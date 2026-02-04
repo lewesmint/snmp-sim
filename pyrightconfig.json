@@ -1,0 +1,17 @@
+{
+  "exclude": [
+    "VERY_OLD_TESTS/",
+    "VEERY_OLD-compiled-mibs",
+    "OLD-compiled-mibs/",
+    "compiled-mibs/",
+    "compiled-mibs-test/",
+    "reference/",
+    ".venv",
+    "**/site-packages",
+    "OLD_APP/"
+  ],
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownVariableType": false
+}
