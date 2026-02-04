@@ -448,13 +448,40 @@ class TypeRecorder:
         return size, constraints, constraints_repr
 
 
+    @staticmethod
+    def _infer_asn1_base_type(type_name: str, type_class: type) -> str:
+        """
+        Infer the ASN.1 base type from a type's MRO.
+
+        Returns one of: 'INTEGER', 'OCTET STRING', 'OBJECT IDENTIFIER'
+        """
+        # Check MRO for ASN.1 base type indicators
+        mro_names = [base.__name__ for base in type_class.__mro__]
+
+        # Map based on what we find in the MRO
+        if 'OctetString' in mro_names:
+            return 'OCTET STRING'
+        elif 'Integer' in mro_names or 'Integer32' in mro_names:
+            return 'INTEGER'
+        elif 'ObjectIdentifier' in mro_names:
+            return 'OBJECT IDENTIFIER'
+
+        # Fallback: try to guess from type name
+        type_lower = type_name.lower()
+        if 'string' in type_lower or 'bits' in type_lower or 'opaque' in type_lower or 'address' in type_lower:
+            return 'OCTET STRING'
+        elif 'object' in type_lower or 'oid' in type_lower:
+            return 'OBJECT IDENTIFIER'
+        else:
+            return 'INTEGER'  # Default fallback
+
     def _seed_base_types(self) -> Dict[str, TypeEntry]:
         """
         Create canonical entries for SNMP application types from SNMPv2-SMI so later
         OBJECT-TYPE instances cannot accidentally tighten them
         (eg sysServices constraining Integer32 to 0..127).
 
-        Set base_type to the type name itself so plugins can match on it.
+        Set base_type to the actual ASN.1 base type (INTEGER, OCTET STRING, OBJECT IDENTIFIER).
         """
         seeded: Dict[str, TypeEntry] = {}
         snmp_types = self.get_snmpv2_smi_types()
@@ -480,8 +507,14 @@ class TypeRecorder:
             # Check if this is an abstract type
             is_abstract = self._is_abstract_type(name, ctor)
 
+            # Infer the ASN.1 base type from the class MRO
+            if inspect.isclass(ctor):
+                asn1_base_type = self._infer_asn1_base_type(name, ctor)
+            else:
+                asn1_base_type = 'INTEGER'  # Fallback
+
             seeded[name] = {
-                "base_type": name,  # Set to type name so plugins can identify and handle it
+                "base_type": asn1_base_type,  # Use ASN.1 base type instead of circular reference
                 "display_hint": None,
                 "size": size,
                 "constraints": constraints,

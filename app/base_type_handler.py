@@ -91,6 +91,16 @@ class BaseTypeHandler:
             'Opaque': 'OCTET STRING',
             'Bits': 'OCTET STRING',
             'ObjectIdentifier': 'OBJECT IDENTIFIER',
+            # ASN.1 base types (abstract)
+            'Integer': 'INTEGER',
+            'Null': 'INTEGER',  # Null is rarely used, maps to INTEGER
+            # Abstract CHOICE types (structural only, not used in OBJECT-TYPEs)
+            'ObjectSyntax': 'INTEGER',  # CHOICE type, default to INTEGER
+            'SimpleSyntax': 'INTEGER',  # CHOICE type, default to INTEGER
+            'ApplicationSyntax': 'INTEGER',  # CHOICE type, default to INTEGER
+            # Type aliases
+            'ObjectName': 'OBJECT IDENTIFIER',  # Alias for ObjectIdentifier
+            'NotificationName': 'OBJECT IDENTIFIER',  # Alias for ObjectIdentifier
         }
 
         if type_name in SNMP_TO_ASN1_MAP:
