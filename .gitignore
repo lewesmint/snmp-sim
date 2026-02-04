@@ -55,3 +55,4 @@ OLD-mock-behaviour/
 *.log.bak
 mock-behaviour/
 logs/
+data/

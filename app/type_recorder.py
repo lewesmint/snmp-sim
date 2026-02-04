@@ -14,12 +14,18 @@ import pysnmp.smi.builder as _builder
 JsonDict = Dict[str, object]
 
 
-# Common ASN.1 base types you care about.
-# We use these names to infer base types from class inheritance.
-ASN1_BASE_TYPE_NAMES: set[str] = {
-    "ObjectIdentifier",
-    "OctetString",
+# True ASN.1 base types (RFC 2578)
+# These are the only fundamental types in ASN.1:
+TRUE_ASN1_BASE_TYPES: set[str] = {
     "Integer",
+    "OctetString",
+    "ObjectIdentifier",
+}
+
+# SNMP application types that we expect to find in SNMPv2-SMI (RFC 2578).
+# These are NOT ASN.1 base types - they are application-specific types built on top of ASN.1.
+# This list is used as a fallback if dynamic discovery fails.
+_EXPECTED_SNMPV2_SMI_TYPES: set[str] = {
     "Integer32",
     "Unsigned32",
     "Counter32",
@@ -44,6 +50,8 @@ class TypeEntry(TypedDict):
     constraints_repr: Optional[str]
     enums: Optional[List[JsonDict]]
     used_by: List[str]
+    defined_in: Optional[str]
+    abstract: bool  # True for abstract/structural types (CHOICE, aliases) not used directly in OBJECT-TYPEs
 
 
 # Move all static/class methods and logic to TypeRecorder
@@ -52,9 +60,50 @@ class TypeRecorder:
     _RANGE_RE = re.compile(r"ValueRangeConstraint object, consts ([-\d]+), ([-\d]+)")
     _SINGLE_RE = re.compile(r"SingleValueConstraint object, consts ([\d,\s-]+)")
 
-    def __init__(self, compiled_dir: Path):
+    def __init__(self, compiled_dir: Path, progress_callback: Optional[Callable[[str], None]] = None):
         self.compiled_dir = compiled_dir
         self._registry: Optional[Dict[str, TypeEntry]] = None
+        self._snmpv2_smi_types: Optional[set[str]] = None
+        self._progress_callback = progress_callback
+
+    @staticmethod
+    def _discover_snmpv2_smi_types() -> set[str]:
+        """
+        Dynamically discover SNMP application types from SNMPv2-SMI.
+
+        Returns a set of type names that are classes (not instances) exported from SNMPv2-SMI.
+        Falls back to expected types if discovery fails.
+
+        Includes all types, even abstract ones (they'll be flagged as abstract separately).
+        """
+        try:
+            import inspect
+            # Import from pysnmp.proto.rfc1902 which contains the compiled SNMPv2-SMI types
+            discovered = set()
+            for name in dir(_rfc1902):
+                if name.startswith('_'):
+                    continue
+                obj = getattr(_rfc1902, name, None)
+                if obj is None:
+                    continue
+                # We want classes that are likely SNMP types
+                if inspect.isclass(obj):
+                    # Check if it's a type we care about (has subtypeSpec or is a known type)
+                    if hasattr(obj, 'subtypeSpec') or name in TRUE_ASN1_BASE_TYPES or name in _EXPECTED_SNMPV2_SMI_TYPES:
+                        discovered.add(name)
+
+            # Ensure we at least have the ASN.1 base types and expected SNMP types
+            result = discovered | TRUE_ASN1_BASE_TYPES | _EXPECTED_SNMPV2_SMI_TYPES
+            return result
+        except Exception:
+            # Fallback to expected types if discovery fails
+            return TRUE_ASN1_BASE_TYPES | _EXPECTED_SNMPV2_SMI_TYPES
+
+    def get_snmpv2_smi_types(self) -> set[str]:
+        """Get the set of SNMP application types (cached)."""
+        if self._snmpv2_smi_types is None:
+            self._snmpv2_smi_types = self._discover_snmpv2_smi_types()
+        return self._snmpv2_smi_types
 
     @staticmethod
     def safe_call_zero_arg(obj: object, name: str) -> Optional[object]:
@@ -79,24 +128,23 @@ class TypeRecorder:
         except TypeError:
             return None
 
-    @staticmethod
-    def infer_base_type_from_mro(syntax: object) -> Optional[str]:
+    def infer_base_type_from_mro(self, syntax: object) -> Optional[str]:
         """
         If getSyntax() does not unwrap a TEXTUAL-CONVENTION, infer the underlying
-        ASN.1 base type from the class MRO.
+        SNMP application type from the class MRO.
 
         Example compiled MIB:
           class ProductID(TextualConvention, ObjectIdentifier): ...
         """
         cls = type(syntax)
+        snmp_types = self.get_snmpv2_smi_types()
         for base in cls.__mro__[1:]:
             name = base.__name__
-            if name in ASN1_BASE_TYPE_NAMES:
+            if name in snmp_types:
                 return name
         return None
 
-    @staticmethod
-    def unwrap_syntax(syntax: object) -> Tuple[str, str, object]:
+    def unwrap_syntax(self, syntax: object) -> Tuple[str, str, object]:
         """
         Returns:
           (syntax_type_name, base_type_name, base_syntax_obj)
@@ -110,7 +158,7 @@ class TypeRecorder:
         if base_obj is not None:
             return syntax_type, base_obj.__class__.__name__, base_obj
 
-        inferred = TypeRecorder.infer_base_type_from_mro(syntax)
+        inferred = self.infer_base_type_from_mro(syntax)
         if inferred is not None:
             return syntax_type, inferred, syntax
 
@@ -328,6 +376,50 @@ class TypeRecorder:
         except (TypeError, AttributeError):
             return False
 
+    @staticmethod
+    def _is_abstract_type(type_name: str, sym_obj: object = None) -> bool:
+        """
+        Determine if a type is abstract (structural/not used directly in OBJECT-TYPEs).
+
+        Abstract types include:
+        - CHOICE types (ObjectSyntax, SimpleSyntax, ApplicationSyntax)
+        - Type aliases that add no constraints (ObjectName, NotificationName)
+        - Null type
+
+        Args:
+            type_name: Name of the type
+            sym_obj: Optional symbol object from MIB to inspect
+
+        Returns:
+            True if the type is abstract
+        """
+        # Check by name for known abstract types
+        KNOWN_ABSTRACT = {
+            'ObjectSyntax',      # ASN.1 CHOICE type
+            'SimpleSyntax',      # ASN.1 CHOICE type
+            'ApplicationSyntax', # ASN.1 CHOICE type
+            'ObjectName',        # Alias for ObjectIdentifier
+            'NotificationName',  # Alias for ObjectIdentifier
+            'Null',              # Not used in SNMP
+        }
+
+        if type_name in KNOWN_ABSTRACT:
+            return True
+
+        # Check if it's a CHOICE type by inspecting MRO
+        # Use 'is not None' instead of truthiness to avoid triggering __bool__ on ASN.1 objects
+        if sym_obj is not None:
+            try:
+                if inspect.isclass(sym_obj):
+                    cls = cast(type, sym_obj)
+                    mro_names = [base.__name__ for base in cls.__mro__]
+                    if 'Choice' in mro_names:
+                        return True
+            except (TypeError, AttributeError):
+                pass
+
+        return False
+
 
     @staticmethod
     def _canonicalise_constraints(
@@ -356,16 +448,18 @@ class TypeRecorder:
         return size, constraints, constraints_repr
 
 
-    @classmethod
-    def _seed_base_types(cls) -> Dict[str, TypeEntry]:
+    def _seed_base_types(self) -> Dict[str, TypeEntry]:
         """
-        Create canonical entries for ASN.1 base types so later OBJECT-TYPE instances
-        cannot accidentally tighten them (eg sysServices constraining Integer32 to 0..127).
-        
+        Create canonical entries for SNMP application types from SNMPv2-SMI so later
+        OBJECT-TYPE instances cannot accidentally tighten them
+        (eg sysServices constraining Integer32 to 0..127).
+
         Set base_type to the type name itself so plugins can match on it.
         """
         seeded: Dict[str, TypeEntry] = {}
-        for name in sorted(ASN1_BASE_TYPE_NAMES):
+        snmp_types = self.get_snmpv2_smi_types()
+
+        for name in sorted(snmp_types):
             ctor = getattr(_rfc1902, name, None)
             if ctor is None or not callable(ctor):
                 continue
@@ -374,14 +468,17 @@ class TypeRecorder:
             except Exception:
                 continue
 
-            size, constraints, constraints_repr = cls.extract_constraints(syntax_obj)
-            size, constraints, constraints_repr = cls._canonicalise_constraints(
+            size, constraints, constraints_repr = self.extract_constraints(syntax_obj)
+            size, constraints, constraints_repr = self._canonicalise_constraints(
                 size=size,
                 constraints=constraints,
                 enums=None,
                 constraints_repr=constraints_repr,
                 drop_repr=True,  # always drop repr for seeded base types
             )
+
+            # Check if this is an abstract type
+            is_abstract = self._is_abstract_type(name, ctor)
 
             seeded[name] = {
                 "base_type": name,  # Set to type name so plugins can identify and handle it
@@ -391,6 +488,8 @@ class TypeRecorder:
                 "constraints_repr": constraints_repr,
                 "enums": None,
                 "used_by": [],
+                "defined_in": "SNMPv2-SMI",  # Base types are defined in SNMPv2-SMI
+                "abstract": is_abstract,
             }
 
         return seeded
@@ -556,7 +655,64 @@ class TypeRecorder:
         mib_symbols = cast(Mapping[str, Mapping[str, object]], mib_builder.mibSymbols)
 
         for mib_name, symbols in mib_symbols.items():
+            if self._progress_callback:
+                self._progress_callback(mib_name)
+
             for sym_name, sym_obj in symbols.items():
+                # First, check if this is a TEXTUAL-CONVENTION class definition
+                is_tc_class = self._is_textual_convention_symbol(sym_obj)
+
+                if is_tc_class:
+                    # This is a TC class definition - extract type info from the class itself
+                    tc_class = cast(type, sym_obj)
+
+                    # Infer base type from the class MRO
+                    base_type_name: Optional[str] = None
+                    snmp_types = self.get_snmpv2_smi_types()
+                    for base in tc_class.__mro__[1:]:  # Skip the TC class itself
+                        if base.__name__ in snmp_types:
+                            base_type_name = base.__name__
+                            break
+
+                    # Try to get display hint and constraints from class attributes
+                    display_hint = getattr(tc_class, 'displayHint', None)
+                    if display_hint and not isinstance(display_hint, str):
+                        display_hint = None
+
+                    # Get subtypeSpec from class if available
+                    subtype_spec = getattr(tc_class, 'subtypeSpec', None)
+                    tc_size: Optional[JsonDict] = None
+                    tc_constraints: List[JsonDict] = []
+                    tc_constraints_repr: Optional[str] = None
+                    if subtype_spec is not None:
+                        subtype_repr = repr(subtype_spec)
+                        tc_size, tc_constraints = self.parse_constraints_from_repr(subtype_repr)
+                        # Set constraints_repr if there are actual constraints
+                        if tc_constraints or tc_size:
+                            tc_constraints_repr = subtype_repr
+
+                    if sym_name not in types:
+                        # TEXTUAL-CONVENTIONs are concrete types, not abstract
+                        types[sym_name] = {
+                            "base_type": base_type_name,
+                            "display_hint": display_hint,
+                            "size": tc_size,
+                            "constraints": tc_constraints,
+                            "constraints_repr": tc_constraints_repr,
+                            "enums": None,
+                            "used_by": [],
+                            "defined_in": mib_name,
+                            "abstract": False,
+                        }
+                    elif types[sym_name]["defined_in"] is None:
+                        # Update the defined_in field if not already set
+                        types[sym_name]["defined_in"] = mib_name
+                        # Also update base_type if not set
+                        if types[sym_name]["base_type"] is None and base_type_name is not None:
+                            types[sym_name]["base_type"] = base_type_name
+                    continue
+
+                # Now process OBJECT-TYPE instances
                 if not hasattr(sym_obj, "getSyntax"):
                     continue
 
@@ -572,14 +728,14 @@ class TypeRecorder:
                 t_name, base_type_raw, base_obj = self.unwrap_syntax(syntax)
 
                 # Keep base_type even if it equals type name - plugins need it to match types.
-                # For ASN.1 base types (Counter32, Integer32, etc.), base_type should be the same as t_name.
+                # For SNMP application types (Counter32, Integer32, etc.), base_type should be the same as t_name.
                 # For TEXTUAL-CONVENTIONs, base_type will differ from t_name.
                 base_type_out: Optional[str] = base_type_raw if base_type_raw else None
 
                 is_tc_def = self._is_textual_convention_symbol(sym_obj)
-                is_base_type = t_name in ASN1_BASE_TYPE_NAMES
+                is_application_type = t_name in self.get_snmpv2_smi_types()
 
-                allow_metadata = is_tc_def or not is_base_type
+                allow_metadata = is_tc_def or not is_application_type
 
                 display: Optional[str]
                 enums: Optional[List[JsonDict]]
@@ -634,6 +790,9 @@ class TypeRecorder:
                             types=types,
                         )
 
+                # Check if this type is abstract (CHOICE types, aliases, etc.)
+                is_abstract = self._is_abstract_type(t_name, syntax)
+
                 entry = types.setdefault(
                     t_name,
                     {
@@ -644,8 +803,18 @@ class TypeRecorder:
                         "constraints_repr": constraints_repr,
                         "enums": enums,
                         "used_by": [],
+                        "defined_in": None,
+                        "abstract": is_abstract,
                     },
                 )
+
+                # If this is a TEXTUAL-CONVENTION definition, record where it's defined
+                if is_tc_def and entry["defined_in"] is None:
+                    entry["defined_in"] = mib_name
+
+                # Update base_type if it's not set (for TC placeholders)
+                if entry["base_type"] is None and base_type_out is not None:
+                    entry["base_type"] = base_type_out
 
                 if allow_metadata:
                     if entry["display_hint"] is None and display is not None:

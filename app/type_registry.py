@@ -7,7 +7,7 @@ Manages build, export, and access to the registry after MIB compilation.
 import os
 import json
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 
 # Import the TypeRecorder from app.type_recorder
 from app.type_recorder import TypeRecorder
@@ -17,9 +17,9 @@ class TypeRegistry:
         self.compiled_mibs_dir = compiled_mibs_dir or (Path(__file__).parent.parent / "compiled-mibs")
         self._registry: Optional[Dict[str, Any]] = None
 
-    def build(self) -> None:
+    def build(self, progress_callback: Optional[Callable[[str], None]] = None) -> None:
         """Build the canonical type registry from compiled-mibs using TypeRecorder."""
-        recorder = TypeRecorder(self.compiled_mibs_dir)
+        recorder = TypeRecorder(self.compiled_mibs_dir, progress_callback=progress_callback)
         recorder.build()
         self._registry = recorder.registry
 

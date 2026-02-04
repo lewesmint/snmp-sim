@@ -6,7 +6,6 @@ from app.app_logger import AppLogger
 from app.app_config import AppConfig
 from app.compiler import MibCompiler
 from app.table_registrar import TableRegistrar
-import subprocess
 import os
 from pathlib import Path
 import json
@@ -75,14 +74,13 @@ class SNMPAgent:
 
         # Validate types
         self.logger.info("Validating type registry...")
-        try:
-            subprocess.run(
-                ["python3", "tools/validate_types.py", "data/types.json"], check=True
-            )
-            self.logger.info("Type registry validation passed.")
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Type registry validation failed: {e}")
+        from app.type_registry_validator import validate_type_registry_file
+        
+        is_valid, errors, type_count = validate_type_registry_file("data/types.json")
+        if not is_valid:
+            self.logger.error(f"Type registry validation failed: {errors}")
             return
+        self.logger.info(f"Type registry validation passed. {type_count} types validated.")
 
         # Generate JSON for MIB behavior
         from app.generator import BehaviourGenerator

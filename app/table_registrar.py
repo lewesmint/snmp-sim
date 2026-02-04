@@ -7,6 +7,7 @@ and making table registration behavior clearer and more maintainable.
 
 import logging
 from typing import Any, Dict, Set, Optional
+from app.base_type_handler import BaseTypeHandler, TypeInfo
 
 
 class TableRegistrar:
@@ -20,6 +21,7 @@ class TableRegistrar:
         mib_table_row: Any,
         mib_table_column: Any,
         logger: logging.Logger,
+        type_registry: TypeInfo,
     ):
         """
         Initialize the TableRegistrar.
@@ -31,6 +33,7 @@ class TableRegistrar:
             mib_table_row: PySNMP MibTableRow class
             mib_table_column: PySNMP MibTableColumn class
             logger: Logger instance for debug/error messages
+            type_registry: Type registry dict mapping type names to type info
         """
         self.mib_builder = mib_builder
         self.mib_scalar_instance = mib_scalar_instance
@@ -38,6 +41,10 @@ class TableRegistrar:
         self.mib_table_row = mib_table_row
         self.mib_table_column = mib_table_column
         self.logger = logger
+        self.type_handler = BaseTypeHandler(
+            type_registry=type_registry,
+            logger=logger
+        )
 
     def find_table_related_objects(self, mib_json: Dict[str, Any]) -> Set[str]:
         """
@@ -301,69 +308,18 @@ class TableRegistrar:
         base_type: str
     ) -> Any:
         """
-        Determine a sensible default value for a type based on type registry information.
-
-        Uses a generic approach that works for any SNMP type.
+        Determine a sensible default value for a type using BaseTypeHandler.
 
         Args:
             col_info: Column information dictionary
             type_name: Type name
             type_info: Type information from registry
-            base_type: Base type name
+            base_type: Base type name (kept for backward compatibility)
 
         Returns:
             A sensible default value for the type
         """
-        # 1. Use explicit initial value if present and not None
-        if 'initial' in col_info and col_info['initial'] is not None:
-            return col_info['initial']
-
-        # 2. For enumerated types, use the first enum value
-        if type_info.get('enums'):
-            enums = type_info.get('enums', [])
-            if enums and isinstance(enums, list) and len(enums) > 0:
-                return enums[0].get('value', 0)
-            return 0
-
-        # 3. If base_type is set, use it to determine the default
-        if base_type and base_type != type_name:
-            if base_type in ('Integer32', 'Integer', 'Counter32', 'Gauge32', 'Unsigned32', 'TimeTicks'):
-                return 0
-            elif base_type in ('OctetString', 'DisplayString'):
-                return ''
-            elif base_type == 'ObjectIdentifier':
-                return (0, 0)  # Return a tuple instead of string for ObjectIdentifier
-
-        # 4. For types with null base_type, infer from constraints
-        constraints = type_info.get('constraints', [])
-        if constraints:
-            for constraint in constraints:
-                constraint_type = constraint.get('type', '')
-
-                # ValueRangeConstraint suggests numeric type
-                if constraint_type == 'ValueRangeConstraint':
-                    return 0
-
-                # ValueSizeConstraint suggests octet string or similar
-                elif constraint_type == 'ValueSizeConstraint':
-                    min_size = constraint.get('min', 0)
-                    max_size = constraint.get('max', 0)
-                    if min_size == 4 and max_size == 4:
-                        return '0.0.0.0'
-                    return ''
-
-        # 5. Check size field as fallback
-        size = type_info.get('size')
-        if size:
-            if isinstance(size, dict):
-                size_type = size.get('type')
-                if size_type == 'set':
-                    allowed = size.get('allowed', [])
-                    if allowed == [4]:
-                        return '0.0.0.0'  # IpAddress
-                    return ''  # OctetString
-                elif size_type == 'range':
-                    return ''  # OctetString
-
-        # 6. Default fallback: use 0 for unknown types
-        return 0
+        # Use BaseTypeHandler which only knows about 3 base ASN.1 types
+        # and resolves everything else from the type registry
+        context = {'initial': col_info.get('initial')} if 'initial' in col_info else {}
+        return self.type_handler.get_default_value(type_name, context)
