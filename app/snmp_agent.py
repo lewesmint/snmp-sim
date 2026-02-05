@@ -82,25 +82,32 @@ class SNMPAgent:
             return
         self.logger.info(f"Type registry validation passed. {type_count} types validated.")
 
-        # Generate JSON for MIB behavior
+        # Generate schema JSON for each MIB
         from app.generator import BehaviourGenerator
 
         generator = BehaviourGenerator(json_dir)
         for py_path in compiled_mib_paths:
-            self.logger.info(f"Generating behavior JSON for: {py_path}")
+            self.logger.info(f"Generating schema JSON for: {py_path}")
             try:
                 generator.generate(py_path)
-                self.logger.info(f"Behavior JSON generated for {py_path}")
+                self.logger.info(f"Schema JSON generated for {py_path}")
             except Exception as e:
-                self.logger.error(f"Failed to generate behavior JSON for {py_path}: {e}", exc_info=True)
+                self.logger.error(f"Failed to generate schema JSON for {py_path}: {e}", exc_info=True)
 
-        # Load behavior JSONs for SNMP serving
+        # Load schema JSONs for SNMP serving
+        # Directory structure: {json_dir}/{MIB_NAME}/schema.json
         for mib in mibs:
-            json_path = os.path.join(json_dir, f"{mib}_behaviour.json")
-            if os.path.exists(json_path):
-                with open(json_path, "r") as jf:
+            mib_dir = os.path.join(json_dir, mib)
+            schema_path = os.path.join(mib_dir, "schema.json")
+
+            if os.path.exists(schema_path):
+                with open(schema_path, "r") as jf:
                     self.mib_jsons[mib] = json.load(jf)
-        self.logger.info("Loaded behavior JSONs for SNMP serving.")
+                self.logger.info(f"Loaded schema for {mib} from {schema_path}")
+            else:
+                self.logger.warning(f"Schema not found for {mib} at {schema_path}")
+
+        self.logger.info(f"Loaded {len(self.mib_jsons)} MIB schemas for SNMP serving.")
 
         # Setup SNMP engine and transport
         self._setup_snmpEngine(compiled_dir)
@@ -278,16 +285,19 @@ class SNMPAgent:
             type_name = info.get("type")
             type_info = type_registry.get(type_name, {}) if type_name else {}
             base_type = type_info.get("base_type") or type_name
-            
+
             if not base_type or not isinstance(base_type, str):
                 self.logger.warning(f"Skipping {name}: invalid type '{type_name}'")
                 continue
-            
+
             # Special handling for sysUpTime
             if name == "sysUpTime":
                 uptime_seconds = time.time() - self.start_time
                 value = int(uptime_seconds * 100)
-            
+
+            # Decode value if it's in encoded format
+            value = self._decode_value(value)
+
             # Handle None values with defaults
             if value is None:
                 if base_type in ["Integer32", "Integer", "Gauge32", "Counter32", "Counter64", "TimeTicks", "Unsigned32"]:
@@ -299,13 +309,13 @@ class SNMPAgent:
                 else:
                     self.logger.warning(f"Skipping {name}: no value and no default for type '{base_type}'")
                     continue
-            
+
             # Get SNMP type class
             try:
                 pysnmp_type = self._get_pysnmp_type(base_type)
                 if pysnmp_type is None:
                     raise ImportError(f"Could not resolve type '{base_type}'")
-                
+
                 # Create scalar instance
                 scalar_inst = self.MibScalarInstance(
                     oid_value, (0,), pysnmp_type(value)
@@ -452,18 +462,21 @@ class SNMPAgent:
                     value = index_tuple[idx_pos]
                 else:
                     continue
-                
+
+                # Decode value if it's in encoded format
+                value = self._decode_value(value)
+
                 try:
                     pysnmp_type = self._get_pysnmp_type(base_type)
                     if pysnmp_type is None:
                         continue
-                    
+
                     inst = self.MibScalarInstance(
                         col_oid,
                         index_tuple,
                         pysnmp_type(value)
                     )
-                    
+
                     inst_name = f"{col_name}Inst_{'_'.join(map(str, index_tuple))}"
                     symbols[inst_name] = inst
                 except Exception as e:
@@ -494,6 +507,51 @@ class SNMPAgent:
                                     table_related.add(col_name)
         
         return table_related
+
+    def _decode_value(self, value: Any) -> Any:
+        """Decode a value that may be in encoded format.
+
+        Values can be either:
+        - Direct values (strings, integers, etc.)
+        - Dictionaries with {"value": "...", "encoding": "hex"} format
+
+        Args:
+            value: The value to decode (can be any type)
+
+        Returns:
+            The decoded value
+        """
+        # If value is not a dict, return as-is
+        if not isinstance(value, dict):
+            return value
+
+        # Check if it has the encoded format structure
+        if "value" not in value or "encoding" not in value:
+            return value
+
+        encoded_value = value["value"]
+        encoding = value["encoding"]
+
+        # Handle different encodings
+        if encoding == "hex":
+            # Decode hex-encoded string (e.g., "\\xAA\\xBB\\xCC")
+            # The value is stored as a string with escape sequences
+            try:
+                # Use encode().decode('unicode_escape') to convert escape sequences
+                # Then encode to bytes
+                if isinstance(encoded_value, str):
+                    # Convert string with \x escape sequences to bytes
+                    decoded = encoded_value.encode('utf-8').decode('unicode_escape').encode('latin1')
+                    return decoded
+                else:
+                    self.logger.warning(f"Hex encoding expects string value, got {type(encoded_value)}")
+                    return encoded_value
+            except Exception as e:
+                self.logger.error(f"Failed to decode hex value '{encoded_value}': {e}")
+                return encoded_value
+        else:
+            self.logger.warning(f"Unknown encoding '{encoding}', returning raw value")
+            return encoded_value
 
     def _get_pysnmp_type(self, base_type: str) -> Any:
         """Get SNMP type class from base type name."""

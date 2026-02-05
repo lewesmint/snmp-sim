@@ -47,7 +47,8 @@ def check_imported_mibs(mib_txt_path: str, compiled_dir: str) -> None:
 
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Generate behaviour JSON from a compiled MIB Python file."
+        description="Generate schema.json from a compiled MIB Python file. "
+                    "Creates {output-dir}/{MIB_NAME}/schema.json with structure and initial values."
     )
     parser.add_argument("compiled_mib_py", help="Path to the compiled MIB .py file")
     parser.add_argument("mib_name", nargs="?", default=None, help="MIB module name")
@@ -55,7 +56,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument(
         "--output-dir",
         default="mock-behaviour",
-        help="Directory to write behaviour JSON",
+        help="Base directory for MIB schemas (default: mock-behaviour)",
     )
     parser.add_argument(
         "--no-plugins",
@@ -84,7 +85,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         force_regenerate=True,
     )
 
-    print(f"Behaviour JSON written to {json_path}")
+    print(f"Schema JSON written to {json_path}")
     return 0
 
 
