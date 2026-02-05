@@ -13,6 +13,10 @@ import time
 from typing import Any, Dict, Optional
 from pysnmp import debug as pysnmp_debug
 
+# Load type converter plugins
+from plugins.type_encoders import encode_value
+import plugins.date_and_time  # noqa: F401 - registers the converter
+
 class SNMPAgent:
     def __init__(
         self,
@@ -363,6 +367,9 @@ class SNMPAgent:
 
             # Decode value if it's in encoded format
             value = self._decode_value(value)
+            
+            # Apply type converter if one is registered (plugin system)
+            value = encode_value(value, base_type)
 
             # Handle None values with defaults
             if value is None:
@@ -375,7 +382,7 @@ class SNMPAgent:
                 else:
                     self.logger.warning(f"Skipping {name}: no value and no default for type '{base_type}'")
                     continue
-
+            
             # Get SNMP type class
             try:
                 pysnmp_type = self._get_pysnmp_type(snmp_type_name)
@@ -566,6 +573,9 @@ class SNMPAgent:
 
                 # Decode value if it's in encoded format
                 value = self._decode_value(value)
+                
+                # Apply type converter if one is registered (plugin system)
+                value = encode_value(value, base_type)
 
                 try:
                     pysnmp_type = self._get_pysnmp_type(base_type)
@@ -662,6 +672,7 @@ class SNMPAgent:
         else:
             self.logger.warning(f"Unknown encoding '{encoding}', returning raw value")
             return encoded_value
+
 
     def _get_pysnmp_type(self, base_type: str) -> Any:
         """Get SNMP type class from base type name.
