@@ -5,6 +5,41 @@ from app.default_value_plugins import register_plugin
 from app.types import TypeInfo
 
 
+def _get_first_enum_value(enums: Any) -> Any:
+    """Extract the first valid enum value from enums.
+    
+    Handles both dict format {'name': value, ...} and list format [{'value': v, 'name': n}, ...].
+    
+    Args:
+        enums: Either a dict mapping names to values, or a list of dicts with 'value' keys
+        
+    Returns:
+        The first valid enum value, or None if no valid enums found
+    """
+    if not enums:
+        return None
+        
+    # Handle dict format (from generator._extract_type_info)
+    if isinstance(enums, dict):
+        # Sort by value to get the first (lowest) enum value
+        if enums:
+            values = list(enums.values())
+            values.sort()
+            return values[0]
+    
+    # Handle list format (from type registry)
+    elif isinstance(enums, list):
+        if enums:
+            # List of dicts with 'value' key
+            first_enum = enums[0]
+            if isinstance(first_enum, dict):
+                return first_enum.get('value')
+            # Or list of values
+            return enums[0]
+    
+    return None
+
+
 @register_plugin("basic_types")
 def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
     """Provide default values for basic SNMP types."""
@@ -25,21 +60,32 @@ def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
         return 0  # Will be dynamic
     elif symbol_name == "sysServices":
         return 72  # Application + End-to-end
+    # MAC address fields should have proper null MAC
+    elif "PhysAddress" in symbol_name or "MacAddress" in symbol_name or symbol_name in (
+        "ifPhysAddress", "ipNetMediaPhysAddress", "atPhysAddress"
+    ):
+        return [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
     # Type-based defaults
     # Note: base_type can be the underlying type (e.g., 'INTEGER' for Counter32)
     # so we need to handle both the base_type and common derived types
     if base_type in ("OctetString", "DisplayString", "SnmpAdminString", "OCTET STRING"):
+        # For MAC/physical addresses, use proper null MAC instead of "unset"
+        if "PhysAddress" in symbol_name or "MacAddress" in symbol_name or symbol_name in (
+            "ifPhysAddress", "ipNetMediaPhysAddress", "atPhysAddress"
+        ):
+            return [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         return "unset"
     elif base_type in ("ObjectIdentifier", "AutonomousType", "OBJECT IDENTIFIER"):
         return [0, 0]
     elif base_type in ("Integer32", "Integer", "Gauge32", "Unsigned32", "INTEGER"):
-        # Check for enums
-        if type_info.get("enums"):
-            # Return first enum value
-            enums = type_info["enums"]
-            if enums:
-                return enums[0]["value"]
+        # Check for enums first - CRITICAL: must check before returning 0
+        enums = type_info.get("enums")
+        if enums:
+            first_value = _get_first_enum_value(enums)
+            if first_value is not None:
+                return first_value
+        # No enums, return 0 as default integer
         return 0
     elif base_type in ("Counter32", "Counter64"):
         return 0

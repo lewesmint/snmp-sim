@@ -244,6 +244,20 @@ class BehaviourGenerator:
                 if not type_info:
                     # Create minimal type_info with base_type set to the mapped type
                     type_info = {"base_type": mapped_type}
+            
+            # CRITICAL: Always enrich type_info with enums from the compiled MIB syntax object
+            # This is necessary because the registry has generic types (Integer32, OctetString)
+            # but the actual compiled MIB has specific enums for each symbol
+            if syntax_obj is not None and syntax_obj.__class__.__name__ != "NoneType":
+                extracted_type_info = self._extract_type_info(syntax_obj, type_name)
+                # Merge extracted enums and constraints into type_info
+                # Extracted info has priority as it comes from the specific symbol
+                if extracted_type_info.get("enums"):
+                    type_info = dict(type_info)  # Create a copy to avoid modifying registry
+                    type_info["enums"] = extracted_type_info["enums"]
+                if extracted_type_info.get("constraints"):
+                    type_info = dict(type_info)  # Create a copy if not already done
+                    type_info["constraints"] = extracted_type_info["constraints"]
 
             # Provide sensible default initial values based on type (skip for structural types)
             if is_structural:
