@@ -19,6 +19,7 @@ class SNMPAgent:
         host: str = "127.0.0.1",
         port: int = 11161,
         config_path: str = "agent_config.yaml",
+        preloaded_model: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
         # Set up logging and config
         if not AppLogger._configured:
@@ -38,6 +39,7 @@ class SNMPAgent:
         self.mib_jsons: Dict[str, Dict[str, Any]] = {}
         # Track agent start time for sysUpTime
         self.start_time = time.time()
+        self.preloaded_model = preloaded_model
 
     def run(self) -> None:
         self.logger.info("Starting SNMP Agent setup workflow...")
@@ -82,30 +84,34 @@ class SNMPAgent:
             return
         self.logger.info(f"Type registry validation passed. {type_count} types validated.")
 
-        # Generate schema JSON for each MIB
-        from app.generator import BehaviourGenerator
+        if self.preloaded_model:
+            self.mib_jsons = self.preloaded_model
+            self.logger.info("Using preloaded model for schemas")
+        else:
+            # Generate schema JSON for each MIB
+            from app.generator import BehaviourGenerator
 
-        generator = BehaviourGenerator(json_dir)
-        for py_path in compiled_mib_paths:
-            self.logger.info(f"Generating schema JSON for: {py_path}")
-            try:
-                generator.generate(py_path)
-                self.logger.info(f"Schema JSON generated for {py_path}")
-            except Exception as e:
-                self.logger.error(f"Failed to generate schema JSON for {py_path}: {e}", exc_info=True)
+            generator = BehaviourGenerator(json_dir)
+            for py_path in compiled_mib_paths:
+                self.logger.info(f"Generating schema JSON for: {py_path}")
+                try:
+                    generator.generate(py_path)
+                    self.logger.info(f"Schema JSON generated for {py_path}")
+                except Exception as e:
+                    self.logger.error(f"Failed to generate schema JSON for {py_path}: {e}", exc_info=True)
 
-        # Load schema JSONs for SNMP serving
-        # Directory structure: {json_dir}/{MIB_NAME}/schema.json
-        for mib in mibs:
-            mib_dir = os.path.join(json_dir, mib)
-            schema_path = os.path.join(mib_dir, "schema.json")
+            # Load schema JSONs for SNMP serving
+            # Directory structure: {json_dir}/{MIB_NAME}/schema.json
+            for mib in mibs:
+                mib_dir = os.path.join(json_dir, mib)
+                schema_path = os.path.join(mib_dir, "schema.json")
 
-            if os.path.exists(schema_path):
-                with open(schema_path, "r") as jf:
-                    self.mib_jsons[mib] = json.load(jf)
-                self.logger.info(f"Loaded schema for {mib} from {schema_path}")
-            else:
-                self.logger.warning(f"Schema not found for {mib} at {schema_path}")
+                if os.path.exists(schema_path):
+                    with open(schema_path, "r") as jf:
+                        self.mib_jsons[mib] = json.load(jf)
+                    self.logger.info(f"Loaded schema for {mib} from {schema_path}")
+                else:
+                    self.logger.warning(f"Schema not found for {mib} at {schema_path}")
 
         self.logger.info(f"Loaded {len(self.mib_jsons)} MIB schemas for SNMP serving.")
 

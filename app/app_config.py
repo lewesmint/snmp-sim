@@ -1,22 +1,21 @@
 from dynaconf import Dynaconf
-
-
 import os
 import sys
 from threading import Lock
-
+from typing import Any  # Add this import
 
 class AppConfig:
     _instance = None
     _lock = Lock()
 
-    def get_platform_setting(self, key: str, default: object = None) -> object:
+    def get_platform_setting(self, key: str, default: Any = None) -> Any:  # Changed to Any
         import sys
         platform_key = sys.platform  # e.g. 'linux', 'darwin', 'win32'
         value = self.get(key, {})
         if isinstance(value, dict):
             return value.get(platform_key, default)
         return default
+
     _instance = None
     _lock = Lock()
 
@@ -33,7 +32,7 @@ class AppConfig:
                 raise FileNotFoundError(f"Config file {config_path} not found")
             self.settings = Dynaconf(settings_files=[config_path], environments=False)
 
-    def get(self, key: str, default: object = None) -> object:
+    def get(self, key: str, default: Any = None) -> Any:
         return self.settings.get(key, default)
 
     def reload(self) -> None:
