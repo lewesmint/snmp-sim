@@ -55,14 +55,15 @@ class SNMPAgent:
 
     def _setup_signal_handlers(self) -> None:
         """Set up signal handlers for graceful shutdown."""
+        import os
 
         def signal_handler(signum: int, frame: Any) -> None:
             sig_name = signal.Signals(signum).name
             self.logger.info(
-                f"Received signal {sig_name} ({signum}), initiating graceful shutdown..."
+                f"Received signal {sig_name} ({signum}), terminating immediately..."
             )
-            self._shutdown_requested = True
-            self._shutdown()
+            # Force immediate exit - don't wait for event loop
+            os._exit(0)
 
         # Register handlers for common termination signals
         signal.signal(signal.SIGTERM, signal_handler)
@@ -74,6 +75,7 @@ class SNMPAgent:
 
     def _shutdown(self) -> None:
         """Perform graceful shutdown of the SNMP agent."""
+        import os
         self.logger.info("Starting graceful shutdown...")
 
         try:
@@ -81,7 +83,8 @@ class SNMPAgent:
                 self.logger.info("Closing SNMP transport dispatcher...")
                 # Close the dispatcher to stop accepting new requests
                 if hasattr(self.snmpEngine, "transport_dispatcher"):
-                    self.snmpEngine.transport_dispatcher.close_dispatcher()
+                    dispatcher = self.snmpEngine.transport_dispatcher
+                    dispatcher.close_dispatcher()
                     self.logger.info("Transport dispatcher closed successfully")
 
             # Flush and close log handlers
@@ -95,8 +98,8 @@ class SNMPAgent:
         except Exception as e:
             self.logger.error(f"Error during shutdown: {e}", exc_info=True)
         finally:
-            # Exit cleanly
-            sys.exit(0)
+            # Exit cleanly - use os._exit to ensure termination
+            os._exit(0)
 
     def run(self) -> None:
         self.logger.info("Starting SNMP Agent setup workflow...")

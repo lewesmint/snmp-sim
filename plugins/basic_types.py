@@ -67,3 +67,26 @@ def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
     # Fallback for unknown types - return None to indicate no default
     # (caller should handle appropriately, e.g., skip or use type-specific logic)
     return None
+
+# Register encoders for textual conventions that don't need special encoding
+# but appear in MIB definitions
+from plugins.type_encoders import register_type_encoder
+
+# ObjectIdentifier and aliases - pass through as-is (already handled by base_type_handler)
+register_type_encoder("ObjectIdentifier", lambda x: x)
+register_type_encoder("AutonomousType", lambda x: x)
+register_type_encoder("ObjectName", lambda x: x)
+register_type_encoder("NotificationName", lambda x: x)
+
+# TimeStamp and Timestamp - pass through (already TimeTicks)
+register_type_encoder("TimeStamp", lambda x: x)
+register_type_encoder("Timestamp", lambda x: x)
+
+# Other common textual conventions that pass through
+register_type_encoder("SnmpAdminString", lambda x: x)
+register_type_encoder("TruthValue", lambda x: x)
+register_type_encoder("RowStatus", lambda x: x)
+register_type_encoder("StorageType", lambda x: x)
+register_type_encoder("DisplayString", lambda x: x)
+register_type_encoder("PhysAddress", lambda x: x)
+register_type_encoder("MacAddress", lambda x: x)
