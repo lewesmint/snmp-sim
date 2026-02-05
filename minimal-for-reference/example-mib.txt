@@ -1,0 +1,52 @@
+EXAMPLE-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+    MODULE-IDENTITY, OBJECT-TYPE, Integer32, enterprises
+        FROM SNMPv2-SMI
+    DisplayString
+        FROM SNMPv2-TC;
+
+exampleMib MODULE-IDENTITY
+    LAST-UPDATED "202602050000Z"
+    ORGANIZATION "Local"
+    CONTACT-INFO "none"
+    DESCRIPTION "Minimal example table for snmptable against a PySNMP agent."
+    ::= { enterprises 99999 }
+
+exampleObjects OBJECT IDENTIFIER ::= { exampleMib 1 }
+
+exampleTable OBJECT-TYPE
+    SYNTAX        SEQUENCE OF ExampleEntry
+    MAX-ACCESS    not-accessible
+    STATUS        current
+    DESCRIPTION   "A tiny example table."
+    ::= { exampleObjects 1 }
+
+exampleEntry OBJECT-TYPE
+    SYNTAX        ExampleEntry
+    MAX-ACCESS    not-accessible
+    STATUS        current
+    DESCRIPTION   "A row in exampleTable."
+    INDEX         { exampleIndex }
+    ::= { exampleTable 1 }
+
+ExampleEntry ::= SEQUENCE {
+    exampleIndex Integer32,
+    exampleDescr DisplayString
+}
+
+exampleIndex OBJECT-TYPE
+    SYNTAX        Integer32 (1..2147483647)
+    MAX-ACCESS    read-only
+    STATUS        current
+    DESCRIPTION   "Row index."
+    ::= { exampleEntry 1 }
+
+exampleDescr OBJECT-TYPE
+    SYNTAX        DisplayString (SIZE (0..255))
+    MAX-ACCESS    read-only
+    STATUS        current
+    DESCRIPTION   "A short description."
+    ::= { exampleEntry 2 }
+
+END

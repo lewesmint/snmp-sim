@@ -16,7 +16,7 @@ from pysnmp import debug as pysnmp_debug
 class SNMPAgent:
     def __init__(
         self,
-        host: str = "127.0.0.1",
+        host: str = "0.0.0.0",
         port: int = 11161,
         config_path: str = "agent_config.yaml",
         preloaded_model: Optional[Dict[str, Dict[str, Any]]] = None,
@@ -187,11 +187,15 @@ class SNMPAgent:
             raise RuntimeError("pysnmp is not installed or not available.")
         if self.snmpEngine is None:
             raise RuntimeError("snmpEngine is not initialized.")
+        transport = udp.UdpTransport().open_server_mode((self.host, self.port))
+        if transport is None:
+            raise RuntimeError(f"Failed to open transport on {self.host}:{self.port}")
         config.add_transport(
             self.snmpEngine,
             udp.DOMAIN_NAME,
-            udp.UdpTransport().open_server_mode((self.host, self.port)),
+            transport,
         )
+        self.logger.info(f"Transport opened on {self.host}:{self.port}")
 
     def _setup_community(self) -> None:
         from pysnmp.entity import config
@@ -201,9 +205,9 @@ class SNMPAgent:
         config.add_v1_system(self.snmpEngine, "my-area", "public")
         config.add_context(self.snmpEngine, "")
         config.add_vacm_group(self.snmpEngine, "mygroup", 2, "my-area")
-        config.add_vacm_view(self.snmpEngine, "restrictedView", 1, (1, 3, 6, 1), "")
+        config.add_vacm_view(self.snmpEngine, "fullView", 1, (1,), "")
         config.add_vacm_view(
-            self.snmpEngine, "restrictedView", 2, (1, 3, 6, 1, 6, 3), ""
+            self.snmpEngine, "fullView", 2, (1,), ""
         )
         config.add_vacm_access(
             self.snmpEngine,
@@ -211,10 +215,10 @@ class SNMPAgent:
             "",
             2,
             "noAuthNoPriv",
-            "exact",
-            "restrictedView",
-            "restrictedView",
-            "restrictedView",
+            "prefix",
+            "fullView",
+            "fullView",
+            "fullView",
         )
 
     def _setup_responders(self) -> None:
@@ -256,24 +260,21 @@ class SNMPAgent:
         type_registry: Dict[str, Any]
     ) -> None:
         """Register a complete MIB with all its objects (scalars and tables)."""
-        # Skip registration if the MIB is already loaded in the builder (e.g., standard MIBs loaded via import_symbols)
-        if mib in self.mib_builder.mibSymbols:
-            self.logger.info(f"Skipping registration of {mib}, already loaded in MIB builder")
-            return
-        
         try:
             export_symbols = self._build_mib_symbols(mib, mib_json, type_registry)
             if export_symbols:
-                from pysnmp.smi import error as smi_error
-                try:
-                    self.mib_builder.export_symbols(mib, **export_symbols)
-                    self.logger.info(f"Registered {len(export_symbols)} objects for {mib}")
-                except smi_error.SmiError as e:
-                    if "already exported" in str(e):
-                        self.logger.warning(f"Some symbols already exported for {mib}, skipping duplicates: {e}")
-                        self.logger.info(f"Registered {len(export_symbols)} objects for {mib} (with duplicates)")
-                    else:
-                        raise
+                # Filter out symbols that are already exported to avoid SmiError
+                existing_symbols = set(self.mib_builder.mibSymbols.get(mib, {}).keys())
+                filtered_symbols = {k: v for k, v in export_symbols.items() if k not in existing_symbols}
+                if len(filtered_symbols) < len(export_symbols):
+                    skipped = len(export_symbols) - len(filtered_symbols)
+                    self.logger.debug(f"Skipped {skipped} duplicate symbols for {mib}")
+                
+                if filtered_symbols:
+                    self.mib_builder.export_symbols(mib, **filtered_symbols)
+                    self.logger.info(f"Registered {len(filtered_symbols)} objects for {mib}")
+                else:
+                    self.logger.warning(f"All symbols for {mib} are already exported, skipping registration")
             else:
                 self.logger.warning(f"No objects to register for {mib}")
         except Exception as e:

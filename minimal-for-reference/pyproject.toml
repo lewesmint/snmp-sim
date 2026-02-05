@@ -1,0 +1,53 @@
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unreachable = true
+show_error_codes = true
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
+exclude = [
+    "VEERY_OLD-compiled-mibs/",
+    "VERY_OLD_TESTS/",
+    "tests/",
+    "OLD_APP/",
+    "compiled-mibs-test/",
+    "^compiled-mibs/",
+    "^OLD-compiled-mibs/",
+]
+
+[tool.pyright]
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportAttributeAccessIssue = false
+executionEnvironments = [
+    { root = ".", pythonVersion = "3.10" }
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+branch = true
+source = ["app", "tools"]
+omit = ["tests/*", "compiled-mibs/*", "VEERY_OLD-compiled-mibs/*", "OLD-compiled-mibs/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
