@@ -35,6 +35,7 @@ class SNMPAgent:
         self.host = host
         self.port = port
         self.snmpEngine: Optional[Any] = None
+        self.snmpContext: Optional[Any] = None
         # self.mib_builder: Optional[Any] = None
         self.mib_jsons: Dict[str, Dict[str, Any]] = {}
         # Track agent start time for sysUpTime
@@ -132,36 +133,47 @@ class SNMPAgent:
             self._setup_responders()
             self._register_mib_objects()
             self.logger.info("SNMP Agent is now listening for SNMP requests.")
-            # Block and serve SNMP requests using asyncio carrier correctly
+            # Block and serve SNMP requests using asyncio dispatcher
             try:
                 self.logger.info("Entering SNMP event loop...")
-                self.snmpEngine.transport_dispatcher.job_started(1)
-
-                # IMPORTANT: asyncio carrier needs the dispatcher to stay open
-                # open_dispatcher() opens it but doesn't block, so we block using run_dispatcher()
-                self.snmpEngine.open_dispatcher()
-                
-                # Run the dispatcher's internal event loop - this blocks
+                # Just run the dispatcher - no need for job_started() or open_dispatcher()
                 self.snmpEngine.transport_dispatcher.run_dispatcher()
             except KeyboardInterrupt:
                 self.logger.info("Shutting down agent")
             except Exception as e:
                 self.logger.error(f"SNMP event loop error: {e}", exc_info=True)
-            finally:
-                # Close dispatcher on exit
-                self.snmpEngine.close_dispatcher()
         else:
             self.logger.error("snmpEngine is not initialized. SNMP agent will not start.")
 
     def _setup_snmpEngine(self, compiled_dir: str) -> None:
         from pysnmp.entity import engine
-        from pysnmp.smi import builder
+        from pysnmp.carrier.asyncio.dispatch import AsyncioDispatcher
+        from pysnmp.entity.rfc3413 import context
+        from pysnmp.smi import builder as snmp_builder
 
         self.logger.info("Setting up SNMP engine...")
         self.snmpEngine = engine.SnmpEngine()
-        self.mib_builder = self.snmpEngine.get_mib_builder()
 
-        # Note: Not adding compiled MIB sources to avoid symbol conflicts with our exported symbols
+        # Register asyncio dispatcher
+        dispatcher = AsyncioDispatcher()
+        self.snmpEngine.register_transport_dispatcher(dispatcher)
+
+        # Create context and get MIB builder from instrumentation (like working reference)
+        self.snmpContext = context.SnmpContext(self.snmpEngine)
+        mib_instrum = self.snmpContext.get_mib_instrum()
+        self.mib_builder = mib_instrum.get_mib_builder()
+
+        # Ensure compiled MIBs are discoverable and loaded into the builder
+        compiled_path = Path(compiled_dir)
+        self.mib_builder.add_mib_sources(snmp_builder.DirMibSource(str(compiled_path)))
+        compiled_modules = [p.stem for p in compiled_path.glob("*.py")]
+        if compiled_modules:
+            self.mib_builder.load_modules(*compiled_modules)
+            self.logger.info(
+                "Loaded compiled MIB modules: %s", ", ".join(sorted(compiled_modules))
+            )
+        else:
+            self.logger.warning("No compiled MIB modules found to load from %s", compiled_dir)
 
         # Import MIB classes from SNMPv2-SMI
         (self.MibScalar,
@@ -187,13 +199,12 @@ class SNMPAgent:
             raise RuntimeError("pysnmp is not installed or not available.")
         if self.snmpEngine is None:
             raise RuntimeError("snmpEngine is not initialized.")
-        transport = udp.UdpTransport().open_server_mode((self.host, self.port))
-        if transport is None:
-            raise RuntimeError(f"Failed to open transport on {self.host}:{self.port}")
+
+        # Use UdpAsyncioTransport for asyncio dispatcher
         config.add_transport(
             self.snmpEngine,
-            udp.DOMAIN_NAME,
-            transport,
+            config.SNMP_UDP_DOMAIN,
+            udp.UdpAsyncioTransport().open_server_mode((self.host, self.port))
         )
         self.logger.info(f"Transport opened on {self.host}:{self.port}")
 
@@ -206,9 +217,6 @@ class SNMPAgent:
         config.add_context(self.snmpEngine, "")
         config.add_vacm_group(self.snmpEngine, "mygroup", 2, "my-area")
         config.add_vacm_view(self.snmpEngine, "fullView", 1, (1,), "")
-        config.add_vacm_view(
-            self.snmpEngine, "fullView", 2, (1,), ""
-        )
         config.add_vacm_access(
             self.snmpEngine,
             "mygroup",
@@ -222,15 +230,18 @@ class SNMPAgent:
         )
 
     def _setup_responders(self) -> None:
-        from pysnmp.entity.rfc3413 import cmdrsp, context
+        from pysnmp.entity.rfc3413 import cmdrsp
 
         if self.snmpEngine is None:
             raise RuntimeError("snmpEngine is not initialized.")
-        snmpContext = context.SnmpContext(self.snmpEngine)
-        cmdrsp.GetCommandResponder(self.snmpEngine, snmpContext)
-        cmdrsp.NextCommandResponder(self.snmpEngine, snmpContext)
-        cmdrsp.BulkCommandResponder(self.snmpEngine, snmpContext)
-        cmdrsp.SetCommandResponder(self.snmpEngine, snmpContext)
+        if not hasattr(self, 'snmpContext') or self.snmpContext is None:
+            raise RuntimeError("snmpContext is not initialized.")
+
+        # Use the context created in _setup_snmpEngine
+        cmdrsp.GetCommandResponder(self.snmpEngine, self.snmpContext)
+        cmdrsp.NextCommandResponder(self.snmpEngine, self.snmpContext)
+        cmdrsp.BulkCommandResponder(self.snmpEngine, self.snmpContext)
+        cmdrsp.SetCommandResponder(self.snmpEngine, self.snmpContext)
 
     def _register_mib_objects(self) -> None:
         # Register scalars and tables from behavior JSONs using the type registry
@@ -263,12 +274,25 @@ class SNMPAgent:
         try:
             export_symbols = self._build_mib_symbols(mib, mib_json, type_registry)
             if export_symbols:
+                if mib == "SNMPv2-MIB":
+                    sysor_symbols = sorted(k for k in export_symbols if k.startswith("sysOR"))
+                    if sysor_symbols:
+                        self.logger.info(
+                            "SNMPv2-MIB sysOR symbols before filter: %s",
+                            ", ".join(sysor_symbols),
+                        )
                 # Filter out symbols that are already exported to avoid SmiError
                 existing_symbols = set(self.mib_builder.mibSymbols.get(mib, {}).keys())
                 filtered_symbols = {k: v for k, v in export_symbols.items() if k not in existing_symbols}
                 if len(filtered_symbols) < len(export_symbols):
                     skipped = len(export_symbols) - len(filtered_symbols)
                     self.logger.debug(f"Skipped {skipped} duplicate symbols for {mib}")
+                if mib == "SNMPv2-MIB":
+                    sysor_filtered = sorted(k for k in filtered_symbols if k.startswith("sysOR"))
+                    self.logger.info(
+                        "SNMPv2-MIB sysOR symbols after filter: %s",
+                        ", ".join(sysor_filtered) if sysor_filtered else "<none>",
+                    )
                 
                 if filtered_symbols:
                     self.mib_builder.export_symbols(mib, **filtered_symbols)
@@ -312,11 +336,25 @@ class SNMPAgent:
             value = info.get("current") if "current" in info else info.get("initial")
             type_name = info.get("type")
             type_info = type_registry.get(type_name, {}) if type_name else {}
-            base_type = type_info.get("base_type") or type_name
+            base_type_raw = type_info.get("base_type") or type_name
 
-            if not base_type or not isinstance(base_type, str):
+            if not base_type_raw or not isinstance(base_type_raw, str):
                 self.logger.warning(f"Skipping {name}: invalid type '{type_name}'")
                 continue
+
+            # Prefer the explicit type name when it maps to a concrete SNMP type (e.g., Counter32)
+            preferred_snmp_types = {
+                "Counter32",
+                "Counter64",
+                "Gauge32",
+                "Unsigned32",
+                "Integer32",
+                "TimeTicks",
+                "DisplayString",
+                "OctetString",
+            }
+            snmp_type_name = type_name if type_name in preferred_snmp_types else base_type_raw
+            base_type = snmp_type_name
 
             # Special handling for sysUpTime
             if name == "sysUpTime":
@@ -340,16 +378,18 @@ class SNMPAgent:
 
             # Get SNMP type class
             try:
-                pysnmp_type = self._get_pysnmp_type(base_type)
+                pysnmp_type = self._get_pysnmp_type(snmp_type_name)
                 if pysnmp_type is None:
-                    raise ImportError(f"Could not resolve type '{base_type}'")
+                    raise ImportError(f"Could not resolve type '{snmp_type_name}'")
 
                 # Create scalar instance
                 scalar_inst = self.MibScalarInstance(
                     oid_value, (0,), pysnmp_type(value)
                 )
                 export_symbols[f"{name}Inst"] = scalar_inst
-                self.logger.debug(f"Added scalar {name} (type {base_type})")
+                self.logger.debug(
+                    f"Added scalar {name} (type {snmp_type_name}, value type {pysnmp_type.__name__})"
+                )
             except Exception as e:
                 self.logger.error(f"Error creating scalar {name}: {e}")
                 continue
@@ -443,14 +483,34 @@ class SNMPAgent:
                 continue
             
             type_info = type_registry.get(col_type_name, {})
-            base_type = type_info.get("base_type") or col_type_name
+            base_type_raw = type_info.get("base_type") or col_type_name
+            
+            # Prefer explicit SNMP type names for table columns (same as scalars)
+            preferred_snmp_types = {
+                "Counter32",
+                "Counter64",
+                "Gauge32",
+                "Unsigned32",
+                "Integer32",
+                "TimeTicks",
+                "DisplayString",
+                "OctetString",
+            }
+            base_type = col_type_name if col_type_name in preferred_snmp_types else base_type_raw
             
             try:
                 pysnmp_type = self._get_pysnmp_type(base_type)
                 if pysnmp_type is None:
                     continue
                 
-                col_access = col_info.get("access", "read-only")
+                col_access_raw = col_info.get("access", "read-only")
+                access_map = {
+                    "read-only": "readonly",
+                    "read-write": "readwrite",
+                    "not-accessible": "noaccess",
+                    "accessible-for-notify": "notify",
+                }
+                col_access = access_map.get(col_access_raw, col_access_raw)
                 col_obj = self.MibTableColumn(col_oid, pysnmp_type()).setMaxAccess(col_access)
                 symbols[col_name] = col_obj
                 columns_by_name[col_name] = (col_oid, base_type)
@@ -462,6 +522,14 @@ class SNMPAgent:
         rows_data = table_info.get("rows", [])
         if not isinstance(rows_data, list):
             rows_data = []
+
+        if table_name == "sysORTable":
+            self.logger.info(
+                "sysORTable rows=%d index_names=%s columns=%s",
+                len(rows_data),
+                index_names,
+                list(columns_by_name.keys()),
+            )
         
         for row_idx, row_data in enumerate(rows_data):
             if not isinstance(row_data, dict):
@@ -470,9 +538,20 @@ class SNMPAgent:
             # Build index tuple from the index column values in row_data
             index_tuple = tuple(row_data.get(idx_name, row_idx + 1 if i == 0 else 0) 
                               for i, idx_name in enumerate(index_names))
+
+            if table_name == "sysORTable":
+                self.logger.info(
+                    "sysORTable row %d raw=%s index_tuple=%s",
+                    row_idx,
+                    row_data,
+                    index_tuple,
+                )
             
             # Create instances for each column
-            row_values = row_data.get("values", {})
+            if "values" in row_data and isinstance(row_data.get("values"), dict):
+                row_values = row_data.get("values", {})
+            else:
+                row_values = row_data
             
             for col_name, (col_oid, base_type) in columns_by_name.items():
                 # Get value for this cell
@@ -501,6 +580,15 @@ class SNMPAgent:
 
                     inst_name = f"{col_name}Inst_{'_'.join(map(str, index_tuple))}"
                     symbols[inst_name] = inst
+
+                    if table_name == "sysORTable":
+                        self.logger.info(
+                            "sysORTable cell %s[%s]=%r (type %s)",
+                            col_name,
+                            index_tuple,
+                            value,
+                            pysnmp_type.__name__,
+                        )
                 except Exception as e:
                     self.logger.warning(f"Error creating instance for {col_name} row {index_tuple}: {e}")
                     continue
@@ -590,6 +678,13 @@ class SNMPAgent:
             'NULL': 'Null',
             'IpAddress': 'IpAddress',  # already correct
             'TimeTicks': 'TimeTicks',  # already correct
+            'Counter32': 'Counter32',
+            'Counter64': 'Counter64',
+            'Gauge32': 'Gauge32',
+            'Unsigned32': 'Unsigned32',
+            'Integer32': 'Integer32',
+            'DisplayString': 'DisplayString',
+            'OctetString': 'OctetString',
             # Add more as needed
         }
         pysnmp_name = type_map.get(base_type, base_type)
