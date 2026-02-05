@@ -17,19 +17,21 @@ def validate_type_registry(registry: Dict[str, Any]) -> Tuple[bool, List[str]]:
     Returns:
         Tuple of (is_valid, error_messages)
     """
-    required_fields = {"name", "syntax", "description"}
+    required_fields = {"base_type", "used_by", "defined_in", "abstract"}
     errors = []
     
-    for oid, entry in registry.items():
+    for type_name, entry in registry.items():
         missing = required_fields - set(entry.keys())
         if missing:
-            errors.append(f"OID {oid} missing fields: {', '.join(missing)}")
-        if not isinstance(entry.get("name"), str):
-            errors.append(f"OID {oid} 'name' must be a string")
-        if not isinstance(entry.get("syntax"), str):
-            errors.append(f"OID {oid} 'syntax' must be a string")
-        if not isinstance(entry.get("description"), str):
-            errors.append(f"OID {oid} 'description' must be a string")
+            errors.append(f"Type {type_name} missing fields: {', '.join(missing)}")
+        if not isinstance(entry.get("base_type"), (str, type(None))):
+            errors.append(f"Type {type_name} 'base_type' must be a string or null")
+        if not isinstance(entry.get("used_by"), list):
+            errors.append(f"Type {type_name} 'used_by' must be a list")
+        if not isinstance(entry.get("defined_in"), (str, type(None))):
+            errors.append(f"Type {type_name} 'defined_in' must be a string or null")
+        if not isinstance(entry.get("abstract"), bool):
+            errors.append(f"Type {type_name} 'abstract' must be a boolean")
     
     return len(errors) == 0, errors
 

@@ -52,27 +52,36 @@ class SNMPAgent:
             os.path.join(os.path.dirname(__file__), "..", "mock-behaviour")
         )
         os.makedirs(json_dir, exist_ok=True)
-        compiler = MibCompiler(compiled_dir, self.app_config)
-        compiled_mib_paths: list[str] = []
-        for mib_path in mibs:
-            self.logger.info(f"Compiling MIB: {mib_path}")
-            try:
-                py_path = compiler.compile(mib_path)
-                compiled_mib_paths.append(py_path)
-                self.logger.info(f"Compiled {mib_path} to {py_path}")
-            except Exception as e:
-                self.logger.error(f"Failed to compile {mib_path}: {e}", exc_info=True)
-                continue
 
         # Build and export the canonical type registry
         from app.type_registry import TypeRegistry
 
-        type_registry = TypeRegistry(Path(compiled_dir))
-        type_registry.build()
-        type_registry.export_to_json("data/types.json")
-        self.logger.info(
-            f"Exported type registry to data/types.json with {len(type_registry.registry)} types."
-        )
+        if self.preloaded_model and os.path.exists("data/types.json"):
+            self.logger.info("Using preloaded model and existing types.json, skipping MIB compilation")
+            # Load existing type registry
+            with open("data/types.json", "r") as f:
+                type_registry_data = json.load(f)
+            type_registry = TypeRegistry(Path(""))  # dummy
+            type_registry._registry = type_registry_data
+        else:
+            compiler = MibCompiler(compiled_dir, self.app_config)
+            compiled_mib_paths: list[str] = []
+            for mib_path in mibs:
+                self.logger.info(f"Compiling MIB: {mib_path}")
+                try:
+                    py_path = compiler.compile(mib_path)
+                    compiled_mib_paths.append(py_path)
+                    self.logger.info(f"Compiled {mib_path} to {py_path}")
+                except Exception as e:
+                    self.logger.error(f"Failed to compile {mib_path}: {e}", exc_info=True)
+                    continue
+
+            type_registry = TypeRegistry(Path(compiled_dir))
+            type_registry.build()
+            type_registry.export_to_json("data/types.json")
+            self.logger.info(
+                f"Exported type registry to data/types.json with {len(type_registry.registry)} types."
+            )
 
         # Validate types
         self.logger.info("Validating type registry...")
@@ -152,8 +161,7 @@ class SNMPAgent:
         self.snmpEngine = engine.SnmpEngine()
         self.mib_builder = self.snmpEngine.get_mib_builder()
 
-        # Add MIB sources
-        self.mib_builder.add_mib_sources(builder.DirMibSource(compiled_dir))
+        # Note: Not adding compiled MIB sources to avoid symbol conflicts with our exported symbols
 
         # Import MIB classes from SNMPv2-SMI
         (self.MibScalar,
@@ -248,11 +256,24 @@ class SNMPAgent:
         type_registry: Dict[str, Any]
     ) -> None:
         """Register a complete MIB with all its objects (scalars and tables)."""
+        # Skip registration if the MIB is already loaded in the builder (e.g., standard MIBs loaded via import_symbols)
+        if mib in self.mib_builder.mibSymbols:
+            self.logger.info(f"Skipping registration of {mib}, already loaded in MIB builder")
+            return
+        
         try:
             export_symbols = self._build_mib_symbols(mib, mib_json, type_registry)
             if export_symbols:
-                self.mib_builder.export_symbols(mib, **export_symbols)
-                self.logger.info(f"Registered {len(export_symbols)} objects for {mib}")
+                from pysnmp.smi import error as smi_error
+                try:
+                    self.mib_builder.export_symbols(mib, **export_symbols)
+                    self.logger.info(f"Registered {len(export_symbols)} objects for {mib}")
+                except smi_error.SmiError as e:
+                    if "already exported" in str(e):
+                        self.logger.warning(f"Some symbols already exported for {mib}, skipping duplicates: {e}")
+                        self.logger.info(f"Registered {len(export_symbols)} objects for {mib} (with duplicates)")
+                    else:
+                        raise
             else:
                 self.logger.warning(f"No objects to register for {mib}")
         except Exception as e:
@@ -445,15 +466,9 @@ class SNMPAgent:
             if not isinstance(row_data, dict):
                 continue
             
-            # Get or create index tuple
-            index_value = row_data.get("index")
-            if index_value is None:
-                index_value = row_idx + 1
-            
-            if isinstance(index_value, list):
-                index_tuple = tuple(index_value)
-            else:
-                index_tuple = (index_value,)
+            # Build index tuple from the index column values in row_data
+            index_tuple = tuple(row_data.get(idx_name, row_idx + 1 if i == 0 else 0) 
+                              for i, idx_name in enumerate(index_names))
             
             # Create instances for each column
             row_values = row_data.get("values", {})
@@ -560,15 +575,32 @@ class SNMPAgent:
             return encoded_value
 
     def _get_pysnmp_type(self, base_type: str) -> Any:
-        """Get SNMP type class from base type name."""
+        """Get SNMP type class from base type name.
+        
+        Maps MIB type names (e.g., 'INTEGER') to PySNMP class names (e.g., 'Integer')
+        due to naming differences between ASN.1 MIB definitions and PySNMP implementation.
+        """
+        # Map MIB type names to PySNMP class names
+        type_map = {
+            'INTEGER': 'Integer',
+            'OCTET STRING': 'OctetString',
+            'OBJECT IDENTIFIER': 'ObjectIdentifier',
+            'BITS': 'Bits',
+            'NULL': 'Null',
+            'IpAddress': 'IpAddress',  # already correct
+            'TimeTicks': 'TimeTicks',  # already correct
+            # Add more as needed
+        }
+        pysnmp_name = type_map.get(base_type, base_type)
+        
         try:
-            return self.mib_builder.import_symbols("SNMPv2-SMI", base_type)[0]
+            return self.mib_builder.import_symbols("SNMPv2-SMI", pysnmp_name)[0]
         except Exception:
             try:
-                return self.mib_builder.import_symbols("SNMPv2-TC", base_type)[0]
+                return self.mib_builder.import_symbols("SNMPv2-TC", pysnmp_name)[0]
             except Exception:
                 from pysnmp.proto import rfc1902
-                return getattr(rfc1902, base_type, None)
+                return getattr(rfc1902, pysnmp_name, None)
 
 
 
