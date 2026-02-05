@@ -424,6 +424,7 @@ class SNMPAgent:
                 continue
 
             # Prefer the explicit type name when it maps to a concrete SNMP type (e.g., Counter32)
+            # Include TEXTUAL-CONVENTIONs that have type encoders registered
             preferred_snmp_types = {
                 "Counter32",
                 "Counter64",
@@ -433,6 +434,7 @@ class SNMPAgent:
                 "TimeTicks",
                 "DisplayString",
                 "OctetString",
+                "DateAndTime",  # TEXTUAL-CONVENTION with type encoder
             }
             snmp_type_name = (
                 type_name if type_name in preferred_snmp_types else base_type_raw
@@ -584,6 +586,7 @@ class SNMPAgent:
             base_type_raw = type_info.get("base_type") or col_type_name
 
             # Prefer explicit SNMP type names for table columns (same as scalars)
+            # Include TEXTUAL-CONVENTIONs that have type encoders registered
             preferred_snmp_types = {
                 "Counter32",
                 "Counter64",
@@ -593,6 +596,7 @@ class SNMPAgent:
                 "TimeTicks",
                 "DisplayString",
                 "OctetString",
+                "DateAndTime",  # TEXTUAL-CONVENTION with type encoder
             }
             base_type = (
                 col_type_name

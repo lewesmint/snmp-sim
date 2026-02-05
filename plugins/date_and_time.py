@@ -16,7 +16,11 @@ def _format_date_and_time(value: Union[str, bytes, None]) -> bytes:
     - Minute (1 byte, 0-59)
     - Second (1 byte, 0-59)
     - Deciseconds (1 byte, 0-9)
-    - [Optional: UTC sign, hours offset, minutes offset]
+    - UTC sign (1 byte, '+' = 0x2B, '-' = 0x2D) (optional, included for RFC compliance)
+    - UTC hours offset (1 byte, 0-12) (optional, included for RFC compliance)
+    - UTC minutes offset (1 byte, 0-59) (optional, included for RFC compliance)
+
+    Returns 11-octet format with UTC+0:0 timezone for RFC 2579 compliance.
 
     If value is "unset", empty string, None, or "unknown", returns current time.
     If value is already bytes with 8+ octets, return as-is.
@@ -26,7 +30,7 @@ def _format_date_and_time(value: Union[str, bytes, None]) -> bytes:
         value: The value to format (string, bytes, or None)
 
     Returns:
-        8-byte DateAndTime octet string (year, month, day, hour, minute, second, deciseconds)
+        11-byte DateAndTime octet string (year, month, day, hour, minute, second, deciseconds, +, 0, 0)
     """
     # If already bytes with valid length, return as-is
     if isinstance(value, bytes):
@@ -48,11 +52,15 @@ def _format_date_and_time(value: Union[str, bytes, None]) -> bytes:
             # If parsing fails, use current time
             now = datetime.utcnow()
 
-    # Encode as 8 octets: year(2), month(1), day(1), hour(1), minute(1), second(1), deciseconds(1)
+    # Encode as 11 octets (8 + timezone):
+    # year(2), month(1), day(1), hour(1), minute(1), second(1), deciseconds(1)
+    # plus UTC sign (0x2B for '+'), hours offset (0), minutes offset (0)
     year_bytes = now.year.to_bytes(2, byteorder="big")
     octets = year_bytes + bytes(
         [now.month, now.day, now.hour, now.minute, now.second, 0]
     )
+    # Add UTC timezone: '+' (0x2B) for UTC+0:0
+    octets += bytes([0x2B, 0, 0])  # +0:0
     return octets
 
 
