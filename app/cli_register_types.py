@@ -49,8 +49,13 @@ def main(argv: Iterable[str] | None = None) -> int:
     # Check if compiled MIBs directory exists
     compiled_dir = Path(args.compiled_mibs_dir)
     if not compiled_dir.exists():
-        print(f"Error: Compiled MIBs directory not found: {compiled_dir}", file=sys.stderr)
-        print("Please compile MIBs first using: python -m app.cli_compile_mib", file=sys.stderr)
+        print(
+            f"Error: Compiled MIBs directory not found: {compiled_dir}", file=sys.stderr
+        )
+        print(
+            "Please compile MIBs first using: python -m app.cli_compile_mib",
+            file=sys.stderr,
+        )
         return 1
 
     try:
@@ -65,7 +70,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         registry = build_type_registry(
             compiled_mibs_dir=args.compiled_mibs_dir,
             output_path=args.output,
-            progress_callback=show_progress
+            progress_callback=show_progress,
         )
 
         print()
@@ -78,16 +83,18 @@ def main(argv: Iterable[str] | None = None) -> int:
 
             print()
             print("Discovered types:")
-            print(f"  {'Type Name':<30s} {'Base Type':<20s} {'Default':<15s} {'MIB':<20s} {'Used By'}")
+            print(
+                f"  {'Type Name':<30s} {'Base Type':<20s} {'Default':<15s} {'MIB':<20s} {'Used By'}"
+            )
             print(f"  {'-' * 30} {'-' * 20} {'-' * 15} {'-' * 20} {'-' * 8}")
 
             for type_name in sorted(registry.keys()):
-                base_type = registry[type_name].get('base_type') or 'unknown'
-                used_by_list = registry[type_name].get('used_by', [])
+                base_type = registry[type_name].get("base_type") or "unknown"
+                used_by_list = registry[type_name].get("used_by", [])
                 used_by_count = len(used_by_list)
 
                 # Skip types with no base_type and no usages (incomplete TC definitions)
-                if base_type == 'unknown' and used_by_count == 0:
+                if base_type == "unknown" and used_by_count == 0:
                     continue
 
                 # Get default value
@@ -95,13 +102,13 @@ def main(argv: Iterable[str] | None = None) -> int:
                     default_value = handler.get_default_value(type_name)
 
                     # Check if this is an enum type and format with enum name
-                    enums = registry[type_name].get('enums', [])
+                    enums = registry[type_name].get("enums", [])
                     if enums and isinstance(default_value, int):
                         # Find the enum name for this value
                         enum_name = None
                         for enum in enums:
-                            if enum.get('value') == default_value:
-                                enum_name = enum.get('name')
+                            if enum.get("value") == default_value:
+                                enum_name = enum.get("name")
                                 break
                         if enum_name:
                             default_str = f"{default_value}({enum_name})"
@@ -109,7 +116,11 @@ def main(argv: Iterable[str] | None = None) -> int:
                             default_str = str(default_value)
                     # Format default value for display
                     elif isinstance(default_value, str):
-                        default_str = f'"{default_value}"' if len(default_value) < 10 else f'"{default_value[:7]}..."'
+                        default_str = (
+                            f'"{default_value}"'
+                            if len(default_value) < 10
+                            else f'"{default_value[:7]}..."'
+                        )
                     elif isinstance(default_value, bytes):
                         default_str = f'b"{default_value.decode("utf-8", errors="ignore")[:7]}..."'
                     else:
@@ -121,16 +132,20 @@ def main(argv: Iterable[str] | None = None) -> int:
                     default_str = "N/A"
 
                 # Get MIB where this type is defined (for TCs) or first used
-                defined_in = registry[type_name].get('defined_in')
+                defined_in = registry[type_name].get("defined_in")
                 if defined_in:
                     mib_name = defined_in
                 elif used_by_list:
                     first_usage = used_by_list[0]
-                    mib_name = first_usage.split("::")[0] if "::" in first_usage else "unknown"
+                    mib_name = (
+                        first_usage.split("::")[0] if "::" in first_usage else "unknown"
+                    )
                 else:
                     mib_name = "SNMPv2-SMI"
 
-                print(f"  {type_name:<30s} {base_type:<20s} {default_str:<15s} {mib_name:<20s} {used_by_count}")
+                print(
+                    f"  {type_name:<30s} {base_type:<20s} {default_str:<15s} {mib_name:<20s} {used_by_count}"
+                )
 
         return 0
 
@@ -140,10 +155,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     except Exception as e:
         print(f"Error building type registry: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         return 1
 
 
 if __name__ == "__main__":
     sys.exit(main())
-

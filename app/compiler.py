@@ -9,20 +9,26 @@ from pysmi.parser.smi import parserFactory
 from pysmi.codegen.pysnmp import PySnmpCodeGen
 from pysmi.compiler import MibCompiler as PysmiMibCompiler
 from app.app_config import AppConfig
-from app.app_logger import AppLogger
 
 logger = AppLogger.get(__name__)
 
+
 class MibCompilationError(Exception):
     """Raised when MIB compilation fails."""
-    def __init__(self, message: str, missing_dependencies: List[str] | None = None) -> None:
+
+    def __init__(
+        self, message: str, missing_dependencies: List[str] | None = None
+    ) -> None:
         super().__init__(message)
         self.missing_dependencies = missing_dependencies or []
 
 
 class MibCompiler:
     """Handles compilation of MIB .txt files to Python using pysmi."""
-    def __init__(self, output_dir: str = 'compiled-mibs', app_config: AppConfig | None=None) -> None:
+
+    def __init__(
+        self, output_dir: str = "compiled-mibs", app_config: AppConfig | None = None
+    ) -> None:
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
         self.last_compile_results: dict[str, str] = {}  # Track last compilation results
@@ -46,17 +52,15 @@ class MibCompiler:
 
         # Create pysmi compiler
         compiler = PysmiMibCompiler(
-            parserFactory()(),
-            PySnmpCodeGen(),
-            PyFileWriter(self.output_dir)
+            parserFactory()(), PySnmpCodeGen(), PyFileWriter(self.output_dir)
         )
 
         # Add sources: the directory containing the MIB file and standard locations
         compiler.add_sources(FileReader(mib_dir))
-        compiler.add_sources(FileReader('.'))
+        compiler.add_sources(FileReader("."))
 
         # Add data/mibs and all its subdirectories recursively
-        mib_data_dir = 'data/mibs'
+        mib_data_dir = "data/mibs"
         if os.path.exists(mib_data_dir):
             compiler.add_sources(FileReader(mib_data_dir))
             for root, dirs, files in os.walk(mib_data_dir):
@@ -65,8 +69,16 @@ class MibCompiler:
 
         # Add system MIB directory (Net-SNMP default location on Windows)
         # AppConfig should be passed in by the caller for config access
-        system_mib_dir = self.app_config.get_platform_setting('system_mib_dir') if self.app_config is not None else None
-        if isinstance(system_mib_dir, str) and system_mib_dir and os.path.exists(system_mib_dir):
+        system_mib_dir = (
+            self.app_config.get_platform_setting("system_mib_dir")
+            if self.app_config is not None
+            else None
+        )
+        if (
+            isinstance(system_mib_dir, str)
+            and system_mib_dir
+            and os.path.exists(system_mib_dir)
+        ):
             compiler.add_sources(FileReader(system_mib_dir))
 
         # Add searchers for already compiled MIBs
@@ -76,7 +88,10 @@ class MibCompiler:
         results = compiler.compile(mib_filename)
 
         # Store results for caller to access
-        self.last_compile_results = {str(cast(Any, mib)): str(cast(Any, status)) for mib, status in results.items()}
+        self.last_compile_results = {
+            str(cast(Any, mib)): str(cast(Any, status))
+            for mib, status in results.items()
+        }
 
         # Collect all missing dependencies
         missing_deps: List[str] = []
@@ -95,29 +110,33 @@ class MibCompiler:
 
             # "compiled" and "untouched" are both success states
             # "untouched" means it was already compiled previously
-            if status_str not in ('compiled', 'untouched'):
+            if status_str not in ("compiled", "untouched"):
                 failed_mibs.append((mib_name_str, status_str))
                 # Check if it's a missing dependency error
-                if 'missing' in status_str.lower():
+                if "missing" in status_str.lower():
                     missing_deps.append(mib_name_str)
 
         # Determine the compiled output path using the actual module name
         if actual_mib_name is None:
             raise MibCompilationError(f"No MIB module found in {mib_filename}")
 
-        compiled_py = os.path.join(self.output_dir, f'{actual_mib_name}.py')
+        compiled_py = os.path.join(self.output_dir, f"{actual_mib_name}.py")
 
         # If there are missing dependencies, provide helpful error message
         if missing_deps:
-            error_msg = f"\n{'='*70}\n"
+            error_msg = f"\n{'=' * 70}\n"
             error_msg += f"ERROR: Failed to compile {actual_mib_name}\n"
-            error_msg += f"{'='*70}\n"
+            error_msg += f"{'=' * 70}\n"
             error_msg += f"Missing MIB dependencies: {', '.join(missing_deps)}\n\n"
             error_msg += "To resolve this:\n"
-            error_msg += f"  1. Download the missing MIB files ({', '.join(missing_deps)})\n"
+            error_msg += (
+                f"  1. Download the missing MIB files ({', '.join(missing_deps)})\n"
+            )
             error_msg += "  2. Place them in data/mibs/ or a subdirectory\n"
-            error_msg += f"  3. Add them to agent_config.yaml before {actual_mib_name}\n"
-            error_msg += f"{'='*70}\n"
+            error_msg += (
+                f"  3. Add them to agent_config.yaml before {actual_mib_name}\n"
+            )
+            error_msg += f"{'=' * 70}\n"
             raise MibCompilationError(error_msg, missing_dependencies=missing_deps)
 
         # If there are other failures, report them
@@ -128,7 +147,9 @@ class MibCompiler:
             raise MibCompilationError(error_msg)
 
         if not os.path.exists(compiled_py):
-            raise MibCompilationError(f"Compilation reported success but output file not found: {compiled_py}")
+            raise MibCompilationError(
+                f"Compilation reported success but output file not found: {compiled_py}"
+            )
 
         return compiled_py
 
@@ -136,6 +157,6 @@ class MibCompiler:
         """Parse missing dependencies from compilation status message."""
         missing: set[str] = set()
         # Look for patterns like "MIB-NAME is missing" or similar
-        for match in re.finditer(r'([A-Za-z0-9\-]+)\s+is missing', status):
+        for match in re.finditer(r"([A-Za-z0-9\-]+)\s+is missing", status):
             missing.add(match.group(1))
         return list(missing)

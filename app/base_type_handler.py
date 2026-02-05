@@ -3,19 +3,17 @@ BaseTypeHandler: Clean type system that only hardcodes the 3 ASN.1 base types.
 
 According to SNMPv2-SMI (RFC 2578), only these 3 types are fundamental:
 - INTEGER
-- OCTET STRING  
+- OCTET STRING
 - OBJECT IDENTIFIER
 
 All other types (Integer32, Counter32, IpAddress, DisplayString, BITS, etc.)
 are derived types that should be resolved from the type registry.
 """
-from typing import Any, Dict, Optional, Union
-import logging
-from pathlib import Path
-import json
 
-# Type alias for type information dictionaries
-TypeInfo = Dict[str, Any]
+from typing import Any, Optional
+import logging
+
+from app.types import TypeInfo, TypeRegistry
 
 
 class BaseTypeHandler:
@@ -23,34 +21,32 @@ class BaseTypeHandler:
     Handles SNMP type resolution and value initialization using only base ASN.1 types.
     All derived types, application types, and TEXTUAL-CONVENTIONs are resolved via type registry.
     """
-    
+
     # The only 3 hardcoded types in the entire system
     BASE_ASN1_TYPES = {
-        'INTEGER': 'integer',
-        'OCTET STRING': 'octet_string',
-        'OBJECT IDENTIFIER': 'object_identifier'
+        "INTEGER": "integer",
+        "OCTET STRING": "octet_string",
+        "OBJECT IDENTIFIER": "object_identifier",
     }
-    
+
     def __init__(
-        self,
-        type_registry: TypeInfo,
-        logger: Optional[logging.Logger] = None
+        self, type_registry: TypeRegistry, logger: Optional[logging.Logger] = None
     ):
         """
         Initialize the BaseTypeHandler.
-        
+
         Args:
             type_registry: Type registry dict mapping type names to type info
             logger: Optional logger instance
         """
         self.logger = logger or logging.getLogger(__name__)
         self._type_registry = type_registry
-        
+
     @property
-    def type_registry(self) -> TypeInfo:
+    def type_registry(self) -> TypeRegistry:
         """Get the type registry."""
         return self._type_registry
-    
+
     def get_type_info(self, type_name: str) -> TypeInfo:
         """
         Get type information from registry.
@@ -63,7 +59,7 @@ class BaseTypeHandler:
         """
         result: TypeInfo = self.type_registry.get(type_name, {})
         return result
-    
+
     def resolve_to_base_type(self, type_name: str) -> str:
         """
         Resolve any type name to its base ASN.1 type.
@@ -80,27 +76,27 @@ class BaseTypeHandler:
 
         # Map SNMP application types to ASN.1 base types
         SNMP_TO_ASN1_MAP = {
-            'Integer32': 'INTEGER',
-            'Unsigned32': 'INTEGER',
-            'Counter32': 'INTEGER',
-            'Counter64': 'INTEGER',
-            'Gauge32': 'INTEGER',
-            'TimeTicks': 'INTEGER',
-            'OctetString': 'OCTET STRING',
-            'IpAddress': 'OCTET STRING',
-            'Opaque': 'OCTET STRING',
-            'Bits': 'OCTET STRING',
-            'ObjectIdentifier': 'OBJECT IDENTIFIER',
+            "Integer32": "INTEGER",
+            "Unsigned32": "INTEGER",
+            "Counter32": "INTEGER",
+            "Counter64": "INTEGER",
+            "Gauge32": "INTEGER",
+            "TimeTicks": "INTEGER",
+            "OctetString": "OCTET STRING",
+            "IpAddress": "OCTET STRING",
+            "Opaque": "OCTET STRING",
+            "Bits": "OCTET STRING",
+            "ObjectIdentifier": "OBJECT IDENTIFIER",
             # ASN.1 base types (abstract)
-            'Integer': 'INTEGER',
-            'Null': 'INTEGER',  # Null is rarely used, maps to INTEGER
+            "Integer": "INTEGER",
+            "Null": "INTEGER",  # Null is rarely used, maps to INTEGER
             # Abstract CHOICE types (structural only, not used in OBJECT-TYPEs)
-            'ObjectSyntax': 'INTEGER',  # CHOICE type, default to INTEGER
-            'SimpleSyntax': 'INTEGER',  # CHOICE type, default to INTEGER
-            'ApplicationSyntax': 'INTEGER',  # CHOICE type, default to INTEGER
+            "ObjectSyntax": "INTEGER",  # CHOICE type, default to INTEGER
+            "SimpleSyntax": "INTEGER",  # CHOICE type, default to INTEGER
+            "ApplicationSyntax": "INTEGER",  # CHOICE type, default to INTEGER
             # Type aliases
-            'ObjectName': 'OBJECT IDENTIFIER',  # Alias for ObjectIdentifier
-            'NotificationName': 'OBJECT IDENTIFIER',  # Alias for ObjectIdentifier
+            "ObjectName": "OBJECT IDENTIFIER",  # Alias for ObjectIdentifier
+            "NotificationName": "OBJECT IDENTIFIER",  # Alias for ObjectIdentifier
         }
 
         if type_name in SNMP_TO_ASN1_MAP:
@@ -108,16 +104,20 @@ class BaseTypeHandler:
 
         # Look up in registry and recursively resolve
         type_info = self.get_type_info(type_name)
-        base_type = type_info.get('base_type', '')
+        base_type = type_info.get("base_type", "")
 
         if base_type and base_type != type_name:
             return self.resolve_to_base_type(base_type)
 
         # Default fallback
-        self.logger.warning(f"Could not resolve base type for '{type_name}', defaulting to INTEGER")
-        return 'INTEGER'
-    
-    def get_default_value(self, type_name: str, context: Optional[TypeInfo] = None) -> Any:
+        self.logger.warning(
+            f"Could not resolve base type for '{type_name}', defaulting to INTEGER"
+        )
+        return "INTEGER"
+
+    def get_default_value(
+        self, type_name: str, context: Optional[TypeInfo] = None
+    ) -> Any:
         """
         Get a sensible default value for a type.
 
@@ -131,8 +131,8 @@ class BaseTypeHandler:
         context = context or {}
 
         # If explicit initial value provided, use it
-        if 'initial' in context:
-            return context['initial']
+        if "initial" in context:
+            return context["initial"]
 
         # Get type info from registry
         type_info = self.get_type_info(type_name)
@@ -141,38 +141,48 @@ class BaseTypeHandler:
         base_type = self.resolve_to_base_type(type_name)
 
         # Check if it's a human-readable string type based on display hint
-        display_hint = type_info.get('display_hint', '')
-        if base_type == 'OCTET STRING':
+        display_hint = type_info.get("display_hint", "")
+        if base_type == "OCTET STRING":
             # Display hints with 'a' (ASCII) or 't' (UTF-8 text) indicate human-readable strings
-            if display_hint and ('a' in display_hint or 't' in display_hint):
-                return 'Unset'
+            if display_hint and ("a" in display_hint or "t" in display_hint):
+                return "Unset"
             # Also check for common string type names (heuristic for types without display hints)
             type_lower = type_name.lower()
-            if any(keyword in type_lower for keyword in ['string', 'display', 'name', 'descr', 'label', 'text']):
-                return 'Unset'
+            if any(
+                keyword in type_lower
+                for keyword in ["string", "display", "name", "descr", "label", "text"]
+            ):
+                return "Unset"
 
         # Handle enumerations
-        enums = type_info.get('enums', [])
+        enums = type_info.get("enums", [])
         if enums and isinstance(enums, list) and len(enums) > 0:
             # For enums, try to find a sensible default
             # Look for common default enum names
             for enum in enums:
-                enum_name = enum.get('name', '').lower()
-                if enum_name in ['unknown', 'other', 'none', 'notset', 'unset', 'default']:
-                    return enum.get('value', 0)
+                enum_name = enum.get("name", "").lower()
+                if enum_name in [
+                    "unknown",
+                    "other",
+                    "none",
+                    "notset",
+                    "unset",
+                    "default",
+                ]:
+                    return enum.get("value", 0)
             # Otherwise return the first enum value
-            return enums[0].get('value', 0)
+            return enums[0].get("value", 0)
 
-        if base_type == 'INTEGER':
+        if base_type == "INTEGER":
             # Check constraints for valid range
-            constraints = type_info.get('constraints', [])
+            constraints = type_info.get("constraints", [])
             min_val = None
             max_val = None
 
             for constraint in constraints:
-                if constraint.get('type') == 'ValueRangeConstraint':
-                    c_min = constraint.get('min')
-                    c_max = constraint.get('max')
+                if constraint.get("type") == "ValueRangeConstraint":
+                    c_min = constraint.get("min")
+                    c_max = constraint.get("max")
                     if c_min is not None and (min_val is None or c_min > min_val):
                         min_val = c_min
                     if c_max is not None and (max_val is None or c_max < max_val):
@@ -186,131 +196,139 @@ class BaseTypeHandler:
                     return min_val
             return 0
 
-        elif base_type == 'OCTET STRING':
+        elif base_type == "OCTET STRING":
             # Check if it's a special type
-            if type_name in ['IpAddress']:
-                return '0.0.0.0'
-            elif 'address' in type_name.lower() and 'mac' in type_name.lower():
-                return '00:00:00:00:00:00'
+            if type_name in ["IpAddress"]:
+                return "0.0.0.0"
+            elif "address" in type_name.lower() and "mac" in type_name.lower():
+                return "00:00:00:00:00:00"
             # BITS type - return empty bits
-            elif 'bits' in type_info.get('syntax', '').lower():
-                return ''
+            elif "bits" in type_info.get("syntax", "").lower():
+                return ""
             # Default to empty bytes
-            return b''
+            return b""
 
-        elif base_type == 'OBJECT IDENTIFIER':
+        elif base_type == "OBJECT IDENTIFIER":
             return (0, 0)
 
         # Should never reach here
         self.logger.warning(f"Unexpected base type '{base_type}' for '{type_name}'")
         return 0
-    
-    def create_pysnmp_value(self, type_name: str, value: Any, mib_builder: Any = None) -> Any:
+
+    def create_pysnmp_value(
+        self, type_name: str, value: Any, mib_builder: Any = None
+    ) -> Any:
         """
         Create a PySNMP value object for the given type and value.
-        
+
         Args:
             type_name: SNMP type name
             value: Python value to wrap
             mib_builder: Optional MIB builder to import type classes
-            
+
         Returns:
             PySNMP value object
         """
         if mib_builder is None:
             # Return raw value if no MIB builder available
             return value
-        
+
         # Try to import the actual type class
         type_class = self._get_pysnmp_type_class(type_name, mib_builder)
-        
+
         if type_class is not None:
             try:
                 return type_class(value)
             except Exception as e:
-                self.logger.warning(f"Failed to create {type_name} with value {value}: {e}")
+                self.logger.warning(
+                    f"Failed to create {type_name} with value {value}: {e}"
+                )
                 return value
-        
+
         # Fallback: create based on base type
         base_type = self.resolve_to_base_type(type_name)
-        
+
         try:
-            if base_type == 'INTEGER':
+            if base_type == "INTEGER":
                 from pysnmp.proto import rfc1902
+
                 return rfc1902.Integer32(value)
-            elif base_type == 'OCTET STRING':
+            elif base_type == "OCTET STRING":
                 from pysnmp.proto import rfc1902
+
                 if isinstance(value, str):
-                    value = value.encode('utf-8')
+                    value = value.encode("utf-8")
                 return rfc1902.OctetString(value)
-            elif base_type == 'OBJECT IDENTIFIER':
+            elif base_type == "OBJECT IDENTIFIER":
                 from pysnmp.proto import rfc1902
+
                 return rfc1902.ObjectIdentifier(value)
         except Exception as e:
             self.logger.error(f"Failed to create PySNMP value: {e}")
-        
+
         return value
-    
+
     def _get_pysnmp_type_class(self, type_name: str, mib_builder: Any) -> Optional[Any]:
         """
         Import PySNMP type class from MIB builder.
-        
+
         Args:
             type_name: SNMP type name
             mib_builder: MIB builder instance
-            
+
         Returns:
             PySNMP type class or None
         """
         # Try common MIB modules
-        for module in ['SNMPv2-SMI', 'SNMPv2-TC', 'SNMPv2-CONF']:
+        for module in ["SNMPv2-SMI", "SNMPv2-TC", "SNMPv2-CONF"]:
             try:
                 return mib_builder.import_symbols(module, type_name)[0]
             except Exception:
                 continue
-        
+
         # Try pysnmp.proto.rfc1902 directly
         try:
             from pysnmp.proto import rfc1902
+
             return getattr(rfc1902, type_name, None)
         except Exception:
             pass
-        
+
         return None
-    
+
     def validate_value(self, type_name: str, value: Any) -> bool:
         """
         Validate that a value is appropriate for the given type.
-        
+
         Args:
             type_name: SNMP type name
             value: Value to validate
-            
+
         Returns:
             True if valid, False otherwise
         """
         type_info = self.get_type_info(type_name)
         base_type = self.resolve_to_base_type(type_name)
-        
+
         # Type compatibility check
-        if base_type == 'INTEGER':
+        if base_type == "INTEGER":
             if not isinstance(value, (int, bool)):
                 return False
             # Check range constraints
-            constraints = type_info.get('constraints', {})
-            if 'range' in constraints:
-                range_val = constraints['range']
+            constraints = type_info.get("constraints", {})
+            if "range" in constraints:
+                range_val = constraints["range"]
                 if isinstance(range_val, list) and len(range_val) >= 2:
                     if not (range_val[0] <= value <= range_val[1]):
                         return False
-                        
-        elif base_type == 'OCTET STRING':
+
+        elif base_type == "OCTET STRING":
             if not isinstance(value, (str, bytes, bytearray)):
                 return False
             # Check size constraints
-            constraints = type_info.get('constraints', {})
-            if 'size' in constraints:
-                size = constraints['size']
+            constraints = type_info.get("constraints", {})
+            if "size" in constraints:
+                size = constraints["size"]
                 length = len(value)
                 if isinstance(size, int):
                     if length != size:
@@ -318,11 +336,11 @@ class BaseTypeHandler:
                 elif isinstance(size, list) and len(size) >= 2:
                     if not (size[0] <= length <= size[1]):
                         return False
-                        
-        elif base_type == 'OBJECT IDENTIFIER':
+
+        elif base_type == "OBJECT IDENTIFIER":
             if not isinstance(value, (tuple, list)):
                 return False
             if not all(isinstance(x, int) for x in value):
                 return False
-        
+
         return True

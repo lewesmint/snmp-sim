@@ -23,15 +23,17 @@ def check_imported_mibs(mib_txt_path: str, compiled_dir: str) -> None:
     in_imports = False
     imported_mibs: set[str] = set()
     for line in lines:
-        l = line.strip()
-        if l.startswith("IMPORTS"):
+        stripped_line = line.strip()
+        if stripped_line.startswith("IMPORTS"):
             in_imports = True
             continue
         if in_imports:
-            if ";" in l:
+            if ";" in stripped_line:
                 in_imports = False
-                l = l.split(";")[0]
-            parts = l.split("FROM")
+                line_part = stripped_line.split(";")[0]
+            else:
+                line_part = stripped_line
+            parts = line_part.split("FROM")
             if len(parts) == 2:
                 mib_name = parts[1].strip().rstrip(";")
                 mib_name = mib_name.split()[0]
@@ -49,12 +51,19 @@ def check_imported_mibs(mib_txt_path: str, compiled_dir: str) -> None:
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate schema.json from compiled MIB Python files. "
-                    "If no MIB is specified, processes all MIBs configured in agent_config.yaml. "
-                    "Creates {output-dir}/{MIB_NAME}/schema.json with structure and initial values."
+        "If no MIB is specified, processes all MIBs configured in agent_config.yaml. "
+        "Creates {output-dir}/{MIB_NAME}/schema.json with structure and initial values."
     )
-    parser.add_argument("compiled_mib_py", nargs="?", default=None, help="Path to the compiled MIB .py file (optional, if omitted processes all configured MIBs)")
+    parser.add_argument(
+        "compiled_mib_py",
+        nargs="?",
+        default=None,
+        help="Path to the compiled MIB .py file (optional, if omitted processes all configured MIBs)",
+    )
     parser.add_argument("mib_name", nargs="?", default=None, help="MIB module name")
-    parser.add_argument("mib_txt_path", nargs="?", default=None, help="Path to MIB source .txt file")
+    parser.add_argument(
+        "mib_txt_path", nargs="?", default=None, help="Path to MIB source .txt file"
+    )
     parser.add_argument(
         "--output-dir",
         default="mock-behaviour",
@@ -87,14 +96,21 @@ def main(argv: Iterable[str] | None = None) -> int:
         for mib in mibs:
             compiled_path = os.path.join("compiled-mibs", f"{mib}.py")
             if not os.path.exists(compiled_path):
-                print(f"Warning: Compiled MIB not found: {compiled_path}", file=sys.stderr)
+                print(
+                    f"Warning: Compiled MIB not found: {compiled_path}", file=sys.stderr
+                )
                 continue
-            json_path = generator.generate(compiled_path, mib_name=mib, force_regenerate=True)
+            json_path = generator.generate(
+                compiled_path, mib_name=mib, force_regenerate=True
+            )
             print(f"Schema JSON written to {json_path}")
     else:
         # Process single MIB
         if not os.path.exists(args.compiled_mib_py):
-            print(f"Error: compiled MIB not found: {args.compiled_mib_py}", file=sys.stderr)
+            print(
+                f"Error: compiled MIB not found: {args.compiled_mib_py}",
+                file=sys.stderr,
+            )
             return 1
 
         if args.mib_txt_path:

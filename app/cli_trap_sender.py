@@ -41,7 +41,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         print("Error: OID must be dot-separated integers", file=sys.stderr)
         return 1
 
-    value = Integer(int(args.value)) if args.value_type == "int" else OctetString(args.value)
+    value = (
+        Integer(int(args.value))
+        if args.value_type == "int"
+        else OctetString(args.value)
+    )
 
     mib_builder = builder.MibBuilder()
     mib_builder.load_modules("SNMPv2-SMI")

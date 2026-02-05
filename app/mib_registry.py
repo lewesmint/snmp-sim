@@ -1,7 +1,9 @@
 """
 MibRegistry: Manages OID-to-type mappings and type lookups.
 """
+
 from typing import Dict, Any
+
 
 class MibRegistry:
     def __init__(self) -> None:

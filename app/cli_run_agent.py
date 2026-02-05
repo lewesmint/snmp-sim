@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Any, Dict
 
 from app.app_config import AppConfig
 from app.cli_build_model import build_internal_model
@@ -14,7 +13,7 @@ from app.snmp_agent import SNMPAgent
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run the SNMP agent with a preloaded internal model from configured MIB schemas. "
-                    "Builds the model and starts the agent to respond to GET and GETNEXT requests."
+        "Builds the model and starts the agent to respond to GET and GETNEXT requests."
     )
     parser.add_argument(
         "--schema-dir",
@@ -58,7 +57,9 @@ def main(argv: list[str] | None = None) -> int:
         print("Error: No schemas could be loaded", file=sys.stderr)
         return 1
 
-    print(f"Model built with {len(model)} MIBs. Starting SNMP agent on {args.host}:{args.port}...")
+    print(
+        f"Model built with {len(model)} MIBs. Starting SNMP agent on {args.host}:{args.port}..."
+    )
 
     try:
         agent = SNMPAgent(

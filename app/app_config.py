@@ -4,12 +4,14 @@ import sys
 from threading import Lock
 from typing import Any  # Add this import
 
+
 class AppConfig:
     _instance = None
     _lock = Lock()
 
-    def get_platform_setting(self, key: str, default: Any = None) -> Any:  # Changed to Any
-        import sys
+    def get_platform_setting(
+        self, key: str, default: Any = None
+    ) -> Any:  # Changed to Any
         platform_key = sys.platform  # e.g. 'linux', 'darwin', 'win32'
         value = self.get(key, {})
         if isinstance(value, dict):
@@ -19,7 +21,7 @@ class AppConfig:
     _instance = None
     _lock = Lock()
 
-    def __new__(cls, config_path: str = 'agent_config.yaml') -> 'AppConfig':
+    def __new__(cls, config_path: str = "agent_config.yaml") -> "AppConfig":
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
@@ -27,7 +29,7 @@ class AppConfig:
             return cls._instance
 
     def _init_config(self, config_path: str) -> None:
-        if not hasattr(self, 'settings'):
+        if not hasattr(self, "settings"):
             if not os.path.exists(config_path):
                 raise FileNotFoundError(f"Config file {config_path} not found")
             self.settings = Dynaconf(settings_files=[config_path], environments=False)

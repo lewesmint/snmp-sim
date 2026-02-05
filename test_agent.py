@@ -18,7 +18,7 @@ snmpEngine.register_transport_dispatcher(dispatcher)
 config.add_transport(
     snmpEngine,
     config.SNMP_UDP_DOMAIN,
-    udp.UdpAsyncioTransport().open_server_mode(("127.0.0.1", 11161))
+    udp.UdpAsyncioTransport().open_server_mode(("127.0.0.1", 11161)),
 )
 print("Transport opened")
 
@@ -41,18 +41,18 @@ mibInstrum = snmpContext.get_mib_instrum()
 mibBuilder = mibInstrum.get_mib_builder()
 
 # Import MIB classes
-(MibScalarInstance,) = mibBuilder.import_symbols('SNMPv2-SMI', 'MibScalarInstance')
+(MibScalarInstance,) = mibBuilder.import_symbols("SNMPv2-SMI", "MibScalarInstance")
 
 # Register sysDescr scalar instance
 # OID for sysDescr is .1.3.6.1.2.1.1.1.0
 sysDescrInst = MibScalarInstance(
     (1, 3, 6, 1, 2, 1, 1, 1),  # Base OID (without .0)
     (0,),  # Instance suffix
-    OctetString("Minimal Test Agent")
+    OctetString("Minimal Test Agent"),
 )
 
 # Export to SNMPv2-MIB module
-mibBuilder.export_symbols('SNMPv2-MIB', sysDescrInst=sysDescrInst)
+mibBuilder.export_symbols("SNMPv2-MIB", sysDescrInst=sysDescrInst)
 
 # Set up responders
 cmdrsp.GetCommandResponder(snmpEngine, snmpContext)

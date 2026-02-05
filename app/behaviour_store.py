@@ -1,7 +1,9 @@
 """
 BehaviourStore: Manages persistent/mock data for MIB objects.
 """
+
 from typing import Dict, Any
+
 
 class BehaviourStore:
     def __init__(self) -> None:

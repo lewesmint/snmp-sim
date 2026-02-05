@@ -1,12 +1,14 @@
 """
 SNMPAgent: Main orchestrator for the SNMP agent (initial workflow).
 """
+
 from typing import cast
 from app.app_logger import AppLogger
 from app.app_config import AppConfig
 from app.compiler import MibCompiler
-from app.table_registrar import TableRegistrar
 import os
+import signal
+import sys
 from pathlib import Path
 import json
 import time
@@ -16,6 +18,7 @@ from pysnmp import debug as pysnmp_debug
 # Load type converter plugins
 from plugins.type_encoders import encode_value
 import plugins.date_and_time  # noqa: F401 - registers the converter
+
 
 class SNMPAgent:
     def __init__(
@@ -45,6 +48,55 @@ class SNMPAgent:
         # Track agent start time for sysUpTime
         self.start_time = time.time()
         self.preloaded_model = preloaded_model
+        self._shutdown_requested = False
+
+        # Set up signal handlers for graceful shutdown
+        self._setup_signal_handlers()
+
+    def _setup_signal_handlers(self) -> None:
+        """Set up signal handlers for graceful shutdown."""
+
+        def signal_handler(signum: int, frame: Any) -> None:
+            sig_name = signal.Signals(signum).name
+            self.logger.info(
+                f"Received signal {sig_name} ({signum}), initiating graceful shutdown..."
+            )
+            self._shutdown_requested = True
+            self._shutdown()
+
+        # Register handlers for common termination signals
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+
+        # On Unix systems, also handle SIGHUP
+        if hasattr(signal, "SIGHUP"):
+            signal.signal(signal.SIGHUP, signal_handler)
+
+    def _shutdown(self) -> None:
+        """Perform graceful shutdown of the SNMP agent."""
+        self.logger.info("Starting graceful shutdown...")
+
+        try:
+            if self.snmpEngine is not None:
+                self.logger.info("Closing SNMP transport dispatcher...")
+                # Close the dispatcher to stop accepting new requests
+                if hasattr(self.snmpEngine, "transport_dispatcher"):
+                    self.snmpEngine.transport_dispatcher.close_dispatcher()
+                    self.logger.info("Transport dispatcher closed successfully")
+
+            # Flush and close log handlers
+            self.logger.info("Flushing log handlers...")
+            import logging
+
+            for handler in logging.getLogger().handlers:
+                handler.flush()
+
+            self.logger.info("Shutdown complete")
+        except Exception as e:
+            self.logger.error(f"Error during shutdown: {e}", exc_info=True)
+        finally:
+            # Exit cleanly
+            sys.exit(0)
 
     def run(self) -> None:
         self.logger.info("Starting SNMP Agent setup workflow...")
@@ -61,8 +113,11 @@ class SNMPAgent:
         # Build and export the canonical type registry
         from app.type_registry import TypeRegistry
 
+        compiled_mib_paths: list[str] = []
         if self.preloaded_model and os.path.exists("data/types.json"):
-            self.logger.info("Using preloaded model and existing types.json, skipping MIB compilation")
+            self.logger.info(
+                "Using preloaded model and existing types.json, skipping MIB compilation"
+            )
             # Load existing type registry
             with open("data/types.json", "r") as f:
                 type_registry_data = json.load(f)
@@ -70,7 +125,7 @@ class SNMPAgent:
             type_registry._registry = type_registry_data
         else:
             compiler = MibCompiler(compiled_dir, self.app_config)
-            compiled_mib_paths: list[str] = []
+            compiled_mib_paths = []
             for mib_path in mibs:
                 self.logger.info(f"Compiling MIB: {mib_path}")
                 try:
@@ -78,7 +133,9 @@ class SNMPAgent:
                     compiled_mib_paths.append(py_path)
                     self.logger.info(f"Compiled {mib_path} to {py_path}")
                 except Exception as e:
-                    self.logger.error(f"Failed to compile {mib_path}: {e}", exc_info=True)
+                    self.logger.error(
+                        f"Failed to compile {mib_path}: {e}", exc_info=True
+                    )
                     continue
 
             type_registry = TypeRegistry(Path(compiled_dir))
@@ -91,12 +148,14 @@ class SNMPAgent:
         # Validate types
         self.logger.info("Validating type registry...")
         from app.type_registry_validator import validate_type_registry_file
-        
+
         is_valid, errors, type_count = validate_type_registry_file("data/types.json")
         if not is_valid:
             self.logger.error(f"Type registry validation failed: {errors}")
             return
-        self.logger.info(f"Type registry validation passed. {type_count} types validated.")
+        self.logger.info(
+            f"Type registry validation passed. {type_count} types validated."
+        )
 
         if self.preloaded_model:
             self.mib_jsons = self.preloaded_model
@@ -112,7 +171,10 @@ class SNMPAgent:
                     generator.generate(py_path)
                     self.logger.info(f"Schema JSON generated for {py_path}")
                 except Exception as e:
-                    self.logger.error(f"Failed to generate schema JSON for {py_path}: {e}", exc_info=True)
+                    self.logger.error(
+                        f"Failed to generate schema JSON for {py_path}: {e}",
+                        exc_info=True,
+                    )
 
             # Load schema JSONs for SNMP serving
             # Directory structure: {json_dir}/{MIB_NAME}/schema.json
@@ -143,11 +205,15 @@ class SNMPAgent:
                 # Just run the dispatcher - no need for job_started() or open_dispatcher()
                 self.snmpEngine.transport_dispatcher.run_dispatcher()
             except KeyboardInterrupt:
-                self.logger.info("Shutting down agent")
+                self.logger.info("Received keyboard interrupt, shutting down agent")
+                self._shutdown()
             except Exception as e:
                 self.logger.error(f"SNMP event loop error: {e}", exc_info=True)
+                self._shutdown()
         else:
-            self.logger.error("snmpEngine is not initialized. SNMP agent will not start.")
+            self.logger.error(
+                "snmpEngine is not initialized. SNMP agent will not start."
+            )
 
     def _setup_snmpEngine(self, compiled_dir: str) -> None:
         from pysnmp.entity import engine
@@ -177,20 +243,24 @@ class SNMPAgent:
                 "Loaded compiled MIB modules: %s", ", ".join(sorted(compiled_modules))
             )
         else:
-            self.logger.warning("No compiled MIB modules found to load from %s", compiled_dir)
+            self.logger.warning(
+                "No compiled MIB modules found to load from %s", compiled_dir
+            )
 
         # Import MIB classes from SNMPv2-SMI
-        (self.MibScalar,
-         self.MibScalarInstance,
-         self.MibTable,
-         self.MibTableRow,
-         self.MibTableColumn) = self.mib_builder.import_symbols(
-            'SNMPv2-SMI',
-            'MibScalar',
-            'MibScalarInstance',
-            'MibTable',
-            'MibTableRow',
-            'MibTableColumn'
+        (
+            self.MibScalar,
+            self.MibScalarInstance,
+            self.MibTable,
+            self.MibTableRow,
+            self.MibTableColumn,
+        ) = self.mib_builder.import_symbols(
+            "SNMPv2-SMI",
+            "MibScalar",
+            "MibScalarInstance",
+            "MibTable",
+            "MibTableRow",
+            "MibTableColumn",
         )
 
         self.logger.info("SNMP engine and MIB classes initialized")
@@ -208,7 +278,7 @@ class SNMPAgent:
         config.add_transport(
             self.snmpEngine,
             config.SNMP_UDP_DOMAIN,
-            udp.UdpAsyncioTransport().open_server_mode((self.host, self.port))
+            udp.UdpAsyncioTransport().open_server_mode((self.host, self.port)),
         )
         self.logger.info(f"Transport opened on {self.host}:{self.port}")
 
@@ -238,7 +308,7 @@ class SNMPAgent:
 
         if self.snmpEngine is None:
             raise RuntimeError("snmpEngine is not initialized.")
-        if not hasattr(self, 'snmpContext') or self.snmpContext is None:
+        if not hasattr(self, "snmpContext") or self.snmpContext is None:
             raise RuntimeError("snmpContext is not initialized.")
 
         # Use the context created in _setup_snmpEngine
@@ -269,17 +339,16 @@ class SNMPAgent:
             self._register_mib(mib, mib_json, type_registry)
 
     def _register_mib(
-        self,
-        mib: str,
-        mib_json: Dict[str, Any],
-        type_registry: Dict[str, Any]
+        self, mib: str, mib_json: Dict[str, Any], type_registry: Dict[str, Any]
     ) -> None:
         """Register a complete MIB with all its objects (scalars and tables)."""
         try:
             export_symbols = self._build_mib_symbols(mib, mib_json, type_registry)
             if export_symbols:
                 if mib == "SNMPv2-MIB":
-                    sysor_symbols = sorted(k for k in export_symbols if k.startswith("sysOR"))
+                    sysor_symbols = sorted(
+                        k for k in export_symbols if k.startswith("sysOR")
+                    )
                     if sysor_symbols:
                         self.logger.info(
                             "SNMPv2-MIB sysOR symbols before filter: %s",
@@ -287,56 +356,61 @@ class SNMPAgent:
                         )
                 # Filter out symbols that are already exported to avoid SmiError
                 existing_symbols = set(self.mib_builder.mibSymbols.get(mib, {}).keys())
-                filtered_symbols = {k: v for k, v in export_symbols.items() if k not in existing_symbols}
+                filtered_symbols = {
+                    k: v for k, v in export_symbols.items() if k not in existing_symbols
+                }
                 if len(filtered_symbols) < len(export_symbols):
                     skipped = len(export_symbols) - len(filtered_symbols)
                     self.logger.debug(f"Skipped {skipped} duplicate symbols for {mib}")
                 if mib == "SNMPv2-MIB":
-                    sysor_filtered = sorted(k for k in filtered_symbols if k.startswith("sysOR"))
+                    sysor_filtered = sorted(
+                        k for k in filtered_symbols if k.startswith("sysOR")
+                    )
                     self.logger.info(
                         "SNMPv2-MIB sysOR symbols after filter: %s",
                         ", ".join(sysor_filtered) if sysor_filtered else "<none>",
                     )
-                
+
                 if filtered_symbols:
                     self.mib_builder.export_symbols(mib, **filtered_symbols)
-                    self.logger.info(f"Registered {len(filtered_symbols)} objects for {mib}")
+                    self.logger.info(
+                        f"Registered {len(filtered_symbols)} objects for {mib}"
+                    )
                 else:
-                    self.logger.warning(f"All symbols for {mib} are already exported, skipping registration")
+                    self.logger.warning(
+                        f"All symbols for {mib} are already exported, skipping registration"
+                    )
             else:
                 self.logger.warning(f"No objects to register for {mib}")
         except Exception as e:
             self.logger.error(f"Error registering MIB {mib}: {e}", exc_info=True)
 
     def _build_mib_symbols(
-        self,
-        mib: str,
-        mib_json: Dict[str, Any],
-        type_registry: Dict[str, Any]
+        self, mib: str, mib_json: Dict[str, Any], type_registry: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Build all symbols for a MIB (scalars and tables) as a dictionary."""
         export_symbols = {}
-        
+
         # Identify table-related objects
         table_related_objects = self._find_table_related_objects(mib_json)
-        
+
         # Register scalars (skip table-related objects)
         for name, info in mib_json.items():
             if not isinstance(info, dict):
                 continue
-            
+
             if name in table_related_objects:
                 continue
-            
+
             access = info.get("access")
             if access in ["not-accessible", "accessible-for-notify"]:
                 continue
-            
+
             oid = info.get("oid")
             oid_value = tuple(oid) if isinstance(oid, list) else ()
             if not oid_value:
                 continue
-                
+
             value = info.get("current") if "current" in info else info.get("initial")
             type_name = info.get("type")
             type_info = type_registry.get(type_name, {}) if type_name else {}
@@ -357,7 +431,9 @@ class SNMPAgent:
                 "DisplayString",
                 "OctetString",
             }
-            snmp_type_name = type_name if type_name in preferred_snmp_types else base_type_raw
+            snmp_type_name = (
+                type_name if type_name in preferred_snmp_types else base_type_raw
+            )
             base_type = snmp_type_name
 
             # Special handling for sysUpTime
@@ -367,22 +443,32 @@ class SNMPAgent:
 
             # Decode value if it's in encoded format
             value = self._decode_value(value)
-            
+
             # Apply type converter if one is registered (plugin system)
             value = encode_value(value, base_type)
 
             # Handle None values with defaults
             if value is None:
-                if base_type in ["Integer32", "Integer", "Gauge32", "Counter32", "Counter64", "TimeTicks", "Unsigned32"]:
+                if base_type in [
+                    "Integer32",
+                    "Integer",
+                    "Gauge32",
+                    "Counter32",
+                    "Counter64",
+                    "TimeTicks",
+                    "Unsigned32",
+                ]:
                     value = 0
                 elif base_type in ["OctetString", "DisplayString"]:
                     value = ""
                 elif base_type == "ObjectIdentifier":
                     value = "0.0"
                 else:
-                    self.logger.warning(f"Skipping {name}: no value and no default for type '{base_type}'")
+                    self.logger.warning(
+                        f"Skipping {name}: no value and no default for type '{base_type}'"
+                    )
                     continue
-            
+
             # Get SNMP type class
             try:
                 pysnmp_type = self._get_pysnmp_type(snmp_type_name)
@@ -400,25 +486,27 @@ class SNMPAgent:
             except Exception as e:
                 self.logger.error(f"Error creating scalar {name}: {e}")
                 continue
-        
+
         # Register tables
         for name, info in mib_json.items():
             if not isinstance(info, dict):
                 continue
-            
+
             if not (name.endswith("Table") or name.endswith("Entry")):
                 continue
-            
+
             if not name.endswith("Table"):
                 continue
-            
+
             try:
-                table_symbols = self._build_table_symbols(mib, name, info, mib_json, type_registry)
+                table_symbols = self._build_table_symbols(
+                    mib, name, info, mib_json, type_registry
+                )
                 export_symbols.update(table_symbols)
             except Exception as e:
                 self.logger.error(f"Error building table {name}: {e}", exc_info=True)
                 continue
-        
+
         return export_symbols
 
     def _build_table_symbols(
@@ -427,21 +515,21 @@ class SNMPAgent:
         table_name: str,
         table_info: Dict[str, Any],
         mib_json: Dict[str, Any],
-        type_registry: Dict[str, Any]
+        type_registry: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Build symbols for a single table (table, entry, columns, instances)."""
         symbols = {}
-        
+
         # Get table OID
         table_oid = tuple(table_info.get("oid", []))
         if not table_oid:
             raise ValueError(f"Table {table_name} has no OID")
-        
+
         # Find entry object (ends with "Entry")
         entry_name = None
         entry_info = None
         entry_oid = None
-        
+
         for obj_name, obj_info in mib_json.items():
             if isinstance(obj_info, dict) and obj_name.endswith("Entry"):
                 obj_table_name = obj_name[:-5]  # Remove "Entry" suffix
@@ -450,48 +538,48 @@ class SNMPAgent:
                     entry_info = obj_info
                     entry_oid = tuple(obj_info.get("oid", []))
                     break
-        
+
         if not entry_name or not entry_oid:
             raise ValueError(f"No entry found for table {table_name}")
-        
+
         # Create table and entry objects
         table_obj = self.MibTable(table_oid)
         symbols[table_name] = table_obj
-        
+
         # Get index information from entry
         if not entry_info:
             raise ValueError(f"Entry {entry_name} has no info")
-        
+
         index_names = entry_info.get("indexes", [])
         if not index_names:
             index_names = [entry_info.get("index")] if entry_info.get("index") else []
-        
+
         # Create entry with index specs
         index_specs = tuple((0, mib, idx_name) for idx_name in index_names)
         entry_obj = self.MibTableRow(entry_oid).setIndexNames(*index_specs)
         symbols[entry_name] = entry_obj
-        
+
         # Find and create column objects
         columns_by_name = {}
         for col_name, col_info in mib_json.items():
             if not isinstance(col_info, dict):
                 continue
-            
+
             col_oid = tuple(col_info.get("oid", []))
             if not col_oid or len(col_oid) < len(entry_oid) + 1:
                 continue
-            
+
             # Check if this column belongs to this entry
-            if col_oid[:len(entry_oid)] != entry_oid:
+            if col_oid[: len(entry_oid)] != entry_oid:
                 continue
-            
+
             col_type_name = col_info.get("type")
             if not col_type_name:
                 continue
-            
+
             type_info = type_registry.get(col_type_name, {})
             base_type_raw = type_info.get("base_type") or col_type_name
-            
+
             # Prefer explicit SNMP type names for table columns (same as scalars)
             preferred_snmp_types = {
                 "Counter32",
@@ -503,13 +591,17 @@ class SNMPAgent:
                 "DisplayString",
                 "OctetString",
             }
-            base_type = col_type_name if col_type_name in preferred_snmp_types else base_type_raw
-            
+            base_type = (
+                col_type_name
+                if col_type_name in preferred_snmp_types
+                else base_type_raw
+            )
+
             try:
                 pysnmp_type = self._get_pysnmp_type(base_type)
                 if pysnmp_type is None:
                     continue
-                
+
                 col_access_raw = col_info.get("access", "read-only")
                 access_map = {
                     "read-only": "readonly",
@@ -518,13 +610,15 @@ class SNMPAgent:
                     "accessible-for-notify": "notify",
                 }
                 col_access = access_map.get(col_access_raw, col_access_raw)
-                col_obj = self.MibTableColumn(col_oid, pysnmp_type()).setMaxAccess(col_access)
+                col_obj = self.MibTableColumn(col_oid, pysnmp_type()).setMaxAccess(
+                    col_access
+                )
                 symbols[col_name] = col_obj
                 columns_by_name[col_name] = (col_oid, base_type)
             except Exception as e:
                 self.logger.warning(f"Error creating column {col_name}: {e}")
                 continue
-        
+
         # Create row instances
         rows_data = table_info.get("rows", [])
         if not isinstance(rows_data, list):
@@ -537,14 +631,16 @@ class SNMPAgent:
                 index_names,
                 list(columns_by_name.keys()),
             )
-        
+
         for row_idx, row_data in enumerate(rows_data):
             if not isinstance(row_data, dict):
                 continue
-            
+
             # Build index tuple from the index column values in row_data
-            index_tuple = tuple(row_data.get(idx_name, row_idx + 1 if i == 0 else 0) 
-                              for i, idx_name in enumerate(index_names))
+            index_tuple = tuple(
+                row_data.get(idx_name, row_idx + 1 if i == 0 else 0)
+                for i, idx_name in enumerate(index_names)
+            )
 
             if table_name == "sysORTable":
                 self.logger.info(
@@ -553,13 +649,13 @@ class SNMPAgent:
                     row_data,
                     index_tuple,
                 )
-            
+
             # Create instances for each column
             if "values" in row_data and isinstance(row_data.get("values"), dict):
                 row_values = row_data.get("values", {})
             else:
                 row_values = row_data
-            
+
             for col_name, (col_oid, base_type) in columns_by_name.items():
                 # Get value for this cell
                 if col_name in row_values:
@@ -573,7 +669,7 @@ class SNMPAgent:
 
                 # Decode value if it's in encoded format
                 value = self._decode_value(value)
-                
+
                 # Apply type converter if one is registered (plugin system)
                 value = encode_value(value, base_type)
 
@@ -583,9 +679,7 @@ class SNMPAgent:
                         continue
 
                     inst = self.MibScalarInstance(
-                        col_oid,
-                        index_tuple,
-                        pysnmp_type(value)
+                        col_oid, index_tuple, pysnmp_type(value)
                     )
 
                     inst_name = f"{col_name}Inst_{'_'.join(map(str, index_tuple))}"
@@ -600,22 +694,24 @@ class SNMPAgent:
                             pysnmp_type.__name__,
                         )
                 except Exception as e:
-                    self.logger.warning(f"Error creating instance for {col_name} row {index_tuple}: {e}")
+                    self.logger.warning(
+                        f"Error creating instance for {col_name} row {index_tuple}: {e}"
+                    )
                     continue
-        
+
         return symbols
 
     def _find_table_related_objects(self, mib_json: Dict[str, Any]) -> set[str]:
         """Find all table-related object names."""
         table_related = set()
-        
+
         for name, info in mib_json.items():
             if not isinstance(info, dict):
                 continue
-            
+
             if name.endswith("Table") or name.endswith("Entry"):
                 table_related.add(name)
-                
+
                 # Also mark columns as table-related
                 if name.endswith("Entry"):
                     entry_oid = tuple(info.get("oid", []))
@@ -623,9 +719,9 @@ class SNMPAgent:
                         if isinstance(col_info, dict):
                             col_oid = tuple(col_info.get("oid", []))
                             if col_oid and len(col_oid) > len(entry_oid):
-                                if col_oid[:len(entry_oid)] == entry_oid:
+                                if col_oid[: len(entry_oid)] == entry_oid:
                                     table_related.add(col_name)
-        
+
         return table_related
 
     def _decode_value(self, value: Any) -> Any:
@@ -661,10 +757,16 @@ class SNMPAgent:
                 # Then encode to bytes
                 if isinstance(encoded_value, str):
                     # Convert string with \x escape sequences to bytes
-                    decoded = encoded_value.encode('utf-8').decode('unicode_escape').encode('latin1')
+                    decoded = (
+                        encoded_value.encode("utf-8")
+                        .decode("unicode_escape")
+                        .encode("latin1")
+                    )
                     return decoded
                 else:
-                    self.logger.warning(f"Hex encoding expects string value, got {type(encoded_value)}")
+                    self.logger.warning(
+                        f"Hex encoding expects string value, got {type(encoded_value)}"
+                    )
                     return encoded_value
             except Exception as e:
                 self.logger.error(f"Failed to decode hex value '{encoded_value}': {e}")
@@ -673,33 +775,32 @@ class SNMPAgent:
             self.logger.warning(f"Unknown encoding '{encoding}', returning raw value")
             return encoded_value
 
-
     def _get_pysnmp_type(self, base_type: str) -> Any:
         """Get SNMP type class from base type name.
-        
+
         Maps MIB type names (e.g., 'INTEGER') to PySNMP class names (e.g., 'Integer')
         due to naming differences between ASN.1 MIB definitions and PySNMP implementation.
         """
         # Map MIB type names to PySNMP class names
         type_map = {
-            'INTEGER': 'Integer',
-            'OCTET STRING': 'OctetString',
-            'OBJECT IDENTIFIER': 'ObjectIdentifier',
-            'BITS': 'Bits',
-            'NULL': 'Null',
-            'IpAddress': 'IpAddress',  # already correct
-            'TimeTicks': 'TimeTicks',  # already correct
-            'Counter32': 'Counter32',
-            'Counter64': 'Counter64',
-            'Gauge32': 'Gauge32',
-            'Unsigned32': 'Unsigned32',
-            'Integer32': 'Integer32',
-            'DisplayString': 'DisplayString',
-            'OctetString': 'OctetString',
+            "INTEGER": "Integer",
+            "OCTET STRING": "OctetString",
+            "OBJECT IDENTIFIER": "ObjectIdentifier",
+            "BITS": "Bits",
+            "NULL": "Null",
+            "IpAddress": "IpAddress",  # already correct
+            "TimeTicks": "TimeTicks",  # already correct
+            "Counter32": "Counter32",
+            "Counter64": "Counter64",
+            "Gauge32": "Gauge32",
+            "Unsigned32": "Unsigned32",
+            "Integer32": "Integer32",
+            "DisplayString": "DisplayString",
+            "OctetString": "OctetString",
             # Add more as needed
         }
         pysnmp_name = type_map.get(base_type, base_type)
-        
+
         try:
             return self.mib_builder.import_symbols("SNMPv2-SMI", pysnmp_name)[0]
         except Exception:
@@ -707,9 +808,8 @@ class SNMPAgent:
                 return self.mib_builder.import_symbols("SNMPv2-TC", pysnmp_name)[0]
             except Exception:
                 from pysnmp.proto import rfc1902
+
                 return getattr(rfc1902, pysnmp_name, None)
-
-
 
 
 if __name__ == "__main__":
@@ -720,6 +820,7 @@ if __name__ == "__main__":
         agent.run()
     except Exception as e:
         import traceback
+
         print(f"\nERROR: {type(e).__name__}: {e}", file=sys.stderr)
         traceback.print_exc()
         sys.exit(1)

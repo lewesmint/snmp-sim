@@ -7,7 +7,8 @@ and making table registration behavior clearer and more maintainable.
 
 import logging
 from typing import Any, Dict, Set, Optional
-from app.base_type_handler import BaseTypeHandler, TypeInfo
+from app.base_type_handler import BaseTypeHandler
+from app.types import TypeInfo, TypeRegistry
 
 
 class TableRegistrar:
@@ -21,7 +22,7 @@ class TableRegistrar:
         mib_table_row: Any,
         mib_table_column: Any,
         logger: logging.Logger,
-        type_registry: TypeInfo,
+        type_registry: TypeRegistry,
     ):
         """
         Initialize the TableRegistrar.
@@ -41,10 +42,7 @@ class TableRegistrar:
         self.mib_table_row = mib_table_row
         self.mib_table_column = mib_table_column
         self.logger = logger
-        self.type_handler = BaseTypeHandler(
-            type_registry=type_registry,
-            logger=logger
-        )
+        self.type_handler = BaseTypeHandler(type_registry=type_registry, logger=logger)
 
     def find_table_related_objects(self, mib_json: Dict[str, Any]) -> Set[str]:
         """
@@ -63,17 +61,19 @@ class TableRegistrar:
         for name, info in mib_json.items():
             if not isinstance(info, dict):
                 continue
-            if name.endswith('Table') or name.endswith('Entry'):
+            if name.endswith("Table") or name.endswith("Entry"):
                 table_related_objects.add(name)
-                if name.endswith('Entry'):
-                    entry_oid = tuple(info.get('oid', []))
+                if name.endswith("Entry"):
+                    entry_oid = tuple(info.get("oid", []))
                     # Find all columns that are children of this entry
                     for col_name, col_info in mib_json.items():
                         if not isinstance(col_info, dict):
                             continue
-                        col_oid = tuple(col_info.get('oid', []))
-                        if (len(col_oid) == len(entry_oid) + 1 and
-                            col_oid[:len(entry_oid)] == entry_oid):
+                        col_oid = tuple(col_info.get("oid", []))
+                        if (
+                            len(col_oid) == len(entry_oid) + 1
+                            and col_oid[: len(entry_oid)] == entry_oid
+                        ):
                             table_related_objects.add(col_name)
         return table_related_objects
 
@@ -81,7 +81,7 @@ class TableRegistrar:
         self,
         mib: str,
         mib_json: Dict[str, Any],
-        type_registry: Dict[str, Any],
+        type_registry: TypeRegistry,
         mib_jsons: Dict[str, Dict[str, Any]],
     ) -> None:
         """
@@ -97,7 +97,9 @@ class TableRegistrar:
             mib_jsons: Full collection of loaded MIBs (updated with table rows)
         """
         if not (self.mib_table and self.mib_table_row and self.mib_table_column):
-            self.logger.debug(f"Skipping table registration for {mib}: MIB table classes not available")
+            self.logger.debug(
+                f"Skipping table registration for {mib}: MIB table classes not available"
+            )
             return
 
         # Find all tables by looking for objects ending in "Table"
@@ -106,7 +108,7 @@ class TableRegistrar:
         for name, info in mib_json.items():
             if not isinstance(info, dict):
                 continue
-            if name.endswith('Table') and info.get('access') == 'not-accessible':
+            if name.endswith("Table") and info.get("access") == "not-accessible":
                 # Found a table, now find its entry and columns
                 table_prefix = name[:-5]  # Remove "Table" suffix
                 entry_name = f"{table_prefix}Entry"
@@ -115,7 +117,7 @@ class TableRegistrar:
                 if entry_name not in mib_json:
                     continue
 
-                entry_oid = tuple(mib_json[entry_name]['oid'])
+                entry_oid = tuple(mib_json[entry_name]["oid"])
 
                 # Collect all columns for this table by checking OID hierarchy
                 # Columns must be direct children of the entry OID
@@ -125,34 +127,42 @@ class TableRegistrar:
                         continue
                     if col_name in [name, entry_name]:
                         continue
-                    col_oid = tuple(col_info.get('oid', []))
+                    col_oid = tuple(col_info.get("oid", []))
                     # Check if column OID is a child of entry OID
-                    if (len(col_oid) == len(entry_oid) + 1 and
-                        col_oid[:len(entry_oid)] == entry_oid):
+                    if (
+                        len(col_oid) == len(entry_oid) + 1
+                        and col_oid[: len(entry_oid)] == entry_oid
+                    ):
                         columns[col_name] = col_info
 
                 if columns:
                     tables[name] = {
-                        'table': info,
-                        'entry': mib_json[entry_name],
-                        'columns': columns,
-                        'prefix': table_prefix
+                        "table": info,
+                        "entry": mib_json[entry_name],
+                        "columns": columns,
+                        "prefix": table_prefix,
                     }
 
         # Register each table in the JSON model (but NOT in pysnmp to avoid index errors)
         for table_name, table_data in tables.items():
-            self.logger.debug(f"Processing table: {table_name} (entry: {table_data['entry']})")
+            self.logger.debug(
+                f"Processing table: {table_name} (entry: {table_data['entry']})"
+            )
             try:
-                self.register_single_table(mib, table_name, table_data, type_registry, mib_jsons)
+                self.register_single_table(
+                    mib, table_name, table_data, type_registry, mib_jsons
+                )
             except Exception as e:
-                self.logger.warning(f"Could not register table {table_name}: {e}", exc_info=True)
+                self.logger.warning(
+                    f"Could not register table {table_name}: {e}", exc_info=True
+                )
 
     def register_single_table(
         self,
         mib: str,
         table_name: str,
         table_data: Dict[str, Any],
-        type_registry: Dict[str, Any],
+        type_registry: TypeRegistry,
         mib_jsons: Dict[str, Dict[str, Any]],
     ) -> None:
         """
@@ -172,30 +182,34 @@ class TableRegistrar:
 
         table_json = mib_json.get(table_name)
         if table_json is None:
-            table_json = {'rows': []}
+            table_json = {"rows": []}
             mib_json[table_name] = table_json
-        if 'rows' not in table_json:
-            table_json['rows'] = []
+        if "rows" not in table_json:
+            table_json["rows"] = []
 
         # Build a new row with initial values for all columns (including index columns)
         new_row = {}
-        for col_name, col_info in table_data['columns'].items():
-            type_name = col_info.get('type', '')
+        for col_name, col_info in table_data["columns"].items():
+            type_name = col_info.get("type", "")
             type_info = type_registry.get(type_name, {}) if type_name else {}
-            base_type = type_info.get('base_type') or type_name
-            value = self._get_default_value_for_type(col_info, type_name, type_info, base_type)
+            base_type = type_info.get("base_type") or type_name
+            value = self._get_default_value_for_type(
+                col_info, type_name, type_info, base_type
+            )
             new_row[col_name] = value
 
         # Set index columns to 1 (or suitable value)
-        entry = table_data['entry']
-        index_names = entry.get('indexes', [])
+        entry = table_data["entry"]
+        index_names = entry.get("indexes", [])
         for idx_col in index_names:
             if idx_col in new_row:
                 new_row[idx_col] = 1
 
         # Add the row to the table JSON
-        table_json['rows'].append(new_row)
-        self.logger.info(f"Created row in {table_name} for MIB {mib} with {len(new_row)} columns: {new_row}")
+        table_json["rows"].append(new_row)
+        self.logger.info(
+            f"Created row in {table_name} for MIB {mib} with {len(new_row)} columns: {new_row}"
+        )
 
         # --- PySNMP Table/Row/Column Registration ---
         self._register_pysnmp_table(mib, table_name, table_data, type_registry, new_row)
@@ -223,46 +237,54 @@ class TableRegistrar:
             self.logger.warning(f"mib_builder not available for table {table_name}")
             return
 
-        table_oid = tuple(table_data['table']['oid'])
-        entry_oid = tuple(table_data['entry']['oid'])
-        columns = table_data['columns']
+        table_oid = tuple(table_data["table"]["oid"])
+        entry_oid = tuple(table_data["entry"]["oid"])
+        columns = table_data["columns"]
 
         # Create Table, Row, and Column objects
-        table_sym = self.mib_table(table_oid)
-        row_sym = self.mib_table_row(entry_oid)
+        self.mib_table(table_oid)
+        self.mib_table_row(entry_oid)
         col_syms = []
         col_names = []
         debug_oid_list = []
         self.logger.debug(f"Registering table: {table_name} OID={table_oid}")
         self.logger.debug(f"Registering row: {table_name}Entry OID={entry_oid}")
         for col_name, col_info in columns.items():
-            col_oid = tuple(col_info['oid'])
+            col_oid = tuple(col_info["oid"])
             # Resolve SNMP type for the column
-            type_name = col_info.get('type', '')
+            type_name = col_info.get("type", "")
             type_info = type_registry.get(type_name, {}) if type_name else {}
-            base_type = type_info.get('base_type') or type_name
+            base_type = type_info.get("base_type") or type_name
             pysnmp_type = self._resolve_snmp_type(base_type, col_name, table_name)
             if pysnmp_type is None:
                 continue
             col_syms.append(self.mib_table_column(col_oid, pysnmp_type()))
-            self.logger.debug(f"Registering column: {col_name} OID={col_oid} type={base_type}")
+            self.logger.debug(
+                f"Registering column: {col_name} OID={col_oid} type={base_type}"
+            )
             debug_oid_list.append(col_oid)
             col_names.append(col_name)
 
-        self.logger.info(f"About to export table {table_name} with OIDs: table={table_oid}, row={entry_oid}, columns={debug_oid_list}")
+        self.logger.info(
+            f"About to export table {table_name} with OIDs: table={table_oid}, row={entry_oid}, columns={debug_oid_list}"
+        )
         # DISABLED: Dynamic table registration doesn't work with pysnmp's responder
         # Use compiled MIBs with proper table definitions instead
-        self.logger.info(f"Skipped exporting table {table_name} to pysnmp (JSON-only for now)")
+        self.logger.info(
+            f"Skipped exporting table {table_name} to pysnmp (JSON-only for now)"
+        )
 
         # Register row instances (stub - table support via proper MIB compilation)
-        self._register_row_instances(mib, table_name, table_data, type_registry, col_names, new_row)
+        self._register_row_instances(
+            mib, table_name, table_data, type_registry, col_names, new_row
+        )
 
     def _register_row_instances(
         self,
         mib: str,
         table_name: str,
         table_data: Dict[str, Any],
-        type_registry: Dict[str, Any],
+        type_registry: TypeRegistry,
         col_names: list[str],
         new_row: Dict[str, Any],
     ) -> None:
@@ -273,7 +295,9 @@ class TableRegistrar:
         """
         pass
 
-    def _resolve_snmp_type(self, base_type: str, col_name: str, table_name: str) -> Optional[Any]:
+    def _resolve_snmp_type(
+        self, base_type: str, col_name: str, table_name: str
+    ) -> Optional[Any]:
         """
         Resolve an SNMP type class from its base type name.
 
@@ -288,24 +312,30 @@ class TableRegistrar:
         try:
             if base_type:
                 try:
-                    return self.mib_builder.import_symbols('SNMPv2-SMI', base_type)[0]
+                    return self.mib_builder.import_symbols("SNMPv2-SMI", base_type)[0]
                 except Exception:
                     try:
-                        return self.mib_builder.import_symbols('SNMPv2-TC', base_type)[0]
+                        return self.mib_builder.import_symbols("SNMPv2-TC", base_type)[
+                            0
+                        ]
                     except Exception:
                         from pysnmp.proto import rfc1902
+
                         return getattr(rfc1902, base_type, None)
             return None
         except Exception as e:
-            self.logger.error(f"Error resolving SNMP type {base_type} for column {col_name} in {table_name}: {e}", exc_info=True)
+            self.logger.error(
+                f"Error resolving SNMP type {base_type} for column {col_name} in {table_name}: {e}",
+                exc_info=True,
+            )
             return None
 
     def _get_default_value_for_type(
         self,
         col_info: Dict[str, Any],
         type_name: str,
-        type_info: Dict[str, Any],
-        base_type: str
+        type_info: TypeInfo,
+        base_type: str,
     ) -> Any:
         """
         Determine a sensible default value for a type using BaseTypeHandler.
@@ -321,5 +351,5 @@ class TableRegistrar:
         """
         # Use BaseTypeHandler which only knows about 3 base ASN.1 types
         # and resolves everything else from the type registry
-        context = {'initial': col_info.get('initial')} if 'initial' in col_info else {}
+        context = {"initial": col_info.get("initial")} if "initial" in col_info else {}
         return self.type_handler.get_default_value(type_name, context)

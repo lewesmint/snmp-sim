@@ -6,14 +6,15 @@ import argparse
 import json
 import os
 from typing import Any, Dict
+from app.types import TypeRegistry
 
-def load_all_schemas(schema_dir: str) -> Dict[str, Dict[str, Any]]:
+def load_all_schemas(schema_dir: str) -> TypeRegistry:
     """Load all schema.json files from subdirectories in schema_dir."""
-    model = {}
+    model : TypeRegistry = {}
     if not os.path.exists(schema_dir):
         print(f"Schema directory not found: {schema_dir}", file=sys.stderr)
         return model
-    
+
     for item in os.listdir(schema_dir):
         mib_dir = os.path.join(schema_dir, item)
         if os.path.isdir(mib_dir):
@@ -28,16 +29,22 @@ def load_all_schemas(schema_dir: str) -> Dict[str, Dict[str, Any]]:
                     print(f"Error loading {schema_path}: {e}", file=sys.stderr)
                 except Exception as e:
                     print(f"Error processing {item}: {e}", file=sys.stderr)
-    
+
     return model
+
 
 def print_model_summary(model: Dict[str, Dict[str, Any]]) -> None:
     """Print a summary of the loaded model."""
     print(f"Loaded {len(model)} MIB schemas:")
     for mib, schema in model.items():
         object_count = len(schema)
-        table_count = sum(1 for obj in schema.values() if isinstance(obj, dict) and obj.get("type") == "MibTable")
+        table_count = sum(
+            1
+            for obj in schema.values()
+            if isinstance(obj, dict) and obj.get("type") == "MibTable"
+        )
         print(f"  {mib}: {object_count} objects, {table_count} tables")
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
@@ -78,4 +85,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

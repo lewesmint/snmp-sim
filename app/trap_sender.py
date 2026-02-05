@@ -56,6 +56,7 @@ class TrapSender:
             return
 
         try:
+
             async def _send() -> Any:
                 result = await send_notification(
                     self.snmpEngine,
@@ -65,7 +66,9 @@ class TrapSender:
                     trap_type,
                     NotificationType(mib_symbol).add_var_binds((oid, value)),
                 )
-                error_indication = cast(tuple[Optional[str], int, int, list[tuple[Any, Any]]], result)[0]
+                error_indication = cast(
+                    tuple[Optional[str], int, int, list[tuple[Any, Any]]], result
+                )[0]
                 return error_indication
 
             error_indication = asyncio.run(_send())

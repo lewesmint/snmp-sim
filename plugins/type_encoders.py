@@ -4,13 +4,12 @@ This module provides plugins that encode Python values to SNMP-compatible types,
 handling TEXTUAL-CONVENTIONs and special formatting requirements.
 """
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 import logging
 
-logger = logging.getLogger(__name__)
+from app.types import TypeEncoder
 
-# Type encoder function signature: (value: Any) -> Any
-TypeEncoder = Callable[[Any], Any]
+logger = logging.getLogger(__name__)
 
 # Registry of type encoders
 _type_encoders: Dict[str, TypeEncoder] = {}
@@ -18,7 +17,7 @@ _type_encoders: Dict[str, TypeEncoder] = {}
 
 def register_type_encoder(type_name: str, encoder: TypeEncoder) -> None:
     """Register an encoder function for a specific SNMP type.
-    
+
     Args:
         type_name: SNMP type name (e.g., 'DateAndTime', 'DisplayString')
         encoder: Function that encodes Python value to SNMP-compatible format
@@ -29,10 +28,10 @@ def register_type_encoder(type_name: str, encoder: TypeEncoder) -> None:
 
 def get_type_encoder(type_name: str) -> Optional[TypeEncoder]:
     """Get the encoder function for a type, if registered.
-    
+
     Args:
         type_name: SNMP type name
-        
+
     Returns:
         Encoder function, or None if no encoder registered
     """
@@ -41,11 +40,11 @@ def get_type_encoder(type_name: str) -> Optional[TypeEncoder]:
 
 def encode_value(value: Any, type_name: str) -> Any:
     """Encode a value using the registered encoder for its type.
-    
+
     Args:
         value: The value to encode
         type_name: SNMP type name
-        
+
     Returns:
         Encoded value, or original value if no encoder registered
     """

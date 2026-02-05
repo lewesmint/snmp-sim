@@ -11,7 +11,7 @@ from app.generator import BehaviourGenerator
 def build_type_registry(
     compiled_mibs_dir: str | Path = "compiled-mibs",
     output_path: str = "data/types.json",
-    progress_callback: Optional[Callable[[str], None]] = None
+    progress_callback: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
     """
     Build the type registry from compiled MIBs and export to JSON.
@@ -49,11 +49,10 @@ def build_type_registry(
 
 
 __all__ = [
-    'SNMPAgent',
-    'MibCompiler',
-    'MibCompilationError',
-    'BehaviourGenerator',
-    'TypeRegistry',
-    'build_type_registry',
+    "SNMPAgent",
+    "MibCompiler",
+    "MibCompilationError",
+    "BehaviourGenerator",
+    "TypeRegistry",
+    "build_type_registry",
 ]
-

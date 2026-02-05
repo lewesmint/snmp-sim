@@ -1,6 +1,8 @@
 """
 SNMPTransport: Handles SNMP protocol and network transport.
 """
+
+
 class SNMPTransport:
     def __init__(self) -> None:
         # ...initialize transport...

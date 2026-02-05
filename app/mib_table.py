@@ -1,8 +1,10 @@
 """
 MibTable: Represents a MIB table (collection of rows/columns).
 """
+
 from typing import Any, List
 from .mib_object import MibObject
+
 
 class MibTable:
     def __init__(self, oid: str, columns: List[MibObject]) -> None:

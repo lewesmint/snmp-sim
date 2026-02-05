@@ -6,7 +6,7 @@ import argparse
 import json
 import os
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from app.app_config import AppConfig
 
@@ -19,7 +19,7 @@ def load_mib_schema(mib_name: str, schema_dir: str) -> Dict[str, Any] | None:
         return None
     try:
         with open(schema_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return cast(Dict[str, Any], json.load(f))
     except json.JSONDecodeError as e:
         print(f"Error: Failed to parse {schema_path}: {e}", file=sys.stderr)
         return None
@@ -40,14 +40,18 @@ def print_model_summary(model: Dict[str, Dict[str, Any]]) -> None:
     print(f"Loaded {len(model)} MIB schemas:")
     for mib, schema in model.items():
         object_count = len(schema)
-        table_count = sum(1 for obj in schema.values() if isinstance(obj, dict) and obj.get("type") == "MibTable")
+        table_count = sum(
+            1
+            for obj in schema.values()
+            if isinstance(obj, dict) and obj.get("type") == "MibTable"
+        )
         print(f"  {mib}: {object_count} objects, {table_count} tables")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Build an internal model from configured MIB schemas. "
-                    "Loads schema.json files and creates a combined in-memory model."
+        "Loads schema.json files and creates a combined in-memory model."
     )
     parser.add_argument(
         "--schema-dir",
