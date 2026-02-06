@@ -2,6 +2,7 @@
 
 import pytest
 from app.table_registrar import TableRegistrar
+from app.types import TypeRegistry
 from typing import Any, Dict
 from pytest_mock import MockerFixture
 import logging
@@ -14,7 +15,17 @@ def logger() -> logging.Logger:
 
 
 @pytest.fixture
-def table_registrar(mocker: MockerFixture, logger: logging.Logger) -> TableRegistrar:
+def type_registry() -> TypeRegistry:
+    """Create a mock type registry."""
+    return {
+        "Integer32": {"base_type": "Integer32"},
+        "OctetString": {"base_type": "OctetString"},
+        "Counter32": {"base_type": "Counter32"},
+    }
+
+
+@pytest.fixture
+def table_registrar(mocker: MockerFixture, logger: logging.Logger, type_registry: TypeRegistry) -> TableRegistrar:
     """Create a TableRegistrar instance with mocked dependencies."""
     mib_builder = mocker.MagicMock()
     mib_scalar_instance = mocker.MagicMock()
@@ -29,6 +40,7 @@ def table_registrar(mocker: MockerFixture, logger: logging.Logger) -> TableRegis
         mib_table_row=mib_table_row,
         mib_table_column=mib_table_column,
         logger=logger,
+        type_registry=type_registry,
     )
 
 
@@ -171,6 +183,7 @@ def test_register_tables_creates_table_structure(table_registrar: TableRegistrar
 
 
 def test_register_tables_skips_when_classes_missing(logger: logging.Logger, caplog: pytest.LogCaptureFixture) -> None:
+    type_registry = {}
     registrar = TableRegistrar(
         mib_builder=None,
         mib_scalar_instance=None,
@@ -178,6 +191,7 @@ def test_register_tables_skips_when_classes_missing(logger: logging.Logger, capl
         mib_table_row=None,
         mib_table_column=None,
         logger=logger,
+        type_registry=type_registry,
     )
     with caplog.at_level(logging.WARNING):
         registrar.register_tables("TEST-MIB", {}, {}, {})
@@ -222,6 +236,7 @@ def test_register_single_table_creates_row(table_registrar: TableRegistrar, mock
 
 
 def test_register_pysnmp_table_no_builder(logger: logging.Logger) -> None:
+    type_registry = {}
     registrar = TableRegistrar(
         mib_builder=None,
         mib_scalar_instance=None,
@@ -229,6 +244,7 @@ def test_register_pysnmp_table_no_builder(logger: logging.Logger) -> None:
         mib_table_row=None,
         mib_table_column=None,
         logger=logger,
+        type_registry=type_registry,
     )
     registrar._register_pysnmp_table("TEST", "testTable", {
         "table": {"oid": [1, 2, 3]},

@@ -117,9 +117,29 @@ class SNMPAgent:
         from app.type_registry import TypeRegistry
 
         compiled_mib_paths: list[str] = []
+        compiler = MibCompiler(compiled_dir, self.app_config)
+        
+        # Always check if compiled MIBs exist; compile any missing ones
+        for mib_name in mibs:
+            compiled_file = os.path.join(compiled_dir, f"{mib_name}.py")
+            if not os.path.exists(compiled_file):
+                self.logger.info(f"Compiling missing MIB: {mib_name}")
+                try:
+                    # Pass just the module name; pysmi will find .mib files by name
+                    py_path = compiler.compile(mib_name)
+                    compiled_mib_paths.append(py_path)
+                    self.logger.info(f"Compiled {mib_name} to {py_path}")
+                except Exception as e:
+                    self.logger.error(
+                        f"Failed to compile {mib_name}: {e}", exc_info=True
+                    )
+                    continue
+            else:
+                compiled_mib_paths.append(compiled_file)
+        
         if self.preloaded_model and os.path.exists("data/types.json"):
             self.logger.info(
-                "Using preloaded model and existing types.json, skipping MIB compilation"
+                "Using preloaded model and existing types.json, skipping full MIB compilation"
             )
             # Load existing type registry
             with open("data/types.json", "r") as f:
@@ -127,20 +147,6 @@ class SNMPAgent:
             type_registry = TypeRegistry(Path(""))  # dummy
             type_registry._registry = type_registry_data
         else:
-            compiler = MibCompiler(compiled_dir, self.app_config)
-            compiled_mib_paths = []
-            for mib_path in mibs:
-                self.logger.info(f"Compiling MIB: {mib_path}")
-                try:
-                    py_path = compiler.compile(mib_path)
-                    compiled_mib_paths.append(py_path)
-                    self.logger.info(f"Compiled {mib_path} to {py_path}")
-                except Exception as e:
-                    self.logger.error(
-                        f"Failed to compile {mib_path}: {e}", exc_info=True
-                    )
-                    continue
-
             type_registry = TypeRegistry(Path(compiled_dir))
             type_registry.build()
             type_registry.export_to_json("data/types.json")

@@ -229,31 +229,36 @@ def test_colored_formatter_changes_levelname() -> None:
     assert record.levelname == original
 
 
-def test_validate_type_registry_ok(capsys: pytest.CaptureFixture[str]) -> None:
+def test_validate_type_registry_ok() -> None:
+    """Test that valid type registry passes validation."""
     registry = {
-        "1.2.3": {
-            "name": "sysDescr",
-            "syntax": "DisplayString",
-            "description": "System description",
-        }
+        "DisplayString": {
+            "base_type": "OctetString",
+            "used_by": [],
+            "defined_in": "SNMPv2-TC",
+            "abstract": False,
+        },
+        "Integer32": {
+            "base_type": "Integer32",
+            "used_by": ["sysUpTime"],
+            "defined_in": "SNMPv2-SMI",
+            "abstract": False,
+        },
     }
-    validate_type_registry(registry)
-    output = capsys.readouterr()
-    assert "Type registry validation passed." in output.out
+    is_valid, errors = validate_type_registry(registry)
+    assert is_valid is True
+    assert errors == []
 
 
-def test_validate_type_registry_missing_fields(capsys: pytest.CaptureFixture[str]) -> None:
+def test_validate_type_registry_missing_fields() -> None:
+    """Test that type registry with missing fields fails validation."""
     registry = {
-        "1.2.3": {
-            "name": 123,
-            "syntax": 123,
+        "DisplayString": {
+            "base_type": "OctetString",
+            # Missing: used_by, defined_in, abstract
         }
     }
-    with pytest.raises(SystemExit) as excinfo:
-        validate_type_registry(registry)
-    assert excinfo.value.code == 1
-    output = capsys.readouterr()
-    assert "Validation errors found" in output.out
-    assert "missing fields" in output.out
-    assert "'name' must be a string" in output.out
-    assert "'description' must be a string" in output.out
+    is_valid, errors = validate_type_registry(registry)
+    assert is_valid is False
+    assert len(errors) > 0
+    assert any("missing fields" in error for error in errors)

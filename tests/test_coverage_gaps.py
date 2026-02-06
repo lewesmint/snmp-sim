@@ -20,13 +20,18 @@ from app.generator import BehaviourGenerator
 @pytest.fixture
 def mock_registrar() -> TableRegistrar:
     """Create a mock TableRegistrar for testing."""
+    type_registry = {
+        "Integer32": {"base_type": "Integer32"},
+        "OctetString": {"base_type": "OctetString"},
+    }
     registrar = TableRegistrar(
         mib_builder=MagicMock(),
         mib_scalar_instance=MagicMock(),
         mib_table=MagicMock(),
         mib_table_row=MagicMock(),
         mib_table_column=MagicMock(),
-        logger=logging.getLogger("test")
+        logger=logging.getLogger("test"),
+        type_registry=type_registry
     )
     return registrar
 

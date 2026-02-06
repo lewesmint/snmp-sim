@@ -68,13 +68,18 @@ def snmp_engine_with_table(test_mib_json: Dict[str, Any]) -> engine.SnmpEngine:
     # Create TableRegistrar
     import logging
     logger = logging.getLogger('test')
+    type_registry = {
+        "Integer32": {"base_type": "Integer32"},
+        "OctetString": {"base_type": "OctetString"},
+    }
     registrar = TableRegistrar(
         mib_builder=mib_builder,
         mib_scalar_instance=MibScalarInstance,
         mib_table=MibTable,
         mib_table_row=MibTableRow,
         mib_table_column=MibTableColumn,
-        logger=logger
+        logger=logger,
+        type_registry=type_registry
     )
     
     # Define the table data

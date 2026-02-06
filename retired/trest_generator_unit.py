@@ -71,14 +71,13 @@ def test_get_default_value_from_type_info_plugin(monkeypatch: pytest.MonkeyPatch
     assert generator._get_default_value_from_type_info({"base_type": "Integer32"}, "sysDescr") == "value"
 
 
-def test_get_default_value_from_type_info_warns(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_default_value_from_type_info_raises(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     generator = BehaviourGenerator(output_dir="/tmp", load_default_plugins=False)
     monkeypatch.setattr("app.generator.get_default_value", lambda _type_info, _name: None)
 
-    with caplog.at_level("WARNING"):
-        value = generator._get_default_value_from_type_info({"base_type": "Integer32"}, "sysDescr")
-    assert value is None
-    assert "No plugin provided" in caplog.text
+    with pytest.raises(RuntimeError):
+        generator._get_default_value_from_type_info({"base_type": "Integer32"}, "sysDescr")
+
 
 
 def test_get_default_value_legacy() -> None:
@@ -105,6 +104,8 @@ def test_extract_mib_info_inherited_indexes(monkeypatch: pytest.MonkeyPatch, tmp
     generator = BehaviourGenerator(output_dir=str(tmp_path / "out"), load_default_plugins=False)
     monkeypatch.setattr(generator, "_load_type_registry", lambda: {"Integer32": {"base_type": "Integer32"}})
     monkeypatch.setattr(generator, "_get_dynamic_function", lambda _name: None)
+    # Avoid RuntimeError on default value lookup in this test
+    monkeypatch.setattr(generator, "_get_default_value_from_type_info", lambda _t, _s: 0)
 
     result = generator._extract_mib_info(str(tmp_path / "TEST-MIB.py"), mib_name)
     assert result["testEntry"]["index_from"] == [{"mib": "OTHER-MIB", "column": "ifIndex"}]
@@ -124,11 +125,14 @@ def test_generate_writes_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
 
 def test_generate_respects_existing_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     output_dir = tmp_path / "out"
-    output_dir.mkdir()
-    existing = output_dir / "TEST-MIB_behaviour.json"
+    generator = BehaviourGenerator(output_dir=str(output_dir), load_default_plugins=False)
+
+    # If schema.json exists for the MIB and force_regenerate=False, it should be respected
+    mib_dir = output_dir / "TEST-MIB"
+    mib_dir.mkdir(parents=True)
+    existing = mib_dir / "schema.json"
     existing.write_text("{}")
 
-    generator = BehaviourGenerator(output_dir=str(output_dir), load_default_plugins=False)
     monkeypatch.setattr(generator, "_parse_mib_name_from_py", lambda _p: "TEST-MIB")
 
     output = generator.generate(str(tmp_path / "TEST-MIB.py"), force_regenerate=False)
@@ -156,6 +160,8 @@ def test_generate_adds_default_row_for_table(monkeypatch: pytest.MonkeyPatch, tm
     rows = data["testTable"]["rows"]
     assert rows and rows[0]["idx"] == 1
     assert rows[0]["val"] == "default"
+    # Ensure returned path is the schema.json path
+    assert output.endswith("schema.json")
 
 
 def test_generate_extracts_index_names_from_compiled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -374,7 +380,7 @@ def test_generate_missing_mib_name(monkeypatch: pytest.MonkeyPatch) -> None:
 
         try:
             output = generator.generate(f.name, mib_name=None, force_regenerate=True)
-            assert "AUTO-MIB_behaviour.json" in output
+            assert "AUTO-MIB/schema.json" in output
         finally:
             import os
             os.unlink(f.name)
@@ -602,7 +608,7 @@ class TestGeneratorErrorHandling:
         
         # Should handle gracefully without raising
         output = generator.generate(str(tmp_path / "TEST-MIB.py"), force_regenerate=True)
-        assert output.endswith("TEST-MIB_behaviour.json")
+        assert output.endswith("schema.json")
 
     def test_generate_table_with_no_columns(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Test handling of table with entry but no columns"""
@@ -653,7 +659,7 @@ class TestGeneratorErrorHandling:
         
         # Should handle exception and continue
         output = generator.generate(str(tmp_path / "TEST-MIB.py"), force_regenerate=True)
-        assert output.endswith("TEST-MIB_behaviour.json")
+        assert output.endswith("schema.json")
 
     def test_parse_mib_name_with_fallback(self, tmp_path: Path) -> None:
         """Test parsing MIB names with fallback to filename"""
@@ -692,7 +698,7 @@ class TestGeneratorErrorHandling:
         monkeypatch.setattr(generator, "_extract_mib_info", lambda _p, _n: info)
 
         output = generator.generate(str(tmp_path / "TEST-MIB.py"), force_regenerate=True)
-        assert output.endswith("TEST-MIB_behaviour.json")
+        assert output.endswith("schema.json")
 
     def test_generate_symbol_is_table_row_not_table(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Test generate handles MibTableRow without matching MibTable (line 55)"""
@@ -711,7 +717,7 @@ class TestGeneratorErrorHandling:
         info["testEntry"]["type"] = "MibTableRow"
 
         output = generator.generate(str(tmp_path / "TEST-MIB.py"), force_regenerate=True)
-        assert output.endswith("TEST-MIB_behaviour.json")
+        assert output.endswith("schema.json")
 
     def test_generate_table_without_type_key(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Test generate assigns NoneType when type key missing from table (line 59)"""
@@ -729,7 +735,7 @@ class TestGeneratorErrorHandling:
         info["testTable"]["type"] = "MibTable"
 
         output = generator.generate(str(tmp_path / "TEST-MIB.py"), force_regenerate=True)
-        assert output.endswith("TEST-MIB_behaviour.json")
+        assert output.endswith("schema
 
     def test_generate_rows_not_list_or_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Test generate handles rows field that is not a list (line 61)"""
@@ -749,6 +755,8 @@ class TestGeneratorErrorHandling:
         output = generator.generate(str(tmp_path / "TEST-MIB.py"), force_regenerate=True)
         # After generation, rows should be converted to list
         assert isinstance(info["testTable"]["rows"], list)
+        # Ensure returned path is schema.json
+        assert output.endswith("schema.json")
 
     def test_extract_type_info_constraint_with_values(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test _extract_type_info handles constraints with values attribute (line 286)"""
@@ -851,7 +859,7 @@ class TestGeneratorErrorHandling:
         del info["testEntry"]["type"]
 
         output = generator.generate(str(tmp_path / "TEST-MIB.py"), force_regenerate=True)
-        assert output.endswith("TEST-MIB_behaviour.json")
+        assert output.endswith("schema.json")
 
     def test_generate_entry_not_in_info_dict(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Test generate when entry doesn't exist in info dict (line 88)"""

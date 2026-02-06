@@ -149,23 +149,24 @@ class TypeRecorder:
         except TypeError:
             return None
 
-    def infer_base_type_from_mro(self, syntax: object) -> Optional[str]:
+    @staticmethod
+    def infer_base_type_from_mro(syntax: object) -> Optional[str]:
         """
-        If getSyntax() does not unwrap a TEXTUAL-CONVENTION, infer the underlying
-        SNMP application type from the class MRO.
+        Infer the underlying SNMP application type from the class MRO.
 
-        Example compiled MIB:
-          class ProductID(TextualConvention, ObjectIdentifier): ...
+        This is a static helper so it can be used without instantiating a TypeRecorder
+        (useful in unit tests and simple type inspection).
         """
         cls = type(syntax)
-        snmp_types = self.get_snmpv2_smi_types()
+        snmp_types = TypeRecorder._discover_snmpv2_smi_types()
         for base in cls.__mro__[1:]:
             name = base.__name__
             if name in snmp_types:
                 return name
         return None
 
-    def unwrap_syntax(self, syntax: object) -> Tuple[str, str, object]:
+    @staticmethod
+    def unwrap_syntax(syntax: object) -> Tuple[str, str, object]:
         """
         Returns:
           (syntax_type_name, base_type_name, base_syntax_obj)
@@ -179,7 +180,7 @@ class TypeRecorder:
         if base_obj is not None:
             return syntax_type, base_obj.__class__.__name__, base_obj
 
-        inferred = self.infer_base_type_from_mro(syntax)
+        inferred = TypeRecorder.infer_base_type_from_mro(syntax)
         if inferred is not None:
             return syntax_type, inferred, syntax
 
@@ -505,10 +506,10 @@ class TypeRecorder:
         else:
             return "INTEGER"  # Default fallback
 
-    def _seed_base_types(self) -> Dict[str, TypeEntry]:
+    def _seed_base_types_impl(self) -> Dict[str, TypeEntry]:
         """
-        Create canonical entries for SNMP application types from SNMPv2-SMI so later
-        OBJECT-TYPE instances cannot accidentally tighten them
+        Implementation that creates canonical entries for SNMP application types
+        from SNMPv2-SMI so later OBJECT-TYPE instances cannot accidentally tighten them
         (eg sysServices constraining Integer32 to 0..127).
 
         Set base_type to the actual ASN.1 base type (INTEGER, OCTET STRING, OBJECT IDENTIFIER).
@@ -556,6 +557,16 @@ class TypeRecorder:
             }
 
         return seeded
+
+    @classmethod
+    def _seed_base_types(cls) -> Dict[str, TypeEntry]:
+        """Class-level entry point for seeding base types for tests and callers.
+
+        This creates a temporary TypeRecorder instance to perform seeding so callers
+        can invoke _seed_base_types() without constructing an instance themselves.
+        """
+        tr = cls(Path("."))
+        return tr._seed_base_types_impl()
 
     @staticmethod
     def _has_single_value_constraint(constraints: List[JsonDict]) -> bool:
@@ -794,6 +805,11 @@ class TypeRecorder:
                 # For SNMP application types (Counter32, Integer32, etc.), base_type should be the same as t_name.
                 # For TEXTUAL-CONVENTIONs, base_type will differ from t_name.
                 base_type_out: Optional[str] = base_type_raw if base_type_raw else None
+                # If the base_type_out refers to a seeded type that itself has no
+                # canonical base_type (eg ...: None), treat the base_type_out as
+                # effectively None so we don't drop useful constraints_repr.
+                if base_type_out is not None and base_type_out in types and types[base_type_out].get("base_type") is None:
+                    base_type_out = None
 
                 is_tc_def = self._is_textual_convention_symbol(sym_obj)
                 is_application_type = t_name in self.get_snmpv2_smi_types()
@@ -814,11 +830,33 @@ class TypeRecorder:
                     constraints_repr = None
                 else:
                     if base_type_out is None:
-                        display = None
-                        enums = None
+                        # For types whose base is unknown/None, we still capture
+                        # display hints from the syntax if available and also
+                        # inherit constraints/enums from the base_obj when
+                        # syntax itself does not provide them.
+                        display = self.extract_display_hint(syntax)
+
                         size, constraints, constraints_repr = self.extract_constraints(
                             syntax
                         )
+
+                        # If the syntax itself has no constraints, but the base
+                        # object (from getSyntax()) does, inherit those.
+                        if base_obj is not syntax:
+                            size2, constraints2, repr2 = self.extract_constraints(
+                                base_obj
+                            )
+                            if not constraints and constraints2:
+                                size, constraints, constraints_repr = (
+                                    size2,
+                                    constraints2,
+                                    repr2,
+                                )
+
+                        # Extract enums from syntax or fallback to base object
+                        enums = self.extract_enums_list(syntax)
+                        if enums is None and base_obj is not syntax:
+                            enums = self.extract_enums_list(base_obj)
                     else:
                         display = self.extract_display_hint(syntax)
 

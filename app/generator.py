@@ -143,6 +143,9 @@ class BehaviourGenerator:
                             col_info = info[col]
                             col_type = col_info.get("type", "")
                             type_info = self._type_registry.get(col_type, {})
+                            # Add enums from col_info to type_info if present
+                            if "enums" in col_info:
+                                type_info = {**type_info, "enums": col_info["enums"]}
                             # If this column is an index, set to 1, else use default
                             if col in index_names:
                                 default_row[col] = 1
@@ -250,6 +253,9 @@ class BehaviourGenerator:
             # but the actual compiled MIB has specific enums for each symbol
             if syntax_obj is not None and syntax_obj.__class__.__name__ != "NoneType":
                 extracted_type_info = self._extract_type_info(syntax_obj, type_name)
+                # DEBUG
+                if symbol_name_str in ("ifAdminStatus", "ifOperStatus"):
+                    logger.warning(f"DEBUG {symbol_name_str}: extracted enums = {extracted_type_info.get('enums')}")
                 # Merge extracted enums and constraints into type_info
                 # Extracted info has priority as it comes from the specific symbol
                 if extracted_type_info.get("enums"):
@@ -259,8 +265,9 @@ class BehaviourGenerator:
                     type_info = dict(type_info)  # Create a copy if not already done
                     type_info["constraints"] = extracted_type_info["constraints"]
 
-            # Provide sensible default initial values based on type (skip for structural types)
-            if is_structural:
+            # Provide sensible default initial values based on type (skip for structural types EXCEPT columns)
+            # Table columns should have defaults based on their type
+            if is_structural and symbol_type != "MibTableColumn":
                 initial_value = None
                 dynamic_func = None
             else:
@@ -269,13 +276,20 @@ class BehaviourGenerator:
                 )
                 dynamic_func = self._get_dynamic_function(symbol_name_str)
 
-            result[symbol_name_str] = {
+            entry = {
                 "oid": oid,
                 "type": type_name,
                 "access": access,
                 "initial": initial_value,
                 "dynamic_function": dynamic_func,
             }
+            
+            # Include enums in the schema if they exist
+            # This is critical for fields like ifAdminStatus that have enum constraints
+            if type_info and type_info.get("enums"):
+                entry["enums"] = type_info["enums"]
+            
+            result[symbol_name_str] = entry
 
         # Detect tables that inherit their index from another table (AUGMENTS pattern)
         # This needs to be done after all symbols are collected

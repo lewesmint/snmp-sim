@@ -12,3 +12,9 @@ exclude = [
     "compiled-mibs-test/",
     "^compiled-mibs/",  # Exclude auto-generated MIB files
 ]
+
+[tool.coverage.run]
+omit = [
+    "tests/*",
+    "compiled-mibs/*"
+]
