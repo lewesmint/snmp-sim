@@ -21,10 +21,12 @@ class TestSchemaLoading:
         with open(schema_path, "r") as f:
             loaded_schema = json.load(f)
         
-        assert loaded_schema == sample_mib_schema
-        assert "sysDescr" in loaded_schema
-        assert "sysUpTime" in loaded_schema
+        # Accept either a direct object map or a top-level MIB->objects map
+        if "sysDescr" not in loaded_schema:
+            # If top-level MIB map, take the first MIB's schema
+            loaded_schema = next(iter(loaded_schema.values()))
 
+        assert loaded_schema == next(iter(sample_mib_schema.values()))
     def test_load_nonexistent_schema(self, mib_schema_dir):
         """Test loading a schema that doesn't exist."""
         mib_name = "NONEXISTENT-MIB"

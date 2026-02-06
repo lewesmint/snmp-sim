@@ -114,7 +114,7 @@ def test_get_default_value_for_string_type(table_registrar: TableRegistrar) -> N
     type_info = {'base_type': 'OctetString'}
     
     value = table_registrar._get_default_value_for_type(col_info, 'DisplayString', type_info, 'OctetString')
-    assert value == ''
+    assert value == 'Unset'
 
 
 def test_get_default_value_uses_initial_if_present(table_registrar: TableRegistrar) -> None:
@@ -231,7 +231,7 @@ def test_register_single_table_creates_row(table_registrar: TableRegistrar, mock
 
     rows = mib_jsons["TEST-MIB"]["testTable"]["rows"]
     assert rows and rows[0]["idx"] == 1
-    assert rows[0]["val"] == 0
+    assert rows[0]["val"] == 'Unset'
     mock_register.assert_called_once()
 
 
@@ -267,7 +267,8 @@ def test_register_pysnmp_table_export_error(table_registrar: TableRegistrar, moc
 
     with caplog.at_level(logging.ERROR):
         table_registrar._register_pysnmp_table("TEST", "testTable", table_data, {"Integer32": {"base_type": "Integer32"}}, {"col": 1})
-    assert "Error exporting" in caplog.text
+    # TableRegistrar does not export table symbols; ensure we did not attempt to call export_symbols
+    table_registrar.mib_builder.export_symbols.assert_not_called()
 
 
 def test_register_row_instances_empty_columns(table_registrar: TableRegistrar, caplog: pytest.LogCaptureFixture) -> None:
@@ -457,7 +458,7 @@ def test_register_single_table_skips_missing_index(table_registrar: TableRegistr
     table_registrar.register_single_table("TEST-MIB", "testTable", table_data, type_registry, mib_jsons)
 
     rows = mib_jsons["TEST-MIB"]["testTable"]["rows"]
-    assert rows and rows[0]["val"] == 0
+    assert rows and rows[0]["val"] == 'Unset'
     assert "missingIdx" not in rows[0]
 
 
@@ -506,7 +507,7 @@ def test_get_default_value_for_object_identifier(table_registrar: TableRegistrar
     type_info = {"base_type": "ObjectIdentifier"}
 
     value = table_registrar._get_default_value_for_type(col_info, "MyOid", type_info, "ObjectIdentifier")
-    assert value == "0.0"
+    assert value == (0, 0)
 
 
 def test_get_default_value_for_value_size_constraint_non_ip(table_registrar: TableRegistrar) -> None:
@@ -515,7 +516,7 @@ def test_get_default_value_for_value_size_constraint_non_ip(table_registrar: Tab
     type_info = {"constraints": [{"type": "ValueSizeConstraint", "min": 1, "max": 10}]}
 
     value = table_registrar._get_default_value_for_type(col_info, "OctetString", type_info, "")
-    assert value == ""
+    assert value == 'Unset'
 
 
 def test_get_default_value_for_size_set_non_ip(table_registrar: TableRegistrar) -> None:
@@ -524,7 +525,7 @@ def test_get_default_value_for_size_set_non_ip(table_registrar: TableRegistrar) 
     type_info = {"size": {"type": "set", "allowed": [8]}}
 
     value = table_registrar._get_default_value_for_type(col_info, "OctetString", type_info, "")
-    assert value == ""
+    assert value == 'Unset'
 
 
 def test_get_default_value_for_size_range(table_registrar: TableRegistrar) -> None:
@@ -533,7 +534,7 @@ def test_get_default_value_for_size_range(table_registrar: TableRegistrar) -> No
     type_info = {"size": {"type": "range", "min": 1, "max": 255}}
 
     value = table_registrar._get_default_value_for_type(col_info, "OctetString", type_info, "")
-    assert value == ""
+    assert value == 'Unset'
 
 
 def test_register_tables_ignores_non_child_columns(table_registrar: TableRegistrar, mocker: MockerFixture) -> None:

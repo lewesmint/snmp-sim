@@ -134,11 +134,15 @@ class BaseTypeHandler:
         if "initial" in context:
             return context["initial"]
 
-        # Get type info from registry
-        type_info = self.get_type_info(type_name)
+        # Use type_info from context if provided (caller can supply resolved info), otherwise get from registry
+        if "type_info" in context and isinstance(context["type_info"], dict):
+            type_info = context["type_info"]
+        else:
+            type_info = self.get_type_info(type_name)
 
-        # Resolve to base ASN.1 type
-        base_type = self.resolve_to_base_type(type_name)
+        # Resolve to base ASN.1 type. Prefer base_type from type_info when available.
+        base_type_name = type_info.get("base_type", type_name)
+        base_type = self.resolve_to_base_type(base_type_name)
 
         # Check if it's a human-readable string type based on display hint
         display_hint = type_info.get("display_hint", "")

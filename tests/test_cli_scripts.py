@@ -58,10 +58,11 @@ def test_cli_mib_to_json_main(tmp_path: Path) -> None:
 def test_cli_mib_to_json_no_args() -> None:
     """Test cli_mib_to_json with no arguments"""
     with patch('sys.argv', ['cli_mib_to_json.py']), \
-         pytest.raises(SystemExit):
-        
+         patch('app.cli_mib_to_json.AppConfig', side_effect=FileNotFoundError("No config")):
         from app.cli_mib_to_json import main
-        main()
+        result = main()
+        # Should return non-zero (config not found)
+        assert result == 1
 
 
 def test_cli_mib_to_json_with_mib_name(tmp_path: Path) -> None:

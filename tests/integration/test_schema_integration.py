@@ -12,7 +12,7 @@ def test_schema_loading() -> None:
     """Test loading and decoding values from the improved schema."""
 
     # Load the improved schema
-    schema_path = "data/experiemntal_schema/improved_schema.json"
+    schema_path = "data/experimental_schema/improved_schema.json"
     with open(schema_path, "r") as f:
         schema = json.load(f)
 

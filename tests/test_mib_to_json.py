@@ -57,14 +57,14 @@ def test_cli_no_plugins_flag(mocker: MockerFixture, capsys: pytest.CaptureFixtur
     mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
 
     mock_generator = mocker.MagicMock()
-    mock_generator.generate.return_value = "mock-behaviour/TEST-MIB_behaviour.json"
+    mock_generator.generate.return_value = "mock-behaviour/TEST-MIB/schema.json"
     mocker.patch("app.cli_mib_to_json.BehaviourGenerator", return_value=mock_generator)
 
     exit_code = main(["compiled-mibs/TEST-MIB.py", "TEST-MIB", "--no-plugins"])
     output = capsys.readouterr()
 
     assert exit_code == 0
-    assert "Behaviour JSON written to mock-behaviour/TEST-MIB_behaviour.json" in output.out
+    assert "Schema JSON written to mock-behaviour/TEST-MIB/schema.json" in output.out
 
 
 def test_check_imported_mibs_warns_missing_compiled(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -116,12 +116,12 @@ def test_cli_mib_name_optional(mocker: MockerFixture, capsys: pytest.CaptureFixt
     mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
 
     mock_generator = mocker.MagicMock()
-    mock_generator.generate.return_value = "mock-behaviour/TEST-MIB_behaviour.json"
+    mock_generator.generate.return_value = "mock-behaviour/TEST-MIB/schema.json"
     mocker.patch("app.cli_mib_to_json.BehaviourGenerator", return_value=mock_generator)
 
     exit_code = main(["compiled-mibs/TEST-MIB.py"])
     output = capsys.readouterr()
 
     assert exit_code == 0
-    assert "Behaviour JSON written to mock-behaviour/TEST-MIB_behaviour.json" in output.out
+    assert "Schema JSON written to mock-behaviour/TEST-MIB/schema.json" in output.out
 

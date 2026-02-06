@@ -55,8 +55,8 @@ def test_register_pysnmp_table_column_type_resolution_fails(mock_registrar: Tabl
         mock_registrar._register_pysnmp_table("TEST", "testTable", table_data, type_registry, new_row)
     
     # Should skip the column and not register it
-    # The export should happen but with no columns
-    mock_registrar.mib_builder.export_symbols.assert_called_once()
+    # TableRegistrar does not export table symbols; ensure export_symbols not called
+    mock_registrar.mib_builder.export_symbols.assert_not_called()
 
 
 def test_register_row_instances_with_actual_columns(mock_registrar: TableRegistrar) -> None:

@@ -344,8 +344,27 @@ class SNMPAgent:
             self.logger.error("mibBuilder is not initialized.")
             return
 
-        # Use the MibRegistrar to register all MIBs
-        self.mib_registrar.register_all_mibs(self.mib_jsons)
+        # Create MibRegistrar lazily if it does not exist (tests may call this directly)
+        registrar = getattr(self, "mib_registrar", None)
+        if registrar is None:
+            try:
+                from app.mib_registrar import MibRegistrar
+
+                registrar = MibRegistrar(
+                    mib_builder=getattr(self, "mib_builder", None),
+                    mib_scalar_instance=getattr(self, "MibScalarInstance", None),
+                    mib_table=getattr(self, "MibTable", None),
+                    mib_table_row=getattr(self, "MibTableRow", None),
+                    mib_table_column=getattr(self, "MibTableColumn", None),
+                    logger=self.logger,
+                    start_time=self.start_time,
+                )
+                self.mib_registrar = registrar
+            except Exception:
+                self.logger.error("Failed to create MibRegistrar", exc_info=True)
+                return
+
+        registrar.register_all_mibs(self.mib_jsons)
 
     def _populate_sysor_table(self) -> None:
         """Populate sysORTable with the MIBs being served by this agent.
@@ -363,6 +382,30 @@ class SNMPAgent:
     # - _find_table_related_objects()
     # - _decode_value()
     # - _get_pysnmp_type()
+
+    def _decode_value(self, value: Any) -> Any:
+        """Compatibility wrapper: delegate decoding to MibRegistrar._decode_value.
+
+        Historically this was a method on SNMPAgent; tests and some external
+        callers expect it to exist. It simply delegates to a temporary
+        MibRegistrar instance which implements the decoding logic.
+        """
+        try:
+            from app.mib_registrar import MibRegistrar
+
+            temp = MibRegistrar(
+                mib_builder=None,
+                mib_scalar_instance=None,
+                mib_table=None,
+                mib_table_row=None,
+                mib_table_column=None,
+                logger=self.logger,
+                start_time=self.start_time,
+            )
+            return temp._decode_value(value)
+        except Exception:
+            # As a last resort, return the value unchanged
+            return value
 
 
 if __name__ == "__main__":

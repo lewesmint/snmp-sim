@@ -17,16 +17,10 @@ def mock_logger():
 
 
 @pytest.fixture
-def type_registry_file():
-    """Create a temporary type registry file."""
+def type_registry_file(sample_type_registry):
+    """Create a temporary type registry file using the canonical sample registry."""
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        type_registry = {
-            "TimeTicks": {"base_type": "TimeTicks"},
-            "OctetString": {"base_type": "OctetString"},
-            "Integer32": {"base_type": "Integer32"},
-            "Counter32": {"base_type": "Counter32"},
-        }
-        json.dump(type_registry, f)
+        json.dump(sample_type_registry, f)
         temp_path = f.name
     
     yield temp_path
@@ -37,14 +31,14 @@ def type_registry_file():
 
 @pytest.fixture
 def sample_type_registry():
-    """Provide sample type registry data."""
+    """Provide sample type registry data (normalized to ASN.1 base types)."""
     return {
         "TimeTicks": {"base_type": "TimeTicks"},
-        "OctetString": {"base_type": "OctetString"},
-        "Integer32": {"base_type": "Integer32"},
-        "Counter32": {"base_type": "Counter32"},
-        "DisplayString": {"base_type": "OctetString"},
-        "IPAddress": {"base_type": "OctetString"},
+        "OctetString": {"base_type": "OCTET STRING"},
+        "Integer32": {"base_type": "INTEGER", "constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]},
+        "Counter32": {"base_type": "INTEGER"},
+        "DisplayString": {"base_type": "OCTET STRING"},
+        "IPAddress": {"base_type": "OCTET STRING"},
     }
 
 
@@ -93,21 +87,26 @@ def sample_mib_schema():
 
 
 @pytest.fixture
-def mib_schema_dir(tmp_path: Path):
+def mib_schema_dir(tmp_path: Path, sample_mib_schema):
     """Create a temporary MIB schema directory."""
     schema_dir = tmp_path / "schemas"
     schema_dir.mkdir()
     
-    # Create a sample schema file
+    # Preserve older style TEST-MIB.json for compatibility
     mib_schema = {
         "TEST-MIB": {
             "sysDescr": {"oid": [1, 3, 6, 1], "type": "OctetString"}
         }
     }
-    
     schema_file = schema_dir / "TEST-MIB.json"
     schema_file.write_text(json.dumps(mib_schema))
-    
+
+    # Also create a proper MIB folder structure with schema.json for SNMPv2-MIB
+    snmpv2_dir = schema_dir / "SNMPv2-MIB"
+    snmpv2_dir.mkdir()
+    schema_json_path = snmpv2_dir / "schema.json"
+    schema_json_path.write_text(json.dumps(sample_mib_schema))
+
     return schema_dir
 
 
