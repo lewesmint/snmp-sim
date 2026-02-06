@@ -8,16 +8,11 @@ This test will:
 4. See what responses we get
 """
 
-import json
 import pytest
-import tempfile
-from pathlib import Path
 from typing import Dict, Any
 
-from pysnmp.smi import builder, view
+from pysnmp.smi import view
 from pysnmp.entity import engine
-from pysnmp.entity.rfc3413 import cmdrsp, context
-from pysnmp.proto import rfc1902
 
 from app.table_registrar import TableRegistrar
 
@@ -63,7 +58,7 @@ def snmp_engine_with_table(test_mib_json: Dict[str, Any]) -> engine.SnmpEngine:
     MibTableRow = mib_builder.importSymbols('SNMPv2-SMI', 'MibTableRow')[0]
     MibTableColumn = mib_builder.importSymbols('SNMPv2-SMI', 'MibTableColumn')[0]
     MibScalarInstance = mib_builder.importSymbols('SNMPv2-SMI', 'MibScalarInstance')[0]
-    Integer32 = mib_builder.importSymbols('SNMPv2-SMI', 'Integer32')[0]
+    mib_builder.importSymbols('SNMPv2-SMI', 'Integer32')[0]
     
     # Create TableRegistrar
     import logging
@@ -198,8 +193,6 @@ def test_table_oid_walkthrough() -> None:
     """
     
     # Table structure
-    table_oid = (1, 3, 6, 1, 99, 1, 1)
-    entry_oid = (1, 3, 6, 1, 99, 1, 1, 1)
     
     # Columns (base OIDs without instance index)
     testindex_col = (1, 3, 6, 1, 99, 1, 1, 1, 1)
@@ -226,7 +219,7 @@ def test_table_oid_walkthrough() -> None:
         assert len(oid) == 10, f"OID {oid} should have 10 parts"
         assert oid[:8] == (1, 3, 6, 1, 99, 1, 1, 1), f"OID {oid} should be in testEntry subtree"
     
-    print(f"Expected GETNEXT walk through table:")
+    print("Expected GETNEXT walk through table:")
     for oid, value in getnext_walk:
         print(f"  {oid} = {value}")
     

@@ -39,7 +39,7 @@ def test_default_value_fixes() -> None:
         
         # Now try extracting with the generator method
         type_info = gen._extract_type_info(syntax, type(syntax).__name__)
-        print(f'\nExtracted type info:')
+        print('\nExtracted type info:')
         print(json.dumps(type_info, indent=2, default=str))
         
         # Now test what the plugin would return

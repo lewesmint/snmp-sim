@@ -214,7 +214,7 @@ class TestSNMPAgentIntegration:
         else:
             actual_value = result.split("=")[-1].strip()
         
-        print(f"\n=== Behaviour JSON Verification ===")
+        print("\n=== Behaviour JSON Verification ===")
         print(f"Expected (from JSON): {expected_value}")
         print(f"Actual (from SNMP):   {actual_value}")
         

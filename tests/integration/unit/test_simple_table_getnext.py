@@ -9,8 +9,6 @@ import logging
 import pytest
 from pysnmp.smi import builder, view
 from pysnmp.entity import engine
-from pysnmp.entity.rfc3413 import cmdrsp, context
-from pysnmp.proto import rfc1902
 from typing import Dict, Any
 
 from app.table_registrar import TableRegistrar
@@ -66,7 +64,7 @@ def test_simple_2x2_table_with_getnext(
     MibTableRow = mib_builder.importSymbols('SNMPv2-SMI', 'MibTableRow')[0]
     MibTableColumn = mib_builder.importSymbols('SNMPv2-SMI', 'MibTableColumn')[0]
     MibScalarInstance = mib_builder.importSymbols('SNMPv2-SMI', 'MibScalarInstance')[0]
-    Integer32 = mib_builder.importSymbols('SNMPv2-SMI', 'Integer32')[0]
+    mib_builder.importSymbols('SNMPv2-SMI', 'Integer32')[0]
     
     # Create TableRegistrar
     registrar = TableRegistrar(
@@ -132,11 +130,6 @@ def test_simple_2x2_table_with_getnext(
     table_oid = (1, 3, 6, 1, 99, 1, 1)
     entry_oid = (1, 3, 6, 1, 99, 1, 1, 1)
     col1_oid = (1, 3, 6, 1, 99, 1, 1, 1, 1)  # testIndex
-    col2_oid = (1, 3, 6, 1, 99, 1, 1, 1, 2)  # testValue
-    row1_col1_oid = (1, 3, 6, 1, 99, 1, 1, 1, 1, 1)  # testIndex.1
-    row1_col2_oid = (1, 3, 6, 1, 99, 1, 1, 1, 2, 1)  # testValue.1
-    row2_col1_oid = (1, 3, 6, 1, 99, 1, 1, 1, 1, 2)  # testIndex.2
-    row2_col2_oid = (1, 3, 6, 1, 99, 1, 1, 1, 2, 2)  # testValue.2
     
     # Try to translate OIDs through the MIB
     try:
@@ -227,8 +220,6 @@ def test_table_row_instance_oid_generation() -> None:
     """
     
     # Table structure
-    table_oid = (1, 3, 6, 1, 99, 1, 1)
-    entry_oid = (1, 3, 6, 1, 99, 1, 1, 1)
     col1_oid = (1, 3, 6, 1, 99, 1, 1, 1, 1)
     col2_oid = (1, 3, 6, 1, 99, 1, 1, 1, 2)
     
@@ -273,8 +264,6 @@ def test_table_without_export_responds_to_mib_lookup(
     
     # OIDs for our non-registered table
     table_oid = (1, 3, 6, 1, 99, 1, 1)
-    entry_oid = (1, 3, 6, 1, 99, 1, 1, 1)
-    col1_oid = (1, 3, 6, 1, 99, 1, 1, 1, 1)
     
     # Try to get next OID from our non-registered table
     try:

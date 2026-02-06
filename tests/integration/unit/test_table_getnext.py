@@ -9,7 +9,7 @@ import logging
 import pytest
 from typing import TypeAlias, Any
 from unittest.mock import MagicMock
-from pysnmp.smi import builder, view
+from pysnmp.smi import builder
 from pysnmp.entity import engine
 from app.table_registrar import TableRegistrar
 

@@ -2,7 +2,6 @@
 """Test script to verify value decoding functionality."""
 
 import sys
-import os
 
 from app.snmp_agent import SNMPAgent
 

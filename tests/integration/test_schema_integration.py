@@ -2,7 +2,6 @@
 """Test that the agent can properly load and decode values from the improved schema."""
 
 import sys
-import os
 import json
 
 from app.snmp_agent import SNMPAgent

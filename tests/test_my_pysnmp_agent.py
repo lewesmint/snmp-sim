@@ -32,7 +32,6 @@ def test_mibs_loaded_from_config(agent: SNMPAgent) -> None:
 
 def test_scalar_value_get(agent: SNMPAgent, mocker: MockerFixture) -> None:
     """Test that scalar values can be set on the agent."""
-    sysdescr_oid = (1, 3, 6, 1, 2, 1, 1, 1, 0)
     agent.mib_jsons = {'SNMPv2-MIB': {'sysDescr': {'current': 'SNMP Agent Test'}}}
     # Verify mib_jsons was set correctly
     assert 'SNMPv2-MIB' in agent.mib_jsons
@@ -41,6 +40,4 @@ def test_scalar_value_get(agent: SNMPAgent, mocker: MockerFixture) -> None:
 
 def test_scalar_value_set_and_persist(agent: SNMPAgent) -> None:
     """Test setting scalar values on the agent."""
-    syscontact_oid = (1, 3, 6, 1, 2, 1, 1, 4, 0)
-    test_val = 'PyTest Test Contact'
     agent.mib_jsons = {'SNMPv2-MIB': {'sysContact': {'current': ''}}}

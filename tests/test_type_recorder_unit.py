@@ -38,6 +38,8 @@ class TypeEntryDict(TypedDict, total=False):
     constraints: List[ValueRangeConstraintDict | ValueSizeConstraintDict | SingleValueConstraintDict]
     constraints_repr: str | None
     enums: dict[str, int] | None
+    defined_in: str | None
+    abstract: bool | None
     used_by: List[str]
 
 
@@ -709,6 +711,8 @@ class TestDropRedundantBaseValueRange:
                 "constraints": base_constraints,
                 "constraints_repr": None,
                 "enums": None,
+                "defined_in": None,
+                "abstract": False,
                 "used_by": [],
             }
         }
@@ -747,6 +751,8 @@ class TestDropRedundantBaseValueRange:
                 "constraints": base_constraints,
                 "constraints_repr": None,
                 "enums": None,
+                "defined_in": None,
+                "abstract": False,
                 "used_by": [],
             }
         }
@@ -788,6 +794,8 @@ class TestDropRedundantBaseRangeForEnums:
                 "constraints": base_constraints,
                 "constraints_repr": None,
                 "enums": None,
+                "defined_in": None,
+                "abstract": False,
                 "used_by": [],
             }
         }
@@ -812,6 +820,8 @@ class TestDropRedundantBaseRangeForEnums:
                 "constraints": base_constraints,
                 "constraints_repr": None,
                 "enums": None,
+                "defined_in": None,
+                "abstract": False,
                 "used_by": [],
             }
         }
@@ -850,6 +860,8 @@ class TestDropRedundantBaseRangeForEnums:
                 "constraints": [{"type": "ValueSizeConstraint", "min": 1, "max": 1}],
                 "constraints_repr": None,
                 "enums": None,
+                "defined_in": None,
+                "abstract": False,
                 "used_by": [],
             }
         }
@@ -871,6 +883,8 @@ class TestDropRedundantBaseRangeForEnums:
                 "constraints": [{"type": "ValueRangeConstraint", "min": "0", "max": "100"}],
                 "constraints_repr": None,
                 "enums": None,
+                "defined_in": None,
+                "abstract": False,
                 "used_by": [],
             }
         }
@@ -893,6 +907,8 @@ class TestDropRedundantBaseRangeForEnums:
                 "constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 100}],
                 "constraints_repr": None,
                 "enums": None,
+                "defined_in": None,
+                "abstract": False,
                 "used_by": [],
             }
         }
@@ -1056,6 +1072,8 @@ class TestBuild:
             "constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 100}],
             "constraints_repr": None,
             "enums": None,
+            "defined_in": None,
+            "abstract": False,
             "used_by": [],
         }
         custom_entry: TypeEntryDict = {
@@ -1065,6 +1083,8 @@ class TestBuild:
             "constraints": [],
             "constraints_repr": None,
             "enums": None,
+            "defined_in": None,
+            "abstract": False,
             "used_by": [],
         }
 
@@ -1125,6 +1145,8 @@ class TestBuild:
             "constraints": [],
             "constraints_repr": None,
             "enums": None,
+            "defined_in": None,
+            "abstract": False,
             "used_by": [],
         }
 
@@ -1173,6 +1195,8 @@ class TestBuild:
             "constraints": [],
             "constraints_repr": None,
             "enums": None,
+            "defined_in": None,
+            "abstract": False,
             "used_by": [],
         }
 
@@ -1214,6 +1238,8 @@ class TestRegistry:
             "constraints": [],
             "constraints_repr": None,
             "enums": None,
+            "defined_in": None,
+            "abstract": False,
             "used_by": [],
         }
         recorder._registry = {"test": test_entry}
@@ -1242,6 +1268,8 @@ class TestExportToJson:
             "constraints": [],
             "constraints_repr": None,
             "enums": None,
+            "defined_in": None,
+            "abstract": False,
             "used_by": [],
         }
         recorder._registry = {"Integer32": int32_entry}

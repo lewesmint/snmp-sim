@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import logging
-from typing import Any
 
-import pytest
 
 from app.snmp_agent import SNMPAgent
 

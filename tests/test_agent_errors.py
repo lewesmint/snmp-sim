@@ -1,8 +1,6 @@
 import pytest
 from app.snmp_agent import SNMPAgent
-from app.app_config import AppConfig
 from typing import Any, List
-from unittest.mock import MagicMock, patch
 
 @pytest.mark.parametrize("mib_name", [
     "IF-MIB", "HOST-RESOURCES-MIB", "CISCO-ALARM-MIB", "SNMPv2-MIB"

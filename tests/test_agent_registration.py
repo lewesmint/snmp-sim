@@ -1,6 +1,6 @@
 import pytest
 from pytest_mock import MockerFixture
-from typing import Optional, Any
+from typing import Any
 
 from app.snmp_agent import SNMPAgent
 

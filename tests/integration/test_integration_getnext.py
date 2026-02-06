@@ -7,7 +7,7 @@ objects, and verifies that GETNEXT operations work without SmiError exceptions.
 
 import logging
 import pytest
-from pysnmp.smi import builder, view
+from pysnmp.smi import builder
 from pysnmp.entity import engine
 
 from app.table_registrar import TableRegistrar

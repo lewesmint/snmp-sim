@@ -201,10 +201,10 @@ def test_snmp_agent_register_mib_objects_load_type_registry_fails(caplog: pytest
     # Don't replace logger - use the actual one so caplog captures it
     agent.mib_builder = Mock()
     agent.mib_jsons = {"TEST-MIB": {}}
-    agent.MibScalarInstance = Mock()
-    agent.MibTable = Mock()
-    agent.MibTableRow = Mock()
-    agent.MibTableColumn = Mock()
+    setattr(agent, "MibScalarInstance", Mock())
+    setattr(agent, "MibTable", Mock())
+    setattr(agent, "MibTableRow", Mock())
+    setattr(agent, "MibTableColumn", Mock())
     
     # Make the type registry file not exist
     with patch('app.snmp_agent.os.path.join', return_value="/nonexistent/types.json"), \

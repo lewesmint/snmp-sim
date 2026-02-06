@@ -9,25 +9,25 @@ from pytest_mock import MockerFixture
 
 
 @pytest.fixture
-def agent(mocker: MockerFixture) -> SNMPAgent:
+def agent(mocker: MockerFixture) -> Any:
     """Create a mocked SNMPAgent for testing."""
     agent = SNMPAgent.__new__(SNMPAgent)
     agent.mib_builder = mocker.MagicMock()
     agent.mib_builder.import_symbols.return_value = []
     agent.snmpEngine = mocker.MagicMock()
     agent.logger = mocker.MagicMock()
-    # Patch SNMPAgent dependencies for table registration
-    agent.MibTable = mocker.MagicMock()
-    agent.MibTableRow = mocker.MagicMock()
-    agent.MibTableColumn = mocker.MagicMock()
-    agent.MibScalar = mocker.MagicMock()
+    # Patch SNMPAgent dependencies for table registration (use setattr to satisfy mypy)
+    setattr(agent, "MibTable", mocker.MagicMock())
+    setattr(agent, "MibTableRow", mocker.MagicMock())
+    setattr(agent, "MibTableColumn", mocker.MagicMock())
+    setattr(agent, "MibScalar", mocker.MagicMock())
     return agent
 
 
 
 
 @pytest.fixture
-def mock_agent_methods(agent: SNMPAgent, mocker: MockerFixture) -> Generator[None, None, None]:
+def mock_agent_methods(agent: Any, mocker: MockerFixture) -> Generator[None, None, None]:
     """Mock internal agent methods using pytest-mock."""
     # Only mock methods that actually exist on the agent
     yield
@@ -56,7 +56,7 @@ def test_single_column_index() -> None:
         assert 'access' in col_info, f"Column {col_name} missing access"
 
 
-def test_augments_inherited_index(agent: SNMPAgent) -> None:
+def test_augments_inherited_index(agent: Any) -> None:
     """Test table structure with AUGMENTS inherited index."""
     table_data: Dict[str, Any] = {
         'table': {'oid': [1, 3, 6, 1, 2, 1, 31, 1, 1]},
@@ -85,7 +85,7 @@ def test_augments_inherited_index(agent: SNMPAgent) -> None:
     assert index_from[1] == 'ifEntry', "Index should reference ifEntry"
 
 
-def test_multi_column_index_inherited_and_local(agent: SNMPAgent) -> None:
+def test_multi_column_index_inherited_and_local(agent: Any) -> None:
     """Test table structure with multi-column index (inherited + local)."""
     table_data: Dict[str, Any] = {
         'table': {'oid': [1, 3, 6, 1, 2, 1, 31, 4]},
@@ -119,7 +119,7 @@ def test_multi_column_index_inherited_and_local(agent: SNMPAgent) -> None:
     assert len(non_index_columns) > 0, "Table should have non-index columns"
 
 
-def test_table_structure_validation(agent: SNMPAgent) -> None:
+def test_table_structure_validation(agent: Any) -> None:
     """Test that table structures can be validated for proper registration."""
     table_data: Dict[str, Any] = {
         'table': {'oid': [1, 3, 6, 1, 2, 1, 2, 2]},
@@ -147,7 +147,7 @@ def test_table_structure_validation(agent: SNMPAgent) -> None:
     assert agent.MibTableColumn is not None
 
 
-def test_agent_mib_builder_mock_interaction(agent: SNMPAgent, mocker: MockerFixture) -> None:
+def test_agent_mib_builder_mock_interaction(agent: Any, mocker: MockerFixture) -> None:
     """Test that agent's mib_builder can be used to import table symbols."""
     # Setup mock to return table classes
     mock_mib_table = mocker.MagicMock()
@@ -183,7 +183,7 @@ def test_agent_mib_builder_mock_interaction(agent: SNMPAgent, mocker: MockerFixt
 # Integration Tests - Testing the full workflow
 
 
-def test_find_table_related_objects_integration(agent: SNMPAgent, mocker: MockerFixture) -> None:
+def test_find_table_related_objects_integration(agent: Any, mocker: MockerFixture) -> None:
     """Test that table discovery correctly identifies table components via TableRegistrar."""
     # Since _find_table_related_objects was refactored to TableRegistrar,
     # this test validates the pattern with the new architecture
@@ -222,21 +222,11 @@ def test_find_table_related_objects_integration(agent: SNMPAgent, mocker: Mocker
     assert 'sysObjectID' not in table_related, "Scalar should not be in table_related"
 
 
-def test_register_tables_workflow(agent: SNMPAgent, mocker: MockerFixture) -> None:
+def test_register_tables_workflow(agent: Any, mocker: MockerFixture) -> None:
     """Test the table registration workflow orchestration."""
     # Mock the type registry
-    type_registry: Dict[str, Dict[str, Any]] = {
-        'Integer32': {'base_type': 'Integer'},
-        'OctetString': {'base_type': 'OctetString'},
-    }
     
     # Mock MIB JSON with a complete table structure
-    mib_json: Dict[str, Any] = {
-        'ifTable': {'oid': [1, 3, 6, 1, 2, 1, 2, 2], 'access': 'not-accessible'},
-        'ifEntry': {'oid': [1, 3, 6, 1, 2, 1, 2, 2, 1]},
-        'ifIndex': {'oid': [1, 3, 6, 1, 2, 1, 2, 2, 1, 1], 'type': 'Integer32', 'access': 'not-accessible'},
-        'ifDescr': {'oid': [1, 3, 6, 1, 2, 1, 2, 2, 1, 2], 'type': 'OctetString', 'access': 'read-only'},
-    }
     
     # Note: _register_single_table was refactored to TableRegistrar
     # This test validates the integration pattern works correctly
@@ -245,7 +235,7 @@ def test_register_tables_workflow(agent: SNMPAgent, mocker: MockerFixture) -> No
     agent.mib_builder.import_symbols.assert_not_called()
 
 
-def test_register_mib_objects_orchestration(agent: SNMPAgent, mocker: MockerFixture) -> None:
+def test_register_mib_objects_orchestration(agent: Any, mocker: MockerFixture) -> None:
     """Test that _register_mib_objects orchestrates the registration flow correctly."""
     # Setup mocked MIB JSONs (simulating what would be loaded from files)
     agent.mib_jsons = {
@@ -268,7 +258,7 @@ def test_register_mib_objects_orchestration(agent: SNMPAgent, mocker: MockerFixt
     assert agent.MibScalar is not None
 
 
-def test_table_column_type_resolution_in_registration(agent: SNMPAgent) -> None:
+def test_table_column_type_resolution_in_registration(agent: Any) -> None:
     """Test that table registration resolves column types correctly."""
     type_registry: Dict[str, Dict[str, Any]] = {
         'Integer32': {'base_type': 'Integer', 'display_hint': 'd'},

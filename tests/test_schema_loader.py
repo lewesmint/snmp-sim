@@ -1,8 +1,8 @@
 """Tests for MIB schema loading functionality."""
 
 import json
-import os
 from pathlib import Path
+from typing import Any, Mapping
 
 import pytest
 
@@ -10,13 +10,13 @@ import pytest
 class TestSchemaLoading:
     """Test MIB schema loading from files."""
 
-    def test_load_single_mib_schema(self, mib_schema_dir, sample_mib_schema):
+    def test_load_single_mib_schema(self, mib_schema_dir: Path, sample_mib_schema: Mapping[str, Any]) -> None:
         """Test loading a single MIB schema from directory."""
         # This tests the current implementation in snmp_agent.py
         mib_name = "SNMPv2-MIB"
-        schema_path = os.path.join(mib_schema_dir, mib_name, "schema.json")
+        schema_path = mib_schema_dir / mib_name / "schema.json"
         
-        assert os.path.exists(schema_path)
+        assert schema_path.exists()
         
         with open(schema_path, "r") as f:
             loaded_schema = json.load(f)
@@ -27,14 +27,14 @@ class TestSchemaLoading:
             loaded_schema = next(iter(loaded_schema.values()))
 
         assert loaded_schema == next(iter(sample_mib_schema.values()))
-    def test_load_nonexistent_schema(self, mib_schema_dir):
+    def test_load_nonexistent_schema(self, mib_schema_dir: Path) -> None:
         """Test loading a schema that doesn't exist."""
         mib_name = "NONEXISTENT-MIB"
-        schema_path = os.path.join(mib_schema_dir, mib_name, "schema.json")
+        schema_path = mib_schema_dir / mib_name / "schema.json"
         
-        assert not os.path.exists(schema_path)
+        assert not schema_path.exists()
 
-    def test_load_multiple_schemas(self, temp_dir):
+    def test_load_multiple_schemas(self, temp_dir: Path) -> None:
         """Test loading multiple MIB schemas."""
         schema_dir = temp_dir / "mock-behaviour"
         
@@ -54,8 +54,8 @@ class TestSchemaLoading:
         # Load all schemas (simulating snmp_agent.py logic)
         loaded_schemas = {}
         for mib_name in mibs.keys():
-            schema_path = os.path.join(schema_dir, mib_name, "schema.json")
-            if os.path.exists(schema_path):
+            schema_path = schema_dir / mib_name / "schema.json"
+            if schema_path.exists():
                 with open(schema_path, "r") as f:
                     loaded_schemas[mib_name] = json.load(f)
         
@@ -63,7 +63,7 @@ class TestSchemaLoading:
         assert "SNMPv2-MIB" in loaded_schemas
         assert "IF-MIB" in loaded_schemas
 
-    def test_schema_with_invalid_json(self, temp_dir):
+    def test_schema_with_invalid_json(self, temp_dir: Path) -> None:
         """Test handling of invalid JSON in schema file."""
         schema_dir = temp_dir / "mock-behaviour"
         mib_dir = schema_dir / "BAD-MIB"
@@ -78,7 +78,7 @@ class TestSchemaLoading:
             with open(schema_path, "r") as f:
                 json.load(f)
 
-    def test_schema_directory_structure(self, mib_schema_dir):
+    def test_schema_directory_structure(self, mib_schema_dir: Path) -> None:
         """Test that schema directory has correct structure."""
         # Structure should be: {schema_dir}/{MIB_NAME}/schema.json
         mib_dir = mib_schema_dir / "SNMPv2-MIB"
@@ -93,7 +93,7 @@ class TestSchemaLoading:
 class TestBuildInternalModel:
     """Test building internal model from schemas (cli_build_model.py)."""
 
-    def test_build_model_from_schemas(self, temp_dir):
+    def test_build_model_from_schemas(self, temp_dir: Path) -> None:
         """Test building internal model from multiple schemas."""
         schema_dir = temp_dir / "mock-behaviour"
         
@@ -109,15 +109,15 @@ class TestBuildInternalModel:
         # Build model (simulating cli_build_model.py)
         model = {}
         for mib in test_mibs:
-            schema_path = os.path.join(schema_dir, mib, "schema.json")
-            if os.path.exists(schema_path):
+            schema_path = schema_dir / mib / "schema.json"
+            if schema_path.exists():
                 with open(schema_path, "r") as f:
                     model[mib] = json.load(f)
         
         assert len(model) == 3
         assert all(mib in model for mib in test_mibs)
 
-    def test_build_model_with_missing_schemas(self, temp_dir):
+    def test_build_model_with_missing_schemas(self, temp_dir: Path) -> None:
         """Test building model when some schemas are missing."""
         schema_dir = temp_dir / "mock-behaviour"
         
@@ -132,8 +132,8 @@ class TestBuildInternalModel:
         test_mibs = ["SNMPv2-MIB", "MISSING-MIB"]
         model = {}
         for mib in test_mibs:
-            schema_path = os.path.join(schema_dir, mib, "schema.json")
-            if os.path.exists(schema_path):
+            schema_path = schema_dir / mib / "schema.json"
+            if schema_path.exists():
                 with open(schema_path, "r") as f:
                     model[mib] = json.load(f)
         

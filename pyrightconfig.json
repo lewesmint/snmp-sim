@@ -1,0 +1,11 @@
+{
+  "exclude": [
+    "compiled-mibs",
+    "compiled-mibs/**",
+    "retired",
+    "retired/**"
+  ],
+  "executionEnvironments": [
+    { "root": ".", "pythonVersion": "3.10" }
+  ]
+}

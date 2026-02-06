@@ -1,16 +1,15 @@
 """Pytest configuration and shared fixtures."""
 
 import json
-import os
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Generator
 
 import pytest
 
 
 @pytest.fixture
-def temp_dir():
+def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for test files."""
     with tempfile.TemporaryDirectory() as tmpdir:
         yield Path(tmpdir)
@@ -73,7 +72,7 @@ def sample_mib_schema() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def type_registry_file(temp_dir, sample_type_registry):
+def type_registry_file(temp_dir: Path, sample_type_registry: Dict[str, Any]) -> Path:
     """Create a temporary type registry JSON file."""
     registry_path = temp_dir / "types.json"
     with open(registry_path, "w") as f:
@@ -82,7 +81,7 @@ def type_registry_file(temp_dir, sample_type_registry):
 
 
 @pytest.fixture
-def mib_schema_dir(temp_dir, sample_mib_schema):
+def mib_schema_dir(temp_dir: Path, sample_mib_schema: Dict[str, Any]) -> Path:
     """Create a temporary MIB schema directory structure."""
     schema_dir = temp_dir / "mock-behaviour"
     mib_dir = schema_dir / "SNMPv2-MIB"
@@ -96,7 +95,7 @@ def mib_schema_dir(temp_dir, sample_mib_schema):
 
 
 @pytest.fixture
-def mock_logger():
+def mock_logger() -> Any:
     """Create a mock logger for testing."""
     from unittest.mock import Mock
     logger = Mock()

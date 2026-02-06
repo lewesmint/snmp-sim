@@ -8,20 +8,13 @@ Tests that:
 4. Tree walking operations work correctly on TC-based table columns
 """
 
-import json
 import os
-import sys
 import pytest
 from pathlib import Path
-from typing import Any, Dict, cast
 
 from app.compiler import MibCompiler, MibCompilationError
-from app.type_recorder import TypeRecorder
-from app.type_registry import TypeRegistry
 from app.app_config import AppConfig
 from app.generator import BehaviourGenerator
-from pysnmp.smi import builder
-from pysnmp import entity
 
 
 @pytest.fixture
@@ -51,7 +44,7 @@ def app_config() -> AppConfig:
 def _compile_or_skip(compiler: MibCompiler, mib_path: str) -> str:
     try:
         return compiler.compile(mib_path)
-    except MibCompilationError as exc:
+    except MibCompilationError:
         # Fallback: create a minimal compiled MIB file with expected symbols for test assertions
         os.makedirs(compiler.output_dir, exist_ok=True)
         mib_name = Path(mib_path).stem

@@ -183,7 +183,7 @@ def test_register_tables_creates_table_structure(table_registrar: TableRegistrar
 
 
 def test_register_tables_skips_when_classes_missing(logger: logging.Logger, caplog: pytest.LogCaptureFixture) -> None:
-    type_registry = {}
+    type_registry: TypeRegistry = {}
     registrar = TableRegistrar(
         mib_builder=None,
         mib_scalar_instance=None,
@@ -236,7 +236,7 @@ def test_register_single_table_creates_row(table_registrar: TableRegistrar, mock
 
 
 def test_register_pysnmp_table_no_builder(logger: logging.Logger) -> None:
-    type_registry = {}
+    type_registry : TypeRegistry = {}
     registrar = TableRegistrar(
         mib_builder=None,
         mib_scalar_instance=None,

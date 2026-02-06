@@ -341,7 +341,7 @@ class TableRegistrar:
                                 col_info, type_name, type_info, base_type
                             )
                         # Attempt to cast/construct the value for the type (int, pysnmp classes, etc.)
-                        pysnmp_val = pysnmp_type(raw_val)
+                        pysnmp_type(raw_val)
                     except Exception:
                         self.logger.error("Error registering row instance", exc_info=True)
                         continue

@@ -1,5 +1,5 @@
 [tool.mypy]
-python_version = "v310"
+python_version = "3.10"
 strict = true
 warn_unused_ignores = true
 warn_return_any = true
@@ -8,7 +8,7 @@ show_error_codes = true
 ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 exclude = [
-    "tests/",
+    "retired/*",
     "compiled-mibs-test/",
     "^compiled-mibs/",  # Exclude auto-generated MIB files
 ]
@@ -17,4 +17,11 @@ exclude = [
 omit = [
     "tests/*",
     "compiled-mibs/*"
+]
+
+[tool.ruff]
+# Exclude auto-generated, tests, and retired/ compatibility files from ruff checks
+exclude = [
+    "retired/**",
+    "compiled-mibs/**",
 ]

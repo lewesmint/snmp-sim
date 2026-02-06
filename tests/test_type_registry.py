@@ -1,13 +1,9 @@
 """
 Tests for the canonical type registry and its integration with the agent.
 """
-import os
 import json
 import pytest
-import builtins
 from pathlib import Path
-from typing import Any
-import tempfile
 from app.type_registry import TypeRegistry
 
 def test_type_registry_build_and_export(tmp_path: Path) -> None:
@@ -63,9 +59,9 @@ def test_type_registry_fields() -> None:
         
         # Entries should have name and syntax at minimum
         if "name" in entry:
-            assert isinstance(entry["name"], str), f"Name should be string"
+            assert isinstance(entry["name"], str), "Name should be string"
         if "syntax" in entry:
-            assert isinstance(entry["syntax"], str), f"Syntax should be string"
+            assert isinstance(entry["syntax"], str), "Syntax should be string"
 
 def test_agent_loads_type_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that type registry files can be created and loaded."""

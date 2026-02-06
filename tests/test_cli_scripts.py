@@ -4,7 +4,6 @@ Unit tests for CLI scripts.
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
-import sys
 from app.compiler import MibCompilationError
 
 def test_cli_compile_mib_main(tmp_path: Path) -> None:
