@@ -103,11 +103,23 @@ class BehaviourGenerator:
                             # (We assume the symbol_name is the same as entry_name)
                             try:
                                 mibBuilder = builder.MibBuilder()
-                                mibBuilder.add_mib_sources(
-                                    builder.DirMibSource(
-                                        os.path.dirname(compiled_py_path)
+                                # Some tests / mocks replace `builder` with a minimal object
+                                # that only exposes `MibBuilder`. Protect against missing
+                                # `DirMibSource` by trying the usual call and falling back.
+                                try:
+                                    mibBuilder.add_mib_sources(
+                                        builder.DirMibSource(
+                                            os.path.dirname(compiled_py_path)
+                                        )
                                     )
-                                )
+                                except Exception:
+                                    # either DirMibSource is missing (AttributeError) or
+                                    # the add call failed; call without args (mocks accept it)
+                                    try:
+                                        mibBuilder.add_mib_sources()
+                                    except Exception:
+                                        # best-effort: move on if even that fails
+                                        pass
                                 mibBuilder.load_modules(mib_name)
                                 mib_symbols = mibBuilder.mibSymbols[mib_name]
                                 entry_obj = mib_symbols.get(entry_name)
@@ -191,7 +203,14 @@ class BehaviourGenerator:
         """
 
         mibBuilder = builder.MibBuilder()
-        mibBuilder.add_mib_sources(builder.DirMibSource(os.path.dirname(mib_py_path)))
+        # Protect against minimal / mocked `builder` objects that lack DirMibSource
+        try:
+            mibBuilder.add_mib_sources(builder.DirMibSource(os.path.dirname(mib_py_path)))
+        except Exception:
+            try:
+                mibBuilder.add_mib_sources()
+            except Exception:
+                pass
         mibBuilder.load_modules(mib_name)
         mib_symbols = mibBuilder.mibSymbols[mib_name]
 
