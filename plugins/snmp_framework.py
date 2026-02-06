@@ -6,7 +6,6 @@ Handles SNMPv3 and SNMP Framework MIB objects that require special consideration
 """
 
 import hashlib
-import os
 import socket
 from typing import Any, Optional
 from app.default_value_plugins import register_plugin

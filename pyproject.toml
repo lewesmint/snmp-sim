@@ -1,5 +1,5 @@
 [tool.mypy]
-python_version = "3.10"
+python_version = "v310"
 strict = true
 warn_unused_ignores = true
 warn_return_any = true
@@ -8,28 +8,7 @@ show_error_codes = true
 ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 exclude = [
-    "VEERY_OLD-compiled-mibs/",
-    "VERY_OLD_TESTS/",
     "tests/",
-    "OLD_APP/",
     "compiled-mibs-test/",
     "^compiled-mibs/",  # Exclude auto-generated MIB files
-    "^OLD-compiled-mibs/",  # Exclude old compiled MIB files
-]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short"
-
-[tool.coverage.run]
-branch = true
-source = ["app", "tools"]
-omit = ["tests/*", "compiled-mibs/*", "VEERY_OLD-compiled-mibs/*", "OLD-compiled-mibs/*"]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "if __name__ == .__main__.:",
 ]

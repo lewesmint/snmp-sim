@@ -4,6 +4,10 @@ from typing import Any
 from app.default_value_plugins import register_plugin
 from app.types import TypeInfo
 
+# Register encoders for textual conventions that don't need special encoding
+# but appear in MIB definitions
+from plugins.type_encoders import register_type_encoder
+
 
 def _get_first_enum_value(enums: Any) -> Any:
     """Extract the first valid enum value from enums.
@@ -113,10 +117,6 @@ def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
     # Fallback for unknown types - return None to indicate no default
     # (caller should handle appropriately, e.g., skip or use type-specific logic)
     return None
-
-# Register encoders for textual conventions that don't need special encoding
-# but appear in MIB definitions
-from plugins.type_encoders import register_type_encoder
 
 # ObjectIdentifier and aliases - pass through as-is (already handled by base_type_handler)
 register_type_encoder("ObjectIdentifier", lambda x: x)
