@@ -99,7 +99,7 @@ def test_build_table_symbols_basic(monkeypatch: Any) -> None:
     assert any(k.startswith("col1Inst") for k in symbols.keys())
 
 
-def test_get_pysnmp_type_uses_builder(_monkeypatch: Any) -> None:
+def test_get_pysnmp_type_uses_builder() -> None:
     reg = make_registrar()
 
     class FakeType:

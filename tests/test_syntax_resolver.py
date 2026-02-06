@@ -96,12 +96,26 @@ def test_type_info_extraction_from_registry() -> None:
     
     types_json = Path(__file__).parent.parent / "data" / "types.json"
     
-    if not types_json.exists():
-        pytest.skip("data/types.json not found")
-    
-    with open(types_json) as f:
-        types_dict = json.load(f)
-    
+    types_dict = None
+    if types_json.exists():
+        try:
+            with open(types_json) as f:
+                types_dict = json.load(f)
+        except Exception:
+            types_dict = None
+
+    # If types.json is missing or appears to be a placeholder, try to generate
+    # the registry from compiled MIBs at test time so the test can run in
+    # environments where data is produced at runtime.
+    required = {"OctetString", "Integer32", "ObjectIdentifier"}
+    if not types_dict or not required.issubset(set(types_dict.keys())):
+        compiled_dir = Path(__file__).parent.parent / "compiled-mibs"
+        if not compiled_dir.exists():
+            pytest.skip("data/types.json not found and no compiled-mibs to build from")
+        registry = TypeRegistry(compiled_dir)
+        registry.build()
+        types_dict = registry.registry
+
     # Verify that DisplayString maps to OctetString
     if "DisplayString" in types_dict:
         entry = types_dict["DisplayString"]
