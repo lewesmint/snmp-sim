@@ -976,5 +976,5 @@ def main() -> None:
     print(f"Wrote {len(recorder.registry)} types to {args.output}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": # pragma: no cover
     main()

@@ -1,6 +1,5 @@
 """Tests for MibRegistrar functionality."""
 
-from unittest.mock import Mock
 from typing import Any
 from pathlib import Path
 
@@ -9,16 +8,16 @@ from pathlib import Path
 class TestMibRegistrarInitialization:
     """Test MibRegistrar initialization."""
 
-    def test_mib_registrar_creation(self, mock_logger: Any) -> None:
+    def test_mib_registrar_creation(self, mock_logger: Any, mocker: Any) -> None:
         """Test creating a MibRegistrar instance."""
         from app.mib_registrar import MibRegistrar
         
         # Create mock objects
-        mock_mib_builder = Mock()
-        mock_scalar_instance = Mock()
-        mock_table = Mock()
-        mock_table_row = Mock()
-        mock_table_column = Mock()
+        mock_mib_builder = mocker.Mock()
+        mock_scalar_instance = mocker.Mock()
+        mock_table = mocker.Mock()
+        mock_table_row = mocker.Mock()
+        mock_table_column = mocker.Mock()
         start_time = 12345.0
         
         registrar = MibRegistrar(
@@ -43,17 +42,17 @@ class TestMibRegistrarInitialization:
 class TestMibRegistrarTypeRegistryLoading:
     """Test type registry loading in MibRegistrar."""
 
-    def test_register_all_mibs_loads_type_registry(self, mock_logger: Any, type_registry_file: Path) -> None:
+    def test_register_all_mibs_loads_type_registry(self, mock_logger: Any, type_registry_file: Path, mocker: Any) -> None:
         """Test that register_all_mibs loads the type registry."""
         from app.mib_registrar import MibRegistrar
         
-        mock_mib_builder = Mock()
+        mock_mib_builder = mocker.Mock()
         registrar = MibRegistrar(
             mib_builder=mock_mib_builder,
-            mib_scalar_instance=Mock(),
-            mib_table=Mock(),
-            mib_table_row=Mock(),
-            mib_table_column=Mock(),
+            mib_scalar_instance=mocker.Mock(),
+            mib_table=mocker.Mock(),
+            mib_table_row=mocker.Mock(),
+            mib_table_column=mocker.Mock(),
             logger=mock_logger,
             start_time=0.0,
         )
@@ -64,17 +63,17 @@ class TestMibRegistrarTypeRegistryLoading:
         # This should not raise an error even with empty mib_jsons
         registrar.register_all_mibs(mib_jsons, type_registry_path=str(type_registry_file))
 
-    def test_populate_sysor_table_loads_type_registry(self, mock_logger: Any, type_registry_file: Path) -> None:
+    def test_populate_sysor_table_loads_type_registry(self, mock_logger: Any, type_registry_file: Path, mocker: Any) -> None:
         """Test that populate_sysor_table loads the type registry."""
         from app.mib_registrar import MibRegistrar
         
-        mock_mib_builder = Mock()
+        mock_mib_builder = mocker.Mock()
         registrar = MibRegistrar(
             mib_builder=mock_mib_builder,
-            mib_scalar_instance=Mock(),
-            mib_table=Mock(),
-            mib_table_row=Mock(),
-            mib_table_column=Mock(),
+            mib_scalar_instance=mocker.Mock(),
+            mib_table=mocker.Mock(),
+            mib_table_row=mocker.Mock(),
+            mib_table_column=mocker.Mock(),
             logger=mock_logger,
             start_time=0.0,
         )
@@ -95,16 +94,16 @@ class TestMibRegistrarTypeRegistryLoading:
 class TestMibRegistrarErrorHandling:
     """Test error handling in MibRegistrar."""
 
-    def test_register_all_mibs_with_none_builder(self, mock_logger: Any) -> None:
+    def test_register_all_mibs_with_none_builder(self, mock_logger: Any, mocker: Any) -> None:
         """Test register_all_mibs when mib_builder is None."""
         from app.mib_registrar import MibRegistrar
         
         registrar = MibRegistrar(
             mib_builder=None,
-            mib_scalar_instance=Mock(),
-            mib_table=Mock(),
-            mib_table_row=Mock(),
-            mib_table_column=Mock(),
+            mib_scalar_instance=mocker.Mock(),
+            mib_table=mocker.Mock(),
+            mib_table_row=mocker.Mock(),
+            mib_table_column=mocker.Mock(),
             logger=mock_logger,
             start_time=0.0,
         )
@@ -115,16 +114,16 @@ class TestMibRegistrarErrorHandling:
         # Check that error was logged
         assert mock_logger.error.called
 
-    def test_populate_sysor_table_without_snmpv2_mib(self, mock_logger: Any, type_registry_file: Path) -> None:
+    def test_populate_sysor_table_without_snmpv2_mib(self, mock_logger: Any, type_registry_file: Path, mocker: Any) -> None:
         """Test populate_sysor_table when SNMPv2-MIB is not loaded."""
         from app.mib_registrar import MibRegistrar
         
         registrar = MibRegistrar(
-            mib_builder=Mock(),
-            mib_scalar_instance=Mock(),
-            mib_table=Mock(),
-            mib_table_row=Mock(),
-            mib_table_column=Mock(),
+            mib_builder=mocker.Mock(),
+            mib_scalar_instance=mocker.Mock(),
+            mib_table=mocker.Mock(),
+            mib_table_row=mocker.Mock(),
+            mib_table_column=mocker.Mock(),
             logger=mock_logger,
             start_time=0.0,
         )

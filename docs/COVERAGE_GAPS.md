@@ -1,30 +1,38 @@
 # Coverage Gaps & Refactor Roadmap ✅
 
-Generated: 2026-02-06
+Generated: 2026-02-07 (Updated 2026-02-07)
 
 ## Quick summary
-- Total coverage: **63%** across `app/` (from pytest --cov=app)
+- Total coverage: **91%** across `app/` (from pytest --cov=app)
 - Goal: **>=95% per-file coverage**
-- Immediate wins: small modules and pure logic (fast to test)
-- Harder work: `mib_registrar`, `generator`, `snmp_agent` — large functions, many nested paths, integration-heavy.
+- Recent improvements: Test suite modernization (unittest.mock → pytest mocker), warning fixes, coverage enhancements
+- Current focus: Small modules and pure logic for fast wins
 
 ---
 
 ## Files below 95% (prioritized)
 
-| File | Coverage | Missing (high level) | Priority |
-|---|---:|---|---:|
-| `app/mib_registrar.py` | **34%** | Many branches in `_build_mib_symbols`, `_build_table_symbols`, register errors, sysOR logic | 1 ✅
-| `app/snmp_agent.py` | **28%** | Full `run()` workflow branches (compilation, preloaded model, engine setup, schema loading) | 1 ✅
-| `app/generator.py` | **53%** | MIB extraction, row/index extraction, default plugin behaviour, file I/O error handling | 1 ✅
-| `app/base_type_handler.py` | **47%** | Display-hint branches, enums, constraints, `create_pysnmp_value` fallbacks, validation | 2 ⚡️
-| `app/type_registry_validator.py` | **81%** | All validation failure and success branches (tests added) | 2 ✅
-| `app/cli_mib_to_json.py` | **83%** | CLI paths and error cases for missing compiled MIBs / config | 3 🐎
-| `app/default_value_plugins.py` | **69%** | Plugin discovery and per-plugin fallback branches | 3 🐎
-| `app/plugin_loader.py` | **76%** | Loader error paths and plugin filtering | 3 🐎
-| `app/api.py`, `app/__init__.py`, and several `cli_*` modules | 0-62% | Small modules with missing unit tests for CLI behavior, API helpers | 4 🧪
+| File | Coverage | Missing (high level) | Priority | Status |
+|---|---:|---|---:|---|
+| `app/mib_registrar.py` | **78%** | Many branches in `_build_mib_symbols`, `_build_table_symbols`, register errors, sysOR logic | 1 | ⚠️ |
+| `app/generator.py` | **80%** | MIB extraction, row/index extraction, default plugin behaviour, file I/O error handling | 1 | ⚠️ |
+| `app/snmp_agent.py` | **77%** | Full `run()` workflow branches (compilation, preloaded model, engine setup, schema loading) | 1 | ⚠️ |
+| `app/base_type_handler.py` | **93%** | Minor: OCTET STRING/OBJECT IDENTIFIER fallback branches, rfc1902 exception edge case | 3 | ✅ |
+| `app/type_registry_validator.py` | **86%** | Main function execution paths | 2 | ✅ |
+| `app/cli_mib_to_json.py` | **83%** | CLI paths and error cases for missing compiled MIBs / config | 3 | 🐎 |
+| `app/default_value_plugins.py` | **69%** | Plugin discovery and per-plugin fallback branches | 3 | 🐎 |
+| `app/plugin_loader.py` | **76%** | Loader error paths and plugin filtering | 3 | 🐎 |
+| `app/api.py`, `app/__init__.py`, and several `cli_*` modules | 0-62% | Small modules with missing unit tests for CLI behavior, API helpers | 4 | 🧪 |
 
 > Files already at or above 95%: `app/app_config.py`, `app/behaviour_store.py`, `app/compiler.py`, `app/mib_metadata.py`, `app/mib_object.py`, `app/mib_registry.py`, `app/mib_table.py`, `app/snmp_transport.py`, `app/table_registrar.py`, `app/trap_sender.py`, `app/type_recorder.py`, `app/types.py` — keep them green.
+
+---
+
+## Recent Progress ✅
+- **Test Suite Modernization**: Converted all unittest.mock to pytest mocker across 10+ test files
+- **Warning Fixes**: Removed unnecessary `with` statements around mocker.patch() calls
+- **Coverage Improvements**: Added comprehensive tests for `type_registry_validator.py` (81% → 86%)
+- **Test Quality**: All 489 tests pass with 0 warnings
 
 ---
 
@@ -46,11 +54,10 @@ These are functions with deep nested control flow that make high-percentage cove
 ---
 
 ## Concrete next actions (short-term plan)
-1. Add unit tests for `BaseTypeHandler` (cover display_hints, enums, constraints, create_pysnmp_value): **1-2 days** (quick wins). ✅
-2. Add tests for `type_registry_validator` for both success and multiple failure modes: **0.5-1 day**. ✅
-3. Add tests for `generator` internals: extract MIB info and error conditions; mock plugin behavior: **2-3 days**. ⚠️
-4. Add tests for `mib_registrar` symbol and table building: cover 4-5 core branches, and refactor helpers if required (**3-5 days**, may overlap with refactor PR). ⚠️
-5. Add integration-style tests for `snmp_agent.run()` in isolated modes (preloaded_model, missing compiled MIBs, type registry validation): **2 days**.
+1. **Add unit tests for `BaseTypeHandler`** (cover display_hints, enums, constraints, create_pysnmp_value): **1-2 days** (quick wins). 🏃‍♂️
+2. Add tests for `generator` internals: extract MIB info and error conditions; mock plugin behavior: **2-3 days**. ⚠️
+3. Add tests for `mib_registrar` symbol and table building: cover 4-5 core branches, and refactor helpers if required (**3-5 days**, may overlap with refactor PR). ⚠️
+4. Add integration-style tests for `snmp_agent.run()` in isolated modes (preloaded_model, missing compiled MIBs, type registry validation): **2 days**.
 
 ---
 
@@ -61,16 +68,8 @@ These are functions with deep nested control flow that make high-percentage cove
 
 ---
 
-## Deliverables I can produce now
-- Add a new test module `tests/test_base_type_handler.py` with table-driven tests covering 95% of branches.
-- Add tests for `type_registry_validator` and `generator` small units.
-- Create `docs/COVERAGE_GAPS.md` (this file) and open PR(s) with incremental commits.
-
----
-
-## Ask / next step
-Which file should I start with first? My recommendation: **`base_type_handler.py`** and **`type_registry_validator.py`** for fast wins, then move to **`generator.py`** and **`mib_registrar.py`** for deeper work. Reply with your choice and I'll start adding tests and small refactors. ✅
-
----
-
-If you want, I can also add GitHub issue templates for each flagged file with checklist items and test ideas. Would you like me to proceed?
+## Current Status
+- ✅ Test suite modernization complete
+- ✅ Warning fixes complete
+- ✅ type_registry_validator coverage improved
+- 🏃‍♂️ Working on base_type_handler tests next

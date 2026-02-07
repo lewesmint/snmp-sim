@@ -407,8 +407,80 @@ class SNMPAgent:
             # As a last resort, return the value unchanged
             return value
 
+    def get_scalar_value(self, oid: tuple[int, ...]) -> Any:
+        """Get the value of a scalar MIB object by OID.
+        
+        Args:
+            oid: The OID of the scalar object (including instance index, e.g., (1,3,6,1,2,1,1,1,0))
+            
+        Returns:
+            The current value of the scalar
+            
+        Raises:
+            ValueError: If the OID is not found or is not a scalar
+        """
+        if self.mib_builder is None:
+            raise RuntimeError("MIB builder not initialized")
+            
+        # Import MibScalarInstance for type checking
+        MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
+        
+        # Search through all MIB modules and symbols
+        for module_name, symbols in self.mib_builder.mibSymbols.items():
+            for symbol_name, symbol_obj in symbols.items():
+                if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == oid:
+                    return symbol_obj.syntax
+                    
+        raise ValueError(f"Scalar OID {oid} not found")
 
-if __name__ == "__main__":
+    def set_scalar_value(self, oid: tuple[int, ...], value: Any) -> None:
+        """Set the value of a scalar MIB object by OID.
+        
+        Args:
+            oid: The OID of the scalar object (including instance index, e.g., (1,3,6,1,2,1,1,1,0))
+            value: The new value to set
+            
+        Raises:
+            ValueError: If the OID is not found or is not a scalar
+        """
+        if self.mib_builder is None:
+            raise RuntimeError("MIB builder not initialized")
+            
+        # Import MibScalarInstance for type checking
+        MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
+        
+        # Search through all MIB modules and symbols
+        for module_name, symbols in self.mib_builder.mibSymbols.items():
+            for symbol_name, symbol_obj in symbols.items():
+                if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == oid:
+                    symbol_obj.syntax = value
+                    return
+                    
+        raise ValueError(f"Scalar OID {oid} not found")
+
+
+    def get_all_oids(self) -> dict[str, tuple[int, ...]]:
+        """Get all registered OIDs with their names.
+        
+        Returns:
+            Dict mapping OID names to OID tuples
+        """
+        if self.mib_builder is None:
+            raise RuntimeError("MIB builder not initialized")
+        
+        oid_map = {}
+        
+        # Iterate through all MIB modules and symbols
+        for module_name, symbols in self.mib_builder.mibSymbols.items():
+            for symbol_name, symbol_obj in symbols.items():
+                # Check if it has a name attribute (OID)
+                if hasattr(symbol_obj, 'name') and symbol_obj.name:
+                    oid_map[symbol_name] = symbol_obj.name
+        
+        return oid_map
+
+
+if __name__ == "__main__": # pragma: no cover
     import sys
 
     try:

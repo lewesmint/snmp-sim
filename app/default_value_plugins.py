@@ -32,6 +32,9 @@ class DefaultValuePluginRegistry:
             plugin: Function that takes (type_info, symbol_name) and returns a value or None
         """
         if name in self._plugin_names:
+            old_plugin = self._plugin_names[name]
+            if old_plugin != plugin and old_plugin in self._plugins:
+                self._plugins.remove(old_plugin)
             logger.warning(f"Plugin '{name}' already registered, replacing")
 
         self._plugin_names[name] = plugin

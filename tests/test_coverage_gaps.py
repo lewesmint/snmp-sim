@@ -4,7 +4,6 @@ Tests specifically targeting remaining coverage gaps to reach 95%+ on all files.
 import pytest
 import logging
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 from typing import Any, Dict, List
 
 from app.table_registrar import TableRegistrar
@@ -18,25 +17,25 @@ from app.generator import BehaviourGenerator
 # ============================================================================
 
 @pytest.fixture
-def mock_registrar() -> TableRegistrar:
+def mock_registrar(mocker: Any) -> TableRegistrar:
     """Create a mock TableRegistrar for testing."""
     type_registry = {
         "Integer32": {"base_type": "Integer32"},
         "OctetString": {"base_type": "OctetString"},
     }
     registrar = TableRegistrar(
-        mib_builder=MagicMock(),
-        mib_scalar_instance=MagicMock(),
-        mib_table=MagicMock(),
-        mib_table_row=MagicMock(),
-        mib_table_column=MagicMock(),
+        mib_builder=mocker.MagicMock(),
+        mib_scalar_instance=mocker.MagicMock(),
+        mib_table=mocker.MagicMock(),
+        mib_table_row=mocker.MagicMock(),
+        mib_table_column=mocker.MagicMock(),
         logger=logging.getLogger("test"),
         type_registry=type_registry
     )
     return registrar
 
 
-def test_register_pysnmp_table_column_type_resolution_fails(mock_registrar: TableRegistrar, caplog: pytest.LogCaptureFixture) -> None:
+def test_register_pysnmp_table_column_type_resolution_fails(mock_registrar: TableRegistrar, caplog: pytest.LogCaptureFixture, mocker: Any) -> None:
     """Test _register_pysnmp_table when column type resolution fails (lines 234-236)"""
     table_data = {
         "table": {"oid": [1, 2, 3]},
@@ -49,7 +48,7 @@ def test_register_pysnmp_table_column_type_resolution_fails(mock_registrar: Tabl
     new_row: Dict[str, Any] = {}
     
     # Make _resolve_snmp_type return None
-    mock_registrar._resolve_snmp_type = Mock(return_value=None)  # type: ignore[method-assign]
+    mock_registrar._resolve_snmp_type = mocker.Mock(return_value=None)  # type: ignore[method-assign]
     
     with caplog.at_level(logging.DEBUG):
         mock_registrar._register_pysnmp_table("TEST", "testTable", table_data, type_registry, new_row)
@@ -59,7 +58,7 @@ def test_register_pysnmp_table_column_type_resolution_fails(mock_registrar: Tabl
     mock_registrar.mib_builder.export_symbols.assert_not_called()
 
 
-def test_register_row_instances_with_actual_columns(mock_registrar: TableRegistrar) -> None:
+def test_register_row_instances_with_actual_columns(mock_registrar: TableRegistrar, mocker: Any) -> None:
     """Test _register_row_instances successful path (lines 289-307)"""
     table_data = {
         "entry": {"oid": [1, 2, 3, 1]},
@@ -74,7 +73,7 @@ def test_register_row_instances_with_actual_columns(mock_registrar: TableRegistr
     col_names = ["col1", "col2"]
     new_row = {"col1": 42, "col2": 99}
     
-    mock_registrar._resolve_snmp_type = Mock(return_value=int)  # type: ignore[method-assign]
+    mock_registrar._resolve_snmp_type = mocker.Mock(return_value=int)  # type: ignore[method-assign]
     
     mock_registrar._register_row_instances("TEST", "testTable", table_data, type_registry, col_names, new_row)
     
@@ -82,7 +81,7 @@ def test_register_row_instances_with_actual_columns(mock_registrar: TableRegistr
     assert mock_registrar.mib_scalar_instance.call_count == 2
 
 
-def test_register_row_instances_type_resolution_fails(mock_registrar: TableRegistrar) -> None:
+def test_register_row_instances_type_resolution_fails(mock_registrar: TableRegistrar, mocker: Any) -> None:
     """Test _register_row_instances when type resolution fails (lines 289-290)"""
     table_data = {
         "entry": {"oid": [1, 2, 3, 1]},
@@ -95,7 +94,7 @@ def test_register_row_instances_type_resolution_fails(mock_registrar: TableRegis
     new_row: Dict[str, Any] = {"badCol": 0}
     
     # Make _resolve_snmp_type return None - this causes continue on line 290
-    mock_registrar._resolve_snmp_type = Mock(return_value=None)  # type: ignore[method-assign]
+    mock_registrar._resolve_snmp_type = mocker.Mock(return_value=None)  # type: ignore[method-assign]
     
     mock_registrar._register_row_instances("TEST", "testTable", table_data, type_registry, col_names, new_row)
     
@@ -103,7 +102,7 @@ def test_register_row_instances_type_resolution_fails(mock_registrar: TableRegis
     mock_registrar.mib_scalar_instance.assert_not_called()
 
 
-def test_register_row_instances_value_error_exception(mock_registrar: TableRegistrar, caplog: pytest.LogCaptureFixture) -> None:
+def test_register_row_instances_value_error_exception(mock_registrar: TableRegistrar, caplog: pytest.LogCaptureFixture, mocker: Any) -> None:
     """Test _register_row_instances when type conversion raises exception (lines 300-303)"""
     table_data = {
         "entry": {"oid": [1, 2, 3, 1]},
@@ -115,7 +114,7 @@ def test_register_row_instances_value_error_exception(mock_registrar: TableRegis
     col_names: List[str] = ["col1"]
     new_row: Dict[str, Any] = {"col1": "not_a_number"}  # Will fail conversion to int
     
-    mock_registrar._resolve_snmp_type = Mock(return_value=int)  # type: ignore[method-assign]
+    mock_registrar._resolve_snmp_type = mocker.Mock(return_value=int)  # type: ignore[method-assign]
     
     with caplog.at_level(logging.ERROR):
         mock_registrar._register_row_instances("TEST", "testTable", table_data, type_registry, col_names, new_row)
@@ -195,20 +194,20 @@ def test_get_default_value_size_set_with_4_only(mock_registrar: TableRegistrar) 
 # snmp_agent.py coverage gaps (92% -> 95%+)
 # ============================================================================
 
-def test_snmp_agent_register_mib_objects_load_type_registry_fails(caplog: pytest.LogCaptureFixture) -> None:
-    """Test _register_mib_objects when type registry load fails (lines 221-223)"""
+def test_snmp_agent_register_mib_objects_missing_type_registry_file(caplog: pytest.LogCaptureFixture, mocker: Any) -> None:
+    """Test _register_mib_objects handles missing type registry file (lines 418-420)"""
     agent = SNMPAgent(config_path="agent_config.yaml")
     # Don't replace logger - use the actual one so caplog captures it
-    agent.mib_builder = Mock()
+    agent.mib_builder = mocker.Mock()
     agent.mib_jsons = {"TEST-MIB": {}}
-    setattr(agent, "MibScalarInstance", Mock())
-    setattr(agent, "MibTable", Mock())
-    setattr(agent, "MibTableRow", Mock())
-    setattr(agent, "MibTableColumn", Mock())
+    setattr(agent, "MibScalarInstance", mocker.Mock())
+    setattr(agent, "MibTable", mocker.Mock())
+    setattr(agent, "MibTableRow", mocker.Mock())
+    setattr(agent, "MibTableColumn", mocker.Mock())
     
     # Make the type registry file not exist
-    with patch('app.snmp_agent.os.path.join', return_value="/nonexistent/types.json"), \
-         caplog.at_level(logging.ERROR):
+    mocker.patch('app.snmp_agent.os.path.join', return_value="/nonexistent/types.json")
+    with caplog.at_level(logging.ERROR):
         agent._register_mib_objects()
     
     # Check that function returns without error (caught exception)
@@ -219,85 +218,85 @@ def test_snmp_agent_register_mib_objects_load_type_registry_fails(caplog: pytest
 # type_recorder.py coverage gaps (92% -> 95%+)
 # ============================================================================
 
-def test_type_recorder_build_handles_symbol_with_no_getsyntax(tmp_path: Path) -> None:
+def test_type_recorder_build_handles_symbol_with_no_getsyntax(tmp_path: Path, mocker: Any) -> None:
     """Test build() skips symbols without getSyntax (lines 593-595)"""
     recorder = TypeRecorder(tmp_path)
     
-    with patch('app.type_recorder._engine.SnmpEngine') as mock_engine, \
-         patch('app.type_recorder._builder.DirMibSource'), \
-         patch.object(Path, 'glob') as mock_glob:
-        
-        # Create a symbol without getSyntax
-        class BadSymbol:
-            pass
-        
-        mock_mib_builder = MagicMock()
-        mock_mib_builder.mibSymbols = {"TEST-MIB": {"badSym": BadSymbol()}}
-        mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
-        
-        fake_mib = Mock()
-        fake_mib.name = "TEST-MIB.py"
-        fake_mib.stem = "TEST-MIB"
-        mock_glob.return_value = [fake_mib]
-        
-        recorder.build()
-        
-        # Should not crash, should skip the bad symbol
-        assert recorder._registry is not None
+    mock_engine = mocker.patch('app.type_recorder._engine.SnmpEngine')
+    mocker.patch('app.type_recorder._builder.DirMibSource')
+    mock_glob = mocker.patch.object(Path, 'glob')
+    
+    # Create a symbol without getSyntax
+    class BadSymbol:
+        pass
+    
+    mock_mib_builder = mocker.MagicMock()
+    mock_mib_builder.mibSymbols = {"TEST-MIB": {"badSym": BadSymbol()}}
+    mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
+    
+    fake_mib = mocker.Mock()
+    fake_mib.name = "TEST-MIB.py"
+    fake_mib.stem = "TEST-MIB"
+    mock_glob.return_value = [fake_mib]
+    
+    recorder.build()
+    
+    # Should not crash, should skip the bad symbol
+    assert recorder._registry is not None
 
 
-def test_type_recorder_build_getsyntax_raises_exception(tmp_path: Path) -> None:
+def test_type_recorder_build_getsyntax_raises_exception(tmp_path: Path, mocker: Any) -> None:
     """Test build() handles getSyntax() exceptions (lines 601-603)"""
     recorder = TypeRecorder(tmp_path)
     
-    with patch('app.type_recorder._engine.SnmpEngine') as mock_engine, \
-         patch('app.type_recorder._builder.DirMibSource'), \
-         patch.object(Path, 'glob') as mock_glob:
-        
-        class FailingSymbol:
-            def getSyntax(self) -> None:
-                raise Exception("getSyntax failed")
-        
-        mock_mib_builder = MagicMock()
-        mock_mib_builder.mibSymbols = {"TEST-MIB": {"failSym": FailingSymbol()}}
-        mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
-        
-        fake_mib = Mock()
-        fake_mib.name = "TEST-MIB.py"
-        fake_mib.stem = "TEST-MIB"
-        mock_glob.return_value = [fake_mib]
-        
-        recorder.build()
-        
-        # Should not crash, should skip the failing symbol
-        assert recorder._registry is not None
+    mock_engine = mocker.patch('app.type_recorder._engine.SnmpEngine')
+    mocker.patch('app.type_recorder._builder.DirMibSource')
+    mock_glob = mocker.patch.object(Path, 'glob')
+    
+    class FailingSymbol:
+        def getSyntax(self) -> None:
+            raise Exception("getSyntax failed")
+    
+    mock_mib_builder = mocker.MagicMock()
+    mock_mib_builder.mibSymbols = {"TEST-MIB": {"failSym": FailingSymbol()}}
+    mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
+    
+    fake_mib = mocker.Mock()
+    fake_mib.name = "TEST-MIB.py"
+    fake_mib.stem = "TEST-MIB"
+    mock_glob.return_value = [fake_mib]
+    
+    recorder.build()
+    
+    # Should not crash, should skip the failing symbol
+    assert recorder._registry is not None
 
 
-def test_type_recorder_build_getsyntax_returns_none(tmp_path: Path) -> None:
+def test_type_recorder_build_getsyntax_returns_none(tmp_path: Path, mocker: Any) -> None:
     """Test build() handles getSyntax() returning None (line 607)"""
     recorder = TypeRecorder(tmp_path)
     
-    with patch('app.type_recorder._engine.SnmpEngine') as mock_engine, \
-         patch('app.type_recorder._builder.DirMibSource'), \
-         patch.object(Path, 'glob') as mock_glob:
-        
-        class NoneSymbol:
-            def getSyntax(self) -> None:
-                return None
-        
-        mock_mib_builder = MagicMock()
-        mock_mib_builder.mibSymbols = {"TEST-MIB": {"noneSym": NoneSymbol()}}
-        mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
-        
-        fake_mib = Mock()
-        fake_mib.name = "TEST-MIB.py"
-        fake_mib.stem = "TEST-MIB"
-        mock_glob.return_value = [fake_mib]
-        
-        recorder.build()
-        
-        # Should not crash, should skip the None syntax
-        assert recorder._registry is not None
+    mock_engine = mocker.patch('app.type_recorder._engine.SnmpEngine')
+    mocker.patch('app.type_recorder._builder.DirMibSource')
+    mock_glob = mocker.patch.object(Path, 'glob')
+    
+    class NoneSymbol:
+        def getSyntax(self) -> None:
+            return None
+    
+    mock_mib_builder = mocker.MagicMock()
+    mock_mib_builder.mibSymbols = {"TEST-MIB": {"noneSym": NoneSymbol()}}
+    mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
+    
+    fake_mib = mocker.Mock()
+    fake_mib.name = "TEST-MIB.py"
+    fake_mib.stem = "TEST-MIB"
+    mock_glob.return_value = [fake_mib]
+    
+    recorder.build()
+    
+    # Should not crash, should skip the None syntax
+    assert recorder._registry is not None
 
 
 # ============================================================================
@@ -385,28 +384,28 @@ def test_generator_table_index_extraction_exception(monkeypatch: pytest.MonkeyPa
 # cli_compile_mib.py coverage gaps (91% -> 95%+)
 # ============================================================================
 
-def test_cli_compile_mib_with_output_dir(tmp_path: Path) -> None:
+def test_cli_compile_mib_with_output_dir(tmp_path: Path, mocker: Any) -> None:
     """Test cli_compile_mib with custom output directory (lines 33-34)"""
     mib_file = tmp_path / "TEST-MIB.txt"
     mib_file.write_text("TEST-MIB DEFINITIONS ::= BEGIN END")
     
     output_dir = tmp_path / "custom-output"
     
-    with patch('sys.argv', ['cli_compile_mib.py', str(mib_file), str(output_dir)]), \
-         patch('app.cli_compile_mib.MibCompiler') as mock_compiler, \
-         patch('app.cli_compile_mib.AppConfig') as mock_config:
-        
-        mock_config_inst = Mock()
-        mock_config.return_value = mock_config_inst
-        
-        mock_instance = Mock()
-        mock_instance.compile.return_value = str(output_dir / "TEST-MIB.py")
-        mock_instance.last_compile_results = {"TEST-MIB": "compiled"}
-        mock_compiler.return_value = mock_instance
-        
-        from app.cli_compile_mib import main
-        result = main()
-        
-        # Should use custom output directory
-        mock_compiler.assert_called_with(str(output_dir), mock_config_inst)
-        assert result == 0
+    mocker.patch('sys.argv', ['cli_compile_mib.py', str(mib_file), str(output_dir)])
+    mock_compiler = mocker.patch('app.cli_compile_mib.MibCompiler')
+    mock_config = mocker.patch('app.cli_compile_mib.AppConfig')
+    
+    mock_config_inst = mocker.Mock()
+    mock_config.return_value = mock_config_inst
+    
+    mock_instance = mocker.Mock()
+    mock_instance.compile.return_value = str(output_dir / "TEST-MIB.py")
+    mock_instance.last_compile_results = {"TEST-MIB": "compiled"}
+    mock_compiler.return_value = mock_instance
+    
+    from app.cli_compile_mib import main
+    result = main()
+    
+    # Should use custom output directory
+    mock_compiler.assert_called_with(str(output_dir), mock_config_inst)
+    assert result == 0

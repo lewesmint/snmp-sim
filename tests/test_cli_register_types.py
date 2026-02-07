@@ -1,6 +1,6 @@
-from unittest.mock import patch
 from pathlib import Path
 import pytest
+from typing import Any
 
 from app import cli_register_types as crt
 
@@ -13,17 +13,17 @@ def test_main_missing_compiled_dir(tmp_path: Path, capsys: pytest.CaptureFixture
     assert "Compiled MIBs directory not found" in captured.err
 
 
-def test_main_success_with_mocks(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_success_with_mocks(tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: Any) -> None:
     # Mock build_type_registry to return a simple registry
     fake_registry = {"MyType": {"base_type": "Integer32", "used_by": []}}
-    with patch("app.cli_register_types.build_type_registry", return_value=fake_registry):
-        rc = crt.main(["--compiled-mibs-dir", str(tmp_path), "--output", str(tmp_path / "out.json")])
-        captured = capsys.readouterr()
-        assert rc == 0
-        assert "Successfully built type registry" in captured.out
+    mocker.patch("app.cli_register_types.build_type_registry", return_value=fake_registry)
+    rc = crt.main(["--compiled-mibs-dir", str(tmp_path), "--output", str(tmp_path / "out.json")])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "Successfully built type registry" in captured.out
 
 
-def test_main_verbose_output_formatting(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_verbose_output_formatting(tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: Any) -> None:
     # Mock build_type_registry and BaseTypeHandler for verbose output
     fake_registry = {
         "MyType": {
@@ -65,23 +65,23 @@ def test_main_verbose_output_formatting(tmp_path: Path, capsys: pytest.CaptureFi
                 return b"binary data"  # Should format as b"..."
             return None
 
-    with patch("app.cli_register_types.build_type_registry", return_value=fake_registry), \
-         patch("app.cli_register_types.BaseTypeHandler", return_value=MockHandler()):
-        rc = crt.main(["--compiled-mibs-dir", str(tmp_path), "--verbose"])
-        captured = capsys.readouterr()
-        assert rc == 0
-        out = captured.out
-        assert "MyType" in out
-        assert "Integer32" in out
-        assert "42" in out
-        assert "1(up)" in out  # Enum formatting
-        assert '"hello w..."' in out  # String truncation (matches current 7-char slice)
-        assert 'b"binary ..."' in out  # Bytes formatting (includes space in 7-char slice)
+    mocker.patch("app.cli_register_types.build_type_registry", return_value=fake_registry)
+    mocker.patch("app.cli_register_types.BaseTypeHandler", return_value=MockHandler())
+    rc = crt.main(["--compiled-mibs-dir", str(tmp_path), "--verbose"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    out = captured.out
+    assert "MyType" in out
+    assert "Integer32" in out
+    assert "42" in out
+    assert "1(up)" in out  # Enum formatting
+    assert '"hello w..."' in out  # String truncation (matches current 7-char slice)
+    assert 'b"binary ..."' in out  # Bytes formatting (includes space in 7-char slice)
 
 
-def test_main_exception_handling(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    with patch("app.cli_register_types.build_type_registry", side_effect=Exception("test error")):
-        rc = crt.main(["--compiled-mibs-dir", str(tmp_path)])
-        captured = capsys.readouterr()
-        assert rc == 1
-        assert "Error building type registry: test error" in captured.err
+def test_main_exception_handling(tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: Any) -> None:
+    mocker.patch("app.cli_register_types.build_type_registry", side_effect=Exception("test error"))
+    rc = crt.main(["--compiled-mibs-dir", str(tmp_path)])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "Error building type registry: test error" in captured.err

@@ -335,10 +335,10 @@ def test_resolve_snmp_type_empty_base(table_registrar: TableRegistrar) -> None:
     assert result is None
 
 
-def test_resolve_snmp_type_returns_type_or_none(table_registrar: TableRegistrar) -> None:
+def test_resolve_snmp_type_returns_type_or_none(table_registrar: TableRegistrar, mocker: MockerFixture) -> None:
     """Test that _resolve_snmp_type handles resolution correctly."""
     # Setup mock to return a type
-    mock_type = table_registrar.mib_builder.MagicMock()
+    mock_type = mocker.MagicMock()
     table_registrar.mib_builder.import_symbols.return_value = (mock_type,)
     
     result = table_registrar._resolve_snmp_type('Integer32', 'testCol', 'testTable')
@@ -348,10 +348,10 @@ def test_resolve_snmp_type_returns_type_or_none(table_registrar: TableRegistrar)
     assert result == mock_type
 
 
-def test_resolve_snmp_type_tries_multiple_modules(table_registrar: TableRegistrar) -> None:
+def test_resolve_snmp_type_tries_multiple_modules(table_registrar: TableRegistrar, mocker: MockerFixture) -> None:
     """Test that _resolve_snmp_type tries SNMPv2-SMI then SNMPv2-TC."""
     # Setup mock to fail on first attempt, succeed on second
-    mock_type = table_registrar.mib_builder.MagicMock()
+    mock_type = mocker.MagicMock()
     table_registrar.mib_builder.import_symbols.side_effect = [
         Exception("Not in SNMPv2-SMI"),
         (mock_type,)

@@ -7,22 +7,13 @@ logger:
   console: true
   max_bytes: 10485760  # 10 MB
   backup_count: 5
+  rotate_on_startup: true  # If true, archive old log with timestamp and create new one; if false, append to existing log
 # SNMP Agent Configuration
 
 system_mib_dir:
   linux: /usr/share/snmp/mibs
   darwin: /opt/homebrew/opt/net-snmp/share/snmp/mibs
   win32: c:\net-snmp\share\snmp\mibs
-
-
-# List the MIBs to load (without extension)
-# Example:
-# mibs:
-# - SNMPv2-MIB  # Standard system group (sysDescr, sysContact, etc.)
-# - IF-MIB
-# - HOST-RESOURCES-MIB
-# - HOST-RESOURCES-TYPES
-# - CISCO-ALARM-MIB
 
 mibs:
   - SNMPv2-MIB  # Standard system group (sysDescr, sysContact, etc.)

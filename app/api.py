@@ -93,3 +93,41 @@ def list_types() -> dict[str, Any]:
     all_types = list(handler.type_registry.keys())
 
     return {"count": len(all_types), "types": sorted(all_types)}
+
+
+@app.get("/mibs")
+def list_mibs() -> dict[str, Any]:
+    """List all MIBs implemented by the agent."""
+    from app.mib_metadata import MIB_METADATA
+
+    mibs = list(MIB_METADATA.keys())
+    return {"count": len(mibs), "mibs": sorted(mibs)}
+
+
+@app.get("/oids")
+def list_oids() -> dict[str, Any]:
+    """List all OIDs implemented by the agent."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+    
+    oid_map = snmp_agent.get_all_oids()
+    return {"count": len(oid_map), "oids": oid_map}
+
+
+@app.get("/value")
+def get_oid_value(oid: str) -> dict[str, Any]:
+    """Get the value for a specific OID string (dot separated)."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    try:
+        parts = tuple(int(x) for x in oid.split(".")) if oid else ()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid OID format")
+
+    try:
+        value = snmp_agent.get_scalar_value(parts)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"OID not found: {e}")
+
+    return {"oid": parts, "value": value}

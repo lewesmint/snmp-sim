@@ -8,7 +8,6 @@ prevents __index_mib from attempting to unregister non-existent subtrees.
 import logging
 import pytest
 from typing import TypeAlias, Any
-from unittest.mock import MagicMock
 from pysnmp.smi import builder
 from pysnmp.entity import engine
 from app.table_registrar import TableRegistrar
@@ -31,7 +30,7 @@ def mib_builder() -> builder.MibBuilder:
     return builder.MibBuilder()
 
 
-def test_table_registration_disabled_in_pysnmp(logger : logging.Logger) -> None:
+def test_table_registration_disabled_in_pysnmp(logger : logging.Logger, mocker: Any) -> None:
     """
     Verify that table symbols are NOT exported to pysnmp.
     
@@ -39,11 +38,11 @@ def test_table_registration_disabled_in_pysnmp(logger : logging.Logger) -> None:
     that were never properly indexed/registered.
     """
     # Create mock MIB components
-    mock_mib_builder = MagicMock()
-    mock_scalar_instance = MagicMock()
-    mock_table = MagicMock()
-    mock_row = MagicMock()
-    mock_col = MagicMock()
+    mock_mib_builder = mocker.MagicMock()
+    mock_scalar_instance = mocker.MagicMock()
+    mock_table = mocker.MagicMock()
+    mock_row = mocker.MagicMock()
+    mock_col = mocker.MagicMock()
     
     registrar = TableRegistrar(
         mib_builder=mock_mib_builder,
@@ -117,18 +116,18 @@ def test_getnext_with_scalars_only() -> None:
     assert snmp_engine is not None
 
 
-def test_disabled_table_export_log_message(logger : logging.Logger) -> None:
+def test_disabled_table_export_log_message(logger : logging.Logger, mocker: Any) -> None:
     """
     Verify that the logger is properly configured.
     
     This confirms the test setup is in place.
     """
     # Create mock MIB components
-    mock_mib_builder = MagicMock()
-    mock_scalar_instance = MagicMock()
-    mock_table = MagicMock()
-    mock_row = MagicMock()
-    mock_col = MagicMock()
+    mock_mib_builder = mocker.MagicMock()
+    mock_scalar_instance = mocker.MagicMock()
+    mock_table = mocker.MagicMock()
+    mock_row = mocker.MagicMock()
+    mock_col = mocker.MagicMock()
     
     registrar = TableRegistrar(
         mib_builder=mock_mib_builder,
@@ -143,18 +142,18 @@ def test_disabled_table_export_log_message(logger : logging.Logger) -> None:
     assert registrar.logger is not None
 
 
-def test_export_symbols_not_called(logger : logging.Logger) -> None:
+def test_export_symbols_not_called(logger : logging.Logger, mocker: Any) -> None:
     """
     Verify that export_symbols is NOT called when registering tables.
     
     This is the core fix: disabled table export prevents __index_mib errors.
     """
     # Create mock MIB components
-    mock_mib_builder = MagicMock()
-    mock_scalar_instance = MagicMock()
-    mock_table = MagicMock()
-    mock_row = MagicMock()
-    mock_col = MagicMock()
+    mock_mib_builder = mocker.MagicMock()
+    mock_scalar_instance = mocker.MagicMock()
+    mock_table = mocker.MagicMock()
+    mock_row = mocker.MagicMock()
+    mock_col = mocker.MagicMock()
     
     registrar = TableRegistrar(
         mib_builder=mock_mib_builder,

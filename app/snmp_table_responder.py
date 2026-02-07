@@ -22,14 +22,14 @@ class SNMPTableResponder:
     """
 
     def __init__(
-        self, behavior_jsons: Dict[str, Dict[str, Any]], mib_builder: builder.MibBuilder
-    ):
+        self, behavior_jsons: Dict[str, Dict[str, Any]], mib_builder: Optional[builder.MibBuilder]
+    ) -> None:
         """
         Initialize the table responder.
 
         Args:
             behavior_jsons: Dict of MIB name -> behavior JSON structure
-            mib_builder: pysnmp MibBuilder instance for type resolution
+            mib_builder: Optional pysnmp MibBuilder instance for type resolution (can be None)
         """
         self.behavior_jsons = behavior_jsons
         self.mib_builder = mib_builder
@@ -165,8 +165,10 @@ class SNMPTableResponder:
         if len(oid) < col_prefix_len:
             return None
 
-        col_id = oid[len(table_oid) + 1]
-        row_index = str(oid[-1]) if len(oid) > col_prefix_len else "1"
+        # Column id is immediately after the table OID (table_oid + [column_id] + [row_indices])
+        col_id = oid[len(table_oid)]
+        # If the OID contains at least one row index element, use it; otherwise default to '1'
+        row_index = str(oid[-1]) if len(oid) >= col_prefix_len else "1"
 
         # Find which column has this OID
         for col_name, col_info in columns.items():

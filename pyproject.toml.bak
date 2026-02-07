@@ -13,6 +13,7 @@ exclude = [
     "^compiled-mibs/",  # Exclude auto-generated MIB files
 ]
 
+
 [tool.coverage.run]
 source = ["app"]
 omit = [
@@ -30,4 +31,9 @@ exclude = [
 [tool.pytest.ini_options]
 filterwarnings = [
     "ignore::DeprecationWarning",
+][tool.coverage.run]
+source = ["app"]
+omit = [
+    "tests/*",
+    "compiled-mibs/*"
 ]

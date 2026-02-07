@@ -95,13 +95,12 @@ def mib_schema_dir(temp_dir: Path, sample_mib_schema: Dict[str, Any]) -> Path:
 
 
 @pytest.fixture
-def mock_logger() -> Any:
+def mock_logger(mocker: Any) -> Any:
     """Create a mock logger for testing."""
-    from unittest.mock import Mock
-    logger = Mock()
-    logger.debug = Mock()
-    logger.info = Mock()
-    logger.warning = Mock()
-    logger.error = Mock()
+    logger = mocker.Mock()
+    logger.debug = mocker.Mock()
+    logger.info = mocker.Mock()
+    logger.warning = mocker.Mock()
+    logger.error = mocker.Mock()
     return logger
 

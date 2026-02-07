@@ -4,7 +4,6 @@ Unit tests for TypeRecorder module.
 from pathlib import Path
 from typing import Any, List, TypedDict, Dict,cast
 from types import SimpleNamespace
-from unittest.mock import Mock, MagicMock, patch, mock_open
 import pytest
 
 from app.type_recorder import TypeRecorder
@@ -46,32 +45,32 @@ class TypeEntryDict(TypedDict, total=False):
 class TestSafeCallZeroArg:
     """Test safe_call_zero_arg static method"""
 
-    def test_not_callable(self) -> None:
+    def test_not_callable(self, mocker: Any) -> None:
         """If attribute is not callable, return None"""
-        obj = Mock()
+        obj = mocker.Mock()
         obj.method = "not a function"
         result = TypeRecorder.safe_call_zero_arg(obj, "method")
         assert result is None
 
-    def test_missing_attribute(self) -> None:
+    def test_missing_attribute(self, mocker: Any) -> None:
         """If attribute does not exist, return None"""
-        obj = Mock(spec=[])
+        obj = mocker.Mock(spec=[])
         result = TypeRecorder.safe_call_zero_arg(obj, "missing")
         assert result is None
 
-    def test_signature_inspection_fails(self) -> None:
+    def test_signature_inspection_fails(self, mocker: Any) -> None:
         """If signature inspection fails, return None"""
-        obj = Mock()
-        obj.method = Mock(side_effect=TypeError("inspection failed"))
+        obj = mocker.Mock()
+        obj.method = mocker.Mock(side_effect=TypeError("inspection failed"))
         
         # Make inspect.signature fail
-        with patch("inspect.signature", side_effect=TypeError):
-            result = TypeRecorder.safe_call_zero_arg(obj, "method")
+        mocker.patch("inspect.signature", side_effect=TypeError)
+        result = TypeRecorder.safe_call_zero_arg(obj, "method")
         assert result is None
 
-    def test_required_parameters(self) -> None:
+    def test_required_parameters(self, mocker: Any) -> None:
         """If method requires parameters, return None"""
-        obj = Mock()
+        obj = mocker.Mock()
         
         def requires_param(x: Any) -> Any:
             return x
@@ -80,17 +79,17 @@ class TestSafeCallZeroArg:
         result = TypeRecorder.safe_call_zero_arg(obj, "method")
         assert result is None
 
-    def test_call_raises_type_error(self) -> None:
+    def test_call_raises_type_error(self, mocker: Any) -> None:
         """If call raises TypeError, return None"""
-        obj = Mock()
-        obj.method = Mock(side_effect=TypeError("bad call"))
+        obj = mocker.Mock()
+        obj.method = mocker.Mock(side_effect=TypeError("bad call"))
         result = TypeRecorder.safe_call_zero_arg(obj, "method")
         assert result is None
 
-    def test_successful_zero_arg_call(self) -> None:
+    def test_successful_zero_arg_call(self, mocker: Any) -> None:
         """If method is callable with no args, return result"""
-        obj = Mock()
-        obj.method = Mock(return_value="success")
+        obj = mocker.Mock()
+        obj.method = mocker.Mock(return_value="success")
         result = TypeRecorder.safe_call_zero_arg(obj, "method")
         assert result == "success"
 
@@ -98,7 +97,7 @@ class TestSafeCallZeroArg:
 class TestInferBaseTypeFromMRO:
     """Test infer_base_type_from_mro static method"""
 
-    def test_finds_known_base_type(self) -> None:
+    def test_finds_known_base_type(self, mocker: Any) -> None:
         """Should find ASN1 base type in MRO"""
         # Create a type dynamically with proper __name__
         OctetString = type("OctetString", (), {})
@@ -108,7 +107,7 @@ class TestInferBaseTypeFromMRO:
         result = TypeRecorder.infer_base_type_from_mro(instance)
         assert result == "OctetString"
 
-    def test_no_known_base_type(self) -> None:
+    def test_no_known_base_type(self, mocker: Any) -> None:
         """Should return None if no known base type in MRO"""
         UnknownType = type("UnknownType", (), {})
         
@@ -120,7 +119,7 @@ class TestInferBaseTypeFromMRO:
 class TestUnwrapSyntax:
     """Test unwrap_syntax static method"""
 
-    def test_with_get_syntax(self) -> None:
+    def test_with_get_syntax(self, mocker: Any) -> None:
         """Should use getSyntax() if available"""
         BaseType = type("Integer32", (), {})
 
@@ -135,7 +134,7 @@ class TestUnwrapSyntax:
         assert base_type == "Integer32"
         assert isinstance(base_obj, BaseType)
 
-    def test_without_get_syntax(self) -> None:
+    def test_without_get_syntax(self, mocker: Any) -> None:
         """Should infer from MRO if getSyntax not available"""
         Counter32 = type("Counter32", (), {})
         CustomCounter = type("CustomCounter", (Counter32,), {})
@@ -146,7 +145,7 @@ class TestUnwrapSyntax:
         assert base_type == "Counter32"
         assert base_obj is syntax
 
-    def test_no_base_type(self) -> None:
+    def test_no_base_type(self, mocker: Any) -> None:
         """Should return syntax_type for both if no base found"""
         class UnknownType:
             __name__ = "UnknownType"
@@ -161,22 +160,22 @@ class TestUnwrapSyntax:
 class TestExtractDisplayHint:
     """Test extract_display_hint static method"""
 
-    def test_from_get_display_hint_method(self) -> None:
+    def test_from_get_display_hint_method(self, mocker: Any) -> None:
         """Should extract from getDisplayHint() method"""
-        syntax = Mock()
-        syntax.getDisplayHint = Mock(return_value="1x:")
+        syntax = mocker.Mock()
+        syntax.getDisplayHint = mocker.Mock(return_value="1x:")
         result = TypeRecorder.extract_display_hint(syntax)
         assert result == "1x:"
 
-    def test_from_instance_attribute(self) -> None:
+    def test_from_instance_attribute(self, mocker: Any) -> None:
         """Should extract from instance displayHint attribute"""
-        syntax = Mock()
-        syntax.getDisplayHint = Mock(return_value=None)
+        syntax = mocker.Mock()
+        syntax.getDisplayHint = mocker.Mock(return_value=None)
         syntax.displayHint = "2d-1d-1d,1d:1d:1d.1d,1a1d:1d"
         result = TypeRecorder.extract_display_hint(syntax)
         assert result == "2d-1d-1d,1d:1d:1d.1d,1a1d:1d"
 
-    def test_from_class_attribute(self) -> None:
+    def test_from_class_attribute(self, mocker: Any) -> None:
         """Should extract from class displayHint attribute"""
         class CustomType:
             displayHint = "255a"
@@ -185,20 +184,20 @@ class TestExtractDisplayHint:
         result = TypeRecorder.extract_display_hint(syntax)
         assert result == "255a"
 
-    def test_empty_string(self) -> None:
+    def test_empty_string(self, mocker: Any) -> None:
         """Should return None for empty display hint"""
-        syntax = Mock()
-        syntax.getDisplayHint = Mock(return_value="")
+        syntax = mocker.Mock()
+        syntax.getDisplayHint = mocker.Mock(return_value="")
         result = TypeRecorder.extract_display_hint(syntax)
         assert result is None
 
-    def test_no_display_hint(self) -> None:
+    def test_no_display_hint(self, mocker: Any) -> None:
         """Should return None if no display hint found"""
-        syntax = Mock(spec=[])
+        syntax = mocker.Mock(spec=[])
         result = TypeRecorder.extract_display_hint(syntax)
         assert result is None
 
-    def test_instance_blank_class_non_blank(self) -> None:
+    def test_instance_blank_class_non_blank(self, mocker: Any) -> None:
         """Should skip blank instance displayHint and use class value"""
         class CustomType:
             displayHint = "1x:"
@@ -213,12 +212,12 @@ class TestExtractDisplayHint:
 class TestExtractEnumsList:
     """Test extract_enums_list static method"""
 
-    def test_from_named_values(self) -> None:
+    def test_from_named_values(self, mocker: Any) -> None:
         """Should extract enums from namedValues"""
-        named_values = Mock()
-        named_values.items = Mock(return_value=[("active", 1), ("notInService", 2), ("notReady", 3)])
+        named_values = mocker.Mock()
+        named_values.items = mocker.Mock(return_value=[("active", 1), ("notInService", 2), ("notReady", 3)])
         
-        syntax = Mock()
+        syntax = mocker.Mock()
         syntax.namedValues = named_values
         
         result = TypeRecorder.extract_enums_list(syntax)
@@ -228,49 +227,49 @@ class TestExtractEnumsList:
             {"value": 3, "name": "notReady"},
         ]
 
-    def test_sorts_by_value(self) -> None:
+    def test_sorts_by_value(self, mocker: Any) -> None:
         """Should sort enums by value"""
-        named_values = Mock()
-        named_values.items = Mock(return_value=[("down", 2), ("up", 1), ("testing", 3)])
+        named_values = mocker.Mock()
+        named_values.items = mocker.Mock(return_value=[("down", 2), ("up", 1), ("testing", 3)])
 
-        syntax = Mock()
+        syntax = mocker.Mock()
         syntax.namedValues = named_values
 
         result = TypeRecorder.extract_enums_list(syntax)
         assert result is not None
         assert [e["value"] for e in result] == [1, 2, 3]
 
-    def test_no_named_values(self) -> None:
+    def test_no_named_values(self, mocker: Any) -> None:
         """Should return None if no namedValues"""
-        syntax = Mock(spec=[])
+        syntax = mocker.Mock(spec=[])
         result = TypeRecorder.extract_enums_list(syntax)
         assert result is None
 
-    def test_named_values_not_callable(self) -> None:
+    def test_named_values_not_callable(self, mocker: Any) -> None:
         """Should return None if namedValues.items not callable"""
-        syntax = Mock()
-        syntax.namedValues = Mock()
+        syntax = mocker.Mock()
+        syntax.namedValues = mocker.Mock()
         syntax.namedValues.items = "not callable"
         result = TypeRecorder.extract_enums_list(syntax)
         assert result is None
 
-    def test_items_raises_exception(self) -> None:
+    def test_items_raises_exception(self, mocker: Any) -> None:
         """Should return None if items() raises exception"""
-        named_values = Mock()
-        named_values.items = Mock(side_effect=Exception("error"))
+        named_values = mocker.Mock()
+        named_values.items = mocker.Mock(side_effect=Exception("error"))
         
-        syntax = Mock()
+        syntax = mocker.Mock()
         syntax.namedValues = named_values
         
         result = TypeRecorder.extract_enums_list(syntax)
         assert result is None
 
-    def test_invalid_types_in_pairs(self) -> None:
+    def test_invalid_types_in_pairs(self, mocker: Any) -> None:
         """Should skip invalid pairs"""
-        named_values = Mock()
-        named_values.items = Mock(return_value=[("valid", 1), (123, "invalid"), ("another", 2)])
+        named_values = mocker.Mock()
+        named_values.items = mocker.Mock(return_value=[("valid", 1), (123, "invalid"), ("another", 2)])
         
-        syntax = Mock()
+        syntax = mocker.Mock()
         syntax.namedValues = named_values
         
         result = TypeRecorder.extract_enums_list(syntax)
@@ -279,7 +278,7 @@ class TestExtractEnumsList:
             {"value": 2, "name": "another"},
         ]
 
-    def test_from_class_named_values(self) -> None:
+    def test_from_class_named_values(self, mocker: Any) -> None:
         """Should extract from class namedValues if instance has none"""
         class CustomType:
             class NamedValues:
@@ -357,21 +356,21 @@ class TestParseConstraintsFromRepr:
 class TestExtractConstraints:
     """Test extract_constraints class method"""
 
-    def test_no_subtype_spec(self) -> None:
+    def test_no_subtype_spec(self, mocker: Any) -> None:
         """Should return empty if no subtypeSpec"""
-        syntax = Mock(spec=[])
+        syntax = mocker.Mock(spec=[])
         size, constraints, repr_text = TypeRecorder.extract_constraints(syntax)
         assert size is None
         assert constraints == []
         assert repr_text is None
 
-    def test_with_constraints(self) -> None:
+    def test_with_constraints(self, mocker: Any) -> None:
         """Should extract constraints from subtypeSpec"""
         class FakeSubtypeSpec:
             def __repr__(self) -> str:
                 return "ValueRangeConstraint object, consts 1, 100"
 
-        syntax = Mock()
+        syntax = mocker.Mock()
         syntax.subtypeSpec = FakeSubtypeSpec()
 
         _size, constraints, repr_text = TypeRecorder.extract_constraints(syntax)
@@ -379,13 +378,13 @@ class TestExtractConstraints:
         assert constraints[0]["type"] == "ValueRangeConstraint"
         assert repr_text == "ValueRangeConstraint object, consts 1, 100"
 
-    def test_empty_constraints_intersection(self) -> None:
+    def test_empty_constraints_intersection(self, mocker: Any) -> None:
         """Should not set repr_text for empty constraint markers"""
         class FakeSubtypeSpec:
             def __repr__(self) -> str:
                 return "<ConstraintsIntersection object>"
 
-        syntax = Mock()
+        syntax = mocker.Mock()
         syntax.subtypeSpec = FakeSubtypeSpec()
 
         _size, constraints, repr_text = TypeRecorder.extract_constraints(syntax)
@@ -488,9 +487,9 @@ class TestCompactSingleValueConstraintsIfEnumsPresent:
 class TestIsTextualConventionSymbol:
     """Test _is_textual_convention_symbol static method"""
 
-    def test_not_a_class(self) -> None:
+    def test_not_a_class(self, mocker: Any) -> None:
         """Should return False for non-class objects"""
-        obj = Mock()
+        obj = mocker.Mock()
         result = TypeRecorder._is_textual_convention_symbol(obj)
         assert result is False
 
@@ -571,59 +570,59 @@ class TestCanonicaliseConstraints:
 class TestSeedBaseTypes:
     """Test _seed_base_types class method"""
 
-    def test_creates_entries_for_base_types(self) -> None:
+    def test_creates_entries_for_base_types(self, mocker: Any) -> None:
         """Should create entries for all ASN1 base types"""
-        with patch("app.type_recorder._rfc1902") as mock_rfc:
-            # Mock constructors for base types
-            for name in ["Integer32", "OctetString", "Counter32"]:
-                mock_obj = Mock()
-                mock_obj.subtypeSpec = None
-                setattr(mock_rfc, name, Mock(return_value=mock_obj))
-            
-            seeded = TypeRecorder._seed_base_types()
-            
-            # Should have entries
-            assert isinstance(seeded, dict)
-            # Each entry should have the required structure
-            for entry in seeded.values():
-                assert "base_type" in entry
-                assert "display_hint" in entry
-                assert "size" in entry
-                assert "constraints" in entry
-                assert "constraints_repr" in entry
-                assert "enums" in entry
-                assert "used_by" in entry
-
-    def test_skips_unavailable_types(self) -> None:
-        """Should skip base types that aren't available in rfc1902"""
-        with patch("app.type_recorder._rfc1902") as mock_rfc:
-            # Only provide some base types
-            mock_obj = Mock()
+        mock_rfc = mocker.patch("app.type_recorder._rfc1902")
+        # mocker.Mock constructors for base types
+        for name in ["Integer32", "OctetString", "Counter32"]:
+            mock_obj = mocker.Mock()
             mock_obj.subtypeSpec = None
-            mock_rfc.Integer32 = Mock(return_value=mock_obj)
-            # Others will be None or missing
-            
-            seeded = TypeRecorder._seed_base_types()
-            # Should only have the available ones
-            assert isinstance(seeded, dict)
+            setattr(mock_rfc, name, mocker.Mock(return_value=mock_obj))
+        
+        seeded = TypeRecorder._seed_base_types()
+        
+        # Should have entries
+        assert isinstance(seeded, dict)
+        # Each entry should have the required structure
+        for entry in seeded.values():
+            assert "base_type" in entry
+            assert "display_hint" in entry
+            assert "size" in entry
+            assert "constraints" in entry
+            assert "constraints_repr" in entry
+            assert "enums" in entry
+            assert "used_by" in entry
 
-    def test_handles_constructor_exceptions(self) -> None:
-        """Should skip types whose constructor raises exceptions"""
-        with patch("app.type_recorder._rfc1902") as mock_rfc:
-            mock_rfc.Integer32 = Mock(side_effect=Exception("construction failed"))
-            
-            seeded = TypeRecorder._seed_base_types()
-            # Should not crash, should skip this type
-            assert isinstance(seeded, dict)
-
-    def test_skips_non_callable_or_missing_constructor(self) -> None:
-        """Should skip base types with no callable constructor"""
-        mock_obj = Mock()
+    def test_skips_unavailable_types(self, mocker: Any) -> None:
+        """Should skip base types that aren't available in rfc1902"""
+        mock_rfc = mocker.patch("app.type_recorder._rfc1902")
+        # Only provide some base types
+        mock_obj = mocker.Mock()
         mock_obj.subtypeSpec = None
-        fake_rfc = SimpleNamespace(Integer32=Mock(return_value=mock_obj))
+        mock_rfc.Integer32 = mocker.Mock(return_value=mock_obj)
+        # Others will be None or missing
+        
+        seeded = TypeRecorder._seed_base_types()
+        # Should only have the available ones
+        assert isinstance(seeded, dict)
 
-        with patch("app.type_recorder._rfc1902", new=fake_rfc):
-            seeded = TypeRecorder._seed_base_types()
+    def test_handles_constructor_exceptions(self, mocker: Any) -> None:
+        """Should skip types whose constructor raises exceptions"""
+        mock_rfc = mocker.patch("app.type_recorder._rfc1902")
+        mock_rfc.Integer32 = mocker.Mock(side_effect=Exception("construction failed"))
+        
+        seeded = TypeRecorder._seed_base_types()
+        # Should not crash, should skip this type
+        assert isinstance(seeded, dict)
+
+    def test_skips_non_callable_or_missing_constructor(self, mocker: Any) -> None:
+        """Should skip base types with no callable constructor"""
+        mock_obj = mocker.Mock()
+        mock_obj.subtypeSpec = None
+        fake_rfc = SimpleNamespace(Integer32=mocker.Mock(return_value=mock_obj))
+
+        mocker.patch("app.type_recorder._rfc1902", new=fake_rfc)
+        seeded = TypeRecorder._seed_base_types()
 
         assert "Integer32" in seeded
         assert "OctetString" not in seeded
@@ -959,52 +958,52 @@ class TestIsValueRangeConstraint:
 class TestBuild:
     """Test build method"""
 
-    def test_build_processes_mibs(self) -> None:
+    def test_build_processes_mibs(self, mocker: Any) -> None:
         """Should process MIB files and build type registry"""
         compiled_dir = Path("/fake/compiled")
         recorder = TypeRecorder(compiled_dir)
 
-        with patch("app.type_recorder._engine.SnmpEngine") as mock_engine, \
-             patch("app.type_recorder._builder.DirMibSource"), \
-             patch.object(Path, "glob") as mock_glob:
-            
-            # Setup mocks
-            mock_mib_builder = MagicMock()
-            mock_mib_builder.mibSymbols = {}
-            mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
-            
-            # Mock glob to return no files (simplest case)
-            mock_glob.return_value = []
-            
-            recorder.build()
-            
-            # Should have built registry (even if empty)
-            assert recorder._registry is not None
+        mock_engine = mocker.patch("app.type_recorder._engine.SnmpEngine")
+        mocker.patch("app.type_recorder._builder.DirMibSource")
+        mock_glob = mocker.patch.object(Path, "glob")
+        
+        # Setup mocks
+        mock_mib_builder = mocker.MagicMock()
+        mock_mib_builder.mibSymbols = {}
+        mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
+        
+        # mocker.Mock glob to return no files (simplest case)
+        mock_glob.return_value = []
+        
+        recorder.build()
+        
+        # Should have built registry (even if empty)
+        assert recorder._registry is not None
 
-    def test_build_handles_load_failure(self) -> None:
+    def test_build_handles_load_failure(self, mocker: Any) -> None:
         """Should handle MIB load failures gracefully"""
         compiled_dir = Path("/fake/compiled")
         recorder = TypeRecorder(compiled_dir)
         
-        with patch("app.type_recorder._engine.SnmpEngine") as mock_engine, \
-             patch("app.type_recorder._builder.DirMibSource"), \
-             patch.object(Path, "glob") as mock_glob:
-            
-            mock_mib_builder = MagicMock()
-            mock_mib_builder.mibSymbols = {}
-            mock_mib_builder.load_modules.side_effect = Exception("load failed")
-            mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
-            
-            fake_mib = Mock()
-            fake_mib.name = "TEST-MIB.py"
-            fake_mib.stem = "TEST-MIB"
-            mock_glob.return_value = [fake_mib]
-            
-            # Should not crash
-            recorder.build()
-            assert recorder._registry is not None
+        mock_engine = mocker.patch("app.type_recorder._engine.SnmpEngine")
+        mocker.patch("app.type_recorder._builder.DirMibSource")
+        mock_glob = mocker.patch.object(Path, "glob")
+        
+        mock_mib_builder = mocker.MagicMock()
+        mock_mib_builder.mibSymbols = {}
+        mock_mib_builder.load_modules.side_effect = Exception("load failed")
+        mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
+        
+        fake_mib = mocker.Mock()
+        fake_mib.name = "TEST-MIB.py"
+        fake_mib.stem = "TEST-MIB"
+        mock_glob.return_value = [fake_mib]
+        
+        # Should not crash
+        recorder.build()
+        assert recorder._registry is not None
 
-    def test_build_skips_init_py(self, tmp_path: Path) -> None:
+    def test_build_skips_init_py(self, tmp_path: Path, mocker: Any) -> None:
         """Should skip __init__.py when loading MIBs"""
         compiled_dir = tmp_path
         (compiled_dir / "__init__.py").write_text("# init")
@@ -1012,20 +1011,20 @@ class TestBuild:
 
         recorder = TypeRecorder(compiled_dir)
 
-        with patch("app.type_recorder._engine.SnmpEngine") as mock_engine, \
-             patch("app.type_recorder._builder.DirMibSource"):
+        mock_engine = mocker.patch("app.type_recorder._engine.SnmpEngine")
+        mocker.patch("app.type_recorder._builder.DirMibSource")
 
-            mock_mib_builder = MagicMock()
-            mock_mib_builder.mibSymbols = {}
-            mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
+        mock_mib_builder = mocker.MagicMock()
+        mock_mib_builder.mibSymbols = {}
+        mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
 
-            recorder.build()
+        recorder.build()
 
-            called = [call.args[0] for call in mock_mib_builder.load_modules.call_args_list]
-            assert "__init__" not in called
-            assert "TEST-MIB" in called
+        called = [call.args[0] for call in mock_mib_builder.load_modules.call_args_list]
+        assert "__init__" not in called
+        assert "TEST-MIB" in called
 
-    def test_build_updates_metadata_fields(self) -> None:
+    def test_build_updates_metadata_fields(self, mocker: Any) -> None:
         """Should update entry metadata fields when available"""
         compiled_dir = Path("/fake/compiled")
         recorder = TypeRecorder(compiled_dir)
@@ -1088,17 +1087,17 @@ class TestBuild:
             "used_by": [],
         }
 
-        with patch.object(TypeRecorder, "_seed_base_types", return_value={"Integer32": base_entry, "CustomType": custom_entry}), \
-             patch("app.type_recorder._engine.SnmpEngine") as mock_engine, \
-             patch("app.type_recorder._builder.DirMibSource"), \
-             patch.object(Path, "glob") as mock_glob:
+        mocker.patch.object(TypeRecorder, "_seed_base_types", return_value={"Integer32": base_entry, "CustomType": custom_entry})
+        mock_engine = mocker.patch("app.type_recorder._engine.SnmpEngine")
+        mocker.patch("app.type_recorder._builder.DirMibSource")
+        mock_glob = mocker.patch.object(Path, "glob")
 
-            mock_mib_builder = MagicMock()
-            mock_mib_builder.mibSymbols = {"TEST-MIB": {"sym": Symbol()}}
-            mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
-            mock_glob.return_value = []
+        mock_mib_builder = mocker.MagicMock()
+        mock_mib_builder.mibSymbols = {"TEST-MIB": {"sym": Symbol()}}
+        mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
+        mock_glob.return_value = []
 
-            recorder.build()
+        recorder.build()
 
         entry = recorder.registry["CustomType"]
         assert entry["display_hint"] == "1x:"
@@ -1106,7 +1105,7 @@ class TestBuild:
         assert entry["enums"] == [{"value": 1, "name": "one"}]
         assert entry["constraints"]
 
-    def test_build_base_obj_constraints_empty_falls_through(self) -> None:
+    def test_build_base_obj_constraints_empty_falls_through(self, mocker: Any) -> None:
         """Should fall through when base_obj constraints are empty"""
         compiled_dir = Path("/fake/compiled")
         recorder = TypeRecorder(compiled_dir)
@@ -1150,22 +1149,22 @@ class TestBuild:
             "used_by": [],
         }
 
-        with patch.object(TypeRecorder, "_seed_base_types", return_value={"CustomType": custom_entry}), \
-             patch("app.type_recorder._engine.SnmpEngine") as mock_engine, \
-             patch("app.type_recorder._builder.DirMibSource"), \
-             patch.object(Path, "glob") as mock_glob:
+        mocker.patch.object(TypeRecorder, "_seed_base_types", return_value={"CustomType": custom_entry})
+        mock_engine = mocker.patch("app.type_recorder._engine.SnmpEngine")
+        mocker.patch("app.type_recorder._builder.DirMibSource")
+        mock_glob = mocker.patch.object(Path, "glob")
 
-            mock_mib_builder = MagicMock()
-            mock_mib_builder.mibSymbols = {"TEST-MIB": {"sym": Symbol()}}
-            mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
-            mock_glob.return_value = []
+        mock_mib_builder = mocker.MagicMock()
+        mock_mib_builder.mibSymbols = {"TEST-MIB": {"sym": Symbol()}}
+        mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
+        mock_glob.return_value = []
 
-            recorder.build()
+        recorder.build()
 
         entry = recorder.registry["CustomType"]
         assert entry["constraints"] == []
 
-    def test_build_base_type_out_none_keeps_constraints_repr(self) -> None:
+    def test_build_base_type_out_none_keeps_constraints_repr(self, mocker: Any) -> None:
         """Should keep constraints_repr when base_type_out is None"""
         compiled_dir = Path("/fake/compiled")
         recorder = TypeRecorder(compiled_dir)
@@ -1200,17 +1199,17 @@ class TestBuild:
             "used_by": [],
         }
 
-        with patch.object(TypeRecorder, "_seed_base_types", return_value={"CustomNoBase": custom_entry}), \
-             patch("app.type_recorder._engine.SnmpEngine") as mock_engine, \
-             patch("app.type_recorder._builder.DirMibSource"), \
-             patch.object(Path, "glob") as mock_glob:
+        mocker.patch.object(TypeRecorder, "_seed_base_types", return_value={"CustomNoBase": custom_entry})
+        mock_engine = mocker.patch("app.type_recorder._engine.SnmpEngine")
+        mocker.patch("app.type_recorder._builder.DirMibSource")
+        mock_glob = mocker.patch.object(Path, "glob")
 
-            mock_mib_builder = MagicMock()
-            mock_mib_builder.mibSymbols = {"TEST-MIB": {"sym": Symbol()}}
-            mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
-            mock_glob.return_value = []
+        mock_mib_builder = mocker.MagicMock()
+        mock_mib_builder.mibSymbols = {"TEST-MIB": {"sym": Symbol()}}
+        mock_engine.return_value.get_mib_builder.return_value = mock_mib_builder
+        mock_glob.return_value = []
 
-            recorder.build()
+        recorder.build()
 
         entry = recorder.registry["CustomNoBase"]
         assert entry["constraints_repr"] is not None
@@ -1256,7 +1255,7 @@ class TestExportToJson:
         with pytest.raises(RuntimeError, match="build.*must be called"):
             recorder.export_to_json("out.json")
 
-    def test_exports_registry(self) -> None:
+    def test_exports_registry(self, mocker: Any) -> None:
         """Should export registry to JSON file"""
         from app.type_recorder import TypeEntry
 
@@ -1274,9 +1273,9 @@ class TestExportToJson:
         }
         recorder._registry = {"Integer32": int32_entry}
 
-        m = mock_open()
-        with patch("builtins.open", m):
-            recorder.export_to_json("types.json")
+        m = mocker.mock_open()
+        mocker.patch("builtins.open", m)
+        recorder.export_to_json("types.json")
 
         m.assert_called_once_with("types.json", "w", encoding="utf-8")
         # Verify json.dump was called
@@ -1288,14 +1287,14 @@ class TestExportToJson:
 class TestMain:
     """Test main function"""
 
-    def test_main_function(self) -> None:
+    def test_main_function(self, mocker: Any) -> None:
         """Should parse args and run recorder"""
         from app.type_recorder import main
         
-        with patch("sys.argv", ["type_recorder.py", "compiled-mibs", "-o", "out.json"]), \
-             patch.object(TypeRecorder, "build"), \
-             patch.object(TypeRecorder, "export_to_json"), \
-             patch.object(TypeRecorder, "registry", {"type1": {}}), \
-             patch("builtins.print"):
-            
-            main()
+        mocker.patch("sys.argv", ["type_recorder.py", "compiled-mibs", "-o", "out.json"])
+        mocker.patch.object(TypeRecorder, "build")
+        mocker.patch.object(TypeRecorder, "export_to_json")
+        mocker.patch.object(TypeRecorder, "registry", {"type1": {}})
+        mocker.patch("builtins.print")
+        
+        main()

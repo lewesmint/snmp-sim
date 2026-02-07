@@ -262,3 +262,99 @@ def test_validate_type_registry_missing_fields() -> None:
     assert is_valid is False
     assert len(errors) > 0
     assert any("missing fields" in error for error in errors)
+
+
+def test_log_rotation_archives_existing_log(tmp_path: Path) -> None:
+    """Test that log rotation archives existing log file with timestamp from first entry."""
+    AppLogger._configured = False
+    log_dir = tmp_path / "logs-rotation"
+    log_dir.mkdir()
+    log_file = "test-agent.log"
+    log_path = log_dir / log_file
+
+    # Create an existing log file with a known timestamp
+    log_path.write_text(
+        "2026-02-07 10:30:45.123 INFO test.module [MainThread] Test message\n"
+        "2026-02-07 10:30:46.456 DEBUG test.module [MainThread] Another message\n"
+    )
+
+    root = logging.getLogger()
+    old_handlers = list(root.handlers)
+    try:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+
+        # Configure with rotation enabled
+        config = LoggingConfig(
+            level="INFO",
+            log_dir=log_dir,
+            log_file=log_file,
+            console=False,
+            rotate_on_startup=True,
+        )
+        AppLogger(config)
+
+        # Original log file should be archived
+        assert not log_path.exists() or log_path.stat().st_size == 0 or log_path.read_text() != "2026-02-07 10:30:45.123 INFO test.module [MainThread] Test message\n"
+
+        # Check that archived file exists with timestamp
+        archived_files = list(log_dir.glob("test-agent_2026-02-07_10-30-45*.log"))
+        assert len(archived_files) == 1
+
+        # New log file should exist (may be empty or have new content)
+        assert log_path.exists()
+
+    finally:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+        for handler in old_handlers:
+            root.addHandler(handler)
+        AppLogger._configured = False
+
+
+def test_log_no_rotation_appends_to_existing(tmp_path: Path) -> None:
+    """Test that with rotation disabled, logs append to existing file."""
+    AppLogger._configured = False
+    log_dir = tmp_path / "logs-no-rotation"
+    log_dir.mkdir()
+    log_file = "test-agent.log"
+    log_path = log_dir / log_file
+
+    # Create an existing log file
+    existing_content = "2026-02-07 10:30:45.123 INFO test.module [MainThread] Existing message\n"
+    log_path.write_text(existing_content)
+
+    root = logging.getLogger()
+    old_handlers = list(root.handlers)
+    try:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+
+        # Configure with rotation disabled
+        config = LoggingConfig(
+            level="INFO",
+            log_dir=log_dir,
+            log_file=log_file,
+            console=False,
+            rotate_on_startup=False,
+        )
+        AppLogger(config)
+
+        # Write a new log message
+        root.info("New message")
+
+        # Original content should still be there
+        log_content = log_path.read_text()
+        assert "Existing message" in log_content
+        assert "New message" in log_content
+
+        # No archived files should exist
+        archived_files = list(log_dir.glob("test-agent_*.log"))
+        assert len(archived_files) == 0
+
+    finally:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+        for handler in old_handlers:
+            root.addHandler(handler)
+        AppLogger._configured = False

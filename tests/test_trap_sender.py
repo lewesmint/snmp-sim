@@ -182,4 +182,3 @@ def test_cli_sends_trap(mocker: MockerFixture, capsys: pytest.CaptureFixture[str
     _output = capsys.readouterr()
     assert exit_code == 0
     mock_sender.send_trap.assert_called_once()
-

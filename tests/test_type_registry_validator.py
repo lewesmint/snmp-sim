@@ -1,5 +1,8 @@
 import json
 from pathlib import Path
+import pytest
+import subprocess
+import sys
 
 
 from app.type_registry_validator import (
@@ -92,3 +95,51 @@ def test_validate_type_registry_file_open_error(tmp_path: Path) -> None:
     assert is_valid is False
     assert count == 0
     assert any("Failed to validate type registry" in e for e in errors)
+
+
+def test_validate_type_registry_file_valid(tmp_path: Path) -> None:
+    registry = {
+        "MyType": {
+            "base_type": "Integer",
+            "used_by": [],
+            "defined_in": "MY-MIB",
+            "abstract": False,
+        }
+    }
+    path = tmp_path / "valid.json"
+    path.write_text(json.dumps(registry))
+
+    is_valid, errors, count = validate_type_registry_file(str(path))
+
+    assert is_valid is True
+    assert errors == []
+    assert count == 1
+
+
+def test_main_no_args(capsys: pytest.CaptureFixture[str]) -> None:
+    # Test the main function with no arguments
+    result = subprocess.run([sys.executable, "-m", "app.type_registry_validator"], 
+                          capture_output=True, text=True)
+    assert result.returncode == 2
+    assert "Usage:" in result.stdout
+
+
+def test_main_with_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # Create a valid registry file
+    registry = {
+        "MyType": {
+            "base_type": "Integer",
+            "used_by": [],
+            "defined_in": "MY-MIB",
+            "abstract": False,
+        }
+    }
+    path = tmp_path / "types.json"
+    path.write_text(json.dumps(registry))
+    
+    # Run the main function
+    result = subprocess.run([sys.executable, "-m", "app.type_registry_validator", str(path)], 
+                          capture_output=True, text=True)
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert result.stderr == ""

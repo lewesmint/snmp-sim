@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import logging
 import logging.handlers
+import re
+import shutil
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -16,6 +19,7 @@ class LoggingConfig:
     console: bool = True
     max_bytes: int = 10 * 1024 * 1024
     backup_count: int = 5
+    rotate_on_startup: bool = True
 
 
 if TYPE_CHECKING:
@@ -76,6 +80,64 @@ class FlushingRotatingFileHandler(logging.handlers.RotatingFileHandler):
             self.handleError(record)
 
 
+def _archive_log_file(log_path: Path) -> None:
+    """
+    Archive an existing log file by renaming it with the timestamp from its first entry.
+
+    If the log file exists, reads the first line to extract the timestamp and renames
+    the file to include that timestamp. If no timestamp can be extracted, uses the
+    file's modification time.
+
+    Args:
+        log_path: Path to the log file to archive
+    """
+    if not log_path.exists():
+        return
+
+    # Try to read the first line to get the timestamp
+    timestamp_str = None
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            first_line = f.readline().strip()
+            # Match timestamp format: YYYY-MM-DD HH:MM:SS.mmm
+            match = re.match(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\.\d{3}", first_line)
+            if match:
+                timestamp_str = match.group(1)
+    except Exception:
+        # If we can't read the file, we'll use the modification time
+        pass
+
+    # If we couldn't extract timestamp from first line, use file modification time
+    if timestamp_str is None:
+        mtime = log_path.stat().st_mtime
+        dt = datetime.fromtimestamp(mtime)
+        timestamp_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Convert timestamp to filename-safe format: YYYY-MM-DD_HH-MM-SS
+    filename_timestamp = timestamp_str.replace(" ", "_").replace(":", "-")
+
+    # Create archived filename
+    log_dir = log_path.parent
+    log_name = log_path.stem
+    log_ext = log_path.suffix
+    archived_name = f"{log_name}_{filename_timestamp}{log_ext}"
+    archived_path = log_dir / archived_name
+
+    # If archived file already exists, add a counter
+    counter = 1
+    while archived_path.exists():
+        archived_name = f"{log_name}_{filename_timestamp}_{counter}{log_ext}"
+        archived_path = log_dir / archived_name
+        counter += 1
+
+    # Move the file
+    try:
+        shutil.move(str(log_path), str(archived_path))
+    except Exception:
+        # If move fails, just continue - we'll append to the existing file
+        pass
+
+
 class AppLogger:
     _configured: bool = False
 
@@ -95,6 +157,7 @@ class AppLogger:
         console = logger_cfg.get("console", True)
         max_bytes = logger_cfg.get("max_bytes", 10 * 1024 * 1024)
         backup_count = logger_cfg.get("backup_count", 5)
+        rotate_on_startup = logger_cfg.get("rotate_on_startup", True)
         config = LoggingConfig(
             level=level,
             log_dir=Path(os.path.abspath(log_dir)),
@@ -102,6 +165,7 @@ class AppLogger:
             console=console,
             max_bytes=max_bytes,
             backup_count=backup_count,
+            rotate_on_startup=rotate_on_startup,
         )
         AppLogger(config)
 
@@ -134,6 +198,10 @@ class AppLogger:
 
         config.log_dir.mkdir(parents=True, exist_ok=True)
         log_path = config.log_dir / config.log_file
+
+        # Archive existing log file if rotation is enabled
+        if config.rotate_on_startup:
+            _archive_log_file(log_path)
 
         root = logging.getLogger()
         root.setLevel(level)

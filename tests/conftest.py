@@ -3,19 +3,43 @@ import os
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 from typing import Generator, Any, Dict
 
 import pytest
 from app.types import TypeRegistry, JsonDict
 
+# Silence noisy DeprecationWarnings from pysnmp's generated MIBs (importSymbols/exportSymbols)
+# These come from compiled MIB files and the pysnmp library and are not actionable for this project.
+import warnings
+warnings.filterwarnings("ignore", ".*importSymbols is deprecated.*", DeprecationWarning)
+warnings.filterwarnings("ignore", ".*exportSymbols is deprecated.*", DeprecationWarning)
+# Also ignore any DeprecationWarning originating from the pysnmp package
+warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"pysnmp.*")
+
+# Additionally, suppress DeprecationWarnings that originate from auto-generated
+# compiled MIB files (those under the 'compiled-mibs' directory). These warnings
+# are emitted from third-party generated code (PySNMP MIB generators) and are
+# not actionable for this repository - suppress them to keep test output clean.
+_orig_showwarning = warnings.showwarning
+
+def _showwarning_filter(message: Any, category: Any, filename: Any, lineno: int, file: Any = None, line: Any = None) -> None:
+    try:
+        fn = str(filename)
+        if category is DeprecationWarning and "compiled-mibs" in fn:
+            return
+    except Exception:
+        pass
+    _orig_showwarning(message, category, filename, lineno, file=file, line=line)
+
+warnings.showwarning = _showwarning_filter
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 
 @pytest.fixture
-def mock_logger() -> MagicMock:
+def mock_logger(mocker: Any) -> Any:
     """Provide a mock logger fixture."""
-    return MagicMock()
+    return mocker.MagicMock()
 
 
 @pytest.fixture

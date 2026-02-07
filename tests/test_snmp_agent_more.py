@@ -4,7 +4,7 @@ import os
 import signal
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from typing import Any
 
 import pytest
 
@@ -34,10 +34,10 @@ def test_decode_value_unknown_encoding() -> None:
 
 # Additional tests to cover more of SNMPAgent
 
-def test_setup_signal_handlers_registers_signals(monkeypatch):
-    calls = {}
+def test_setup_signal_handlers_registers_signals(monkeypatch: Any) -> None:
+    calls: dict[Any, Any] = {}
 
-    def fake_signal(sig, handler):
+    def fake_signal(sig: Any, handler: Any) -> None:
         calls[sig] = handler
 
     monkeypatch.setattr(signal, "signal", fake_signal)
@@ -51,10 +51,10 @@ def test_setup_signal_handlers_registers_signals(monkeypatch):
         assert signal.SIGHUP in calls
 
 
-def test_shutdown_closes_dispatcher(monkeypatch, caplog):
+def test_shutdown_closes_dispatcher(monkeypatch: Any, caplog: Any, mocker: Any) -> None:
     agent = SNMPAgent(config_path="agent_config.yaml")
     # Provide a fake dispatcher with close_dispatcher
-    fake_dispatcher = Mock()
+    fake_dispatcher = mocker.Mock()
     agent.snmpEngine = SimpleNamespace(transport_dispatcher=fake_dispatcher)
 
     # Prevent os._exit from terminating test process
@@ -67,7 +67,7 @@ def test_shutdown_closes_dispatcher(monkeypatch, caplog):
     assert "Transport dispatcher closed successfully" in caplog.text
 
 
-def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(monkeypatch, tmp_path, caplog):
+def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(monkeypatch: Any, tmp_path: Any, caplog: Any) -> None:
     # Ensure data/types.json exists
     data_dir = Path("data")
     data_dir.mkdir(exist_ok=True)
@@ -77,7 +77,7 @@ def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(monkeypatc
     # Create an agent with a preloaded model and no mibs in config
     agent = SNMPAgent(config_path="agent_config.yaml", preloaded_model={"TEST-MIB": {}})
     # Avoid running heavy setup: ensure no mibs to compile
-    agent.app_config.get = lambda key, default=None: []
+    monkeypatch.setattr(agent.app_config, "get", lambda key, default=None: [])
 
     # Stub validation to succeed
     monkeypatch.setattr("app.type_registry_validator.validate_type_registry_file", lambda p: (True, [], 1))
@@ -92,13 +92,13 @@ def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(monkeypatc
     assert agent.mib_jsons == {"TEST-MIB": {}}
 
 
-def test_decode_value_delegates_to_mib_registrar(monkeypatch):
+def test_decode_value_delegates_to_mib_registrar(monkeypatch: Any) -> None:
     # Replace MibRegistrar with a fake that returns a sentinel value
     class FakeRegistrar:
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        def _decode_value(self, v):
+        def _decode_value(self, v: Any) -> str:
             return f"decoded:{v}"
 
     monkeypatch.setattr("app.mib_registrar.MibRegistrar", FakeRegistrar)
@@ -107,10 +107,10 @@ def test_decode_value_delegates_to_mib_registrar(monkeypatch):
     assert agent._decode_value("x") == "decoded:x"
 
 
-def test_decode_value_fallback_returns_value_on_exception(monkeypatch):
+def test_decode_value_fallback_returns_value_on_exception(monkeypatch: Any) -> None:
     # Make MibRegistrar constructor raise to trigger fallback
     class FailingRegistrar:
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             raise RuntimeError("boom")
 
     monkeypatch.setattr("app.mib_registrar.MibRegistrar", FailingRegistrar)
