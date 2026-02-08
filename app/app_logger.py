@@ -82,11 +82,11 @@ class FlushingRotatingFileHandler(logging.handlers.RotatingFileHandler):
 
 def _archive_log_file(log_path: Path) -> None:
     """
-    Archive an existing log file by renaming it with the timestamp from its first entry.
+    Archive an existing log file by moving it to the archive subdirectory with a timestamp.
 
-    If the log file exists, reads the first line to extract the timestamp and renames
-    the file to include that timestamp. If no timestamp can be extracted, uses the
-    file's modification time.
+    If the log file exists, reads the first line to extract the timestamp and moves
+    the file to logs/archive/ with the timestamp in the filename. If no timestamp can
+    be extracted, uses the file's modification time.
 
     Args:
         log_path: Path to the log file to archive
@@ -116,18 +116,22 @@ def _archive_log_file(log_path: Path) -> None:
     # Convert timestamp to filename-safe format: YYYY-MM-DD_HH-MM-SS
     filename_timestamp = timestamp_str.replace(" ", "_").replace(":", "-")
 
-    # Create archived filename
+    # Create archive directory if it doesn't exist
     log_dir = log_path.parent
+    archive_dir = log_dir / "archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create archived filename
     log_name = log_path.stem
     log_ext = log_path.suffix
     archived_name = f"{log_name}_{filename_timestamp}{log_ext}"
-    archived_path = log_dir / archived_name
+    archived_path = archive_dir / archived_name
 
     # If archived file already exists, add a counter
     counter = 1
     while archived_path.exists():
         archived_name = f"{log_name}_{filename_timestamp}_{counter}{log_ext}"
-        archived_path = log_dir / archived_name
+        archived_path = archive_dir / archived_name
         counter += 1
 
     # Move the file

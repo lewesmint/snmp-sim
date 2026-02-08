@@ -33,13 +33,21 @@ if __name__ == "__main__": # pragma: no cover
         print("REST API available at http://localhost:8800")
         print("Press Ctrl+C to stop")
         
+        # Ensure uvicorn loggers propagate to the root logger configured by AppLogger
+        import logging
+        for name in ("uvicorn.error", "uvicorn.access"):
+            lg = logging.getLogger(name)
+            # Remove uvicorn's handlers so logs propagate to root handlers
+            lg.handlers = []
+            lg.propagate = True
+
         # Start the FastAPI server
         uvicorn.run(
             "app.api:app",
             host="0.0.0.0",
             port=8800,
             reload=False,
-            log_level="info"
+            log_level="info",
         )
         
     except Exception as e:

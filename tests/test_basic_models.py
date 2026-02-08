@@ -297,8 +297,13 @@ def test_log_rotation_archives_existing_log(tmp_path: Path) -> None:
         # Original log file should be archived
         assert not log_path.exists() or log_path.stat().st_size == 0 or log_path.read_text() != "2026-02-07 10:30:45.123 INFO test.module [MainThread] Test message\n"
 
-        # Check that archived file exists with timestamp
-        archived_files = list(log_dir.glob("test-agent_2026-02-07_10-30-45*.log"))
+        # Check that archive directory was created
+        archive_dir = log_dir / "archive"
+        assert archive_dir.exists()
+        assert archive_dir.is_dir()
+
+        # Check that archived file exists with timestamp in archive subdirectory
+        archived_files = list(archive_dir.glob("test-agent_2026-02-07_10-30-45*.log"))
         assert len(archived_files) == 1
 
         # New log file should exist (may be empty or have new content)

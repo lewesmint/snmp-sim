@@ -4,6 +4,7 @@ MIB Registrar: Handles registration of MIB objects (scalars and tables) in the S
 Separates MIB registration logic from SNMPAgent, improving testability
 and making MIB registration behavior clearer and more maintainable.
 """
+from __future__ import annotations
 
 import json
 import logging
@@ -12,6 +13,7 @@ import time
 from typing import Any, Dict, Optional, Set
 
 from plugins.type_encoders import encode_value
+import types
 
 
 class MibRegistrar:
@@ -270,9 +272,186 @@ class MibRegistrar:
                 scalar_inst = self.MibScalarInstance(
                     oid_value, (0,), pysnmp_type(value)
                 )
+
+                # Set max access based on schema access field
+                access_map = {
+                    "read-only": "readonly",
+                    "read-write": "readwrite",
+                    "read-create": "readcreate",
+                    "not-accessible": "noaccess",
+                    "accessible-for-notify": "notify",
+                }
+                max_access = access_map.get(access or "read-only", "readonly")
+                scalar_inst.setMaxAccess(max_access)
+                is_writable = max_access in ("readwrite", "readcreate")
+
                 export_symbols[f"{name}Inst"] = scalar_inst
+                # Attach a small write-commit wrapper so network-originated SNMP SETs
+                # are surfaced immediately in the agent logs. pysnmp will call
+                # instance.writeCommit(...) during Set processing; we wrap any
+                # existing implementation and then emit an INFO log with the
+                # dotted OID and friendly MIB:symbol name.
+                try:
+                    registrar_logger = self.logger
+                    try:
+                        dotted = ".".join(str(x) for x in scalar_inst.name)
+                    except Exception:
+                        dotted = ".".join(str(x) for x in oid_value + (0,))
+                    friendly = f"{mib}:{name}"
+                    original_write = getattr(scalar_inst, "writeCommit", None)
+
+                    def _write_commit_wrapper(
+                        inst: Any,
+                        *a: Any,
+                        _dotted: str = dotted,
+                        _friendly: str = friendly,
+                        _is_writable: bool = is_writable,
+                        _logger: logging.Logger = registrar_logger,
+                        **kw: Any,
+                    ) -> None:
+                        # Call original if present (don't prevent normal behavior)
+                        try:
+                            if original_write:
+                                original_write(*a, **kw)
+                        except Exception:
+                            pass
+                        try:
+                            if not _is_writable:
+                                _logger.debug(
+                                    "Ignoring SET on read-only scalar %s (%s)",
+                                    _dotted,
+                                    _friendly,
+                                )
+                                return
+                            def _format_value(val: Any) -> str:
+                                if val is None:
+                                    return "<none>"
+                                try:
+                                    if hasattr(val, "prettyPrint"):
+                                        text = val.prettyPrint()
+                                    else:
+                                        text = str(val)
+                                except Exception:
+                                    text = None
+                                if not text:
+                                    try:
+                                        if hasattr(val, "asOctets"):
+                                            octs = val.asOctets()
+                                            text = (
+                                                octs.decode("utf-8", errors="replace")
+                                                if octs
+                                                else "<empty-octets>"
+                                            )
+                                        elif hasattr(val, "asNumbers"):
+                                            text = str(val.asNumbers())
+                                        elif isinstance(val, (bytes, bytearray)):
+                                            text = val.decode("utf-8", errors="replace") or "<empty-bytes>"
+                                        else:
+                                            text = repr(val)
+                                    except Exception:
+                                        text = repr(val)
+                                return text if text else "<empty>"
+
+                            def _serialize_value(val: Any) -> object:
+                                try:
+                                    if val is None:
+                                        return None
+                                    if isinstance(val, (int, float, bool, str)):
+                                        return val
+                                    if isinstance(val, (bytes, bytearray)):
+                                        try:
+                                            return val.decode("latin1")
+                                        except Exception:
+                                            return val.hex()
+                                    return str(val)
+                                except Exception:
+                                    return str(val)
+
+                            old_val = getattr(inst, "syntax", None)
+                            var_bind = a[0] if a else None
+                            new_val = None
+                            vb_oid = None
+                            if isinstance(var_bind, tuple) and len(var_bind) == 2:
+                                vb_oid, new_val = var_bind
+
+                            if new_val is not None:
+                                try:
+                                    inst.syntax = new_val
+                                except Exception:
+                                    pass
+
+                            if vb_oid is not None:
+                                try:
+                                    vb_oid_tuple = tuple(int(x) for x in vb_oid)
+                                except Exception:
+                                    vb_oid_tuple = None
+                            else:
+                                vb_oid_tuple = None
+
+                            final_dotted = _dotted
+                            if vb_oid_tuple:
+                                final_dotted = ".".join(str(x) for x in vb_oid_tuple)
+
+                            _logger.info(
+                                "SNMP SET applied to %s (%s): old=%s new=%s",
+                                final_dotted,
+                                _friendly,
+                                _format_value(old_val),
+                                _format_value(getattr(inst, "syntax", None)),
+                            )
+
+                            try:
+                                overrides_path = os.path.join(
+                                    os.path.dirname(__file__), "..", "data", "overrides.json"
+                                )
+                                os.makedirs(os.path.dirname(overrides_path), exist_ok=True)
+                                try:
+                                    with open(overrides_path, "r") as f:
+                                        overrides_data = json.load(f)
+                                except Exception:
+                                    overrides_data = {}
+                                overrides_data[final_dotted] = _serialize_value(
+                                    getattr(inst, "syntax", None)
+                                )
+                                with open(overrides_path, "w") as f:
+                                    json.dump(overrides_data, f, indent=2, sort_keys=True)
+                                _logger.info(
+                                    "Saved override for %s to %s",
+                                    final_dotted,
+                                    overrides_path,
+                                )
+                            except Exception:
+                                _logger.exception("Failed to persist overrides.json")
+                        except Exception:
+                            pass
+
+                    # Bind wrapper as method on the instance
+                    scalar_inst.writeCommit = types.MethodType(_write_commit_wrapper, scalar_inst)
+                    # Also override writeTest to accept any value
+                    def _write_test_wrapper(
+                        self: Any,
+                        varBind: Any,
+                        _dotted: str = dotted,
+                        _friendly: str = friendly,
+                        _is_writable: bool = is_writable,
+                        _logger: logging.Logger = registrar_logger,
+                        **_context: Any,
+                    ) -> None:
+                        if not _is_writable:
+                            _logger.debug(
+                                "Rejecting SET (writeTest) on read-only scalar %s (%s)",
+                                _dotted,
+                                _friendly,
+                            )
+                            raise ValueError("notWritable")
+                        _logger.debug(f"writeTest called for {varBind}")
+                        return None
+                    scalar_inst.writeTest = types.MethodType(_write_test_wrapper, scalar_inst)
+                except Exception:
+                    # Don't fail registration if hooking logging fails
+                    pass
                 self.logger.debug(
-                    f"Added scalar {name} (type {snmp_type_name}, value type {pysnmp_type.__name__})"
+                    f"Added scalar {name} (type {snmp_type_name}, access {max_access}, value type {pysnmp_type.__name__})"
                 )
             except Exception as e:
                 self.logger.error(f"Error creating scalar {name}: {e}")
@@ -399,6 +578,7 @@ class MibRegistrar:
                 access_map = {
                     "read-only": "readonly",
                     "read-write": "readwrite",
+                    "read-create": "readcreate",
                     "not-accessible": "noaccess",
                     "accessible-for-notify": "notify",
                 }
@@ -406,8 +586,10 @@ class MibRegistrar:
                 col_obj = self.MibTableColumn(col_oid, pysnmp_type()).setMaxAccess(
                     col_access
                 )
+                col_is_writable = col_access in ("readwrite", "readcreate")
                 symbols[col_name] = col_obj
-                columns_by_name[col_name] = (col_oid, base_type)
+                # Store writable flag alongside oid and base_type so it's available when creating instances
+                columns_by_name[col_name] = (col_oid, base_type, col_is_writable)
             except Exception as e:
                 self.logger.warning(f"Error creating column {col_name}: {e}")
                 continue
@@ -449,7 +631,7 @@ class MibRegistrar:
             else:
                 row_values = row_data
 
-            for col_name, (col_oid, base_type) in columns_by_name.items():
+            for col_name, (col_oid, base_type, col_is_writable) in columns_by_name.items():
                 # Get value for this cell
                 if col_name in row_values:
                     value = row_values[col_name]
@@ -477,6 +659,165 @@ class MibRegistrar:
 
                     inst_name = f"{col_name}Inst_{'_'.join(map(str, index_tuple))}"
                     symbols[inst_name] = inst
+
+                    # Attach writeCommit/writeTest wrappers for table column instances
+                    try:
+                        registrar_logger = self.logger
+                        try:
+                            dotted = ".".join(str(x) for x in inst.name)
+                        except Exception:
+                            dotted = ".".join(str(x) for x in col_oid + index_tuple)
+                        friendly = f"{mib}:{col_name}"
+                        original_write = getattr(inst, "writeCommit", None)
+
+                        def _write_commit_wrapper(
+                            inst_ref: Any,
+                            *a: Any,
+                            _dotted: str = dotted,
+                            _friendly: str = friendly,
+                            _is_writable: bool = col_is_writable,
+                            _logger: logging.Logger = registrar_logger,
+                            **kw: Any,
+                        ) -> None:
+                            try:
+                                if original_write:
+                                    original_write(*a, **kw)
+                            except Exception:
+                                pass
+                            try:
+                                if not _is_writable:
+                                    _logger.debug(
+                                        "Ignoring SET on read-only column %s (%s)",
+                                        _dotted,
+                                        _friendly,
+                                    )
+                                    return
+                                def _format_value(val: Any) -> str:
+                                    if val is None:
+                                        return "<none>"
+                                    try:
+                                        if hasattr(val, "prettyPrint"):
+                                            text = val.prettyPrint()
+                                        else:
+                                            text = str(val)
+                                    except Exception:
+                                        text = None
+                                    if not text:
+                                        try:
+                                            if hasattr(val, "asOctets"):
+                                                octs = val.asOctets()
+                                                text = (
+                                                    octs.decode("utf-8", errors="replace")
+                                                    if octs
+                                                    else "<empty-octets>"
+                                                )
+                                            elif hasattr(val, "asNumbers"):
+                                                text = str(val.asNumbers())
+                                            elif isinstance(val, (bytes, bytearray)):
+                                                text = val.decode("utf-8", errors="replace") or "<empty-bytes>"
+                                            else:
+                                                text = repr(val)
+                                        except Exception:
+                                            text = repr(val)
+                                    return text if text else "<empty>"
+
+                                def _serialize_value(val: Any) -> object:
+                                    try:
+                                        if val is None:
+                                            return None
+                                        if isinstance(val, (int, float, bool, str)):
+                                            return val
+                                        if isinstance(val, (bytes, bytearray)):
+                                            try:
+                                                return val.decode("latin1")
+                                            except Exception:
+                                                return val.hex()
+                                        return str(val)
+                                    except Exception:
+                                        return str(val)
+
+                                old_val = getattr(inst_ref, "syntax", None)
+                                var_bind = a[0] if a else None
+                                new_val = None
+                                vb_oid = None
+                                if isinstance(var_bind, tuple) and len(var_bind) == 2:
+                                    vb_oid, new_val = var_bind
+
+                                if new_val is not None:
+                                    try:
+                                        inst_ref.syntax = new_val
+                                    except Exception:
+                                        pass
+
+                                if vb_oid is not None:
+                                    try:
+                                        vb_oid_tuple = tuple(int(x) for x in vb_oid)
+                                    except Exception:
+                                        vb_oid_tuple = None
+                                else:
+                                    vb_oid_tuple = None
+
+                                final_dotted = _dotted
+                                if vb_oid_tuple:
+                                    final_dotted = ".".join(str(x) for x in vb_oid_tuple)
+
+                                _logger.info(
+                                    "SNMP SET applied to %s (%s): old=%s new=%s",
+                                    final_dotted,
+                                    _friendly,
+                                    _format_value(old_val),
+                                    _format_value(getattr(inst_ref, "syntax", None)),
+                                )
+
+                                try:
+                                    overrides_path = os.path.join(
+                                        os.path.dirname(__file__), "..", "data", "overrides.json"
+                                    )
+                                    os.makedirs(os.path.dirname(overrides_path), exist_ok=True)
+                                    try:
+                                        with open(overrides_path, "r") as f:
+                                            overrides_data = json.load(f)
+                                    except Exception:
+                                        overrides_data = {}
+                                    overrides_data[final_dotted] = _serialize_value(
+                                        getattr(inst_ref, "syntax", None)
+                                    )
+                                    with open(overrides_path, "w") as f:
+                                        json.dump(overrides_data, f, indent=2, sort_keys=True)
+                                    _logger.info(
+                                        "Saved override for %s to %s",
+                                        final_dotted,
+                                        overrides_path,
+                                    )
+                                except Exception:
+                                    _logger.exception("Failed to persist overrides.json")
+                            except Exception:
+                                pass
+
+                        inst.writeCommit = types.MethodType(_write_commit_wrapper, inst)
+
+                        def _write_test_wrapper(
+                            self: Any,
+                            varBind: Any,
+                            _dotted: str = dotted,
+                            _friendly: str = friendly,
+                            _col_is_writable: bool = col_is_writable,
+                            _logger: logging.Logger = registrar_logger,
+                            **context: Any,
+                        ) -> None:
+                            if not _col_is_writable:
+                                _logger.debug(
+                                    "Rejecting SET (writeTest) on read-only column %s (%s)",
+                                    _dotted,
+                                    _friendly,
+                                )
+                                raise ValueError("notWritable")
+                            _logger.debug(f"writeTest called for {varBind}")
+                            return None
+
+                        inst.writeTest = types.MethodType(_write_test_wrapper, inst)
+                    except Exception:
+                        pass
 
                     if table_name == "sysORTable":
                         self.logger.info(

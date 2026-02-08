@@ -49,6 +49,12 @@ class SNMPAgent:
         self.start_time = time.time()
         self.preloaded_model = preloaded_model
         self._shutdown_requested = False
+        # Overrides: dotted OID -> JSON-serializable value
+        self.overrides: dict[str, object] = {}
+        # Map of initial values captured after registration: dotted OID -> JSON-serializable value
+        self._initial_values: dict[str, object] = {}
+        # Set of dotted OIDs that are writable (read-write)
+        self._writable_oids: set[str] = set()
 
         # Set up signal handlers for graceful shutdown
         self._setup_signal_handlers()
@@ -207,6 +213,13 @@ class SNMPAgent:
             self._setup_community()
             self._setup_responders()
             self._register_mib_objects()
+            # Capture initial scalar values (for comparison) and apply overrides
+            try:
+                self._capture_initial_values()
+                self._load_overrides()
+                self._apply_overrides()
+            except Exception as e:
+                self.logger.error(f"Error applying overrides: {e}", exc_info=True)
             self._populate_sysor_table()  # Populate sysORTable with actual MIBs
             self.logger.info("SNMP Agent is now listening for SNMP requests.")
             # Block and serve SNMP requests using asyncio dispatcher
@@ -308,20 +321,50 @@ class SNMPAgent:
 
         if self.snmpEngine is None:
             raise RuntimeError("snmpEngine is not initialized.")
-        config.add_v1_system(self.snmpEngine, "my-area", "public")
+
+        # Add read-only community "public"
+        config.add_v1_system(self.snmpEngine, "public-area", "public")
+
+        # Add read-write community "private"
+        config.add_v1_system(self.snmpEngine, "private-area", "private")
+
+        # Add context
         config.add_context(self.snmpEngine, "")
-        config.add_vacm_group(self.snmpEngine, "mygroup", 2, "my-area")
+
+        # Create VACM groups for read-only and read-write access
+        config.add_vacm_group(self.snmpEngine, "read-only-group", 2, "public-area")
+        config.add_vacm_group(self.snmpEngine, "read-write-group", 2, "private-area")
+
+        # Create VACM views
+        # fullView: allows access to all OIDs (include)
         config.add_vacm_view(self.snmpEngine, "fullView", 1, (1,), "")
+        # restrictedView: denies access to all OIDs (exclude) - used for write view in read-only
+        config.add_vacm_view(self.snmpEngine, "restrictedView", 2, (1,), "")
+
+        # Configure read-only access for "public" community
         config.add_vacm_access(
             self.snmpEngine,
-            "mygroup",
+            "read-only-group",
             "",
             2,
             "noAuthNoPriv",
             "prefix",
-            "fullView",
-            "fullView",
-            "fullView",
+            "fullView",        # read view (allow all reads)
+            "restrictedView",  # write view (deny all writes)
+            "fullView",        # notify view
+        )
+
+        # Configure read-write access for "private" community
+        config.add_vacm_access(
+            self.snmpEngine,
+            "read-write-group",
+            "",
+            2,
+            "noAuthNoPriv",
+            "prefix",
+            "fullView",  # read view (allow all reads)
+            "fullView",  # write view (allow all writes)
+            "fullView",  # notify view
         )
 
     def _setup_responders(self) -> None:
@@ -453,7 +496,62 @@ class SNMPAgent:
         for module_name, symbols in self.mib_builder.mibSymbols.items():
             for symbol_name, symbol_obj in symbols.items():
                 if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == oid:
-                    symbol_obj.syntax = value
+                    # Update in-memory value
+                    try:
+                        # If incoming value is a pysnmp type, assign directly
+                        symbol_obj.syntax = value
+                    except Exception:
+                        # Try to coerce using existing type class
+                        try:
+                            type_cls = type(symbol_obj.syntax)
+                            symbol_obj.syntax = type_cls(value)
+                        except Exception:
+                            # Fallback to raw assignment
+                            symbol_obj.syntax = value
+
+                    # Persist override if different from initial
+                    dotted = ".".join(str(x) for x in oid)
+                    new_serial = self._serialize_value(symbol_obj.syntax)
+                    initial = self._initial_values.get(dotted)
+                    # Log the set operation for debugging and info-level visibility
+                    try:
+                        # INFO so it's visible with default logging configuration
+                        mod, sym = self._lookup_symbol_for_dotted(dotted)
+                        name = f"{mod}:{sym}" if mod and sym else dotted
+                        self.logger.info(
+                            "SNMP SET received for %s (%s): initial=%r new=%r",
+                            dotted,
+                            name,
+                            initial,
+                            new_serial,
+                        )
+                        # Also emit a DEBUG-level detailed message
+                        self.logger.debug(
+                            "(debug) SNMP SET for %s (%s): initial=%r new=%r",
+                            dotted,
+                            name,
+                            initial,
+                            new_serial,
+                        )
+                    except Exception:
+                        pass
+
+                    if initial is None or new_serial != initial:
+                        # Save override
+                        self.overrides[dotted] = new_serial
+                        try:
+                            self._save_overrides()
+                        except Exception:
+                            self.logger.exception("Failed to save overrides")
+                    else:
+                        # If we've reverted to initial, remove any existing override
+                        if dotted in self.overrides:
+                            self.overrides.pop(dotted, None)
+                            try:
+                                self._save_overrides()
+                            except Exception:
+                                self.logger.exception("Failed to save overrides")
+
                     return
                     
         raise ValueError(f"Scalar OID {oid} not found")
@@ -478,6 +576,234 @@ class SNMPAgent:
                     oid_map[symbol_name] = symbol_obj.name
         
         return oid_map
+
+    def _lookup_symbol_for_dotted(self, dotted: str) -> tuple[Optional[str], Optional[str]]:
+        """Return (module_name, symbol_name) for a dotted OID string if known.
+
+        This helps produce human-friendly log messages (e.g. SNMPv2-MIB:sysContact).
+        """
+        if self.mib_builder is None:
+            return None, None
+        try:
+            target_oid = tuple(int(x) for x in dotted.split("."))
+        except Exception:
+            return None, None
+
+        for module_name, symbols in self.mib_builder.mibSymbols.items():
+            for symbol_name, symbol_obj in symbols.items():
+                try:
+                    if hasattr(symbol_obj, "name") and symbol_obj.name:
+                        if tuple(symbol_obj.name) == target_oid:
+                            return module_name, symbol_name
+                except Exception:
+                    continue
+        return None, None
+
+    # ---- Overrides persistence helpers ----
+    def _overrides_file_path(self) -> str:
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "overrides.json"))
+
+    def _load_overrides(self) -> None:
+        path = self._overrides_file_path()
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    self.overrides = json.load(f)
+                self.logger.info(f"Loaded {len(self.overrides)} overrides from {path}")
+                # Prune any overrides that are identical to initial values
+                if self._initial_values:
+                    removed = []
+                    for k in list(self.overrides.keys()):
+                        init = self._initial_values.get(k)
+                        if init is not None and self.overrides.get(k) == init:
+                            removed.append(k)
+                            self.overrides.pop(k, None)
+                    if removed:
+                        self.logger.info(f"Pruned {len(removed)} redundant overrides: {removed}")
+                        # Persist pruned result
+                        try:
+                            self._save_overrides()
+                        except Exception:
+                            self.logger.exception("Failed to save overrides after pruning")
+            except Exception as e:
+                self.logger.error(f"Failed to load overrides from {path}: {e}", exc_info=True)
+                self.overrides = {}
+        else:
+            self.overrides = {}
+
+    def _save_overrides(self) -> None:
+        path = self._overrides_file_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        try:
+            # Only persist overrides that differ from initial values (don't store defaults)
+            to_persist = {}
+            for k, v in self.overrides.items():
+                init = self._initial_values.get(k)
+                if init is None or v != init:
+                    to_persist[k] = v
+
+            with open(path, "w") as f:
+                json.dump(to_persist, f, indent=2, sort_keys=True)
+            self.logger.info(f"Saved {len(to_persist)} overrides to {path}")
+        except Exception as e:
+            self.logger.error(f"Failed to save overrides to {path}: {e}", exc_info=True)
+
+    def _serialize_value(self, value: Any) -> object:
+        # Convert pysnmp types and other non-JSON-friendly values into JSON-serializable forms
+        try:
+            # Primitive types pass-through
+            if value is None:
+                return None
+            if isinstance(value, (int, float, bool, str)):
+                return value
+            # Bytes -> latin1 string to preserve raw bytes
+            if isinstance(value, (bytes, bytearray)):
+                try:
+                    return value.decode("latin1")
+                except Exception:
+                    return value.hex()
+            # pysnmp rfc1902 types often stringify sensibly
+            try:
+                s = str(value)
+                return s
+            except Exception:
+                return repr(value)
+        except Exception:
+            return str(value)
+
+    def _capture_initial_values(self) -> None:
+        """Capture the initial scalar values after MIB registration for comparison."""
+        self._initial_values = {}
+        if self.mib_builder is None:
+            return
+        try:
+            MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
+        except Exception:
+            return
+
+        for module_name, symbols in self.mib_builder.mibSymbols.items():
+            for symbol_name, symbol_obj in symbols.items():
+                try:
+                    if isinstance(symbol_obj, MibScalarInstance) and hasattr(symbol_obj, "name") and symbol_obj.name:
+                        dotted = ".".join(str(x) for x in symbol_obj.name)
+                        self._initial_values[dotted] = self._serialize_value(symbol_obj.syntax)
+                        # detect writable scalars by consulting loaded mib_jsons when possible
+                        try:
+                            added = False
+                            # Prefer schema-based access info if available. The registrar
+                            # exports scalar symbols with an "Inst" suffix (e.g. sysContactInst),
+                            # whereas the schema keys are the base names (e.g. sysContact).
+                            module_json = self.mib_jsons.get(module_name, {})
+                            base_name = symbol_name
+                            if base_name.endswith("Inst"):
+                                base_name = base_name[:-4]
+                            if isinstance(module_json, dict) and base_name in module_json:
+                                access_field = module_json[base_name].get("access")
+                                if access_field and access_field.lower() == "read-write":
+                                    self._writable_oids.add(dotted)
+                                    added = True
+                                    self.logger.debug(f"Marked writable via schema: {dotted} -> {module_name}.{base_name}")
+                            if not added:
+                                # Fallback to inspecting symbol object if it exposes access
+                                access = None
+                                if hasattr(symbol_obj, "getMaxAccess"):
+                                    access = symbol_obj.getMaxAccess()
+                                elif hasattr(symbol_obj, "maxAccess"):
+                                    access = getattr(symbol_obj, "maxAccess")
+                                if access and str(access).lower().startswith("readwrite"):
+                                    self._writable_oids.add(dotted)
+                        except Exception:
+                            pass
+                except Exception:
+                    continue
+
+        self.logger.info(f"Captured {len(self._initial_values)} initial scalar values")
+
+    def _apply_overrides(self) -> None:
+        """Apply loaded overrides to the in-memory MIB scalar instances."""
+        if not self.overrides:
+            return
+        if self.mib_builder is None:
+            return
+        try:
+            MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
+        except Exception:
+            return
+
+        removed_invalid: list[str] = []
+
+        for dotted, stored in list(self.overrides.items()):
+            try:
+                oid = tuple(int(x) for x in dotted.split("."))
+            except Exception:
+                self.logger.warning(f"Invalid OID in overrides: {dotted}")
+                removed_invalid.append(dotted)
+                continue
+
+            applied = False
+            # We'll attempt the literal OID, and if not found and the OID does not
+            # already end with an instance (i.e. last component != 0), try appending .0
+            candidate_oids = [oid]
+            try:
+                if oid[-1] != 0:
+                    candidate_oids.append(oid + (0,))
+            except Exception:
+                pass
+            for module_name, symbols in self.mib_builder.mibSymbols.items():
+                for symbol_name, symbol_obj in symbols.items():
+                    try:
+                        if isinstance(symbol_obj, MibScalarInstance) and tuple(symbol_obj.name) in candidate_oids:
+                            # Determine target type class from existing syntax
+                            try:
+                                type_cls = type(symbol_obj.syntax)
+                                # Try direct construction
+                                try:
+                                    symbol_obj.syntax = type_cls(stored)
+                                except Exception:
+                                    # Try numeric cast for integer-like types
+                                    try:
+                                        if isinstance(stored, str) and stored.isdigit():
+                                            symbol_obj.syntax = type_cls(int(stored))
+                                        else:
+                                            # For octet strings, pass bytes
+                                            if hasattr(type_cls, "__name__") and "Octet" in type_cls.__name__:
+                                                if isinstance(stored, str):
+                                                    symbol_obj.syntax = type_cls(stored.encode("latin1"))
+                                                else:
+                                                    symbol_obj.syntax = type_cls(stored)
+                                            else:
+                                                symbol_obj.syntax = type_cls(stored)
+                                    except Exception:
+                                        # Last resort: assign string representation
+                                        symbol_obj.syntax = type_cls(str(stored))
+                            except Exception:
+                                # fallback to raw assignment
+                                symbol_obj.syntax = stored
+
+                            applied = True
+                            break
+                    except Exception:
+                        continue
+                if applied:
+                    break
+
+            if not applied:
+                # No matching scalar instance found; mark for removal
+                self.logger.warning(
+                    f"Override for {dotted} found, but no matching scalar instance to apply"
+                )
+                removed_invalid.append(dotted)
+
+        # Remove any invalid overrides that could not be applied
+        if removed_invalid:
+            for k in removed_invalid:
+                self.overrides.pop(k, None)
+            try:
+                self._save_overrides()
+            except Exception:
+                self.logger.exception("Failed to save overrides after pruning invalid entries")
+            self.logger.info(f"Removed {len(removed_invalid)} invalid overrides: {removed_invalid}")
+
 
 
 if __name__ == "__main__": # pragma: no cover

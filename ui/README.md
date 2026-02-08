@@ -1,21 +1,25 @@
 # SNMP GUI Controller
 
-A simple tkinter-based GUI application for controlling the SNMP agent's sysDescr value.
+A modern customtkinter-based GUI application for controlling and monitoring the SNMP agent.
 
 ## Features
 
-- **Set sysDescr**: Enter a new value and click "Set sysDescr" to update the SNMP agent
-- **Get Current Value**: Fetch and display the current sysDescr value from the agent
+- **Modern UI**: Built with customtkinter for a sleek, modern appearance with dark/light mode support
+- **OID Tree View**: Browse all registered OIDs in a hierarchical tree structure
+- **MIB Browser**: View all implemented MIBs
+- **Connection Management**: Easy connect/disconnect to the SNMP agent REST API
 - **Activity Log**: View all operations and their results in real-time
-- **Status Bar**: Shows the current operation status
+- **Status Bar**: Shows the current connection status
+- **Auto-connect**: Support for automatic connection on startup with configurable delay
+- **Silent Errors**: Option to log connection errors without popup dialogs
 
 ## Requirements
 
 ```bash
-pip install requests
+pip install customtkinter requests
 ```
 
-Note: `tkinter` is included with most Python installations.
+Note: `customtkinter` provides a modern look and feel with automatic dark mode support.
 
 ## Usage
 
