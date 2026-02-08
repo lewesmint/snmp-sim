@@ -151,7 +151,7 @@ def get_oid_metadata() -> dict[str, Any]:
 
     schemas = load_all_schemas(schema_dir)
 
-    # Build metadata map: OID name -> metadata
+    # Build metadata map: OID string -> metadata
     metadata_map: dict[str, dict[str, Any]] = {}
 
     for mib_name, schema in schemas.items():
@@ -161,9 +161,10 @@ def get_oid_metadata() -> dict[str, Any]:
                 oid_tuple = obj_data["oid"]
                 oid_str = ".".join(str(x) for x in oid_tuple)
 
-                metadata_map[obj_name] = {
+                metadata_map[oid_str] = {
                     "oid": oid_tuple,
                     "oid_str": oid_str,
+                    "name": obj_name,
                     "type": obj_data.get("type", ""),
                     "access": obj_data.get("access", ""),
                     "mib": mib_name,
@@ -214,3 +215,33 @@ def get_oid_value(oid: str) -> dict[str, Any]:
     serializable = _make_jsonable(value)
     logger.info(f"Fetched value for OID {parts}: {serializable}")
     return {"oid": parts, "value": serializable}
+
+
+class OIDValueUpdate(BaseModel):
+    oid: str
+    value: str
+
+
+@app.post("/value")
+def set_oid_value(update: OIDValueUpdate) -> dict[str, Any]:
+    """Set the value for a specific OID string (dot separated)."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+    try:
+        parts = tuple(int(x) for x in update.oid.split(".")) if update.oid else ()
+    except ValueError as e:
+        logger.error(f"Invalid OID format requested: {update.oid} - {e}")
+        raise HTTPException(status_code=400, detail="Invalid OID format")
+
+    try:
+        snmp_agent.set_scalar_value(parts, update.value)
+        logger.info(f"Set value for OID {parts} to: {update.value}")
+        return {"status": "ok", "oid": parts, "new_value": update.value}
+    except ValueError as e:
+        # Expected: scalar not found or not writable for this OID
+        logger.warning(f"Cannot set scalar OID: {parts} - {e}")
+        raise HTTPException(status_code=404, detail=f"OID not settable: {e}")
+    except Exception:
+        # Unexpected errors should be logged with traceback and return 500
+        logger.exception(f"Unexpected error setting value for OID {parts}")
+        raise HTTPException(status_code=500, detail="Internal server error")

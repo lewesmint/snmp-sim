@@ -206,6 +206,47 @@ def test_build_mib_symbols_scalar_creation_with_none_value(monkeypatch: Any) -> 
     assert any(k.startswith('bar') or k.startswith('barInst') for k in symbols.keys())
 
 
+def test_read_only_scalar_allows_internal_change(monkeypatch: Any) -> None:
+    reg = make_registrar()
+
+    class FakeScalarInstance:
+        def __init__(self, oid: Iterable[int], idx: Iterable[int], val: Any) -> None:
+            self.name = tuple(oid) + tuple(idx)
+            self.syntax = val
+
+        def setMaxAccess(self, a: Any) -> Any:
+            self.maxAccess = a
+            return self
+
+    reg.MibScalarInstance = FakeScalarInstance
+
+    def fake_get_pysnmp_type(self: MibRegistrar, _base_type: str) -> Any:
+        return int
+
+    monkeypatch.setattr(MibRegistrar, "_get_pysnmp_type", fake_get_pysnmp_type)
+    import app.mib_registrar as mr
+    monkeypatch.setattr(mr, "encode_value", lambda v, _t: v)
+
+    mib_json: dict[str, dict[str, Any]] = {
+        "roScalar": {
+            "oid": [1, 3, 6, 1, 4, 1, 999, 1],
+            "type": "Integer32",
+            "initial": 1,
+            "access": "read-only",
+        }
+    }
+    type_registry = {"Integer32": {"base_type": "Integer32"}}
+
+    symbols = reg._build_mib_symbols("TEST-MIB", mib_json, type_registry)
+    scalar = symbols["roScalarInst"]
+
+    with pytest.raises(ValueError):
+        scalar.writeTest((scalar.name, 2), snmpEngine=None)
+
+    scalar.syntax = 2
+    assert scalar.syntax == 2
+
+
 def test_register_mib_filters_existing_and_handles_export_exception(monkeypatch: Any, caplog: Any) -> None:
     # Test filtering and handling export exception
     class Builder:

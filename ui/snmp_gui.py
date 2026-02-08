@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, ttk, simpledialog
 from typing import Any, Dict, Tuple
 import concurrent.futures
 import requests
@@ -26,6 +26,8 @@ class SNMPControllerGUI:
         self.silent_errors = False  # If True, log errors without showing popup dialogs
         self.oids_data: Dict[str, Tuple[int, ...]] = {}  # Store OIDs for rebuilding (name -> OID tuple)
         self.oid_values: Dict[str, str] = {}  # oid_str -> value
+        self.oid_metadata: Dict[str, Dict[str, Any]] = {}  # oid_str -> metadata
+        self.oid_to_item: Dict[str, str] = {}  # oid_str -> tree item id
         # Executor for background value fetching
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
         self._setup_ui()
@@ -80,6 +82,16 @@ class SNMPControllerGUI:
         collapse_btn = ctk.CTkButton(toolbar, text="Collapse All", command=self._collapse_all, width=100)
         expand_btn.pack(side="left", padx=(0, 6))
         collapse_btn.pack(side="left")
+
+        # Search bar
+        search_label = ctk.CTkLabel(toolbar, text="Search:")
+        search_label.pack(side="left", padx=(20, 5))
+        self.search_var = ctk.StringVar()
+        search_entry = ctk.CTkEntry(toolbar, textvariable=self.search_var, width=250)
+        search_entry.pack(side="left", padx=(0, 6))
+        search_entry.bind("<Return>", self._on_search)
+        search_btn = ctk.CTkButton(toolbar, text="Go", command=self._on_search, width=50)
+        search_btn.pack(side="left")
 
         # Frame for treeview (ttk.Treeview is used as customtkinter doesn't have a tree widget)
         tree_frame = ctk.CTkFrame(oid_frame)
@@ -149,6 +161,8 @@ class SNMPControllerGUI:
 
         # Bind expand event for lazy loading
         self.oid_tree.bind("<<TreeviewOpen>>", self._on_node_open)
+        # Bind double-click for editing values
+        self.oid_tree.bind("<Double-1>", self._on_double_click)
         # Placeholder data
         self._populate_oid_tree()
     
@@ -219,12 +233,21 @@ class SNMPControllerGUI:
         # Clear existing
         for item in self.oid_tree.get_children():
             self.oid_tree.delete(item)
+        self.oid_to_item.clear()
 
         if self.oids_data:
             # Build hierarchical tree
             root = self.oid_tree.insert("", "end", text="MIB Tree", values=("", "", "", "", ""))
             self.oid_tree.item(root, open=True)  # Expand root by default
             self._build_tree_from_oids(root, self.oids_data)
+            # Fetch values for top-level leaves
+            self.executor.submit(self._fetch_values_for_node, root)
+            # Expand common MIB groups like system
+            system_oid = "1.3.6.1.2.1.1"
+            if system_oid in self.oid_to_item:
+                self._expand_path_to_item(self.oid_to_item[system_oid])
+                # Fetch values for system scalars
+                self.executor.submit(self._fetch_values_for_node, self.oid_to_item[system_oid])
         # If not connected or no data, leave empty
     
     def _build_tree_from_oids(self, parent: str, oids: Dict[str, Tuple[int, ...]]) -> None:
@@ -245,6 +268,11 @@ class SNMPControllerGUI:
                 # Regular OID - keep it
                 filtered_oids[name] = oid_tuple
 
+        # Add base OIDs for scalars
+        for base_oid, instance_name in scalar_instances.items():
+            base_name = instance_name[:-4] if instance_name.endswith("Inst") else instance_name
+            filtered_oids[base_name] = base_oid
+
         # Create a tree structure
         # Use a generic dict for the transient tree structure to satisfy static checkers
         tree: Dict[Any, Any] = {}
@@ -260,8 +288,20 @@ class SNMPControllerGUI:
             if oid_tuple in scalar_instances:
                 current['__has_instance__'] = True
 
+        self._mark_tables(tree)
+
         # Now build the Treeview from the tree dict
         self._insert_tree_nodes(parent, tree, ())
+    
+    def _mark_tables(self, tree: Dict[Any, Any]) -> None:
+        """Mark nodes that are table entries."""
+        for key, value in list(tree.items()):
+            if key in ('__name__', '__has_instance__', '__is_table__'):
+                continue
+            if isinstance(value, dict):
+                if '__name__' in value and 'Table' in value['__name__']:
+                    value['__is_table__'] = True
+                self._mark_tables(value)
     
     def _insert_tree_nodes(self, parent: str, tree: Dict[Any, Any], current_oid: Tuple[int, ...], row_count: int = 0) -> int:
         """Insert nodes into Treeview recursively.
@@ -294,14 +334,27 @@ class SNMPControllerGUI:
                 # Check if this is a scalar with an instance
                 has_instance = value.get('__has_instance__', False)
 
-                # Add icon based on type
                 if has_instance:
-                    icon = "📊"  # Scalar with instance
+                    # Scalar
+                    access = str(self.oid_metadata.get(oid_str, {}).get("access", "")).lower()
+                    if "write" in access:
+                        icon = "✏️"
+                    elif "read" in access or "not-accessible" in access or "none" in access:
+                        icon = "🔒"
+                    else:
+                        icon = "📊"
                     instance_str = "0"
                     instance_oid_str = oid_str + ".0"
                     val = self.oid_values.get(instance_oid_str, "")
                 else:
-                    icon = "📄"  # Regular leaf
+                    # Regular leaf
+                    access = str(self.oid_metadata.get(oid_str, {}).get("access", "")).lower()
+                    if "write" in access:
+                        icon = "✏️"
+                    elif "read" in access or "not-accessible" in access or "none" in access:
+                        icon = "🔒"
+                    else:
+                        icon = "📄"
                     instance_str = ""
                     val = self.oid_values.get(oid_str, "")
 
@@ -309,16 +362,29 @@ class SNMPControllerGUI:
                 node = self.oid_tree.insert(parent, "end", text=display_text,
                                            values=(oid_str, instance_str, val, "", ""),
                                            tags=(row_tag,))
+                self.oid_to_item[oid_str] = node
             else:
                 # Folder/container node
-                icon = "📁"  # Folder icon
-                display_text = f"{icon} {stored_name}" if stored_name else f"{icon} {key}"
+                if value.get('__is_table__'):
+                    icon = "📋"  # Table icon
+                    display_text = f"{icon} {stored_name}" if stored_name else f"{icon} {key}"
 
-                node = self.oid_tree.insert(parent, "end", text=display_text,
-                                           values=(oid_str, "", "", "", ""),
-                                           tags=(row_tag,))
-                # Recurse into children
-                row_count = self._insert_tree_nodes(node, value, new_oid, row_count)
+                    node = self.oid_tree.insert(parent, "end", text=display_text,
+                                               values=(oid_str, "", "", "", ""),
+                                               tags=(row_tag, 'table'))
+                    self.oid_to_item[oid_str] = node
+                    # Insert placeholder to make it expandable
+                    self.oid_tree.insert(node, "end", text="Loading...", values=("", "", "", "", ""), tags=('placeholder',))
+                else:
+                    icon = "📁"  # Folder icon
+                    display_text = f"{icon} {stored_name}" if stored_name else f"{icon} {key}"
+
+                    node = self.oid_tree.insert(parent, "end", text=display_text,
+                                               values=(oid_str, "", "", "", ""),
+                                               tags=(row_tag,))
+                    self.oid_to_item[oid_str] = node
+                    # Recurse into children
+                    row_count = self._insert_tree_nodes(node, value, new_oid, row_count)
 
         return row_count
 
@@ -335,6 +401,355 @@ class SNMPControllerGUI:
         # Schedule background fetch for this node's children
         self.executor.submit(self._fetch_values_for_node, item)
 
+        if 'table' in self.oid_tree.item(item, 'tags'):
+            oid_str = self.oid_tree.set(item, "oid")
+            self.executor.submit(self._discover_table_instances, item, oid_str)
+
+    def _on_double_click(self, event: Any) -> None:
+        """Handler called when a tree item is double-clicked; allows editing values for writable items."""
+        try:
+            item = self.oid_tree.identify_row(event.y)
+        except Exception:
+            return
+
+        if not item:
+            return
+
+        # Get the OID and instance
+        oid_str = self.oid_tree.set(item, "oid")
+        instance_str = self.oid_tree.set(item, "instance")
+
+        if not oid_str:
+            return  # Not a leaf node
+
+        # Check if this is a scalar with instance or regular leaf
+        if instance_str:
+            full_oid = f"{oid_str}.{instance_str}"
+        else:
+            full_oid = oid_str
+
+        # Get current value
+        current_value = self.oid_tree.set(item, "value")
+
+        # Check if it's writable
+        is_writable = self._is_oid_writable(full_oid)
+
+        # Show edit dialog (always, but with different behavior for read-only)
+        self._show_edit_dialog(full_oid, current_value, item, is_writable)
+
+    def _show_edit_dialog(self, oid: str, current_value: str, item: str, is_writable: bool) -> None:
+        """Show a dialog to edit the value of an OID."""
+        # DEBUG: Print what we're getting
+        print(f"DEBUG: _show_edit_dialog called with oid={oid}, is_writable={is_writable}")
+
+        # Strip instance suffix for metadata lookup
+        base_oid = oid.split('.')[:-1] if '.' in oid and oid.split('.')[-1].isdigit() else oid
+        base_oid_str = '.'.join(base_oid) if isinstance(base_oid, list) else base_oid
+
+        # Get the type information from metadata
+        metadata = self.oid_metadata.get(base_oid_str, {})
+        value_type = metadata.get("type", "Unknown")
+        
+        print(f"DEBUG: Looking up metadata for base_oid={base_oid_str}, found metadata={metadata}")
+
+        # Create custom dialog using customtkinter
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("Edit OID Value")
+        dialog.geometry("450x300")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        # dialog.grab_set()  # Commented out for testing multiple dialogs
+
+        # Center the dialog
+        dialog.geometry("+{}+{}".format(
+            self.root.winfo_x() + (self.root.winfo_width() // 2) - 225,
+            self.root.winfo_y() + (self.root.winfo_height() // 2) - 150
+        ))
+
+        # Main frame with padding
+        main_frame = ctk.CTkFrame(dialog)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Title
+        title_label = ctk.CTkLabel(main_frame, text="Edit OID Value",
+                                 font=ctk.CTkFont(size=16, weight="bold"))
+        title_label.pack(pady=(0, 15))
+
+        # OID info
+        info_text = f"OID: {oid}\nType: {value_type}"
+        info_label = ctk.CTkLabel(main_frame, text=info_text, justify="left",
+                                font=ctk.CTkFont(size=11))
+        info_label.pack(anchor="w", pady=(0, 10))
+
+        # Current value
+        current_text = f"Current: {current_value}"
+        current_label = ctk.CTkLabel(main_frame, text=current_text, justify="left",
+                                   font=ctk.CTkFont(size=11))
+        current_label.pack(anchor="w", pady=(0, 15))
+
+        # New value section
+        value_label = ctk.CTkLabel(main_frame, text="New value:", font=ctk.CTkFont(weight="bold"))
+        value_label.pack(anchor="w")
+
+        value_var = ctk.StringVar(value=current_value)
+        value_entry = ctk.CTkEntry(main_frame, textvariable=value_var, width=400)
+        value_entry.pack(pady=(5, 10), fill="x")
+
+        # Track if value has changed from original
+        original_value = current_value
+        value_changed = ctk.BooleanVar(value=False)
+
+        def on_value_change(*args):
+            """Enable OK button only if value is different from original."""
+            current = value_var.get()
+            changed = current != original_value
+            value_changed.set(changed)
+            ok_button.configure(state="normal" if changed else "disabled")
+
+        # Bind to value changes
+        value_var.trace_add("write", on_value_change)
+
+        # Bottom frame for checkbox and buttons
+        bottom_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        bottom_frame.pack(fill="x", pady=(15, 0))
+
+        # Unlock checkbox (only for read-only items) - left side
+        unlock_var = ctk.BooleanVar(value=False)
+        unlock_checkbox = None
+
+        print(f"DEBUG: is_writable={is_writable}, creating checkbox: {not is_writable}")
+
+        if not is_writable:
+            print("DEBUG: Creating unlock checkbox")
+            def on_checkbox_toggle():
+                """Handle checkbox toggle - reset value when unchecked."""
+                unlocked = unlock_var.get()
+                if not unlocked:
+                    # Reset to original value when unchecked
+                    value_var.set(original_value)
+                self._toggle_entry_state(value_entry, unlocked)
+
+            unlock_checkbox = ctk.CTkCheckBox(bottom_frame, text="Unlock for editing",
+                                            variable=unlock_var,
+                                            command=on_checkbox_toggle)
+            unlock_checkbox.pack(side="left", anchor="w")
+            value_entry.configure(state="disabled")  # Start disabled
+            print("DEBUG: Checkbox created and packed, entry disabled")
+        else:
+            print("DEBUG: No checkbox needed for writable OID")
+
+        # Buttons - right side
+        def on_ok() -> None:
+            new_value = value_var.get()
+            if new_value is not None:
+                # For read-only items, only allow if unlocked
+                if not is_writable and not unlock_var.get():
+                    messagebox.showwarning("Read-Only", "Please check 'Unlock for editing' to modify this read-only object.")
+                    return
+                # Only proceed if value has actually changed
+                if not value_changed.get():
+                    messagebox.showinfo("No Change", "Value has not been modified.")
+                    return
+                # Send the new value to the API
+                self._set_oid_value(oid, new_value, item)
+            dialog.destroy()
+
+        def on_cancel() -> None:
+            dialog.destroy()
+
+        # Button container for right alignment
+        button_container = ctk.CTkFrame(bottom_frame, fg_color="transparent")
+        button_container.pack(side="right")
+
+        cancel_button = ctk.CTkButton(button_container, text="Cancel", command=on_cancel, width=80)
+        cancel_button.pack(side="right", padx=(10, 0))
+
+        ok_button = ctk.CTkButton(button_container, text="OK", command=on_ok, width=80, state="disabled")
+        ok_button.pack(side="right")
+
+        # Focus handling
+        if is_writable:
+            value_entry.focus()
+            value_entry.select_range(0, 'end')
+        elif unlock_checkbox:
+            unlock_checkbox.focus()
+
+        # Bind keys
+        dialog.bind('<Return>', lambda e: on_ok())
+        dialog.bind('<Escape>', lambda e: on_cancel())
+
+    def _toggle_entry_state(self, entry: Any, unlocked: bool) -> None:
+        """Toggle the entry field state based on unlock checkbox."""
+        entry.configure(state="normal" if unlocked else "disabled")
+
+    def _set_oid_value(self, oid: str, new_value: str, item: str) -> None:
+        """Set the value for an OID via the API."""
+        try:
+            self._log(f"Setting value for OID {oid} to: {new_value}")
+            resp = requests.post(f"{self.api_url}/value",
+                               json={"oid": oid, "value": new_value},
+                               timeout=5)
+            resp.raise_for_status()
+            result = resp.json()
+
+            # Update the local value cache
+            self.oid_values[oid] = new_value
+
+            # Update the UI
+            self.oid_tree.set(item, "value", new_value)
+
+            self._log(f"Successfully set value for OID {oid}")
+            messagebox.showinfo("Success", f"Value updated successfully for {oid}")
+
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Failed to set value for OID {oid}: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Set Error", error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error setting value for OID {oid}: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Set Error", error_msg)
+
+    def _is_oid_writable(self, oid: str) -> bool:
+        """Check if an OID is writable based on metadata."""
+        # Strip instance suffix (e.g., .0) for metadata lookup
+        base_oid = oid.split('.')[:-1] if '.' in oid and oid.split('.')[-1].isdigit() else oid
+        base_oid_str = '.'.join(base_oid) if isinstance(base_oid, list) else base_oid
+
+        metadata = self.oid_metadata.get(base_oid_str, {})
+        access = metadata.get("access", "").lower()
+        result = access in ["read-write", "readwrite", "write-only", "writeonly"]
+
+        # DEBUG: Print what we're checking
+        print(f"DEBUG: _is_oid_writable({oid}) -> base_oid={base_oid_str}, access='{access}', result={result}")
+
+        return result
+
+    def _on_search(self, event: Any = None) -> None:
+        """Handle search button or enter key press."""
+        query = self.search_var.get().strip()
+        if not query:
+            return
+
+        # Try to find by OID first
+        target_oid = None
+        if query.replace(".", "").isdigit():
+            # Looks like an OID
+            target_oid = query
+        else:
+            # Try to find by name
+            for name, oid_tuple in self.oids_data.items():
+                if query.lower() in name.lower() or query.lower() in ".".join(str(x) for x in oid_tuple):
+                    target_oid = ".".join(str(x) for x in oid_tuple)
+                    break
+
+        if target_oid and target_oid in self.oid_to_item:
+            item = self.oid_to_item[target_oid]
+            # Expand the path to the item
+            self._expand_path_to_item(item)
+            # Select and focus the item
+            self.oid_tree.selection_set(item)
+            self.oid_tree.focus(item)
+            self.oid_tree.see(item)
+        else:
+            self._log(f"Search term '{query}' not found", "WARNING")
+
+    def _expand_path_to_item(self, item: str) -> None:
+        """Expand all ancestors of the given item."""
+        path = []
+        current = item
+        while current:
+            path.append(current)
+            current = self.oid_tree.parent(current)
+        path.reverse()
+        for node in path:
+            self.oid_tree.item(node, open=True)
+
+    def _discover_table_instances(self, item: str, entry_oid: str) -> None:
+        """Discover table instances and populate the tree."""
+        # Find the entry name
+        entry_name = None
+        entry_tuple = tuple(int(x) for x in (entry_oid + '.1').split("."))
+        for name, oid_t in self.oids_data.items():
+            if oid_t == entry_tuple:
+                entry_name = name
+                break
+        
+        if not entry_name:
+            self._log(f"Could not find name for entry OID {entry_oid}.1", "WARNING")
+            entry_name = "Entry"  # fallback
+        
+        # Find the first column OID
+        first_col_oid = None
+        for name, oid_t in self.oids_data.items():
+            if oid_t[:len(entry_tuple)] == entry_tuple and len(oid_t) == len(entry_tuple) + 1:
+                first_col_oid = ".".join(str(x) for x in oid_t)
+                break
+        if not first_col_oid:
+            self._log(f"No columns found for table {entry_oid}", "WARNING")
+            return
+
+        instances: list[str] = []
+        index = 1
+        while len(instances) < 20:  # limit to 20 instances
+            try:
+                resp = requests.get(f"{self.api_url}/value", params={"oid": first_col_oid + "." + str(index)}, timeout=1)
+                if resp.status_code == 200:
+                    instances.append(str(index))
+                    index += 1
+                else:
+                    break
+            except Exception:
+                break
+
+        # Get columns
+        columns = []
+        for name, oid_t in self.oids_data.items():
+            if oid_t[:len(entry_tuple)] == entry_tuple and len(oid_t) == len(entry_tuple) + 1:
+                col_num = oid_t[-1]
+                col_oid = ".".join(str(x) for x in oid_t)
+                columns.append((name, col_oid, col_num))
+        columns.sort(key=lambda x: x[2])
+
+        # Update UI
+        def update_ui() -> None:
+            # Remove existing children
+            for child in self.oid_tree.get_children(item):
+                self.oid_tree.delete(child)
+            
+            # Group columns by instance
+            grouped = {}
+            for inst in instances:
+                grouped[inst] = []
+                for name, col_oid, col_num in columns:
+                    full_col_oid = f"{col_oid}.{inst}"
+                    grouped[inst].append((name, col_oid, full_col_oid))
+
+            # Add entry nodes under the table
+            for inst, cols in grouped.items():
+                entry_display = f"{entry_name}.{inst}"
+                entry_full_oid = f"{entry_oid}.1.{inst}"
+                entry_item = self.oid_tree.insert(item, "end", text=entry_display, values=(entry_full_oid, "", "", "", ""), tags=('table-entry',))
+
+                # Add columns under the entry
+                for name, col_oid, full_col_oid in cols:
+                    access = str(self.oid_metadata.get(col_oid, {}).get("access", "")).lower()
+                    type_str = str(self.oid_metadata.get(col_oid, {}).get("type", ""))
+                    access_str = str(self.oid_metadata.get(col_oid, {}).get("access", ""))
+                    if "index" in name.lower():
+                        icon = "🔑"
+                    elif "write" in access:
+                        icon = "✏️"
+                    elif "read" in access or "not-accessible" in access or "none" in access:
+                        icon = "🔒"
+                    else:
+                        icon = "📊"
+
+                    display_text = f"{icon} {name}"
+                    self.oid_tree.insert(entry_item, "end", text=display_text, values=(col_oid, inst, "", type_str, access_str), tags=('evenrow',))
+
+        self.root.after(0, update_ui)
+    
     def _fetch_values_for_node(self, item: str) -> None:
         """Background worker: fetch values for immediate children of `item`.
 
@@ -353,11 +768,13 @@ class SNMPControllerGUI:
                 if not oid_str:
                     continue
 
-                # For scalars (instance = "0"), fetch value from instance OID
+                # Fetch values for scalars (instance = "0") or table columns (instance is digit)
                 if instance_str == "0":
                     fetch_oid = oid_str + ".0"
+                elif instance_str and instance_str.isdigit():
+                    fetch_oid = oid_str + "." + instance_str
                 else:
-                    fetch_oid = oid_str
+                    continue
 
                 if fetch_oid in self.oid_values and self.oid_values[fetch_oid] != "":
                     continue  # already fetched
@@ -425,6 +842,16 @@ class SNMPControllerGUI:
             self.oids_data = converted
             # Do not fetch values eagerly; use lazy background loading on expand
             self.oid_values = {}
+            
+            # Fetch OID metadata
+            try:
+                response = requests.get(f"{self.api_url}/oid-metadata", timeout=5)
+                response.raise_for_status()
+                metadata_data = response.json()
+                self.oid_metadata = metadata_data.get("metadata", {})
+            except Exception as e:
+                self._log(f"Failed to fetch OID metadata: {e}", "WARNING")
+                self.oid_metadata = {}
             
             # Populate OID tree with OIDs
             self._populate_oid_tree()
