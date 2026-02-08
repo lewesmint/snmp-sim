@@ -176,6 +176,84 @@ def get_oid_metadata() -> dict[str, Any]:
     return {"count": len(metadata_map), "metadata": metadata_map}
 
 
+@app.get("/table-schema")
+def get_table_schema(oid: str) -> dict[str, Any]:
+    """Get schema information for a table OID."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    try:
+        parts = tuple(int(x) for x in oid.split(".")) if oid else ()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid OID format")
+
+    # Load all schemas
+    from app.cli_load_model import load_all_schemas
+    import os
+
+    schema_dir = "mock-behaviour"
+    if not os.path.exists(schema_dir):
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
+
+    schemas = load_all_schemas(schema_dir)
+
+    # Find the table in schemas
+    table_info = None
+    table_name = None
+    mib_name = None
+    entry_info = None
+    entry_name = None
+
+    for mib, schema in schemas.items():
+        for obj_name, obj_data in schema.items():
+            if isinstance(obj_data, dict) and "oid" in obj_data:
+                obj_oid = obj_data["oid"]
+                if obj_oid == parts and obj_data.get("type") == "MibTable":
+                    table_info = obj_data
+                    table_name = obj_name
+                    mib_name = mib
+                elif len(obj_oid) == len(parts) + 1 and obj_oid[:-1] == parts and obj_oid[-1] == 1 and obj_data.get("type") == "MibTableRow":
+                    entry_info = obj_data
+                    entry_name = obj_name
+
+    if not table_info:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    # Get entry OID (usually table_oid + .1)
+    entry_oid = parts + (1,)
+
+    # Get index columns from entry
+    index_columns = entry_info.get("indexes", []) if entry_info else []
+
+    # Find columns
+    columns = {}
+    for mib, schema in schemas.items():
+        for obj_name, obj_data in schema.items():
+            if isinstance(obj_data, dict) and "oid" in obj_data:
+                obj_oid = obj_data["oid"]
+                if len(obj_oid) > len(entry_oid) and obj_oid[:len(entry_oid)] == entry_oid:
+                    # This is a column in the table
+                    col_name = obj_name
+                    is_index = col_name in index_columns
+                    columns[col_name] = {
+                        "oid": obj_oid,
+                        "type": obj_data.get("type", ""),
+                        "access": obj_data.get("access", ""),
+                        "is_index": is_index,
+                        "default": obj_data.get("initial", ""),
+                        "enums": obj_data.get("enums")
+                    }
+
+    return {
+        "name": table_name,
+        "oid": parts,
+        "mib": mib_name,
+        "entry_oid": entry_oid,
+        "index_columns": index_columns,
+        "columns": columns
+    }
+
+
 @app.get("/value")
 def get_oid_value(oid: str) -> dict[str, Any]:
     """Get the value for a specific OID string (dot separated)."""

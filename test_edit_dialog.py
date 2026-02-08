@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import customtkinter as ctk
 from ui.snmp_gui import SNMPControllerGUI
 
-def test_edit_dialog():
+def test_edit_dialog() -> None:
     """Test the edit dialog with different writable states."""
     root = ctk.CTk()
     app = SNMPControllerGUI(root)

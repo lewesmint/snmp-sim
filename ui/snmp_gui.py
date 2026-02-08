@@ -1,6 +1,6 @@
 import customtkinter as ctk
 from tkinter import messagebox, ttk, simpledialog
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, List
 import concurrent.futures
 import requests
 from datetime import datetime
@@ -141,7 +141,7 @@ class SNMPControllerGUI:
         self.oid_tree.heading("mib", text="📚 MIB")
 
         # Configure columns with borders for better separation
-        self.oid_tree.column("#0", width=250, minwidth=150, stretch=True)
+        self.oid_tree.column("#0", width=250, minwidth=150, stretch=False)
         self.oid_tree.column("oid", width=200, minwidth=150, stretch=True, anchor="w")
         self.oid_tree.column("instance", width=80, minwidth=60, stretch=False, anchor="center")
         self.oid_tree.column("value", width=200, minwidth=100, stretch=True, anchor="w")
@@ -178,10 +178,29 @@ class SNMPControllerGUI:
         """Setup the table view tab."""
         table_frame = self.tabview.tab("Table View")
 
+        # Buttons frame
+        buttons_frame = ctk.CTkFrame(table_frame)
+        buttons_frame.pack(fill="x", padx=10, pady=(10, 0))
+
+        # Add instance button
+        self.add_instance_btn = ctk.CTkButton(buttons_frame, text="Add Instance", command=self._add_instance)
+        self.add_instance_btn.pack(side="left", padx=(0, 10))
+
+        # Remove instance button
+        self.remove_instance_btn = ctk.CTkButton(buttons_frame, text="Remove Instance", command=self._remove_instance, fg_color="red", hover_color="darkred")
+        self.remove_instance_btn.pack(side="left")
+
+        # Initially disable buttons
+        self.add_instance_btn.configure(state="disabled")
+        self.remove_instance_btn.configure(state="disabled")
+
         # Table view treeview
         self.table_tree = ttk.Treeview(table_frame, columns=("index",), show="headings", style="OID.Treeview")
         self.table_tree.heading("index", text="Index")
         self.table_tree.column("index", width=100, minwidth=50, stretch=False, anchor="center")
+
+        # Bind selection change
+        self.table_tree.bind("<<TreeviewSelect>>", self._on_table_row_select)
 
         # Scrollbars
         v_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.table_tree.yview)
@@ -191,6 +210,11 @@ class SNMPControllerGUI:
         self.table_tree.pack(fill="both", expand=True, padx=10, pady=10)
         v_scroll.pack(side="right", fill="y")
         h_scroll.pack(side="bottom", fill="x")
+
+        # Message label for when no table is selected
+        self.table_message_label = ctk.CTkLabel(table_frame, text="Select a table in the OID tree to view its data", font=("", 12))
+        self.table_message_label.pack(pady=20)
+        self.table_message_label.pack_forget()  # Hide initially
 
         # Initially disable the tab - CustomTkinter doesn't support state, so we'll handle it differently
         # self.tabview.tab("Table View").configure(state="disabled")
@@ -475,29 +499,69 @@ class SNMPControllerGUI:
         self._show_edit_dialog(full_oid, current_value, item, is_writable)
 
     def _on_tree_select(self, event: Any) -> None:
-        """Handler called when tree selection changes; populates Table View if table selected."""
+        """Handler called when tree selection changes; populates Table View if table or table entry selected."""
         selected_items = self.oid_tree.selection()
         if not selected_items:
-            # Clear table view
-            for child in self.table_tree.get_children():
-                self.table_tree.delete(child)
+            # Hide table tab if no selection
+            if "Table View" in self.tabview._tab_dict:
+                self.tabview.delete("Table View")
             return
 
-        # Check if any selected item is a table
+        # Check if any selected item is a table or table entry
         table_item = None
+        table_entry_item = None
+        selected_instance = None
+        
         for item in selected_items:
-            if 'table' in self.oid_tree.item(item, 'tags'):
+            tags = self.oid_tree.item(item, 'tags')
+            if 'table' in tags:
                 table_item = item
                 break
+            elif 'table-entry' in tags:
+                table_entry_item = item
+                # Extract instance number from the OID
+                oid_str = self.oid_tree.set(item, "oid")
+                if oid_str:
+                    # OID format: table.entry.instance, so instance is the last part
+                    oid_parts = oid_str.split('.')
+                    if len(oid_parts) >= 3 and oid_parts[-1].isdigit():
+                        selected_instance = oid_parts[-1]
+                break
 
-        if table_item:
-            self._populate_table_view(table_item)
+        if table_item or table_entry_item:
+            # Show table tab if not already shown
+            if "Table View" not in self.tabview._tab_dict:
+                self.tabview.add("Table View")
+                # Re-setup the table tab since it was removed
+                self._setup_table_tab()
+            
+            # Determine which table to show
+            if table_entry_item:
+                # Find the parent table
+                parent = self.oid_tree.parent(table_entry_item)
+                if parent and 'table' in self.oid_tree.item(parent, 'tags'):
+                    table_item = parent
+            
+            if table_item:
+                self._populate_table_view(table_item, selected_instance)
+                # Enable add button
+                self.add_instance_btn.configure(state="normal")
+                # Hide message
+                self.table_message_label.pack_forget()
         else:
-            # Clear table view if no table selected
-            for child in self.table_tree.get_children():
-                self.table_tree.delete(child)
+            # Hide table tab if not on table-related item
+            if "Table View" in self.tabview._tab_dict:
+                self.tabview.delete("Table View")
 
-    def _populate_table_view(self, table_item: str) -> None:
+    def _on_table_row_select(self, event: Any) -> None:
+        """Handler called when table row selection changes."""
+        selected_rows = self.table_tree.selection()
+        if selected_rows:
+            self.remove_instance_btn.configure(state="normal")
+        else:
+            self.remove_instance_btn.configure(state="disabled")
+
+    def _populate_table_view(self, table_item: str, selected_instance: str = None) -> None:
         """Populate the table view with data from the selected table."""
         oid_str = self.oid_tree.set(table_item, "oid")
         if not oid_str:
@@ -534,7 +598,7 @@ class SNMPControllerGUI:
 
         # Find instances
         first_col_oid = columns[0][1]
-        instances = []
+        instances: list[str] = []
         index = 1
         while len(instances) < 20:
             try:
@@ -557,6 +621,7 @@ class SNMPControllerGUI:
             self.table_tree.column(col_name, width=150, minwidth=100, stretch=True, anchor="w")
 
         # Populate rows
+        row_items = []
         for inst in instances:
             values = [inst]
             for name, col_oid, col_num in columns:
@@ -570,7 +635,206 @@ class SNMPControllerGUI:
                 except Exception:
                     val = ""
                 values.append(val)
-            self.table_tree.insert("", "end", values=values)
+            item = self.table_tree.insert("", "end", values=values)
+            row_items.append((inst, item))
+
+        # Select the row corresponding to selected_instance if provided
+        if selected_instance:
+            for inst, item in row_items:
+                if inst == selected_instance:
+                    self.table_tree.selection_set(item)
+                    self.table_tree.see(item)
+                    # Enable remove button since we have a selection
+                    self.remove_instance_btn.configure(state="normal")
+                    break
+
+    def _add_instance(self) -> None:
+        """Add a new instance to the current table."""
+        # Get current table OID from the selected item in oid_tree
+        selected_items = self.oid_tree.selection()
+        if not selected_items:
+            return
+        table_item = None
+        for item in selected_items:
+            if 'table' in self.oid_tree.item(item, 'tags'):
+                table_item = item
+                break
+        if not table_item:
+            return
+
+        table_oid = self.oid_tree.set(table_item, "oid")
+        if not table_oid:
+            return
+
+        # Get table schema to find index columns
+        try:
+            resp = requests.get(f"{self.api_url}/table-schema", params={"oid": table_oid}, timeout=5)
+            if resp.status_code != 200:
+                messagebox.showerror("Error", "Failed to get table schema")
+                return
+            schema = resp.json()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to get schema: {e}")
+            return
+
+        # Find index columns
+        index_columns = []
+        for col_name in schema.get("index_columns", []):
+            if col_name in schema.get("columns", {}):
+                col_info = schema["columns"][col_name]
+                index_columns.append((col_name, col_info))
+
+        if not index_columns:
+            messagebox.showerror("Error", "No index columns found")
+            return
+
+        # Create dialog for index values
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("Add Table Instance")
+        dialog.geometry("400x300")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Title
+        title_label = ctk.CTkLabel(dialog, text=f"Add instance to {schema.get('name', table_oid)}", font=("", 14, "bold"))
+        title_label.pack(pady=10)
+
+        # Frame for inputs
+        input_frame = ctk.CTkFrame(dialog)
+        input_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+
+        # Create entry fields for each index column
+        entries = {}
+        row = 0
+        for col_name, col_info in index_columns:
+            ctk.CTkLabel(input_frame, text=f"{col_name}:").grid(row=row, column=0, sticky="w", pady=5, padx=10)
+            default_val = str(col_info.get("default", ""))
+            entry = ctk.CTkEntry(input_frame)
+            entry.insert(0, default_val)
+            entry.grid(row=row, column=1, sticky="ew", pady=5, padx=(0, 10))
+            entries[col_name] = entry
+            row += 1
+
+        input_frame.columnconfigure(1, weight=1)
+
+        # Buttons
+        button_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        button_frame.pack(fill="x", padx=20, pady=(0, 20))
+
+        def on_cancel() -> None:
+            dialog.destroy()
+
+        def on_add() -> None:
+            # Collect values
+            index_values = []
+            for col_name in entries:
+                val = entries[col_name].get().strip()
+                if not val:
+                    messagebox.showerror("Error", f"{col_name} cannot be empty")
+                    return
+                index_values.append(val)
+
+            # Create index string
+            index_str = '.'.join(index_values)
+
+            # Try to create the instance by setting a value for one of the columns
+            # Use the first non-index column if available
+            first_col = None
+            for col_name, col_info in schema.get("columns", {}).items():
+                if not col_info.get("is_index", False):
+                    first_col = col_name
+                    break
+
+            if first_col:
+                col_oid = schema["columns"][first_col]["oid"]
+                full_oid = f"{col_oid}.{index_str}"
+                try:
+                    resp = requests.post(f"{self.api_url}/value", json={"oid": full_oid, "value": "0"}, timeout=5)
+                    if resp.status_code == 200:
+                        messagebox.showinfo("Success", "Instance added successfully")
+                        # Refresh table view
+                        self._populate_table_view(table_item)
+                        dialog.destroy()
+                    else:
+                        messagebox.showerror("Error", f"Failed to add instance: {resp.text}")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to add instance: {e}")
+            else:
+                messagebox.showerror("Error", "No data columns found to create instance")
+
+        cancel_btn = ctk.CTkButton(button_frame, text="Cancel", command=on_cancel)
+        cancel_btn.pack(side="right", padx=(10, 0))
+
+        add_btn = ctk.CTkButton(button_frame, text="Add", command=on_add)
+        add_btn.pack(side="right")
+
+    def _remove_instance(self) -> None:
+        """Remove the selected instance from the table."""
+        selected_rows = self.table_tree.selection()
+        if not selected_rows:
+            return
+
+        # Get the index from the selected row
+        row_values = self.table_tree.item(selected_rows[0], "values")
+        if not row_values or len(row_values) < 1:
+            return
+
+        index_str = str(row_values[0])
+
+        # Show confirmation
+        if not messagebox.askyesno("Confirm", f"Are you sure you want to remove instance {index_str}?"):
+            return
+
+        # Get current table OID
+        selected_items = self.oid_tree.selection()
+        if not selected_items:
+            return
+        table_item = None
+        for item in selected_items:
+            if 'table' in self.oid_tree.item(item, 'tags'):
+                table_item = item
+                break
+        if not table_item:
+            return
+
+        table_oid = self.oid_tree.set(table_item, "oid")
+        if not table_oid:
+            return
+
+        # Get table schema
+        try:
+            resp = requests.get(f"{self.api_url}/table-schema", params={"oid": table_oid}, timeout=5)
+            if resp.status_code != 200:
+                messagebox.showerror("Error", "Failed to get table schema")
+                return
+            schema = resp.json()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to get schema: {e}")
+            return
+
+        # Find a column to delete (use first column)
+        first_col = None
+        for col_name, col_info in schema.get("columns", {}).items():
+            first_col = col_name
+            break
+
+        if first_col:
+            col_oid = schema["columns"][first_col]["oid"]
+            full_oid = f"{col_oid}.{index_str}"
+            try:
+                # To remove, we might need to set to empty or use a delete endpoint
+                # For now, try setting to empty string
+                resp = requests.post(f"{self.api_url}/value", json={"oid": full_oid, "value": ""}, timeout=5)
+                if resp.status_code == 200:
+                    messagebox.showinfo("Success", "Instance removed successfully")
+                    # Refresh table view
+                    self._populate_table_view(table_item)
+                else:
+                    messagebox.showerror("Error", f"Failed to remove instance: {resp.text}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to remove instance: {e}")
+        else:
+            messagebox.showerror("Error", "No columns found")
 
     def _show_edit_dialog(self, oid: str, current_value: str, item: str, is_writable: bool) -> None:
         """Show a dialog to edit the value of an OID."""
@@ -634,7 +898,7 @@ class SNMPControllerGUI:
         original_value = current_value
         value_changed = ctk.BooleanVar(value=False)
 
-        def on_value_change(*args):
+        def on_value_change(*args: Any) -> None:
             """Enable OK button only if value is different from original."""
             current = value_var.get()
             changed = current != original_value
@@ -656,7 +920,7 @@ class SNMPControllerGUI:
 
         if not is_writable:
             print("DEBUG: Creating unlock checkbox")
-            def on_checkbox_toggle():
+            def on_checkbox_toggle() -> None:
                 """Handle checkbox toggle - reset value when unchecked."""
                 unlocked = unlock_var.get()
                 if not unlocked:
@@ -853,7 +1117,7 @@ class SNMPControllerGUI:
                 self.oid_tree.delete(child)
             
             # Group columns by instance
-            grouped = {}
+            grouped: Dict[str, List[Tuple[str, str, str]]] = {}
             for inst in instances:
                 grouped[inst] = []
                 for name, col_oid, col_num in columns:
