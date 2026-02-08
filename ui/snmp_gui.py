@@ -49,7 +49,11 @@ class SNMPControllerGUI:
         self.tabview.add("OID Tree")
         self._setup_oid_tab()
 
-        # Tab 2: Configuration
+        # Tab 2: Table View
+        self.tabview.add("Table View")
+        self._setup_table_tab()
+
+        # Tab 3: Configuration
         self.tabview.add("Configuration")
         self._setup_config_tab()
 
@@ -125,8 +129,8 @@ class SNMPControllerGUI:
         style.map("OID.Treeview",
                  background=[("selected", selected_bg)])
 
-        # Treeview for OIDs (add columns for instance, value, type, access)
-        self.oid_tree = ttk.Treeview(tree_frame, columns=("oid", "instance", "value", "type", "access"),
+        # Treeview for OIDs (add columns for instance, value, type, access, mib)
+        self.oid_tree = ttk.Treeview(tree_frame, columns=("oid", "instance", "value", "type", "access", "mib"),
                                      show="tree headings", style="OID.Treeview")
         self.oid_tree.heading("#0", text="📋 MIB/Object")
         self.oid_tree.heading("oid", text="🔢 OID")
@@ -134,6 +138,7 @@ class SNMPControllerGUI:
         self.oid_tree.heading("value", text="💾 Value")
         self.oid_tree.heading("type", text="Type")
         self.oid_tree.heading("access", text="Access")
+        self.oid_tree.heading("mib", text="📚 MIB")
 
         # Configure columns with borders for better separation
         self.oid_tree.column("#0", width=250, minwidth=150, stretch=True)
@@ -142,6 +147,7 @@ class SNMPControllerGUI:
         self.oid_tree.column("value", width=200, minwidth=100, stretch=True, anchor="w")
         self.oid_tree.column("type", width=120, minwidth=80, stretch=False, anchor="w")
         self.oid_tree.column("access", width=100, minwidth=80, stretch=False, anchor="center")
+        self.oid_tree.column("mib", width=120, minwidth=80, stretch=False, anchor="w")
 
         # Configure tags for alternating row colors and column borders
         self.oid_tree.tag_configure("oddrow", background=alt_bg)
@@ -163,8 +169,31 @@ class SNMPControllerGUI:
         self.oid_tree.bind("<<TreeviewOpen>>", self._on_node_open)
         # Bind double-click for editing values
         self.oid_tree.bind("<Double-1>", self._on_double_click)
+        # Bind selection change
+        self.oid_tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         # Placeholder data
         self._populate_oid_tree()
+    
+    def _setup_table_tab(self) -> None:
+        """Setup the table view tab."""
+        table_frame = self.tabview.tab("Table View")
+
+        # Table view treeview
+        self.table_tree = ttk.Treeview(table_frame, columns=("index",), show="headings", style="OID.Treeview")
+        self.table_tree.heading("index", text="Index")
+        self.table_tree.column("index", width=100, minwidth=50, stretch=False, anchor="center")
+
+        # Scrollbars
+        v_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.table_tree.yview)
+        h_scroll = ttk.Scrollbar(table_frame, orient="horizontal", command=self.table_tree.xview)
+        self.table_tree.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
+
+        self.table_tree.pack(fill="both", expand=True, padx=10, pady=10)
+        v_scroll.pack(side="right", fill="y")
+        h_scroll.pack(side="bottom", fill="x")
+
+        # Initially disable the tab - CustomTkinter doesn't support state, so we'll handle it differently
+        # self.tabview.tab("Table View").configure(state="disabled")
     
     def _setup_config_tab(self) -> None:
         """Setup the configuration tab."""
@@ -346,6 +375,9 @@ class SNMPControllerGUI:
                     instance_str = "0"
                     instance_oid_str = oid_str + ".0"
                     val = self.oid_values.get(instance_oid_str, "")
+                    type_val = self.oid_metadata.get(instance_oid_str, {}).get("type", "")
+                    access_val = self.oid_metadata.get(instance_oid_str, {}).get("access", "")
+                    mib_val = self.oid_metadata.get(instance_oid_str, {}).get("mib", "")
                 else:
                     # Regular leaf
                     access = str(self.oid_metadata.get(oid_str, {}).get("access", "")).lower()
@@ -357,10 +389,13 @@ class SNMPControllerGUI:
                         icon = "📄"
                     instance_str = ""
                     val = self.oid_values.get(oid_str, "")
+                    type_val = self.oid_metadata.get(oid_str, {}).get("type", "")
+                    access_val = self.oid_metadata.get(oid_str, {}).get("access", "")
+                    mib_val = self.oid_metadata.get(oid_str, {}).get("mib", "")
 
                 display_text = f"{icon} {stored_name}" if stored_name else f"{icon} {key}"
                 node = self.oid_tree.insert(parent, "end", text=display_text,
-                                           values=(oid_str, instance_str, val, "", ""),
+                                           values=(oid_str, instance_str, val, type_val, access_val, mib_val),
                                            tags=(row_tag,))
                 self.oid_to_item[oid_str] = node
             else:
@@ -369,18 +404,20 @@ class SNMPControllerGUI:
                     icon = "📋"  # Table icon
                     display_text = f"{icon} {stored_name}" if stored_name else f"{icon} {key}"
 
+                    mib_val = self.oid_metadata.get(oid_str, {}).get("mib", "")
                     node = self.oid_tree.insert(parent, "end", text=display_text,
-                                               values=(oid_str, "", "", "", ""),
+                                               values=(oid_str, "", "", "", "", mib_val),
                                                tags=(row_tag, 'table'))
                     self.oid_to_item[oid_str] = node
                     # Insert placeholder to make it expandable
-                    self.oid_tree.insert(node, "end", text="Loading...", values=("", "", "", "", ""), tags=('placeholder',))
+                    self.oid_tree.insert(node, "end", text="Loading...", values=("", "", "", "", "", ""), tags=('placeholder',))
                 else:
                     icon = "📁"  # Folder icon
                     display_text = f"{icon} {stored_name}" if stored_name else f"{icon} {key}"
 
+                    mib_val = self.oid_metadata.get(oid_str, {}).get("mib", "")
                     node = self.oid_tree.insert(parent, "end", text=display_text,
-                                               values=(oid_str, "", "", "", ""),
+                                               values=(oid_str, "", "", "", "", mib_val),
                                                tags=(row_tag,))
                     self.oid_to_item[oid_str] = node
                     # Recurse into children
@@ -436,6 +473,104 @@ class SNMPControllerGUI:
 
         # Show edit dialog (always, but with different behavior for read-only)
         self._show_edit_dialog(full_oid, current_value, item, is_writable)
+
+    def _on_tree_select(self, event: Any) -> None:
+        """Handler called when tree selection changes; populates Table View if table selected."""
+        selected_items = self.oid_tree.selection()
+        if not selected_items:
+            # Clear table view
+            for child in self.table_tree.get_children():
+                self.table_tree.delete(child)
+            return
+
+        # Check if any selected item is a table
+        table_item = None
+        for item in selected_items:
+            if 'table' in self.oid_tree.item(item, 'tags'):
+                table_item = item
+                break
+
+        if table_item:
+            self._populate_table_view(table_item)
+        else:
+            # Clear table view if no table selected
+            for child in self.table_tree.get_children():
+                self.table_tree.delete(child)
+
+    def _populate_table_view(self, table_item: str) -> None:
+        """Populate the table view with data from the selected table."""
+        oid_str = self.oid_tree.set(table_item, "oid")
+        if not oid_str:
+            return
+
+        # Clear existing
+        for child in self.table_tree.get_children():
+            self.table_tree.delete(child)
+
+        # Find entry OID (assume .1 is the entry)
+        entry_oid = oid_str + ".1"
+        entry_tuple = tuple(int(x) for x in entry_oid.split("."))
+
+        # Find entry name
+        entry_name = None
+        for name, oid_t in self.oids_data.items():
+            if oid_t == entry_tuple:
+                entry_name = name
+                break
+        if not entry_name:
+            entry_name = "Entry"
+
+        # Get columns
+        columns = []
+        for name, oid_t in self.oids_data.items():
+            if oid_t[:len(entry_tuple)] == entry_tuple and len(oid_t) == len(entry_tuple) + 1:
+                col_num = oid_t[-1]
+                col_oid = ".".join(str(x) for x in oid_t)
+                columns.append((name, col_oid, col_num))
+        columns.sort(key=lambda x: x[2])
+
+        if not columns:
+            return
+
+        # Find instances
+        first_col_oid = columns[0][1]
+        instances = []
+        index = 1
+        while len(instances) < 20:
+            try:
+                resp = requests.get(f"{self.api_url}/value", params={"oid": first_col_oid + "." + str(index)}, timeout=1)
+                if resp.status_code == 200:
+                    instances.append(str(index))
+                    index += 1
+                else:
+                    break
+            except Exception:
+                break
+
+        # Set columns
+        col_names = [col[0] for col in columns]
+        self.table_tree["columns"] = ("index",) + tuple(col_names)
+        self.table_tree.heading("index", text="Index")
+        self.table_tree.column("index", width=100, minwidth=50, stretch=False, anchor="center")
+        for col_name in col_names:
+            self.table_tree.heading(col_name, text=col_name)
+            self.table_tree.column(col_name, width=150, minwidth=100, stretch=True, anchor="w")
+
+        # Populate rows
+        for inst in instances:
+            values = [inst]
+            for name, col_oid, col_num in columns:
+                full_oid = f"{col_oid}.{inst}"
+                try:
+                    resp = requests.get(f"{self.api_url}/value", params={"oid": full_oid}, timeout=1)
+                    if resp.status_code == 200:
+                        val = resp.json().get("value", "")
+                    else:
+                        val = ""
+                except Exception:
+                    val = ""
+                values.append(val)
+            self.table_tree.insert("", "end", values=values)
 
     def _show_edit_dialog(self, oid: str, current_value: str, item: str, is_writable: bool) -> None:
         """Show a dialog to edit the value of an OID."""
@@ -729,7 +864,8 @@ class SNMPControllerGUI:
             for inst, cols in grouped.items():
                 entry_display = f"{entry_name}.{inst}"
                 entry_full_oid = f"{entry_oid}.1.{inst}"
-                entry_item = self.oid_tree.insert(item, "end", text=entry_display, values=(entry_full_oid, "", "", "", ""), tags=('table-entry',))
+                mib_val = self.oid_metadata.get(entry_full_oid, {}).get("mib", "")
+                entry_item = self.oid_tree.insert(item, "end", text=entry_display, values=(entry_full_oid, "", "", "", "", mib_val), tags=('table-entry',))
 
                 # Add columns under the entry
                 for name, col_oid, full_col_oid in cols:
@@ -746,7 +882,8 @@ class SNMPControllerGUI:
                         icon = "📊"
 
                     display_text = f"{icon} {name}"
-                    self.oid_tree.insert(entry_item, "end", text=display_text, values=(col_oid, inst, "", type_str, access_str), tags=('evenrow',))
+                    mib_val = self.oid_metadata.get(col_oid, {}).get("mib", "")
+                    self.oid_tree.insert(entry_item, "end", text=display_text, values=(col_oid, inst, "", type_str, access_str, mib_val), tags=('evenrow',))
 
         self.root.after(0, update_ui)
     
