@@ -12,20 +12,6 @@ The coldStart trap (RFC 3418) does not define any additional varbinds.
 import argparse
 import asyncio
 import sys
-import warnings
-
-# Workaround for pysnmp 7.1.22 bug - patch missing imports in compiler.py
-# See: https://github.com/lextudio/pysnmp/blob/master/pysnmp/smi/compiler.py#L28
-try:
-    from pysmi.parser.dialect import smiV1Relaxed
-    from pysmi.reader.url import getReadersFromUrls
-    import pysnmp.smi.compiler
-    pysnmp.smi.compiler.smiV1Relaxed = smiV1Relaxed  # pyright: ignore[reportAttributeAccessIssue]
-    pysnmp.smi.compiler.getReadersFromUrls = getReadersFromUrls  # pyright: ignore[reportAttributeAccessIssue]
-    # Suppress deprecation warnings from pysmi
-    warnings.filterwarnings("ignore", category=DeprecationWarning, module="pysmi")
-except ImportError:
-    pass  # pysmi not installed, MIB compilation won't work but we don't need it
 
 from pysnmp.hlapi.v3arch.asyncio import (
     CommunityData,
