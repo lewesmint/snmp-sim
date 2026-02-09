@@ -107,9 +107,13 @@ class SNMPControllerGUI:
 
         # Configure Treeview style for better column distinction
         style = ttk.Style()
-        style.theme_use("default")
+        # style.theme_use("default")
+        style.theme_use('clam')                       # optional: helps rowheight be respected on some platforms
+        style.configure("Treeview", font=('Helvetica', 22), rowheight=30)
+        style.configure("Treeview.Heading", font=('Helvetica', 23, 'bold'))
 
         # Configure colors based on appearance mode
+
         bg_color = "#2b2b2b" if ctk.get_appearance_mode() == "Dark" else "#ffffff"
         fg_color = "#ffffff" if ctk.get_appearance_mode() == "Dark" else "#000000"
         selected_bg = "#1f538d" if ctk.get_appearance_mode() == "Dark" else "#0078d7"
@@ -123,7 +127,7 @@ class SNMPControllerGUI:
                        fieldbackground=bg_color,
                        borderwidth=2,
                        relief="solid",
-                       rowheight=25)
+                       rowheight=40)
         style.configure("OID.Treeview.Heading",
                        background="#1f1f1f" if ctk.get_appearance_mode() == "Dark" else "#e0e0e0",
                        foreground=fg_color,
@@ -174,7 +178,52 @@ class SNMPControllerGUI:
         # Bind double-click for editing values
         self.oid_tree.bind("<Double-1>", self._on_double_click)
         # Bind selection change
+        self._create_icon_images()
         self.oid_tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+    
+    def _create_icon_images(self) -> None:
+        """Create PhotoImage objects used in the tree view.
+
+        If the `ui/icons` directory contains PNG files named after keys (e.g. folder.png), those are
+        loaded and used. Otherwise the method generates simple colored square icons as a fallback.
+        """
+        size = 16
+        icons = {}
+        icons_dir = Path(__file__).parent / "icons"
+
+        def make_generated(color, inner=None):
+            img = tk.PhotoImage(width=size, height=size)
+            img.put(color, to=(0,0,size-1,size-1))
+            if inner:
+                img.put(inner, to=(2,2,size-3,size-3))
+            return img
+
+        # Try to load from ui/icons/<name>.png, otherwise generate a simple icon
+        icon_specs = {
+            'folder': ('#f4c542', None),
+            'table': ('#3b82f6', None),
+            'lock': ('#9ca3af', None),
+            'edit': ('#10b981', None),
+            'doc': ('#ffffff', '#e5e7eb'),
+            'chart': ('#a78bfa', None),
+            'key': ('#f97316', None),
+        }
+
+        for name, (color, inner) in icon_specs.items():
+            try:
+                png_path = icons_dir / f"{name}.png"
+                if png_path.exists():
+                    icons[name] = tk.PhotoImage(file=str(png_path))
+                else:
+                    icons[name] = make_generated(color, inner)
+            except Exception:
+                # On any error fall back to generated icon
+                icons[name] = make_generated(color, inner)
+
+        # Store images and keep refs so Tcl doesn't GC them
+        self.oid_icon_images = icons
+        self._image_refs = list(icons.values())
+
     
     def _setup_table_tab(self) -> None:
         """Setup the table view tab."""
@@ -1253,11 +1302,11 @@ class SNMPControllerGUI:
                     # Scalar - use base OID for access info
                     access = str(self.oid_metadata.get(oid_str, {}).get("access", "")).lower()
                     if "write" in access:
-                        icon = "✏️"
+                        icon_key = "edit"
                     elif "read" in access or "not-accessible" in access or "none" in access:
-                        icon = "🔒"
+                        icon_key = "lock"
                     else:
-                        icon = "📊"
+                        icon_key = "chart"
                     instance_str = "0"
                     instance_oid_str = oid_str + ".0"
                     val = self.oid_values.get(instance_oid_str, "")
@@ -1268,50 +1317,60 @@ class SNMPControllerGUI:
                     # Regular leaf
                     access = str(self.oid_metadata.get(oid_str, {}).get("access", "")).lower()
                     if "write" in access:
-                        icon = "✏️"
+                        icon_key = "edit"
                     elif "read" in access or "not-accessible" in access or "none" in access:
-                        icon = "🔒"
+                        icon_key = "lock"
                     else:
-                        icon = "📄"
+                        icon_key = "doc"
                     instance_str = ""
                     val = self.oid_values.get(oid_str, "")
                     type_val = self.oid_metadata.get(oid_str, {}).get("type") or "Unknown"
                     access_val = self.oid_metadata.get(oid_str, {}).get("access") or "N/A"
                     mib_val = self.oid_metadata.get(oid_str, {}).get("mib") or "N/A"
 
-                display_text = f"{icon} {stored_name}" if stored_name else f"{icon} {key}"
+                display_text = stored_name if stored_name else str(key)
                 
                 # Add INDEX indicator to type column for known index columns
                 if stored_name in ["ifIndex", "ifStackHigherLayer", "ifStackLowerLayer", "ifRcvAddressAddress"]:
                     type_val += " [INDEX]"
-                    
-                node = self.oid_tree.insert(parent, "end", text=display_text,
+
+                img = None
+                if getattr(self, 'oid_icon_images', None):
+                    img = self.oid_icon_images.get(icon_key)
+
+                node = self.oid_tree.insert(parent, "end", text=display_text, image=img,
                                            values=(oid_str, instance_str, val, type_val, access_val, mib_val),
                                            tags=(row_tag,))
                 self.oid_to_item[oid_str] = node
             else:
                 # Folder/container node
                 if value.get('__is_table__'):
-                    icon = "📋"  # Table icon
-                    display_text = f"{icon} {stored_name}" if stored_name else f"{icon} {key}"
+                    icon_key = "table"
+                    display_text = stored_name if stored_name else str(key)
 
                     type_val = self.oid_metadata.get(oid_str, {}).get("type") or "branch"
                     access_val = self.oid_metadata.get(oid_str, {}).get("access") or ""
                     mib_val = self.oid_metadata.get(oid_str, {}).get("mib") or "N/A"
-                    node = self.oid_tree.insert(parent, "end", text=display_text,
+                    img = None
+                    if getattr(self, 'oid_icon_images', None):
+                        img = self.oid_icon_images.get(icon_key)
+                    node = self.oid_tree.insert(parent, "end", text=display_text, image=img,
                                                values=(oid_str, "", "", type_val, access_val, mib_val),
                                                tags=(row_tag, 'table'))
                     self.oid_to_item[oid_str] = node
                     # Insert placeholder to make it expandable
                     self.oid_tree.insert(node, "end", text="Loading...", values=("", "", "", "", "", ""), tags=('placeholder',))
                 else:
-                    icon = "📁"  # Folder icon
-                    display_text = f"{icon} {stored_name}" if stored_name else f"{icon} {key}"
+                    icon_key = "folder"
+                    display_text = stored_name if stored_name else str(key)
 
                     type_val = self.oid_metadata.get(oid_str, {}).get("type") or "branch"
                     access_val = self.oid_metadata.get(oid_str, {}).get("access") or "N/A"
                     mib_val = self.oid_metadata.get(oid_str, {}).get("mib") or "N/A"
-                    node = self.oid_tree.insert(parent, "end", text=display_text,
+                    img = None
+                    if getattr(self, 'oid_icon_images', None):
+                        img = self.oid_icon_images.get(icon_key)
+                    node = self.oid_tree.insert(parent, "end", text=display_text, image=img,
                                                values=(oid_str, "", "", type_val, access_val, mib_val),
                                                tags=(row_tag,))
                     self.oid_to_item[oid_str] = node
@@ -2138,18 +2197,21 @@ class SNMPControllerGUI:
                     type_str = self.oid_metadata.get(col_oid, {}).get("type") or "Unknown"
                     access_str = self.oid_metadata.get(col_oid, {}).get("access") or "N/A"
                     if "index" in name.lower():
-                        icon = "🔑"
+                        icon_key = "key"
                     elif "write" in access:
-                        icon = "✏️"
+                        icon_key = "edit"
                     elif "read" in access or "not-accessible" in access or "none" in access:
-                        icon = "🔒"
+                        icon_key = "lock"
                     else:
-                        icon = "📊"
+                        icon_key = "chart"
 
-                    display_text = f"{icon} {name}"
+                    display_text = name
+                    img = None
+                    if getattr(self, 'oid_icon_images', None):
+                        img = self.oid_icon_images.get(icon_key)
                     mib_val = self.oid_metadata.get(col_oid, {}).get("mib") or "N/A"
                     value_here = self.oid_values.get(full_col_oid, "")
-                    self.oid_tree.insert(entry_item, "end", text=display_text, values=(col_oid, inst, value_here, type_str, access_str, mib_val), tags=('evenrow', 'table-column'))
+                    self.oid_tree.insert(entry_item, "end", text=display_text, image=img, values=(col_oid, inst, value_here, type_str, access_str, mib_val), tags=('evenrow', 'table-column'))
 
         self.root.after(0, update_ui)
     
