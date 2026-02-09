@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from tkinter import messagebox, ttk
+import tkinter as tk
 from typing import Any, Dict, Tuple, List
 import concurrent.futures
 import requests
@@ -202,6 +203,8 @@ class SNMPControllerGUI:
 
         # Bind selection change
         self.table_tree.bind("<<TreeviewSelect>>", self._on_table_row_select)
+        # Bind double-click for cell editing
+        self.table_tree.bind("<Double-1>", self._on_table_double_click)
 
         # Scrollbars
         v_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.table_tree.yview)
@@ -210,7 +213,19 @@ class SNMPControllerGUI:
 
         self.table_tree.pack(fill="both", expand=True, padx=10, pady=10)
         v_scroll.pack(side="right", fill="y")
+        h_scroll.pack(side="right", fill="y")
         h_scroll.pack(side="bottom", fill="x")
+
+        # Edit overlay for in-place cell editing - using tk.Frame for proper overlay
+        # Create as child of root so place() uses absolute coordinates
+        self.edit_overlay_frame = tk.Frame(self.root, bg="white", relief="solid", borderwidth=1)
+        self.edit_overlay_entry = tk.Entry(self.edit_overlay_frame, font=("Courier", 12), width=40)
+        self.edit_overlay_entry.pack(padx=2, pady=2, fill="both", expand=True)
+        
+        # Store editing state
+        self.editing_item: str | None = None
+        self.editing_column: str | None = None
+        self.editing_oid: str | None = None
 
         # Message label for when no table is selected
         self.table_message_label = ctk.CTkLabel(table_frame, text="Select a table in the OID tree to view its data", font=("", 12))
@@ -1408,8 +1423,6 @@ class SNMPControllerGUI:
                 self._populate_table_view(table_item, selected_instance)
                 # Enable add button
                 self.add_instance_btn.configure(state="normal")
-                # Switch to table view tab
-                self.tabview.set("Table View")
         else:
             # Hide table tab if not on table-related item
             if "Table View" in self.tabview._tab_dict:
@@ -1423,10 +1436,145 @@ class SNMPControllerGUI:
         else:
             self.remove_instance_btn.configure(state="disabled")
 
+    def _on_table_double_click(self, event: Any) -> None:
+        """Handle double-click on table cell to enable in-place editing."""
+        # Get the region that was clicked
+        region = self.table_tree.identify_region(event.x, event.y)
+        if region != "cell":
+            return
+        
+        # Get the item and column that were clicked
+        item = self.table_tree.identify_row(event.y)
+        column = self.table_tree.identify_column(event.x)
+        
+        if not item or not column:
+            return
+        
+        # Don't allow editing the index column (column 0)
+        col_num = int(column[1:]) - 1  # Convert #1, #2, etc to 0, 1, etc
+        if col_num == 0:
+            return
+        
+        # Get current value
+        values = self.table_tree.item(item, "values")
+        if col_num >= len(values):
+            return
+        
+        current_value = str(values[col_num])
+        
+        # Show edit overlay
+        self._show_edit_overlay(event, item, column, current_value)
+    
+    def _show_edit_overlay(self, event: Any, item: str, column: str, current_value: str) -> None:
+        """Show edit overlay at the clicked cell location."""
+        # Hide any existing overlay first
+        self._hide_edit_overlay()
+        
+        # Get the bounding box of the cell (relative to treeview)
+        bbox = self.table_tree.bbox(item, column)
+        if not bbox:
+            return
+        
+        cell_x, cell_y, cell_width, cell_height = bbox
+        
+        # Get absolute screen coordinates for the treeview
+        tree_rootx = self.table_tree.winfo_rootx()
+        tree_rooty = self.table_tree.winfo_rooty()
+        
+        # Get absolute screen coordinates for the root window
+        root_rootx = self.root.winfo_rootx()
+        root_rooty = self.root.winfo_rooty()
+        
+        # Calculate overlay position relative to root window
+        overlay_x = tree_rootx + cell_x - root_rootx
+        overlay_y = tree_rooty + cell_y - root_rooty
+        
+        # Store references for later
+        self.editing_item = item
+        self.editing_column = column
+        
+        # Position and show the overlay relative to root window
+        self.edit_overlay_frame.place(x=overlay_x, y=overlay_y, width=cell_width, height=cell_height)
+        self.edit_overlay_frame.lift()  # Bring to front
+        
+        # Clear and populate the entry field
+        self.edit_overlay_entry.delete(0, "end")
+        self.edit_overlay_entry.insert(0, current_value)
+        self.edit_overlay_entry.focus()
+        self.edit_overlay_entry.selection_range(0, "end")
+        
+        # Bind keys for save/cancel
+        self.edit_overlay_entry.bind("<Return>", lambda e: self._save_cell_edit())
+        self.edit_overlay_entry.bind("<Escape>", lambda e: self._hide_edit_overlay())
+        self.edit_overlay_entry.bind("<FocusOut>", lambda e: self._hide_edit_overlay())
+    
+    def _hide_edit_overlay(self) -> None:
+        """Hide the edit overlay and cancel editing."""
+        self.edit_overlay_frame.place_forget()
+        self.editing_item = None
+        self.editing_column = None
+        self.editing_oid = None
+        # Unbind the keys
+        self.edit_overlay_entry.unbind("<Return>")
+        self.edit_overlay_entry.unbind("<Escape>")
+        self.edit_overlay_entry.unbind("<FocusOut>")
+    
+    def _save_cell_edit(self) -> None:
+        """Save the edited cell value."""
+        if not self.editing_item or not self.editing_column:
+            self._hide_edit_overlay()
+            return
+        
+        new_value = self.edit_overlay_entry.get()
+        
+        # Get the item's values to construct the OID
+        item_values = self.table_tree.item(self.editing_item, "values")
+        col_num = int(self.editing_column[1:]) - 1  # Convert #1, #2, etc to 0, 1, etc
+        
+        # Try to get table info and construct OID
+        # We need to find the column name and table OID from context
+        try:
+            # Get the current table being shown
+            if not hasattr(self, '_current_table_columns'):
+                self._hide_edit_overlay()
+                return
+            
+            columns = self._current_table_columns  # (name, col_oid, col_num)
+            if col_num - 1 < 0 or col_num - 1 >= len(columns):
+                self._hide_edit_overlay()
+                return
+            
+            col_name, col_oid, _ = columns[col_num - 1]
+            instance_index = item_values[0]  # First value is the instance index
+            full_oid = f"{col_oid}.{instance_index}"
+            
+            # Update via API
+            resp = requests.post(f"{self.api_url}/value", 
+                               json={"oid": full_oid, "value": new_value}, 
+                               timeout=5)
+            
+            if resp.status_code == 200:
+                # Update the cell display
+                updated_values = list(item_values)
+                updated_values[col_num] = new_value
+                self.table_tree.item(self.editing_item, values=updated_values)
+                self._log(f"Updated {col_name} to: {new_value}")
+            else:
+                messagebox.showerror("Error", f"Failed to update value: {resp.text}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save cell: {e}")
+        finally:
+            self._hide_edit_overlay()
+
     def _populate_table_view(self, table_item: str, selected_instance: str | None = None) -> None:
         """Populate the table view with data from the selected table."""
-        oid_str = self.oid_tree.set(table_item, "oid")
-        if not oid_str:
+        try:
+            oid_str = self.oid_tree.set(table_item, "oid")
+            if not oid_str:
+                self._log("No OID found for table item", "WARNING")
+                return
+        except Exception as e:
+            self._log(f"Error getting table OID: {e}", "ERROR")
             return
 
         # Clear existing
@@ -1456,7 +1604,10 @@ class SNMPControllerGUI:
         columns.sort(key=lambda x: x[2])
 
         if not columns:
+            self._log(f"No columns found for table {oid_str}", "WARNING")
             return
+        
+        self._log(f"Found {len(columns)} columns for table {oid_str}")
 
         # Find instances with timeout mechanism
         first_col_oid = columns[0][1]
@@ -1471,9 +1622,11 @@ class SNMPControllerGUI:
                     index += 1
                 else:
                     break
-            except Exception:
+            except Exception as e:
+                self._log(f"Error loading instance {index}: {e}", "DEBUG")
                 break
 
+        self._log(f"Loaded {len(instances)} instances from {first_col_oid}")
         if len(instances) == max_attempts:
             messagebox.showwarning("Warning", "Reached maximum attempts while loading instances.")
 
@@ -1485,6 +1638,9 @@ class SNMPControllerGUI:
         for col_name in col_names:
             self.table_tree.heading(col_name, text=col_name)
             self.table_tree.column(col_name, width=150, minwidth=100, stretch=True, anchor="w")
+        
+        # Store columns for later use in cell editing
+        self._current_table_columns = columns
 
         # Populate rows
         row_items = []
@@ -1516,8 +1672,12 @@ class SNMPControllerGUI:
 
     def _add_instance(self) -> None:
         """Add a new instance to the current table."""
-        # Get current table OID from the selected item in oid_tree
-        selected_items = self.oid_tree.selection()
+        try:
+            # Get current table OID from the selected item in oid_tree
+            selected_items = self.oid_tree.selection()
+        except Exception as e:
+            messagebox.showerror("Error", f"Error getting selected item: {e}")
+            return
         if not selected_items:
             return
         table_item = None
@@ -1591,42 +1751,33 @@ class SNMPControllerGUI:
             dialog.destroy()
 
         def on_add() -> None:
-            # Collect values
-            index_values = []
+            # Collect index values
+            index_values = {}
             for col_name in entries:
                 val = entries[col_name].get().strip()
                 if not val:
                     messagebox.showerror("Error", f"{col_name} cannot be empty")
                     return
-                index_values.append(val)
+                index_values[col_name] = val
 
-            # Create index string
-            index_str = '.'.join(index_values)
-
-            # Try to create the instance by setting a value for one of the columns
-            # Use the first non-index column if available
-            first_col = None
-            for col_name, col_info in schema.get("columns", {}).items():
-                if not col_info.get("is_index", False):
-                    first_col = col_name
-                    break
-
-            if first_col:
-                col_oid = schema["columns"][first_col]["oid"]
-                full_oid = f"{col_oid}.{index_str}"
-                try:
-                    resp = requests.post(f"{self.api_url}/value", json={"oid": full_oid, "value": "0"}, timeout=5)
-                    if resp.status_code == 200:
-                        messagebox.showinfo("Success", "Instance added successfully")
-                        # Refresh table view
-                        self._populate_table_view(table_item)
-                        dialog.destroy()
-                    else:
-                        messagebox.showerror("Error", f"Failed to add instance: {resp.text}")
-                except Exception as e:
-                    messagebox.showerror("Error", f"Failed to add instance: {e}")
-            else:
-                messagebox.showerror("Error", "No data columns found to create instance")
+            # Create the table row using the new endpoint
+            try:
+                payload = {
+                    "table_oid": table_oid,
+                    "index_values": index_values,
+                    "column_values": {}  # Can be extended for additional columns
+                }
+                resp = requests.post(f"{self.api_url}/table-row", json=payload, timeout=5)
+                if resp.status_code == 200:
+                    result = resp.json()
+                    messagebox.showinfo("Success", f"Instance added successfully: {result.get('instance_oid')}")
+                    # Refresh table view
+                    self._populate_table_view(table_item)
+                    dialog.destroy()
+                else:
+                    messagebox.showerror("Error", f"Failed to add instance: {resp.text}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to add instance: {e}")
 
         cancel_btn = ctk.CTkButton(button_frame, text="Cancel", command=on_cancel)
         cancel_btn.pack(side="right", padx=(10, 0))
@@ -1636,69 +1787,18 @@ class SNMPControllerGUI:
 
     def _remove_instance(self) -> None:
         """Remove the selected instance from the table."""
-        selected_rows = self.table_tree.selection()
-        if not selected_rows:
-            return
-
-        # Get the index from the selected row
-        row_values = self.table_tree.item(selected_rows[0], "values")
-        if not row_values or len(row_values) < 1:
-            return
-
-        index_str = str(row_values[0])
-
-        # Show confirmation
-        if not messagebox.askyesno("Confirm", f"Are you sure you want to remove instance {index_str}?"):
-            return
-
-        # Get current table OID
-        selected_items = self.oid_tree.selection()
-        if not selected_items:
-            return
-        table_item = None
-        for item in selected_items:
-            if 'table' in self.oid_tree.item(item, 'tags'):
-                table_item = item
-                break
-        if not table_item:
-            return
-
-        table_oid = self.oid_tree.set(table_item, "oid")
-        if not table_oid:
-            return
-
-        # Get table schema
         try:
-            resp = requests.get(f"{self.api_url}/table-schema", params={"oid": table_oid}, timeout=5)
-            if resp.status_code != 200:
-                messagebox.showerror("Error", "Failed to get table schema")
+            selected_rows = self.table_tree.selection()
+            if not selected_rows:
+                messagebox.showwarning("No Selection", "Please select an instance to remove.")
                 return
-            schema = resp.json()
+            
+            # For now, just show info - actual deletion would require API support
+            messagebox.showinfo("Remove Instance", "Table instance removal functionality coming soon")
+            self._log(f"Remove instance requested for {len(selected_rows)} row(s)", "INFO")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to get schema: {e}")
-            return
-
-        # Find a column to delete (use first column)
-        first_col = None
-        for col_name, col_info in schema.get("columns", {}).items():
-            first_col = col_name
-            break
-
-        if first_col:
-            col_oid = schema["columns"][first_col]["oid"]
-            full_oid = f"{col_oid}.{index_str}"
-            try:
-                # To remove, we might need to set to empty or use a delete endpoint
-                # For now, try setting to empty string
-                resp = requests.post(f"{self.api_url}/value", json={"oid": full_oid, "value": ""}, timeout=5)
-                if resp.status_code == 200:
-                    messagebox.showinfo("Success", "Instance removed successfully")
-                    # Refresh table view
-                    self._populate_table_view(table_item)
-                else:
-                    messagebox.showerror("Error", f"Failed to remove instance: {resp.text}")
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to remove instance: {e}")
+            messagebox.showerror("Error", f"Error removing instance: {e}")
+            self._log(f"Error in _remove_instance: {e}", "ERROR")
         else:
             messagebox.showerror("Error", "No columns found")
 
@@ -2297,15 +2397,18 @@ def main() -> None:
     try:
         saved = None
         
-        # First try to load from server
-        try:
-            api_url = f"http://{_app.host_var.get()}:{_app.port_var.get()}"
-            resp = requests.get(f"{api_url}/config", timeout=5)
-            if resp.status_code == 200:
-                saved = resp.json()
-                _app._log("Configuration loaded from server")
-        except requests.exceptions.RequestException:
-            _app._log("Server not available, trying local config files")
+        # Only try to load from server if --autoconnect is specified
+        if args.autoconnect:
+            try:
+                api_url = f"http://{_app.host_var.get()}:{_app.port_var.get()}"
+                resp = requests.get(f"{api_url}/config", timeout=5)
+                if resp.status_code == 200:
+                    saved = resp.json()
+                    _app._log("Configuration loaded from server")
+                    _app.connected = True
+                    _app.status_var.set(f"Connected: {_app.host_var.get()}:{_app.port_var.get()}")
+            except requests.exceptions.RequestException:
+                _app._log("Server not available, trying local config files")
         
         # Fallback to local files if server load failed
         if saved is None:

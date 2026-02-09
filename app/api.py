@@ -247,7 +247,18 @@ def get_table_schema(oid: str) -> dict[str, Any]:
     # Find columns
     columns = {}
     for mib, schema in schemas.items():
-        for obj_name, obj_data in schema.items():
+        # Handle both old flat structure and new {"objects": ..., "traps": ...} structure
+        if isinstance(schema, dict):
+            if "objects" in schema:
+                # New structure
+                objects = schema["objects"]
+            else:
+                # Old flat structure
+                objects = schema
+        else:
+            continue
+            
+        for obj_name, obj_data in objects.items():
             if isinstance(obj_data, dict) and "oid" in obj_data:
                 obj_oid = obj_data["oid"]
                 if len(obj_oid) > len(entry_oid) and obj_oid[:len(entry_oid)] == entry_oid:
@@ -476,6 +487,13 @@ def send_trap(request: TrapSendRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to send trap: {str(e)}")
 
 
+class CreateTableRowRequest(BaseModel):
+    """Request to create a new table row."""
+    table_oid: str  # e.g., "1.3.6.1.2.1.2.2" for ifTable
+    index_values: dict[str, Any]  # e.g., {"ifIndex": "2"}
+    column_values: dict[str, Any] = {}  # e.g., {"ifName": "eth0", "ifType": "6"}
+
+
 class ConfigData(BaseModel):
     host: str
     port: str
@@ -483,6 +501,85 @@ class ConfigData(BaseModel):
     selected_trap: str
     trap_index: str
     trap_overrides: dict[str, Any]
+
+
+@app.post("/table-row")
+def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
+    """Create a new instance in a table."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+    
+    try:
+        # Parse table OID
+        table_parts = tuple(int(x) for x in request.table_oid.split(".")) if request.table_oid else ()
+        entry_oid = table_parts + (1,)
+        
+        # Get the first index value to create the instance OID
+        if not request.index_values:
+            raise HTTPException(status_code=400, detail="No index values provided")
+        
+        # Extract first index value
+        first_index_value = list(request.index_values.values())[0]
+        
+        # Set the index value first
+        index_oid = entry_oid + (1, int(first_index_value))
+        try:
+            snmp_agent.set_scalar_value(index_oid, first_index_value)
+            logger.info(f"Created table instance: {index_oid}")
+        except Exception as e:
+            logger.warning(f"Could not set index value: {e}")
+        
+        # Set other column values if provided
+        created_columns = [str(index_oid)]
+        
+        # Load schemas to find column OIDs
+        from app.cli_load_model import load_all_schemas
+        import os
+        
+        schema_dir = "mock-behaviour"
+        if not os.path.exists(schema_dir):
+            raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
+        
+        schemas = load_all_schemas(schema_dir)
+        
+        # Set each column value
+        for col_name, col_value in request.column_values.items():
+            # Find the column OID in schemas
+            for mib, schema in schemas.items():
+                if isinstance(schema, dict):
+                    if "objects" in schema:
+                        objects = schema["objects"]
+                    else:
+                        objects = schema
+                else:
+                    continue
+                    
+                if col_name in objects:
+                    col_data = objects[col_name]
+                    if isinstance(col_data, dict) and "oid" in col_data:
+                        col_oid = tuple(col_data["oid"])
+                        # Create instance OID for this column
+                        instance_col_oid = col_oid + (int(first_index_value),)
+                        try:
+                            snmp_agent.set_scalar_value(instance_col_oid, col_value)
+                            created_columns.append(str(instance_col_oid))
+                            logger.info(f"Set {col_name} for instance {first_index_value}")
+                        except Exception as e:
+                            logger.warning(f"Could not set {col_name}: {e}")
+                        break
+        
+        return {
+            "status": "ok",
+            "table_oid": request.table_oid,
+            "instance_index": first_index_value,
+            "instance_oid": f"{request.table_oid}.1.{first_index_value}",
+            "columns_created": created_columns
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error creating table row: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create table row: {str(e)}")
 
 
 @app.get("/config")
