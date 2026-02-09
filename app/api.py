@@ -120,10 +120,17 @@ def check_ready() -> dict[str, Any]:
 @app.get("/mibs")
 def list_mibs() -> dict[str, Any]:
     """List all MIBs implemented by the agent."""
-    from app.mib_metadata import MIB_METADATA
+    # Load all schema files from mock-behaviour directory
+    from app.cli_load_model import load_all_schemas
+    import os
 
-    mibs = list(MIB_METADATA.keys())
-    return {"count": len(mibs), "mibs": sorted(mibs)}
+    schema_dir = "mock-behaviour"
+    if not os.path.exists(schema_dir):
+        return {"count": 0, "mibs": []}
+
+    schemas = load_all_schemas(schema_dir)
+    mibs = sorted(list(schemas.keys()))
+    return {"count": len(mibs), "mibs": mibs}
 
 
 @app.get("/oids")
@@ -256,8 +263,8 @@ def get_table_schema(oid: str) -> dict[str, Any]:
                 # Old flat structure
                 objects = schema
         else:
-            continue
-            
+            continue  # type: ignore[unreachable]
+
         for obj_name, obj_data in objects.items():
             if isinstance(obj_data, dict) and "oid" in obj_data:
                 obj_oid = obj_data["oid"]
@@ -552,8 +559,8 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
                     else:
                         objects = schema
                 else:
-                    continue
-                    
+                    continue  # type: ignore[unreachable]
+
                 if col_name in objects:
                     col_data = objects[col_name]
                     if isinstance(col_data, dict) and "oid" in col_data:
@@ -601,7 +608,7 @@ def get_config() -> dict[str, Any]:
                 config = {}
         
         return config
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to load config")
         return {}
 

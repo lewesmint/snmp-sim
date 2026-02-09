@@ -10,6 +10,7 @@ from pysnmp.hlapi.v3arch.asyncio import (
     CommunityData,
     ContextData,
     NotificationType,
+    ObjectIdentity,
     SnmpEngine,
     UdpTransportTarget,
     send_notification,
@@ -49,10 +50,9 @@ class TrapSender:
             return
 
         try:
-            mib_symbols = self.mibBuilder.import_symbols(self.mib_name, oid)
-            mib_symbol = mib_symbols[0]
+            mib_symbol = ObjectIdentity(*oid)
         except Exception as exc:  # pragma: no cover - exercised by tests via mock
-            self.logger.error(f"Failed to import MIB symbol for OID {oid}: {exc}")
+            self.logger.error(f"Failed to create ObjectIdentity for OID {oid}: {exc}")
             return
 
         try:
