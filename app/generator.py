@@ -72,8 +72,10 @@ class BehaviourGenerator:
             else:
                 return json_path
 
-        # Extract MIB information
-        info = self._extract_mib_info(compiled_py_path, mib_name)
+        # Extract MIB information (now includes objects and traps)
+        extracted_data = self._extract_mib_info(compiled_py_path, mib_name)
+        info = extracted_data.get("objects", {})
+        traps = extracted_data.get("traps", {})
 
         # Ensure table and entry symbols are recorded with their type, and each table has at least one row
         for name, symbol_info in info.items():
@@ -171,11 +173,15 @@ class BehaviourGenerator:
                         if default_row:
                             symbol_info["rows"].append(default_row)
 
-        # Write to JSON file
+        # Write to JSON file (include both objects and traps)
+        output_data = {
+            "objects": info,
+            "traps": traps,
+        }
         with open(json_path, "w") as f:
-            json.dump(info, f, indent=2)
+            json.dump(output_data, f, indent=2)
 
-        logger.info(f"Schema JSON written to {json_path}")
+        logger.info(f"Schema JSON written to {json_path} with {len(traps)} trap(s)")
         return json_path
 
     def _parse_mib_name_from_py(self, compiled_py_path: str) -> str:
@@ -319,8 +325,76 @@ class BehaviourGenerator:
         }
         self._detect_inherited_indexes(result, table_entries, mib_name)
 
+        # Extract trap/notification definitions
+        traps = self._extract_traps(mib_symbols, mib_name)
+        if traps:
+            logger.info(f"Found {len(traps)} trap(s) in {mib_name}: {list(traps.keys())}")
+        
         logger.debug(f"Extracted MIB info for {mib_name}: {list(result.keys())}")
-        return result
+        return {"objects": result, "traps": traps}
+
+    def _extract_traps(self, mib_symbols: Dict[str, Any], mib_name: str) -> Dict[str, Any]:
+        """Extract NOTIFICATION-TYPE definitions from MIB symbols.
+        
+        Args:
+            mib_symbols: Dictionary of MIB symbols from the compiled MIB
+            mib_name: Name of the MIB module
+            
+        Returns:
+            Dictionary mapping trap names to their metadata (OID, objects, description)
+        """
+        traps: Dict[str, Any] = {}
+        
+        for symbol_name, symbol_obj in mib_symbols.items():
+            symbol_name_str: str = str(cast(Any, symbol_name))
+            
+            # Check if this is a NotificationType
+            if symbol_obj.__class__.__name__ == "NotificationType":
+                try:
+                    # Get the OID
+                    oid = symbol_obj.getName()
+                    
+                    # Get the OBJECTS list (varbinds that will be sent with the trap)
+                    objects = []
+                    if hasattr(symbol_obj, "getObjects"):
+                        obj_refs = symbol_obj.getObjects()
+                        if obj_refs:
+                            for obj_ref in obj_refs:
+                                # obj_ref is a tuple like (('IF-MIB', 'ifIndex'), ('IF-MIB', 'ifAdminStatus'))
+                                if isinstance(obj_ref, tuple) and len(obj_ref) >= 2:
+                                    obj_mib = str(obj_ref[0])
+                                    obj_name = str(obj_ref[1])
+                                    objects.append({"mib": obj_mib, "name": obj_name})
+                                elif hasattr(obj_ref, "__iter__"):
+                                    # Handle nested tuples
+                                    for sub_ref in obj_ref:
+                                        if isinstance(sub_ref, tuple) and len(sub_ref) >= 2:
+                                            obj_mib = str(sub_ref[0])
+                                            obj_name = str(sub_ref[1])
+                                            objects.append({"mib": obj_mib, "name": obj_name})
+                    
+                    # Get the description if available
+                    description = ""
+                    if hasattr(symbol_obj, "getDescription"):
+                        description = symbol_obj.getDescription() or ""
+                    
+                    # Get the status
+                    status = "current"
+                    if hasattr(symbol_obj, "getStatus"):
+                        status = symbol_obj.getStatus() or "current"
+                    
+                    traps[symbol_name_str] = {
+                        "oid": oid,
+                        "objects": objects,
+                        "description": description,
+                        "status": status,
+                        "mib": mib_name,
+                    }
+                    logger.debug(f"Extracted trap {symbol_name_str} with OID {oid} and {len(objects)} objects")
+                except Exception as e:
+                    logger.warning(f"Failed to extract trap info for {symbol_name_str}: {e}")
+        
+        return traps
 
     def _load_type_registry(self) -> Dict[str, Any]:
         """Load the canonical type registry from the exported JSON file."""

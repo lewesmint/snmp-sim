@@ -109,7 +109,19 @@ class MibRegistrar:
 
             # Update the SNMPv2-MIB JSON with the generated rows
             if "SNMPv2-MIB" in mib_jsons:
-                mib_jsons["SNMPv2-MIB"]["sysORTable"]["rows"] = sysor_rows
+                snmp2 = mib_jsons["SNMPv2-MIB"]
+                # Support new schema format {"objects": {...}, "traps": {...}}
+                if isinstance(snmp2, dict) and "objects" in snmp2 and isinstance(snmp2["objects"], dict):
+                    container = snmp2["objects"]
+                else:
+                    container = snmp2
+
+                # Ensure sysORTable exists (create minimal structure if absent)
+                if "sysORTable" not in container or not isinstance(container.get("sysORTable"), dict):
+                    container["sysORTable"] = {"rows": []}
+                    self.logger.info("Created missing sysORTable entry in SNMPv2-MIB schema")
+
+                container["sysORTable"]["rows"] = sysor_rows
                 self.logger.info(f"Updated sysORTable with {len(sysor_rows)} rows")
 
                 # Re-register SNMPv2-MIB to apply the updated sysORTable
@@ -124,7 +136,8 @@ class MibRegistrar:
                     type_registry = {}
 
                 # Update only the sysORTable symbols
-                self.register_mib("SNMPv2-MIB", mib_jsons["SNMPv2-MIB"], type_registry)
+                # If the MIB uses new structure, pass the full structured schema so register_mib handles it
+                self.register_mib("SNMPv2-MIB", snmp2, type_registry)
                 self.logger.info("sysORTable successfully populated with MIB implementations")
         except Exception as e:
             self.logger.error(f"Error populating sysORTable: {e}", exc_info=True)
@@ -134,7 +147,19 @@ class MibRegistrar:
     ) -> None:
         """Register a complete MIB with all its objects (scalars and tables)."""
         try:
-            export_symbols = self._build_mib_symbols(mib, mib_json, type_registry)
+            # Handle new schema structure: {"objects": {...}, "traps": {...}}
+            # vs old flat structure: {obj1: {...}, obj2: {...}}
+            if "objects" in mib_json and isinstance(mib_json["objects"], dict):
+                # New structure with separate objects and traps
+                objects_json = mib_json["objects"]
+                traps_json = mib_json.get("traps", {})
+                if traps_json:
+                    self.logger.info(f"MIB {mib} has {len(traps_json)} trap(s): {list(traps_json.keys())}")
+            else:
+                # Old flat structure - all items are objects
+                objects_json = mib_json
+                
+            export_symbols = self._build_mib_symbols(mib, objects_json, type_registry)
             if export_symbols:
                 if mib == "SNMPv2-MIB":
                     sysor_symbols = sorted(

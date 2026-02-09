@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from app.app_logger import AppLogger
 from pydantic import BaseModel
-from typing import Optional, Any
+from typing import Optional, Any, Literal
+from pathlib import Path
 
 # Reference to the SNMPAgent instance will be set by main app
 snmp_agent: Optional[Any] = None
@@ -155,23 +156,32 @@ def get_oid_metadata() -> dict[str, Any]:
     metadata_map: dict[str, dict[str, Any]] = {}
 
     for mib_name, schema in schemas.items():
-        for obj_name, obj_data in schema.items():
-            if isinstance(obj_data, dict) and "oid" in obj_data:
-                # Convert OID list to dot-notation string
-                oid_tuple = obj_data["oid"]
-                oid_str = ".".join(str(x) for x in oid_tuple)
+        # Handle both old flat structure and new {"objects": ..., "traps": ...} structure
+        if isinstance(schema, dict):
+            if "objects" in schema:
+                # New structure
+                objects = schema["objects"]
+            else:
+                # Old flat structure
+                objects = schema
+                
+            for obj_name, obj_data in objects.items():
+                if isinstance(obj_data, dict) and "oid" in obj_data:
+                    # Convert OID list to dot-notation string
+                    oid_tuple = obj_data["oid"]
+                    oid_str = ".".join(str(x) for x in oid_tuple)
 
-                metadata_map[oid_str] = {
-                    "oid": oid_tuple,
-                    "oid_str": oid_str,
-                    "name": obj_name,
-                    "type": obj_data.get("type", ""),
-                    "access": obj_data.get("access", ""),
-                    "mib": mib_name,
-                    "initial": obj_data.get("initial"),
-                    "enums": obj_data.get("enums"),
-                    "dynamic_function": obj_data.get("dynamic_function")
-                }
+                    metadata_map[oid_str] = {
+                        "oid": oid_tuple,
+                        "oid_str": oid_str,
+                        "name": obj_name,
+                        "type": obj_data.get("type", ""),
+                        "access": obj_data.get("access", ""),
+                        "mib": mib_name,
+                        "initial": obj_data.get("initial"),
+                        "enums": obj_data.get("enums"),
+                        "dynamic_function": obj_data.get("dynamic_function")
+                    }
 
     return {"count": len(metadata_map), "metadata": metadata_map}
 
@@ -184,7 +194,7 @@ def get_table_schema(oid: str) -> dict[str, Any]:
 
     try:
         parts = tuple(int(x) for x in oid.split(".")) if oid else ()
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(status_code=400, detail="Invalid OID format")
 
     # Load all schemas
@@ -205,16 +215,25 @@ def get_table_schema(oid: str) -> dict[str, Any]:
     entry_name = None
 
     for mib, schema in schemas.items():
-        for obj_name, obj_data in schema.items():
-            if isinstance(obj_data, dict) and "oid" in obj_data:
-                obj_oid = obj_data["oid"]
-                if obj_oid == parts and obj_data.get("type") == "MibTable":
-                    table_info = obj_data
-                    table_name = obj_name
-                    mib_name = mib
-                elif len(obj_oid) == len(parts) + 1 and obj_oid[:-1] == parts and obj_oid[-1] == 1 and obj_data.get("type") == "MibTableRow":
-                    entry_info = obj_data
-                    entry_name = obj_name
+        # Handle both old flat structure and new {"objects": ..., "traps": ...} structure
+        if isinstance(schema, dict):
+            if "objects" in schema:
+                # New structure
+                objects = schema["objects"]
+            else:
+                # Old flat structure
+                objects = schema
+
+            for obj_name, obj_data in objects.items():
+                if isinstance(obj_data, dict) and "oid" in obj_data:
+                    obj_oid = obj_data["oid"]
+                    if obj_oid == parts and obj_data.get("type") == "MibTable":
+                        table_info = obj_data
+                        table_name = obj_name
+                        mib_name = mib
+                    elif len(obj_oid) == len(parts) + 1 and obj_oid[:-1] == parts and obj_oid[-1] == 1 and obj_data.get("type") == "MibTableRow":
+                        entry_info = obj_data
+                        entry_name = obj_name
 
     if not table_info:
         raise HTTPException(status_code=404, detail="Table not found")
@@ -249,6 +268,7 @@ def get_table_schema(oid: str) -> dict[str, Any]:
         "oid": parts,
         "mib": mib_name,
         "entry_oid": entry_oid,
+        "entry_name": entry_name,
         "index_columns": index_columns,
         "columns": columns
     }
@@ -261,8 +281,8 @@ def get_oid_value(oid: str) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
     try:
         parts = tuple(int(x) for x in oid.split(".")) if oid else ()
-    except ValueError as e:
-        logger.error(f"Invalid OID format requested: {oid} - {e}")
+    except ValueError:
+        logger.error(f"Invalid OID format requested: {oid}")
         raise HTTPException(status_code=400, detail="Invalid OID format")
 
     try:
@@ -323,3 +343,194 @@ def set_oid_value(update: OIDValueUpdate) -> dict[str, Any]:
         # Unexpected errors should be logged with traceback and return 500
         logger.exception(f"Unexpected error setting value for OID {parts}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/traps")
+def list_traps() -> dict[str, Any]:
+    """List all available SNMP traps/notifications from all loaded MIBs."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    # Load all schema files
+    from app.cli_load_model import load_all_schemas
+    import os
+
+    schema_dir = "mock-behaviour"
+    if not os.path.exists(schema_dir):
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
+
+    schemas = load_all_schemas(schema_dir)
+
+    # Collect traps from all schemas
+    all_traps: dict[str, Any] = {}
+    
+    for mib_name, schema in schemas.items():
+        # Check if schema has new structure with "objects" and "traps" keys
+        if isinstance(schema, dict):
+            if "traps" in schema and isinstance(schema["traps"], dict):
+                # New structure
+                for trap_name, trap_data in schema["traps"].items():
+                    trap_info = {
+                        **trap_data,
+                        "mib": mib_name,
+                        "full_name": f"{mib_name}::{trap_name}",
+                    }
+                    all_traps[trap_name] = trap_info
+    
+    return {"count": len(all_traps), "traps": all_traps}
+
+
+# In-memory storage for trap overrides (in production, this would be persisted)
+trap_overrides: dict[str, dict[str, str]] = {}
+
+
+@app.get("/trap-overrides/{trap_name}")
+def get_trap_overrides(trap_name: str) -> dict[str, Any]:
+    """Get stored overrides for a specific trap."""
+    return {"trap_name": trap_name, "overrides": trap_overrides.get(trap_name, {})}
+
+
+@app.post("/trap-overrides/{trap_name}")
+def set_trap_overrides(trap_name: str, overrides: dict[str, str]) -> dict[str, Any]:
+    """Set overrides for a specific trap."""
+    trap_overrides[trap_name] = overrides
+    return {"status": "ok", "trap_name": trap_name, "overrides": overrides}
+
+
+@app.delete("/trap-overrides/{trap_name}")
+def clear_trap_overrides(trap_name: str) -> dict[str, Any]:
+    """Clear all overrides for a specific trap."""
+    if trap_name in trap_overrides:
+        del trap_overrides[trap_name]
+    return {"status": "ok", "trap_name": trap_name}
+
+
+class TrapSendRequest(BaseModel):
+    trap_name: str
+    trap_type: Literal["trap", "inform"] = "trap"
+    dest_host: Optional[str] = "localhost"
+    dest_port: Optional[int] = 162
+    community: Optional[str] = "public"
+
+
+@app.post("/send-trap")
+def send_trap(request: TrapSendRequest) -> dict[str, Any]:
+    """Send an SNMP trap/notification."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    # Load all schemas to find the trap
+    from app.cli_load_model import load_all_schemas
+    from app.trap_sender import TrapSender
+    import os
+
+    schema_dir = "mock-behaviour"
+    if not os.path.exists(schema_dir):
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
+
+    schemas = load_all_schemas(schema_dir)
+
+    # Find the trap in schemas
+    trap_info = None
+    trap_mib = None
+
+    for mib_name, schema in schemas.items():
+        if isinstance(schema, dict) and "traps" in schema:
+            if request.trap_name in schema["traps"]:
+                trap_info = schema["traps"][request.trap_name]
+                trap_mib = mib_name
+                break
+
+    if not trap_info:
+        raise HTTPException(status_code=404, detail=f"Trap '{request.trap_name}' not found")
+
+    # Get trap OID
+    trap_oid = tuple(trap_info["oid"])
+
+    try:
+        # Create trap sender
+        sender = TrapSender(
+            mib_builder=snmp_agent.mib_builder,
+            dest=(request.dest_host or "localhost", request.dest_port or 162),
+            community=request.community or "public",
+            mib_name=str(trap_mib or "__MY_MIB"),
+            logger=logger,
+        )
+
+        # Send the trap
+        # For now, send with a simple value - in future we could populate varbinds from trap_info["objects"]
+        sender.send_trap(trap_oid, "Trap triggered from GUI", trap_type=request.trap_type)
+
+        logger.info(f"Sent {request.trap_type} for trap {request.trap_name} (OID: {trap_oid})")
+        
+        return {
+            "status": "ok",
+            "trap_name": request.trap_name,
+            "trap_oid": trap_oid,
+            "trap_type": request.trap_type,
+            "destination": f"{request.dest_host}:{request.dest_port}",
+            "objects": trap_info.get("objects", []),
+        }
+    except Exception as e:
+        logger.exception(f"Failed to send trap {request.trap_name}")
+        raise HTTPException(status_code=500, detail=f"Failed to send trap: {str(e)}")
+
+
+class ConfigData(BaseModel):
+    host: str
+    port: str
+    trap_destinations: list[dict[str, Any]]
+    selected_trap: str
+    trap_index: str
+    trap_overrides: dict[str, Any]
+
+
+@app.get("/config")
+def get_config() -> dict[str, Any]:
+    """Get GUI configuration from server."""
+    try:
+        config_path = Path("data/gui_config.yaml")
+        if config_path.exists():
+            import yaml
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            config_path = Path("data/gui_config.json")
+            if config_path.exists():
+                import json
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+            else:
+                config = {}
+        
+        return config
+    except Exception as e:
+        logger.exception("Failed to load config")
+        return {}
+
+
+@app.post("/config")
+def save_config(config: ConfigData) -> dict[str, Any]:
+    """Save GUI configuration to server."""
+    try:
+        data_dir = Path("data")
+        data_dir.mkdir(parents=True, exist_ok=True)
+        
+        config_dict = config.dict()
+        
+        try:
+            import yaml
+            config_path = data_dir / "gui_config.yaml"
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(config_dict, f)
+        except ImportError:
+            # Fallback to JSON if PyYAML not available
+            config_path = data_dir / "gui_config.json"
+            with open(config_path, "w", encoding="utf-8") as f:
+                import json
+                json.dump(config_dict, f, indent=2)
+        
+        return {"status": "ok", "message": "Configuration saved"}
+    except Exception as e:
+        logger.exception("Failed to save config")
+        raise HTTPException(status_code=500, detail=f"Failed to save config: {str(e)}")

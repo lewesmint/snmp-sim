@@ -12,7 +12,7 @@ from ui.snmp_gui import SNMPControllerGUI
 import customtkinter as ctk
 import time
 
-def test_table_display():
+def test_table_display() -> bool:
     """Test that table display shows column instances directly under the table."""
 
     # Create GUI instance
@@ -39,7 +39,7 @@ def test_table_display():
 
     # Find table nodes
     table_nodes = []
-    def find_tables(item=""):
+    def find_tables(item: str = "") -> None:
         if not item:
             item = gui.oid_tree.get_children()[0] if gui.oid_tree.get_children() else ""
 
