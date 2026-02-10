@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     # For type checking only - these won't be imported at runtime
-    from pysnmp.hlapi.asyncio import (
+    from pysnmp.hlapi.v3arch.asyncio import (
         SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
         ObjectType, ObjectIdentity, get_cmd, next_cmd, set_cmd
     )
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 # Runtime imports with fallbacks
 try:
-    from pysnmp.hlapi.asyncio import (
+    from pysnmp.hlapi.v3arch.asyncio import (
         SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
         ObjectType, ObjectIdentity, get_cmd, next_cmd, set_cmd
     )
@@ -253,14 +253,13 @@ class MIBBrowserWindow:
         
         try:
             async def async_get() -> tuple[Any, ...]:
-                iterator = get_cmd(
+                return await get_cmd(  # type: ignore[no-any-return]
                     SnmpEngine(),
                     CommunityData(community, mpModel=0),
-                    UdpTransportTarget((host, port)),  # pyright: ignore[reportArgumentType]
+                    await UdpTransportTarget.create((host, port)),
                     ContextData(),
                     ObjectType(ObjectIdentity(oid))
                 )
-                return await iterator.__anext__()  # type: ignore[no-any-return]  # pyright: ignore[reportReturnType]
 
             errorIndication, errorStatus, errorIndex, varBinds = asyncio.run(async_get())
             _ = errorIndex  # Unused but part of SNMP response tuple
@@ -311,15 +310,16 @@ class MIBBrowserWindow:
         
         try:
             async def async_next() -> tuple[Any, ...]:
-                iterator = next_cmd(
+                # next_cmd returns an async iterator, get first result
+                iterator = await next_cmd(
                     SnmpEngine(),
                     CommunityData(community, mpModel=0),
-                    UdpTransportTarget((host, port)),  # pyright: ignore[reportArgumentType]
+                    await UdpTransportTarget.create((host, port)),
                     ContextData(),
                     ObjectType(ObjectIdentity(oid)),
                     maxRows=1  # Get only one result
                 )
-                return await iterator.__anext__()  # type: ignore[no-any-return]  # pyright: ignore[reportReturnType]
+                return await anext(iterator)
 
             errorIndication, errorStatus, errorIndex, varBinds = asyncio.run(async_next())
             _ = errorIndex  # Unused but part of SNMP response tuple
@@ -374,14 +374,15 @@ class MIBBrowserWindow:
 
             async def async_walk() -> list[tuple[Any, ...]]:
                 results = []
-                async for errorIndication, errorStatus, errorIndex, varBinds in next_cmd(
+                iterator = await next_cmd(
                     SnmpEngine(),
                     CommunityData(community, mpModel=0),
-                    UdpTransportTarget((host, port)),  # pyright: ignore[reportArgumentType]
+                    await UdpTransportTarget.create((host, port)),
                     ContextData(),
                     ObjectType(ObjectIdentity(oid)),
                     lexicographicMode=False
-                ):
+                )
+                async for errorIndication, errorStatus, errorIndex, varBinds in iterator:
                     results.append((errorIndication, errorStatus, errorIndex, varBinds))
                 return results
 
@@ -439,14 +440,13 @@ class MIBBrowserWindow:
             # SNMP SET - using OctetString by default
             # In a production tool, you'd want type selection UI
             async def async_set() -> tuple[Any, ...]:
-                iterator = set_cmd(
+                return await set_cmd(  # type: ignore[no-any-return]
                     SnmpEngine(),
                     CommunityData(community, mpModel=0),
-                    UdpTransportTarget((host, port)),  # pyright: ignore[reportArgumentType]
+                    await UdpTransportTarget.create((host, port)),
                     ContextData(),
-                    ObjectType(ObjectIdentity(oid), OctetString(value))  # pyright: ignore[reportArgumentType]
+                    ObjectType(ObjectIdentity(oid), OctetString(value))
                 )
-                return await iterator.__anext__()  # type: ignore[no-any-return]  # pyright: ignore[reportReturnType]
 
             errorIndication, errorStatus, errorIndex, varBinds = asyncio.run(async_set())
             _ = errorIndex  # Unused but part of SNMP response tuple
