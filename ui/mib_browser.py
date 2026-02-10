@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 try:
     from pysnmp.hlapi.v3arch.asyncio import (
         SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
-        ObjectType, ObjectIdentity, get_cmd, next_cmd, set_cmd
+        ObjectType, ObjectIdentity, get_cmd, next_cmd, set_cmd, walk_cmd
     )
     from pysnmp.proto.rfc1902 import OctetString
     SNMP_AVAILABLE = True
@@ -43,6 +43,8 @@ except ImportError as e:
     def next_cmd(*_: Any, **__: Any) -> Any:  # pyright: ignore
         raise ImportError(f"SNMP not available: {SNMP_ERROR}")
     def set_cmd(*_: Any, **__: Any) -> Any:  # pyright: ignore
+        raise ImportError(f"SNMP not available: {SNMP_ERROR}")
+    def walk_cmd(*_: Any, **__: Any) -> Any:  # pyright: ignore
         raise ImportError(f"SNMP not available: {SNMP_ERROR}")
 
 try:
@@ -310,16 +312,15 @@ class MIBBrowserWindow:
         
         try:
             async def async_next() -> tuple[Any, ...]:
-                # next_cmd returns an async iterator, get first result
-                iterator = await next_cmd(
+                # next_cmd returns a coroutine that yields ONE result
+                target = await UdpTransportTarget.create((host, port))
+                return await next_cmd(  # type: ignore[no-any-return]
                     SnmpEngine(),
                     CommunityData(community, mpModel=1),
-                    await UdpTransportTarget.create((host, port)),
+                    target,
                     ContextData(),
-                    ObjectType(ObjectIdentity(oid)),
-                    maxRows=1  # Get only one result
+                    ObjectType(ObjectIdentity(oid))
                 )
-                return await anext(iterator)
 
             errorIndication, errorStatus, errorIndex, varBinds = asyncio.run(async_next())
             _ = errorIndex  # Unused but part of SNMP response tuple
@@ -374,13 +375,14 @@ class MIBBrowserWindow:
 
             async def async_walk() -> list[tuple[Any, ...]]:
                 results = []
-                iterator = await next_cmd(
+                target = await UdpTransportTarget.create((host, port))
+                # walk_cmd returns async generator directly
+                iterator = walk_cmd(
                     SnmpEngine(),
                     CommunityData(community, mpModel=1),
-                    await UdpTransportTarget.create((host, port)),
+                    target,
                     ContextData(),
-                    ObjectType(ObjectIdentity(oid)),
-                    lexicographicMode=False
+                    ObjectType(ObjectIdentity(oid))
                 )
                 async for errorIndication, errorStatus, errorIndex, varBinds in iterator:
                     results.append((errorIndication, errorStatus, errorIndex, varBinds))
