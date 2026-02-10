@@ -255,7 +255,7 @@ class MIBBrowserWindow:
             async def async_get() -> tuple[Any, ...]:
                 return await get_cmd(  # type: ignore[no-any-return]
                     SnmpEngine(),
-                    CommunityData(community, mpModel=0),
+                    CommunityData(community, mpModel=1),
                     await UdpTransportTarget.create((host, port)),
                     ContextData(),
                     ObjectType(ObjectIdentity(oid))
@@ -313,7 +313,7 @@ class MIBBrowserWindow:
                 # next_cmd returns an async iterator, get first result
                 iterator = await next_cmd(
                     SnmpEngine(),
-                    CommunityData(community, mpModel=0),
+                    CommunityData(community, mpModel=1),
                     await UdpTransportTarget.create((host, port)),
                     ContextData(),
                     ObjectType(ObjectIdentity(oid)),
@@ -376,7 +376,7 @@ class MIBBrowserWindow:
                 results = []
                 iterator = await next_cmd(
                     SnmpEngine(),
-                    CommunityData(community, mpModel=0),
+                    CommunityData(community, mpModel=1),
                     await UdpTransportTarget.create((host, port)),
                     ContextData(),
                     ObjectType(ObjectIdentity(oid)),
@@ -442,7 +442,7 @@ class MIBBrowserWindow:
             async def async_set() -> tuple[Any, ...]:
                 return await set_cmd(  # type: ignore[no-any-return]
                     SnmpEngine(),
-                    CommunityData(community, mpModel=0),
+                    CommunityData(community, mpModel=1),
                     await UdpTransportTarget.create((host, port)),
                     ContextData(),
                     ObjectType(ObjectIdentity(oid), OctetString(value))
