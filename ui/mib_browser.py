@@ -225,6 +225,33 @@ class MIBBrowserWindow:
         status_label = ctk.CTkLabel(container, textvariable=self.status_var, anchor="w")
         status_label.pack(fill="x", padx=10, pady=(0, 5))
     
+    @staticmethod
+    def _normalize_oid(oid: str) -> str:
+        """Normalize OID to work with pysnmp.
+        
+        pysnmp requires OIDs with at least 2 numeric components.
+        If a single-component OID is provided (e.g., "1", ".1"),
+        append ".0" to make it valid.
+        
+        Args:
+            oid: Original OID string
+            
+        Returns:
+            Normalized OID string with at least 2 components
+        """
+        # Remove leading/trailing whitespace
+        oid = oid.strip()
+        
+        # Count numeric components (split by dots, filter out empty strings)
+        parts = [p for p in oid.split('.') if p]
+        
+        # If only one component, append .0
+        if len(parts) == 1:
+            # Return as "X.0" format
+            return f"{oid.rstrip('.')}.0"
+        
+        return oid
+    
     def _get_connection_params(self) -> tuple[str, int, str]:
         """Get connection parameters from UI."""
         host = self.host_var.get().strip()
@@ -249,19 +276,31 @@ class MIBBrowserWindow:
             messagebox.showwarning("No OID", "Please enter an OID")
             return
         
+        # Normalize OID for pysnmp compatibility
+        normalized_oid = self._normalize_oid(oid)
+        if normalized_oid != oid:
+            self.logger.log(f"Normalized OID: {oid} -> {normalized_oid}")
+        
         host, port, community = self._get_connection_params()
         self.status_var.set(f"Executing GET on {oid}...")
         self.logger.log(f"MIB Browser: GET {oid} from {host}:{port}")
         
         try:
             async def async_get() -> tuple[Any, ...]:
-                return await get_cmd(  # type: ignore[no-any-return]
-                    SnmpEngine(),
-                    CommunityData(community, mpModel=1),
-                    await UdpTransportTarget.create((host, port)),
-                    ContextData(),
-                    ObjectType(ObjectIdentity(oid))
-                )
+                from pysnmp.proto.error import StatusInformation
+                
+                try:
+                    return await get_cmd(  # type: ignore[no-any-return]
+                        SnmpEngine(),
+                        CommunityData(community, mpModel=1),
+                        await UdpTransportTarget.create((host, port)),
+                        ContextData(),
+                        ObjectType(ObjectIdentity(normalized_oid))
+                    )
+                except StatusInformation as e:
+                    # Handle any serialization errors
+                    error_indication = e.get('errorIndication', str(e))
+                    return (error_indication, None, None, [])
 
             errorIndication, errorStatus, errorIndex, varBinds = asyncio.run(async_get())
             _ = errorIndex  # Unused but part of SNMP response tuple
@@ -306,6 +345,11 @@ class MIBBrowserWindow:
             messagebox.showwarning("No OID", "Please enter an OID")
             return
         
+        # Normalize OID for pysnmp compatibility
+        normalized_oid = self._normalize_oid(oid)
+        if normalized_oid != oid:
+            self.logger.log(f"Normalized OID: {oid} -> {normalized_oid}")
+        
         host, port, community = self._get_connection_params()
         self.status_var.set(f"Executing GETNEXT on {oid}...")
         self.logger.log(f"MIB Browser: GETNEXT {oid} from {host}:{port}")
@@ -313,14 +357,21 @@ class MIBBrowserWindow:
         try:
             async def async_next() -> tuple[Any, ...]:
                 # next_cmd returns a coroutine that yields ONE result
+                from pysnmp.proto.error import StatusInformation
                 target = await UdpTransportTarget.create((host, port))
-                return await next_cmd(  # type: ignore[no-any-return]
-                    SnmpEngine(),
-                    CommunityData(community, mpModel=1),
-                    target,
-                    ContextData(),
-                    ObjectType(ObjectIdentity(oid))
-                )
+                
+                try:
+                    return await next_cmd(  # type: ignore[no-any-return]
+                        SnmpEngine(),
+                        CommunityData(community, mpModel=1),
+                        target,
+                        ContextData(),
+                        ObjectType(ObjectIdentity(normalized_oid))
+                    )
+                except StatusInformation as e:
+                    # Handle any serialization errors
+                    error_indication = e.get('errorIndication', str(e))
+                    return (error_indication, None, None, [])
 
             errorIndication, errorStatus, errorIndex, varBinds = asyncio.run(async_next())
             _ = errorIndex  # Unused but part of SNMP response tuple
@@ -365,6 +416,11 @@ class MIBBrowserWindow:
             messagebox.showwarning("No OID", "Please enter an OID")
             return
         
+        # Normalize OID for pysnmp compatibility
+        normalized_oid = self._normalize_oid(oid)
+        if normalized_oid != oid:
+            self.logger.log(f"Normalized OID: {oid} -> {normalized_oid}")
+        
         host, port, community = self._get_connection_params()
         self.status_var.set(f"Executing WALK on {oid}...")
         self.logger.log(f"MIB Browser: WALK {oid} from {host}:{port}")
@@ -374,22 +430,33 @@ class MIBBrowserWindow:
             self._clear_results()
 
             async def async_walk() -> list[tuple[Any, ...]]:
-                results = []
+                from pysnmp.proto.error import StatusInformation
+                
+                walk_results = []
                 target = await UdpTransportTarget.create((host, port))
-                # walk_cmd returns async generator directly
-                iterator = walk_cmd(
-                    SnmpEngine(),
-                    CommunityData(community, mpModel=1),
-                    target,
-                    ContextData(),
-                    ObjectType(ObjectIdentity(oid))
-                )
-                async for errorIndication, errorStatus, errorIndex, varBinds in iterator:
-                    results.append((errorIndication, errorStatus, errorIndex, varBinds))
-                return results
+                
+                try:
+                    # walk_cmd returns async generator directly
+                    iterator = walk_cmd(
+                        SnmpEngine(),
+                        CommunityData(community, mpModel=1),
+                        target,
+                        ContextData(),
+                        ObjectType(ObjectIdentity(normalized_oid))
+                    )
+                    async for errorIndication, errorStatus, errorIndex, varBinds in iterator:
+                        walk_results.append((errorIndication, errorStatus, errorIndex, varBinds))
+                except StatusInformation as e:
+                    # Handle any serialization errors
+                    error_indication = e.get('errorIndication', str(e))
+                    walk_results.append((error_indication, None, None, []))
+                
+                return walk_results
 
-            results = asyncio.run(async_walk())
-            for errorIndication, errorStatus, errorIndex, varBinds in results:
+            walk_results = asyncio.run(async_walk())
+            display_results = []
+            
+            for errorIndication, errorStatus, errorIndex, varBinds in walk_results:
                 _ = errorIndex  # Unused but part of SNMP response tuple
                 if errorIndication:
                     self.status_var.set(f"Error: {errorIndication}")
@@ -397,22 +464,22 @@ class MIBBrowserWindow:
                     messagebox.showerror("SNMP WALK Error", str(errorIndication))
                     return
                 elif errorStatus:
-                    self.status_var.set(f"Error: {errorStatus.prettyPrint()}")
-                    self.logger.log(f"MIB Browser WALK error: {errorStatus.prettyPrint()}", "ERROR")
-                    messagebox.showerror("SNMP WALK Error", errorStatus.prettyPrint())
+                    self.status_var.set(f"Error: {errorStatus}")
+                    self.logger.log(f"MIB Browser WALK error: {errorStatus}", "ERROR")
+                    messagebox.showerror("SNMP WALK Error", str(errorStatus))
                     return
                 
                 for varBind in varBinds:
                     oid_str = str(varBind[0])
                     value = format_snmp_value(varBind[1])
                     type_str = type(varBind[1]).__name__
-                    results.append((oid_str, type_str, value))
+                    display_results.append((oid_str, type_str, value))
             
             # Build hierarchical tree
-            if results:
-                self._build_hierarchical_tree(results)
-                self.status_var.set(f"WALK completed: {len(results)} result(s)")
-                self.logger.log(f"MIB Browser: WALK {oid} returned {len(results)} result(s)")
+            if display_results:
+                self._build_hierarchical_tree(display_results)
+                self.status_var.set(f"WALK completed: {len(display_results)} result(s)")
+                self.logger.log(f"MIB Browser: WALK {oid} returned {len(display_results)} result(s)")
             else:
                 self.status_var.set("WALK completed: No results")
                 self.logger.log(f"MIB Browser: WALK {oid} returned no results")
@@ -434,6 +501,11 @@ class MIBBrowserWindow:
             messagebox.showwarning("No Value", "Please enter a value to set")
             return
         
+        # Normalize OID for pysnmp compatibility
+        normalized_oid = self._normalize_oid(oid)
+        if normalized_oid != oid:
+            self.logger.log(f"Normalized OID: {oid} -> {normalized_oid}")
+        
         host, port, community = self._get_connection_params()
         self.status_var.set(f"Executing SET on {oid}...")
         self.logger.log(f"MIB Browser: SET {oid} = {value} on {host}:{port}")
@@ -442,13 +514,20 @@ class MIBBrowserWindow:
             # SNMP SET - using OctetString by default
             # In a production tool, you'd want type selection UI
             async def async_set() -> tuple[Any, ...]:
-                return await set_cmd(  # type: ignore[no-any-return]
-                    SnmpEngine(),
-                    CommunityData(community, mpModel=1),
-                    await UdpTransportTarget.create((host, port)),
-                    ContextData(),
-                    ObjectType(ObjectIdentity(oid), OctetString(value))
-                )
+                from pysnmp.proto.error import StatusInformation
+                
+                try:
+                    return await set_cmd(  # type: ignore[no-any-return]
+                        SnmpEngine(),
+                        CommunityData(community, mpModel=1),
+                        await UdpTransportTarget.create((host, port)),
+                        ContextData(),
+                        ObjectType(ObjectIdentity(normalized_oid), OctetString(value))
+                    )
+                except StatusInformation as e:
+                    # Handle any serialization errors
+                    error_indication = e.get('errorIndication', str(e))
+                    return (error_indication, None, None, [])
 
             errorIndication, errorStatus, errorIndex, varBinds = asyncio.run(async_set())
             _ = errorIndex  # Unused but part of SNMP response tuple
