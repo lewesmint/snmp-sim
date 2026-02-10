@@ -18,10 +18,6 @@ async def test_mib_name_resolution() -> None:
     print("Loading SNMPv2-MIB...")
     mibBuilder.loadModules('SNMPv2-MIB')
     
-    test_cases = [
-        ("sysDescr", "SNMPv2-MIB-style lookup"),
-        ("SNMPv2-MIB", "sysDescr", "Full SMI lookup"),
-    ]
     
     print("\nResolving MIB names:\n")
     

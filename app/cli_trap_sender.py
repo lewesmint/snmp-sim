@@ -4,17 +4,12 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Iterable, Tuple
+from typing import Iterable
 
-from pyasn1.type.univ import Integer, OctetString
-from pysnmp.smi import builder
+from pysnmp.proto import rfc1902
 
+from app.oid_utils import oid_str_to_tuple
 from app.trap_sender import TrapSender
-
-
-def _parse_oid(oid_str: str) -> Tuple[int, ...]:
-    parts = [p for p in oid_str.strip().split(".") if p]
-    return tuple(int(p) for p in parts)
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -31,30 +26,25 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=162)
     parser.add_argument("--community", default="public")
     parser.add_argument("--trap-type", choices=["trap", "inform"], default="inform")
-    parser.add_argument("--mib-name", default="__MY_MIB")
 
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     try:
-        oid = _parse_oid(args.oid)
+        oid = oid_str_to_tuple(args.oid)
     except ValueError:
         print("Error: OID must be dot-separated integers", file=sys.stderr)
         return 1
 
+    # Create value using pysnmp types
     value = (
-        Integer(int(args.value))
+        rfc1902.Integer32(int(args.value))
         if args.value_type == "int"
-        else OctetString(args.value)
+        else rfc1902.OctetString(args.value)
     )
 
-    mib_builder = builder.MibBuilder()
-    mib_builder.load_modules("SNMPv2-SMI")
-
     sender = TrapSender(
-        mib_builder,
         dest=(args.host, args.port),
         community=args.community,
-        mib_name=args.mib_name,
     )
 
     sender.send_trap(oid, value, trap_type=args.trap_type)

@@ -8,33 +8,54 @@ from typing import Callable, Optional, Any
 
 
 class Logger:
-    """Simple logger that outputs to both console and optional text widget."""
-    
+    """Simple logger that outputs to both console and optional text widget with color coding."""
+
     def __init__(self, log_widget: Optional[tk.Text] = None):
         self.log_widget = log_widget
-    
+        self._tags_configured = False
+
+    def _configure_tags(self) -> None:
+        """Configure color tags for different log levels."""
+        if not self.log_widget or self._tags_configured:
+            return
+
+        try:
+            # Configure tags for different log levels
+            self.log_widget.tag_config("ERROR", foreground="#ff4444")  # Red
+            self.log_widget.tag_config("WARNING", foreground="#ff9933")  # Orange
+            self.log_widget.tag_config("INFO", foreground="")  # Default color
+            self.log_widget.tag_config("DEBUG", foreground="#888888")  # Gray
+            self._tags_configured = True
+        except Exception:
+            pass
+
     def log(self, message: str, level: str = "INFO") -> None:
-        """Log a message with timestamp and level."""
+        """Log a message with timestamp and level, with color coding."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_entry = f"[{timestamp}] {level}: {message}\n"
-        
+
         # Print to stdout
         print(log_entry, end="")
-        
+
         # Append to GUI log area if available
         if self.log_widget:
             try:
+                self._configure_tags()
                 self.log_widget.configure(state="normal")
-                self.log_widget.insert("end", log_entry)
+
+                # Insert with appropriate tag for color
+                self.log_widget.insert("end", log_entry, level)
+
                 self.log_widget.see("end")
                 self.log_widget.configure(state="disabled")
             except Exception:
                 # If log area not available, just print
                 pass
-    
+
     def set_log_widget(self, widget: tk.Text) -> None:
         """Update the log widget."""
         self.log_widget = widget
+        self._tags_configured = False  # Reset tag configuration for new widget
 
 
 def save_gui_log(log_widget: tk.Text, filename: str = "gui.log") -> None:

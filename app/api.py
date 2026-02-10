@@ -4,8 +4,14 @@ from pydantic import BaseModel
 from typing import Optional, Any, Literal
 from pathlib import Path
 
+from app.oid_utils import oid_str_to_tuple, oid_tuple_to_str
+from app.trap_receiver import TrapReceiver
+
 # Reference to the SNMPAgent instance will be set by main app
 snmp_agent: Optional[Any] = None
+
+# Global trap receiver instance
+trap_receiver: Optional[TrapReceiver] = None
 
 logger = AppLogger.get("__name__")
 app = FastAPI()
@@ -176,7 +182,7 @@ def get_oid_metadata() -> dict[str, Any]:
                 if isinstance(obj_data, dict) and "oid" in obj_data:
                     # Convert OID list to dot-notation string
                     oid_tuple = obj_data["oid"]
-                    oid_str = ".".join(str(x) for x in oid_tuple)
+                    oid_str = oid_tuple_to_str(tuple(oid_tuple))
 
                     metadata_map[oid_str] = {
                         "oid": oid_tuple,
@@ -200,7 +206,7 @@ def get_table_schema(oid: str) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
 
     try:
-        parts = tuple(int(x) for x in oid.split(".")) if oid else ()
+        parts = oid_str_to_tuple(oid)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid OID format")
 
@@ -359,7 +365,7 @@ def get_oid_value(oid: str) -> dict[str, Any]:
     if snmp_agent is None:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
     try:
-        parts = tuple(int(x) for x in oid.split(".")) if oid else ()
+        parts = oid_str_to_tuple(oid)
     except ValueError:
         logger.error(f"Invalid OID format requested: {oid}")
         raise HTTPException(status_code=400, detail="Invalid OID format")
@@ -484,6 +490,121 @@ def clear_trap_overrides(trap_name: str) -> dict[str, Any]:
     return {"status": "ok", "trap_name": trap_name}
 
 
+# ============================================================================
+# Trap Destinations Endpoints
+# ============================================================================
+
+class TrapDestination(BaseModel):
+    """Model for a trap destination."""
+    host: str
+    port: int
+
+
+@app.get("/trap-destinations")
+def get_trap_destinations() -> dict[str, Any]:
+    """Get all configured trap destinations from app config."""
+    from app.app_config import AppConfig
+
+    try:
+        config = AppConfig()
+        destinations = config.get("trap_destinations", [])
+
+        # Convert to list of dicts if needed
+        dest_list = []
+        for dest in destinations:
+            if isinstance(dest, dict):
+                dest_list.append({"host": dest.get("host", "localhost"), "port": dest.get("port", 162)})
+            else:
+                # Handle legacy format if any
+                dest_list.append({"host": "localhost", "port": 162})
+
+        return {"status": "ok", "destinations": dest_list}
+    except Exception as e:
+        logger.exception("Failed to get trap destinations")
+        raise HTTPException(status_code=500, detail=f"Failed to get trap destinations: {str(e)}")
+
+
+@app.post("/trap-destinations")
+def add_trap_destination(destination: TrapDestination) -> dict[str, Any]:
+    """Add a new trap destination to app config."""
+    from app.app_config import AppConfig
+    import yaml
+
+    try:
+        config = AppConfig()
+        config_file = Path("data/agent_config.yaml")
+
+        # Read current config
+        with open(config_file, "r", encoding="utf-8") as f:
+            config_data = yaml.safe_load(f)
+
+        # Get current destinations
+        destinations = config_data.get("trap_destinations", [])
+
+        # Add new destination
+        new_dest = {"host": destination.host, "port": destination.port}
+        if new_dest not in destinations:
+            destinations.append(new_dest)
+            config_data["trap_destinations"] = destinations
+
+            # Write back to file
+            with open(config_file, "w", encoding="utf-8") as f:
+                yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
+
+            # Reload config
+            config.reload()
+
+            return {"status": "ok", "destination": new_dest, "destinations": destinations}
+        else:
+            return {"status": "ok", "message": "Destination already exists", "destinations": destinations}
+    except Exception as e:
+        logger.exception("Failed to add trap destination")
+        raise HTTPException(status_code=500, detail=f"Failed to add trap destination: {str(e)}")
+
+
+@app.delete("/trap-destinations")
+def remove_trap_destination(destination: TrapDestination) -> dict[str, Any]:
+    """Remove a trap destination from app config."""
+    from app.app_config import AppConfig
+    import yaml
+
+    try:
+        config = AppConfig()
+        config_file = Path("data/agent_config.yaml")
+
+        # Read current config
+        with open(config_file, "r", encoding="utf-8") as f:
+            config_data = yaml.safe_load(f)
+
+        # Get current destinations
+        destinations = config_data.get("trap_destinations", [])
+
+        # Remove destination
+        dest_to_remove = {"host": destination.host, "port": destination.port}
+        if dest_to_remove in destinations:
+            destinations.remove(dest_to_remove)
+
+            # Ensure at least one destination remains
+            if not destinations:
+                destinations = [{"host": "localhost", "port": 162}]
+
+            config_data["trap_destinations"] = destinations
+
+            # Write back to file
+            with open(config_file, "w", encoding="utf-8") as f:
+                yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
+
+            # Reload config
+            config.reload()
+
+            return {"status": "ok", "removed": dest_to_remove, "destinations": destinations}
+        else:
+            return {"status": "ok", "message": "Destination not found", "destinations": destinations}
+    except Exception as e:
+        logger.exception("Failed to remove trap destination")
+        raise HTTPException(status_code=500, detail=f"Failed to remove trap destination: {str(e)}")
+
+
 class TrapSendRequest(BaseModel):
     trap_name: str
     trap_type: Literal["trap", "inform"] = "trap"
@@ -511,13 +632,11 @@ def send_trap(request: TrapSendRequest) -> dict[str, Any]:
 
     # Find the trap in schemas
     trap_info = None
-    trap_mib = None
 
     for mib_name, schema in schemas.items():
         if isinstance(schema, dict) and "traps" in schema:
             if request.trap_name in schema["traps"]:
                 trap_info = schema["traps"][request.trap_name]
-                trap_mib = mib_name
                 break
 
     if not trap_info:
@@ -527,18 +646,18 @@ def send_trap(request: TrapSendRequest) -> dict[str, Any]:
     trap_oid = tuple(trap_info["oid"])
 
     try:
-        # Create trap sender
+        # Create trap sender with agent's start time for accurate sysUpTime
         sender = TrapSender(
-            mib_builder=snmp_agent.mib_builder,
             dest=(request.dest_host or "localhost", request.dest_port or 162),
             community=request.community or "public",
-            mib_name=str(trap_mib or "__MY_MIB"),
             logger=logger,
+            start_time=snmp_agent.start_time if snmp_agent else None,
         )
 
         # Send the trap
-        # For now, send with a simple value - in future we could populate varbinds from trap_info["objects"]
-        sender.send_trap(trap_oid, "Trap triggered from GUI", trap_type=request.trap_type)
+        # Send with None to only include mandatory varbinds (sysUpTime and snmpTrapOID)
+        # In future we could populate additional varbinds from trap_info["objects"]
+        sender.send_trap(trap_oid, None, trap_type=request.trap_type)
 
         logger.info(f"Sent {request.trap_type} for trap {request.trap_name} (OID: {trap_oid})")
         
@@ -774,3 +893,170 @@ def save_config(config: ConfigData) -> dict[str, Any]:
     except Exception as e:
         logger.exception("Failed to save config")
         raise HTTPException(status_code=500, detail=f"Failed to save config: {str(e)}")
+
+
+# ============================================================================
+# Trap Receiver Endpoints
+# ============================================================================
+
+class TrapReceiverConfig(BaseModel):
+    """Configuration for trap receiver."""
+    port: int = 16662
+    community: str = "public"
+
+
+@app.post("/trap-receiver/start")
+def start_trap_receiver(config: Optional[TrapReceiverConfig] = None) -> dict[str, Any]:
+    """Start the trap receiver."""
+    global trap_receiver
+
+    if trap_receiver and trap_receiver.is_running():
+        return {
+            "status": "already_running",
+            "port": trap_receiver.port,
+            "message": "Trap receiver is already running"
+        }
+
+    # Use provided config or defaults
+    port = config.port if config else 16662
+    community = config.community if config else "public"
+
+    try:
+        trap_receiver = TrapReceiver(
+            port=port,
+            community=community,
+            logger=logger,
+        )
+        trap_receiver.start()
+
+        return {
+            "status": "started",
+            "port": port,
+            "community": community,
+            "message": f"Trap receiver started on port {port}"
+        }
+    except Exception as e:
+        logger.exception("Failed to start trap receiver")
+        raise HTTPException(status_code=500, detail=f"Failed to start trap receiver: {str(e)}")
+
+
+@app.post("/trap-receiver/stop")
+def stop_trap_receiver() -> dict[str, Any]:
+    """Stop the trap receiver."""
+    global trap_receiver
+
+    if not trap_receiver or not trap_receiver.is_running():
+        return {
+            "status": "not_running",
+            "message": "Trap receiver is not running"
+        }
+
+    try:
+        trap_receiver.stop()
+        return {
+            "status": "stopped",
+            "message": "Trap receiver stopped"
+        }
+    except Exception as e:
+        logger.exception("Failed to stop trap receiver")
+        raise HTTPException(status_code=500, detail=f"Failed to stop trap receiver: {str(e)}")
+
+
+@app.get("/trap-receiver/status")
+def get_trap_receiver_status() -> dict[str, Any]:
+    """Get trap receiver status."""
+    global trap_receiver
+
+    if not trap_receiver:
+        return {
+            "running": False,
+            "port": None,
+            "trap_count": 0
+        }
+
+    return {
+        "running": trap_receiver.is_running(),
+        "port": trap_receiver.port,
+        "community": trap_receiver.community,
+        "trap_count": len(trap_receiver.received_traps)
+    }
+
+
+@app.get("/trap-receiver/traps")
+def get_received_traps(limit: Optional[int] = None) -> dict[str, Any]:
+    """Get received traps."""
+    global trap_receiver
+
+    if not trap_receiver:
+        return {
+            "count": 0,
+            "traps": []
+        }
+
+    traps = trap_receiver.get_received_traps(limit=limit)
+    return {
+        "count": len(traps),
+        "traps": traps
+    }
+
+
+@app.delete("/trap-receiver/traps")
+def clear_received_traps() -> dict[str, Any]:
+    """Clear all received traps."""
+    global trap_receiver
+
+    if not trap_receiver:
+        return {
+            "status": "ok",
+            "message": "No trap receiver active"
+        }
+
+    trap_receiver.clear_traps()
+    return {
+        "status": "ok",
+        "message": "All received traps cleared"
+    }
+
+
+class TestTrapRequest(BaseModel):
+    """Request to send a test trap."""
+    dest_host: str = "localhost"
+    dest_port: int = 16662
+    community: str = "public"
+    message: str = "Test trap from SNMP Simulator UI"
+
+
+@app.post("/send-test-trap")
+def send_test_trap(request: TestTrapRequest) -> dict[str, Any]:
+    """Send a test trap to the specified destination."""
+    from app.trap_sender import TrapSender
+    from pysnmp.proto import rfc1902
+
+    # Use the test trap OID defined in TrapReceiver
+    test_trap_oid = (1, 3, 6, 1, 4, 1, 99999, 0, 1)
+
+    try:
+        sender = TrapSender(
+            dest=(request.dest_host, request.dest_port),
+            community=request.community,
+            logger=logger,
+        )
+
+        # Send the test trap with the message
+        sender.send_trap(
+            test_trap_oid,
+            rfc1902.OctetString(request.message),
+            trap_type="trap"
+        )
+
+        logger.info(f"Sent test trap to {request.dest_host}:{request.dest_port}")
+
+        return {
+            "status": "ok",
+            "message": f"Test trap sent to {request.dest_host}:{request.dest_port}",
+            "trap_oid": oid_tuple_to_str(test_trap_oid),
+            "destination": f"{request.dest_host}:{request.dest_port}"
+        }
+    except Exception as e:
+        logger.exception("Failed to send test trap")
+        raise HTTPException(status_code=500, detail=f"Failed to send test trap: {str(e)}")

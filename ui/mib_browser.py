@@ -8,44 +8,21 @@ import asyncio
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox, ttk
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, Dict, Any
 
-if TYPE_CHECKING:
-    # For type checking only - these won't be imported at runtime
-    from pysnmp.hlapi.v3arch.asyncio import (
-        SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
-        ObjectType, ObjectIdentity, get_cmd, next_cmd, set_cmd
-    )
-    from pysnmp.proto.rfc1902 import OctetString
-
-# Runtime imports with fallbacks
-try:
-    from pysnmp.hlapi.v3arch.asyncio import (
-        SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
-        ObjectType, ObjectIdentity, get_cmd, next_cmd, set_cmd, walk_cmd
-    )
-    from pysnmp.proto.rfc1902 import OctetString
-    SNMP_AVAILABLE = True
-    SNMP_ERROR = None
-except ImportError as e:
-    SNMP_AVAILABLE = False
-    SNMP_ERROR = str(e)
-    # Define dummy classes for runtime when pysnmp is not available
-    SnmpEngine = type('SnmpEngine', (), {})
-    CommunityData = type('CommunityData', (), {})
-    UdpTransportTarget = type('UdpTransportTarget', (), {})
-    ContextData = type('ContextData', (), {})
-    ObjectType = type('ObjectType', (), {})
-    ObjectIdentity = type('ObjectIdentity', (), {})
-    OctetString = type('OctetString', (), {})
-    def get_cmd(*_: Any, **__: Any) -> Any:  # pyright: ignore
-        raise ImportError(f"SNMP not available: {SNMP_ERROR}")
-    def next_cmd(*_: Any, **__: Any) -> Any:  # pyright: ignore
-        raise ImportError(f"SNMP not available: {SNMP_ERROR}")
-    def set_cmd(*_: Any, **__: Any) -> Any:  # pyright: ignore
-        raise ImportError(f"SNMP not available: {SNMP_ERROR}")
-    def walk_cmd(*_: Any, **__: Any) -> Any:  # pyright: ignore
-        raise ImportError(f"SNMP not available: {SNMP_ERROR}")
+from pysnmp.hlapi.v3arch.asyncio import (
+    SnmpEngine,
+    CommunityData,
+    UdpTransportTarget,
+    ContextData,
+    ObjectType,
+    ObjectIdentity,
+    get_cmd,
+    next_cmd,
+    set_cmd,
+    walk_cmd,
+)
+from pysnmp.proto.rfc1902 import OctetString
 
 try:
     from ui.common import Logger, format_snmp_value

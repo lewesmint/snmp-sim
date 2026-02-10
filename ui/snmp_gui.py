@@ -8,6 +8,7 @@ import requests
 from datetime import datetime
 import argparse
 import json
+import time
 from pathlib import Path
 
 # Import common utilities and MIB browser
@@ -73,9 +74,16 @@ class SNMPControllerGUI:
     
     def _setup_ui(self) -> None:
         """Setup the user interface components."""
-        # Main tabview for tabs
-        self.tabview = ctk.CTkTabview(self.root)
-        self.tabview.pack(fill="both", expand=True, padx=10, pady=10)
+        # Create a PanedWindow to split main content and log
+        self.main_paned = tk.PanedWindow(self.root, orient=tk.VERTICAL, sashwidth=5, bg="#2b2b2b")
+        self.main_paned.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Top pane: Main tabview for tabs
+        top_frame = ctk.CTkFrame(self.main_paned)
+        self.main_paned.add(top_frame, minsize=300)
+
+        self.tabview = ctk.CTkTabview(top_frame)
+        self.tabview.pack(fill="both", expand=True)
 
         # Tab 1: Configuration (always visible)
         self.tabview.add("Configuration")
@@ -88,17 +96,17 @@ class SNMPControllerGUI:
         # OID Tree and Table View will be added dynamically when connected
         # Traps tab will also be added dynamically when connected
 
-        # Log window below tabview
-        log_frame = ctk.CTkFrame(self.root)
-        log_frame.pack(fill="both", side="bottom", padx=10, pady=(0, 5))
+        # Bottom pane: Log window
+        log_frame = ctk.CTkFrame(self.main_paned)
+        self.main_paned.add(log_frame, minsize=60)
 
         log_label = ctk.CTkLabel(log_frame, text="Log Output:", anchor="w")
         log_label.pack(fill="x", padx=5, pady=(5, 0))
 
-        self.log_text = tk.Text(log_frame, height=150, font=("Courier", 11), bg="#2b2b2b", fg="#ffffff")
+        self.log_text = tk.Text(log_frame, height=5, font=("Courier", 12), bg="#2b2b2b", fg="#ffffff")
         self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
         self.log_text.configure(state="disabled")
-        
+
         # Set log widget for logger
         self.logger.set_log_widget(self.log_text)
 
@@ -404,15 +412,15 @@ class SNMPControllerGUI:
 
         conn_frame.columnconfigure(1, weight=1)
 
-        # MIBs frame
-        mibs_frame = ctk.CTkFrame(config_frame)
-        mibs_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        # MIBs section with resizable pane
+        mibs_outer_frame = ctk.CTkFrame(config_frame)
+        mibs_outer_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        mibs_label = ctk.CTkLabel(mibs_frame, text="Implemented MIBs", font=("", 14, "bold"))
+        mibs_label = ctk.CTkLabel(mibs_outer_frame, text="Implemented MIBs", font=("", 14, "bold"))
         mibs_label.pack(pady=(10, 5), padx=10, anchor="w")
 
         # Textbox for MIBs (customtkinter doesn't have Listbox, using CTkTextbox instead)
-        self.mibs_textbox = ctk.CTkTextbox(mibs_frame, height=200, font=("", 12))
+        self.mibs_textbox = ctk.CTkTextbox(mibs_outer_frame, height=100, font=("", 12))
         self.mibs_textbox.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         self.mibs_textbox.configure(state="disabled")
     
@@ -470,18 +478,110 @@ class SNMPControllerGUI:
         # Destination list - compact table view
         dest_list_frame = ctk.CTkFrame(dest_frame)
         dest_list_frame.pack(fill="x", padx=10, pady=(0, 10))
-        
+
         dest_list_label = ctk.CTkLabel(dest_list_frame, text="Current Destinations:", font=("", 11, "bold"))
         dest_list_label.pack(anchor="w", padx=10, pady=(5, 0))
-        
-        # Create Treeview for destinations - compact height
-        self.dest_tree = ttk.Treeview(dest_list_frame, columns=("host", "port"), show="headings", height=3, style="OID.Treeview", selectmode="extended")
+
+        # Create frame for treeview with scrollbar
+        dest_tree_frame = ctk.CTkFrame(dest_list_frame, fg_color="transparent")
+        dest_tree_frame.pack(padx=10, pady=(0, 5), fill="x")
+
+        # Create Treeview for destinations - compact style with smaller font
+        # Create a custom style for destinations with smaller row height
+        dest_bg_color = "#2b2b2b" if ctk.get_appearance_mode() == "Dark" else "#ffffff"
+        dest_fg_color = "#ffffff" if ctk.get_appearance_mode() == "Dark" else "#000000"
+        dest_selected_bg = "#1f538d" if ctk.get_appearance_mode() == "Dark" else "#0078d7"
+
+        dest_style = ttk.Style()
+        dest_style.configure(
+            "Dest.Treeview",
+            background=dest_bg_color,
+            foreground=dest_fg_color,
+            fieldbackground=dest_bg_color,
+            borderwidth=1,
+            relief="solid",
+            rowheight=20,  # Smaller row height for compact display
+            font=('Helvetica', 10)  # Smaller font
+        )
+        dest_style.configure(
+            "Dest.Treeview.Heading",
+            background="#1f1f1f" if ctk.get_appearance_mode() == "Dark" else "#e0e0e0",
+            foreground=dest_fg_color,
+            borderwidth=1,
+            relief="groove",
+            padding=3,
+            font=('Helvetica', 10, 'bold')
+        )
+        dest_style.map("Dest.Treeview",
+                      background=[("selected", dest_selected_bg)])
+
+        # Scrollbar for destinations
+        dest_scrollbar = ttk.Scrollbar(dest_tree_frame, orient="vertical")
+        dest_scrollbar.pack(side="right", fill="y")
+
+        self.dest_tree = ttk.Treeview(
+            dest_tree_frame,
+            columns=("host", "port"),
+            show="headings",
+            height=5,  # Show 5 rows, scrollbar will appear if more
+            style="Dest.Treeview",
+            selectmode="extended",
+            yscrollcommand=dest_scrollbar.set
+        )
         self.dest_tree.heading("host", text="Host")
         self.dest_tree.heading("port", text="Port")
         self.dest_tree.column("host", width=150, minwidth=100)
         self.dest_tree.column("port", width=80, minwidth=60, anchor="center")
-        
-        self.dest_tree.pack(padx=10, pady=(0, 5), fill="x")
+
+        dest_scrollbar.config(command=self.dest_tree.yview)
+        self.dest_tree.pack(side="left", fill="x", expand=True)
+
+        # Trap Receiver Section
+        receiver_frame = ctk.CTkFrame(self.traps_scrollable)
+        receiver_frame.pack(fill="x", pady=(0, 10))
+
+        receiver_label = ctk.CTkLabel(receiver_frame, text="Trap Receiver", font=("", 14, "bold"))
+        receiver_label.pack(pady=(10, 5), padx=10, anchor="w")
+
+        # Receiver controls
+        receiver_controls = ctk.CTkFrame(receiver_frame, fg_color="transparent")
+        receiver_controls.pack(fill="x", padx=10, pady=(0, 10))
+
+        # Port configuration
+        ctk.CTkLabel(receiver_controls, text="Listen Port:").grid(row=0, column=0, padx=(0, 5))
+        self.receiver_port_var = ctk.StringVar(value="16662")
+        port_entry = ctk.CTkEntry(receiver_controls, textvariable=self.receiver_port_var, width=80)
+        port_entry.grid(row=0, column=1, padx=(0, 10))
+
+        # Start/Stop buttons
+        self.start_receiver_btn = ctk.CTkButton(
+            receiver_controls,
+            text="Start Receiver",
+            command=self._start_trap_receiver,
+            width=120,
+            fg_color="green"
+        )
+        self.start_receiver_btn.grid(row=0, column=2, padx=(0, 5))
+
+        self.stop_receiver_btn = ctk.CTkButton(
+            receiver_controls,
+            text="Stop Receiver",
+            command=self._stop_trap_receiver,
+            width=120,
+            state="disabled",
+            fg_color="red"
+        )
+        self.stop_receiver_btn.grid(row=0, column=3)
+
+        # Receiver status
+        self.receiver_status_var = ctk.StringVar(value="Receiver: Stopped")
+        receiver_status = ctk.CTkLabel(
+            receiver_frame,
+            textvariable=self.receiver_status_var,
+            font=("", 11),
+            text_color="gray"
+        )
+        receiver_status.pack(pady=(0, 10), padx=10, anchor="w")
 
         # Main content in two columns
         main_frame = ctk.CTkFrame(self.traps_scrollable)
@@ -530,20 +630,34 @@ class SNMPControllerGUI:
         info_label = ctk.CTkLabel(left_frame, text="Trap Details", font=("", 12, "bold"))
         info_label.pack(pady=(10, 5), padx=10, anchor="w")
 
-        self.trap_info_text = ctk.CTkTextbox(left_frame, height=150, font=("Courier", 10))
+        self.trap_info_text = ctk.CTkTextbox(left_frame, height=150, font=("Courier", 12))
         self.trap_info_text.pack(fill="x", padx=10, pady=(0, 10))
         self.trap_info_text.configure(state="disabled")
 
-        # Send button
+        # Send buttons frame
+        send_buttons_frame = ctk.CTkFrame(left_frame, fg_color="transparent")
+        send_buttons_frame.pack(pady=(0, 10))
+
         self.send_trap_btn = ctk.CTkButton(
-            left_frame,
+            send_buttons_frame,
             text="Send Trap",
             command=self._send_trap,
             width=120,
             state="disabled",
             height=35
         )
-        self.send_trap_btn.pack(pady=(0, 10))
+        self.send_trap_btn.pack(side="left", padx=(0, 5))
+
+        self.send_test_trap_btn = ctk.CTkButton(
+            send_buttons_frame,
+            text="Send Test Trap",
+            command=self._send_test_trap,
+            width=120,
+            state="disabled",
+            height=35,
+            fg_color="orange"
+        )
+        self.send_test_trap_btn.pack(side="left")
 
         # Right column: OID overrides table
         right_frame = ctk.CTkFrame(main_frame)
@@ -559,7 +673,7 @@ class SNMPControllerGUI:
 
         ctk.CTkLabel(header_frame, text="OID", font=("", 10, "bold"), width=200).grid(row=0, column=0, padx=(0, 5))
         ctk.CTkLabel(header_frame, text="Current Value", font=("", 10, "bold"), width=100).grid(row=0, column=1, padx=(0, 5))
-        ctk.CTkLabel(header_frame, text="Use Override", font=("", 10, "bold")).grid(row=0, column=2, padx=(0, 5))
+        ctk.CTkLabel(header_frame, text="Force Override", font=("", 10, "bold")).grid(row=0, column=2, padx=(0, 5))
         ctk.CTkLabel(header_frame, text="Override Value", font=("", 10, "bold"), width=120).grid(row=0, column=3)
 
         # Scrollable table for OID overrides
@@ -580,22 +694,6 @@ class SNMPControllerGUI:
         )
         self.save_overrides_btn.pack(side="left")
 
-        # Bottom section: Trap log
-        log_frame = ctk.CTkFrame(self.traps_scrollable)
-        log_frame.pack(fill="both", expand=True, pady=(0, 10))
-
-        log_label = ctk.CTkLabel(log_frame, text="Trap Log", font=("", 14, "bold"))
-        log_label.pack(pady=(10, 5), padx=10, anchor="w")
-
-        # Textbox for displaying trap log
-        self.traps_textbox = ctk.CTkTextbox(log_frame, height=150, font=("Courier", 11))
-        self.traps_textbox.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-        self.traps_textbox.configure(state="disabled")
-
-        # Button to clear trap log
-        clear_button = ctk.CTkButton(log_frame, text="Clear Log", command=self._clear_traps)
-        clear_button.pack(pady=(5, 10))
-
         # Bind trap selection change
         def on_trap_select(*args: Any) -> None:
             self._update_trap_info()
@@ -603,9 +701,37 @@ class SNMPControllerGUI:
         
         # Store trap metadata
         self.traps_metadata: Dict[str, Dict[str, Any]] = {}
-        
-        # Update destination display with initial destinations
-        self._update_dest_display()
+
+        # Load trap destinations from app config via API
+        self._load_trap_destinations()
+
+    def _is_index_varbind(self, oid_name: str) -> bool:
+        """Check if the given OID name is an index varbind."""
+        # Known INDEX object names that should not be overridden
+        index_object_names = {
+            "ifIndex",  # IF-MIB ifEntry index
+            # Add more known INDEX objects here as discovered
+        }
+
+        # Extract the object name from the OID string (e.g., "IF-MIB::ifIndex.1" -> "ifIndex")
+        if "::" in oid_name:
+            parts = oid_name.split("::")
+            if len(parts) == 2:
+                obj_name = parts[1].split(".")[0]  # Remove any .N suffix
+                return obj_name in index_object_names
+
+        return False
+
+    def _is_sysuptime_varbind(self, oid_name: str) -> bool:
+        """Check if the given OID name is sysUpTime."""
+        # sysUpTime OID: 1.3.6.1.2.1.1.3.0
+        # Could be represented as "SNMPv2-MIB::sysUpTime.0" or similar
+        if "::" in oid_name:
+            parts = oid_name.split("::")
+            if len(parts) == 2:
+                obj_name = parts[1].split(".")[0]
+                return obj_name == "sysUpTime"
+        return False
 
     def _create_oid_table_row(self, oid_name: str, current_value: str = "") -> Dict[str, Any]:
         """Create a row in the OID overrides table."""
@@ -624,6 +750,12 @@ class SNMPControllerGUI:
                 base_oid_name = parts[0]
                 index_part = "." + parts[1]
 
+        # Check if this is an index varbind (e.g., ifIndex)
+        is_index = self._is_index_varbind(oid_name)
+
+        # Check if this is sysUpTime (special case - always real-time)
+        is_sysuptime = self._is_sysuptime_varbind(oid_name)
+
         # OID name label (display the full name including .index)
         oid_label = ctk.CTkLabel(row_frame, text=oid_name, width=200, anchor="w", font=("", 10))
         oid_label.grid(row=0, column=0, padx=(5, 5), sticky="w")
@@ -632,14 +764,56 @@ class SNMPControllerGUI:
         current_label = ctk.CTkLabel(row_frame, text=current_value if current_value else "Loading...", width=100, anchor="w", font=("", 10))
         current_label.grid(row=0, column=1, padx=(0, 5), sticky="w")
 
-        # Use override checkbox
+        # Force override checkbox (hidden for index varbinds and sysUpTime)
         use_override_var = ctk.BooleanVar(value=False)
         override_check = ctk.CTkCheckBox(row_frame, text="", variable=use_override_var, width=20)
-        override_check.grid(row=0, column=2, padx=(0, 5))
 
-        # Override value entry
+        # Override value entry (hidden for index varbinds and sysUpTime, disabled by default for others)
         override_entry = ctk.CTkEntry(row_frame, width=150, font=("", 10))
-        override_entry.grid(row=0, column=3, padx=(0, 5), sticky="ew")
+
+        if is_sysuptime:
+            # Special handling for sysUpTime - show it as real-time
+            sysuptime_label = ctk.CTkLabel(row_frame, text="(Real-time)", width=170, anchor="w", font=("", 10), text_color="#4a9eff")
+            sysuptime_label.grid(row=0, column=2, columnspan=2, padx=(0, 5), sticky="w")
+
+            # Add click handlers for sysUpTime row
+            def on_sysuptime_single_click(event: Any) -> None:
+                """Refresh sysUpTime value on single click."""
+                self._refresh_sysuptime_value(oid_name, current_label)
+
+            def on_sysuptime_double_click(event: Any) -> None:
+                """Show notification on double click."""
+                messagebox.showinfo(
+                    "sysUpTime is Real-time",
+                    "sysUpTime reflects the actual agent uptime and cannot be overridden.\n\n"
+                    "It is automatically calculated based on how long the SNMP agent has been running.\n\n"
+                    "Single-click on this row to refresh the current value."
+                )
+
+            # Bind click events to all widgets in the row
+            for widget in [row_frame, oid_label, current_label, sysuptime_label]:
+                widget.bind("<Button-1>", on_sysuptime_single_click)
+                widget.bind("<Double-Button-1>", on_sysuptime_double_click)
+        elif is_index:
+            # Hide checkbox and entry for index varbinds
+            # Just show a label indicating it's an index
+            index_label = ctk.CTkLabel(row_frame, text="(Index)", width=170, anchor="w", font=("", 10), text_color="gray")
+            index_label.grid(row=0, column=2, columnspan=2, padx=(0, 5), sticky="w")
+        else:
+            # Show checkbox and entry for non-index varbinds
+            override_check.grid(row=0, column=2, padx=(0, 5))
+            override_entry.grid(row=0, column=3, padx=(0, 5), sticky="ew")
+            # Start with entry disabled
+            override_entry.configure(state="disabled")
+
+            # Enable/disable entry based on checkbox state
+            def on_checkbox_toggle() -> None:
+                if use_override_var.get():
+                    override_entry.configure(state="normal")
+                else:
+                    override_entry.configure(state="disabled")
+
+            use_override_var.trace_add("write", lambda *args: on_checkbox_toggle())
 
         return {
             "frame": row_frame,
@@ -651,7 +825,9 @@ class SNMPControllerGUI:
             "oid_name": oid_name,
             "is_table_oid": is_table_oid,
             "base_oid_name": base_oid_name,
-            "index_part": index_part
+            "index_part": index_part,
+            "is_index": is_index,
+            "is_sysuptime": is_sysuptime
         }
 
     def _update_override_labels(self) -> None:
@@ -729,9 +905,14 @@ class SNMPControllerGUI:
                 
                 # Update table rows with override values
                 for row in self.oid_rows:
+                    # Skip sysUpTime and index varbinds
+                    if row.get("is_sysuptime", False) or row.get("is_index", False):
+                        continue
+
                     oid_name = row["oid_name"]
                     if oid_name in self.current_trap_overrides:
                         row["use_override_var"].set(True)
+                        # Entry will be enabled by the trace callback
                         row["override_entry"].delete(0, "end")
                         row["override_entry"].insert(0, self.current_trap_overrides[oid_name])
                     else:
@@ -741,6 +922,9 @@ class SNMPControllerGUI:
                 self.current_trap_overrides = {}
                 # Clear all checkboxes and entries
                 for row in self.oid_rows:
+                    # Skip sysUpTime and index varbinds
+                    if row.get("is_sysuptime", False) or row.get("is_index", False):
+                        continue
                     row["use_override_var"].set(False)
                     row["override_entry"].delete(0, "end")
         except Exception as e:
@@ -748,6 +932,9 @@ class SNMPControllerGUI:
             self.current_trap_overrides = {}
             # Clear all checkboxes and entries
             for row in self.oid_rows:
+                # Skip sysUpTime and index varbinds
+                if row.get("is_sysuptime", False) or row.get("is_index", False):
+                    continue
                 row["use_override_var"].set(False)
                 row["override_entry"].delete(0, "end")
 
@@ -775,13 +962,33 @@ class SNMPControllerGUI:
                 row["current_label"].configure(text="Error")
                 self._log(f"Failed to get current value for {oid_name}: {e}", "WARNING")
 
+    def _refresh_sysuptime_value(self, oid_name: str, label_widget: Any) -> None:
+        """Refresh the sysUpTime value for a specific label widget."""
+        if not self.connected:
+            return
+
+        try:
+            # sysUpTime OID: 1.3.6.1.2.1.1.3.0
+            response = requests.get(f"{self.api_url}/value?oid=1.3.6.1.2.1.1.3.0", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                current_value = str(data.get("value", "N/A"))
+                label_widget.configure(text=current_value)
+                self._log(f"Refreshed sysUpTime: {current_value}")
+            else:
+                label_widget.configure(text="Error")
+                self._log(f"Failed to refresh sysUpTime: {response.text}", "WARNING")
+        except Exception as e:
+            label_widget.configure(text="Error")
+            self._log(f"Failed to refresh sysUpTime: {e}", "WARNING")
+
     def _save_trap_config(self) -> None:
         """Save trap configuration including host/port and overrides."""
         # Save host/port and trap settings to server
+        # Note: trap_destinations are now managed via app config, not GUI config
         cfg = {
-            "host": self.host_var.get(), 
+            "host": self.host_var.get(),
             "port": self.port_var.get(),
-            "trap_destinations": self.trap_destinations,
             "selected_trap": self.trap_var.get(),
             "trap_index": self.trap_index_var.get(),
             "trap_overrides": self.current_trap_overrides
@@ -825,19 +1032,39 @@ class SNMPControllerGUI:
         except Exception as e:
             self._log(f"Failed to save overrides: {e}", "ERROR")
 
+    def _load_trap_destinations(self) -> None:
+        """Load trap destinations from app config via API."""
+        try:
+            response = requests.get(f"{self.api_url}/trap-destinations", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                destinations = data.get("destinations", [])
+                # Convert to tuple format
+                self.trap_destinations = [(d["host"], d["port"]) for d in destinations]
+                self._update_dest_display()
+                self._log(f"Loaded {len(self.trap_destinations)} trap destination(s) from config")
+            else:
+                self._log(f"Failed to load trap destinations: {response.text}", "WARNING")
+                # Fallback to default
+                self.trap_destinations = [("localhost", 162)]
+        except Exception as e:
+            self._log(f"Failed to load trap destinations: {e}", "WARNING")
+            # Fallback to default
+            self.trap_destinations = [("localhost", 162)]
+
     def _update_dest_display(self) -> None:
         """Update the destination display in the Treeview."""
         # Clear existing items
         for item in self.dest_tree.get_children():
             self.dest_tree.delete(item)
-        
+
         # Add current destinations - ensure port is displayed as string
         for host, port in self.trap_destinations:
             # Store host and str(port) in treeview values for consistency
             self.dest_tree.insert("", "end", values=(str(host), str(port)))
 
     def _add_destination(self) -> None:
-        """Add a new trap destination."""
+        """Add a new trap destination via API."""
         try:
             host = self.dest_host_var.get().strip()
             port = int(self.dest_port_var.get().strip())
@@ -847,56 +1074,63 @@ class SNMPControllerGUI:
             if port < 1 or port > 65535:
                 messagebox.showerror("Error", "Port must be between 1 and 65535")
                 return
-            
-            self.trap_destinations.append((host, port))
-            self._update_dest_display()
-            self._log(f"Added trap destination: {host}:{port}")
+
+            # Add via API
+            response = requests.post(
+                f"{self.api_url}/trap-destinations",
+                json={"host": host, "port": port},
+                timeout=5
+            )
+            if response.status_code == 200:
+                # Reload destinations from API
+                self._load_trap_destinations()
+                self._log(f"Added trap destination: {host}:{port}")
+            else:
+                messagebox.showerror("Error", f"Failed to add destination: {response.text}")
         except ValueError:
             messagebox.showerror("Error", "Invalid port number")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add destination: {e}")
 
     def _remove_destination(self) -> None:
-        """Remove the selected destinations from the Treeview."""
+        """Remove the selected destinations via API."""
         selected_items = self.dest_tree.selection()
         if not selected_items:
             messagebox.showwarning("No Selection", "Please select destinations to remove.")
             return
-        
+
         # Get the values of selected items
         to_remove = []
         for item in selected_items:
             values = self.dest_tree.item(item, "values")
-            print(f"DEBUG _remove_destination: item={item}, values={values}, len={len(values)}")
             if len(values) >= 2:
                 host, port = values[0], values[1]
                 try:
                     port_int = int(port)
                     to_remove.append((host, port_int))
-                    print(f"DEBUG: Will remove ({host}, {port_int})")
                 except ValueError:
-                    print(f"DEBUG: Error converting port '{port}' to int")
-        
-        print(f"DEBUG: Current destinations before removal: {self.trap_destinations}")
-        print(f"DEBUG: To remove: {to_remove}")
-        
-        # Remove from the trap_destinations list
+                    self._log(f"Error converting port '{port}' to int", "WARNING")
+
+        # Remove via API
         removed_hosts = []
         for host, port in to_remove:
-            print(f"DEBUG: Looking for ({host}, {port}) in {self.trap_destinations}")
-            if (host, port) in self.trap_destinations:
-                self.trap_destinations.remove((host, port))
-                removed_hosts.append(f"{host}:{port}")
-                print(f"DEBUG: Successfully removed ({host}, {port})")
-            else:
-                print(f"DEBUG: ({host}, {port}) not found in destinations")
-        
-        print(f"DEBUG: Destinations after removal: {self.trap_destinations}")
-        
-        if len(self.trap_destinations) == 0:
-            # Ensure at least one destination remains
-            self.trap_destinations.append(("localhost", 162))
-            messagebox.showwarning("Warning", "Cannot remove all destinations. At least one must remain.")
-        
-        self._update_dest_display()
+            try:
+                response = requests.request(
+                    "DELETE",
+                    f"{self.api_url}/trap-destinations",
+                    json={"host": host, "port": port},
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    removed_hosts.append(f"{host}:{port}")
+                else:
+                    self._log(f"Failed to remove {host}:{port}: {response.text}", "WARNING")
+            except Exception as e:
+                self._log(f"Failed to remove {host}:{port}: {e}", "ERROR")
+
+        # Reload destinations from API
+        self._load_trap_destinations()
+
         if removed_hosts:
             self._log(f"Removed trap destinations: {', '.join(removed_hosts)}")
         else:
@@ -910,22 +1144,27 @@ class SNMPControllerGUI:
         """Set a trap-specific OID override (legacy method - kept for compatibility)."""
         messagebox.showinfo("Use Table", "Please use the table above to set overrides and click 'Save Overrides'")
 
+
+
     def _clear_trap_overrides(self) -> None:
         """Clear all overrides for the current trap."""
         trap_name = self.trap_var.get()
         if not trap_name or trap_name == "No traps available":
             messagebox.showwarning("No Trap Selected", "Please select a trap first.")
             return
-        
+
         # Clear local copy
         self.current_trap_overrides.clear()
-        
+
         # Clear from API
         try:
             response = requests.delete(f"{self.api_url}/trap-overrides/{trap_name}", timeout=5)
             if response.status_code == 200:
                 # Clear table checkboxes and entries
                 for row in self.oid_rows:
+                    # Skip index varbinds
+                    if row.get("is_index", False):
+                        continue
                     row["use_override_var"].set(False)
                     row["override_entry"].delete(0, "end")
                 self._log(f"Cleared all overrides for trap: {trap_name}")
@@ -934,11 +1173,7 @@ class SNMPControllerGUI:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to clear overrides: {e}")
 
-    def _clear_traps(self) -> None:
-        """Clear the traps displayed in the textbox."""
-        self.traps_textbox.configure(state="normal")
-        self.traps_textbox.delete("1.0", "end")
-        self.traps_textbox.configure(state="disabled")
+
     
     def _load_traps(self) -> None:
         """Load available traps from the REST API."""
@@ -956,15 +1191,17 @@ class SNMPControllerGUI:
                 messagebox.showinfo("No Traps", "No traps found in the loaded MIBs.")
                 self.trap_dropdown.configure(values=["No traps available"], state="disabled")
                 self.send_trap_btn.configure(state="disabled")
+                self.send_test_trap_btn.configure(state="disabled")
                 return
-            
+
             # Store trap metadata
             self.traps_metadata = traps
-            
+
             # Update dropdown
             trap_names = sorted(traps.keys())
             self.trap_dropdown.configure(values=trap_names, state="readonly")
             self.send_trap_btn.configure(state="normal")
+            self.send_test_trap_btn.configure(state="normal")
             
             # Select first trap
             if trap_names:
@@ -1138,6 +1375,9 @@ class SNMPControllerGUI:
             # Collect overrides from table
             trap_overrides = {}
             for row in self.oid_rows:
+                # Skip sysUpTime (always real-time) and index varbinds
+                if row.get("is_sysuptime", False) or row.get("is_index", False):
+                    continue
                 if row["use_override_var"].get():
                     oid_name = row["oid_name"]
                     override_value = row["override_entry"].get().strip()
@@ -1205,12 +1445,11 @@ class SNMPControllerGUI:
                     oid_str = ".".join(str(x) for x in trap_oid) if isinstance(trap_oid, (list, tuple)) else str(trap_oid)
                     
                     log_msg = f"[{timestamp}] Sent to {dest_host}:{dest_port}: {trap_name} (OID: {oid_str})"
-                    
-                    self.traps_textbox.configure(state="normal")
-                    self.traps_textbox.insert("end", log_msg + "\n")
-                    self.traps_textbox.see("end")
-                    self.traps_textbox.configure(state="disabled")
-                    
+
+                    # Log to main log window with blank line before
+                    self.log_text.insert("end", "\n" + log_msg + "\n")
+                    self.log_text.see("end")
+
                     success_count += 1
                     
                 except requests.exceptions.RequestException as e:
@@ -1219,10 +1458,9 @@ class SNMPControllerGUI:
                     # Still log the attempt
                     timestamp = datetime.now().strftime("%H:%M:%S")
                     log_msg = f"[{timestamp}] Failed to {dest_host}:{dest_port}: {trap_name} - {str(e)}"
-                    self.traps_textbox.configure(state="normal")
-                    self.traps_textbox.insert("end", log_msg + "\n")
-                    self.traps_textbox.see("end")
-                    self.traps_textbox.configure(state="disabled")
+                    # Log to main log window with blank line before
+                    self.log_text.insert("end", "\n" + log_msg + "\n")
+                    self.log_text.see("end")
             
             if success_count > 0:
                 self._log(f"Successfully sent trap '{trap_name}' to {success_count}/{len(self.trap_destinations)} destination(s)")
@@ -1234,7 +1472,253 @@ class SNMPControllerGUI:
             error_msg = f"Unexpected error sending trap: {e}"
             self._log(error_msg, "ERROR")
             messagebox.showerror("Error", error_msg)
-    
+
+    def _start_trap_receiver(self) -> None:
+        """Start the trap receiver."""
+        try:
+            port = int(self.receiver_port_var.get())
+            payload = {
+                "port": port,
+                "community": "public"
+            }
+
+            response = requests.post(f"{self.api_url}/trap-receiver/start", json=payload, timeout=5)
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("status") in ["started", "already_running"]:
+                self.receiver_status_var.set(f"Receiver: Running on port {port}")
+                self.start_receiver_btn.configure(state="disabled")
+                self.stop_receiver_btn.configure(state="normal")
+                self._log(f"Trap receiver started on port {port}")
+            else:
+                messagebox.showerror("Error", f"Failed to start receiver: {result.get('message', 'Unknown error')}")
+
+        except ValueError:
+            messagebox.showerror("Error", "Invalid port number")
+        except Exception as e:
+            error_msg = f"Failed to start trap receiver: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+
+    def _stop_trap_receiver(self) -> None:
+        """Stop the trap receiver."""
+        try:
+            response = requests.post(f"{self.api_url}/trap-receiver/stop", timeout=5)
+            response.raise_for_status()
+            response.json()
+
+            self.receiver_status_var.set("Receiver: Stopped")
+            self.start_receiver_btn.configure(state="normal")
+            self.stop_receiver_btn.configure(state="disabled")
+            self._log("Trap receiver stopped")
+
+        except Exception as e:
+            error_msg = f"Failed to stop trap receiver: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+
+    def _send_test_trap(self) -> None:
+        """Send the selected trap to localhost on the receiver port."""
+        trap_name = self.trap_var.get()
+        if not trap_name or trap_name == "No traps available":
+            messagebox.showwarning("No Trap Selected", "Please select a trap to send.")
+            return
+
+        try:
+            port = int(self.receiver_port_var.get())
+
+            # Collect overrides from table (same as _send_trap)
+            trap_overrides = {}
+            for row in self.oid_rows:
+                # Skip sysUpTime (always real-time) and index varbinds
+                if row.get("is_sysuptime", False) or row.get("is_index", False):
+                    continue
+                if row["use_override_var"].get():
+                    oid_name = row["oid_name"]
+                    override_value = row["override_entry"].get().strip()
+                    if override_value:
+                        trap_overrides[oid_name] = override_value
+
+            # Apply any trap-specific forced OID values
+            for oid_str, value in trap_overrides.items():
+                try:
+                    # Handle table OIDs with [index] suffix
+                    if "::" in oid_str and "[" in oid_str and "]" in oid_str:
+                        actual_oid = self._resolve_table_oid(oid_str)
+                        if actual_oid:
+                            update_payload = {"oid": actual_oid, "value": value}
+                        else:
+                            self._log(f"Could not resolve table OID: {oid_str}", "WARNING")
+                            continue
+                    else:
+                        # Regular scalar OID
+                        actual_oid = None
+                        for oid, metadata in self.oid_metadata.items():
+                            if oid_str in oid or oid_str in metadata.get("name", ""):
+                                actual_oid = oid
+                                break
+                        if actual_oid:
+                            update_payload = {"oid": actual_oid, "value": value}
+                        else:
+                            self._log(f"Could not find OID for: {oid_str}", "WARNING")
+                            continue
+
+                    response = requests.post(f"{self.api_url}/value", json=update_payload, timeout=5)
+                    if response.status_code == 200:
+                        self._log(f"Set OID {oid_str} = {value}")
+                except Exception as e:
+                    self._log(f"Error setting OID {oid_str}: {e}", "WARNING")
+                    continue
+
+            # Send trap to localhost on receiver port
+            payload = {
+                "trap_name": trap_name,
+                "trap_type": "trap",
+                "dest_host": "localhost",
+                "dest_port": port,
+                "community": "public"
+            }
+
+            response = requests.post(f"{self.api_url}/send-trap", json=payload, timeout=5)
+            response.raise_for_status()
+            result = response.json()
+
+            # Log success
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            trap_oid = result.get("trap_oid", "")
+            oid_str = ".".join(str(x) for x in trap_oid) if isinstance(trap_oid, (list, tuple)) else str(trap_oid)
+
+            log_msg = f"[{timestamp}] Sent test trap to localhost:{port}: {trap_name} (OID: {oid_str})"
+
+            # Log to main log window with blank line before
+            self.log_text.insert("end", "\n" + log_msg + "\n")
+            self.log_text.see("end")
+
+            self._log(f"Test trap sent to localhost:{port}")
+
+            # Wait a moment for the trap to be received, then check
+            time.sleep(0.5)
+
+            # Check if trap was received
+            try:
+                check_response = requests.get(f"{self.api_url}/trap-receiver/traps?limit=1", timeout=2)
+                if check_response.status_code == 200:
+                    check_result = check_response.json()
+                    traps = check_result.get("traps", [])
+                    if traps:
+                        received_trap = traps[0]
+                        recv_timestamp = received_trap.get("timestamp", "")
+                        recv_oid = received_trap.get("trap_oid_str", "unknown")
+                        varbinds = received_trap.get("varbinds", [])
+
+                        # Log the received trap with all varbinds to main log window
+                        recv_log_msg = f"[{recv_timestamp}] Received trap: {trap_name} (OID: {recv_oid})"
+                        # Add blank line before trap message
+                        self.log_text.insert("end", "\n" + recv_log_msg + "\n")
+
+                        # Log all varbinds
+                        for vb in varbinds:
+                            vb_oid = vb.get("oid_str", "unknown")
+                            vb_value = vb.get("value", "")
+                            self.log_text.insert("end", f"  - {vb_oid} = {vb_value}\n")
+
+                        self.log_text.see("end")
+
+                        # Show custom popup notification with varbinds table
+                        self._show_trap_notification(trap_name, recv_oid, recv_timestamp, varbinds)
+                    else:
+                        messagebox.showwarning(
+                            "Trap Sent",
+                            f"Test trap '{trap_name}' was sent to localhost:{port}\n\n"
+                            "But no trap was received. Make sure the receiver is running."
+                        )
+            except Exception:
+                # If we can't check, just show that it was sent
+                messagebox.showinfo("Trap Sent", f"Test trap '{trap_name}' sent to localhost:{port}")
+
+        except ValueError:
+            messagebox.showerror("Error", "Invalid port number")
+        except Exception as e:
+            error_msg = f"Failed to send test trap: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+
+
+
+
+
+    def _show_trap_notification(self, trap_name: str, trap_oid: str, timestamp: str, varbinds: list[dict[str, Any]]) -> None:
+        """Show a custom notification dialog with trap details and varbinds table."""
+        # Create custom dialog window
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("Test Trap Received!")
+        dialog.geometry("800x500")  # Wider window
+
+        # Make it modal
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Header with trap info
+        header_frame = ctk.CTkFrame(dialog)
+        header_frame.pack(fill="x", padx=20, pady=20)
+
+        title_label = ctk.CTkLabel(header_frame, text="✓ Successfully sent and received test trap!",
+                                   font=("", 16, "bold"), text_color="green")
+        title_label.pack(pady=(0, 10))
+
+        info_frame = ctk.CTkFrame(header_frame)
+        info_frame.pack(fill="x")
+
+        ctk.CTkLabel(info_frame, text=f"Trap: {trap_name}", font=("", 13)).pack(anchor="w", pady=2)
+        ctk.CTkLabel(info_frame, text=f"OID: {trap_oid}", font=("", 13)).pack(anchor="w", pady=2)
+        ctk.CTkLabel(info_frame, text=f"Received at: {timestamp}", font=("", 13)).pack(anchor="w", pady=2)
+
+        # Varbinds section
+        varbinds_label = ctk.CTkLabel(dialog, text="Varbinds:", font=("", 14, "bold"))
+        varbinds_label.pack(anchor="w", padx=20, pady=(10, 5))
+
+        # Create frame for treeview (using tkinter's ttk.Treeview for table)
+        from tkinter import ttk
+
+        tree_frame = ctk.CTkFrame(dialog)
+        tree_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+
+        # Create treeview with scrollbar
+        tree_scroll = ttk.Scrollbar(tree_frame)
+        tree_scroll.pack(side="right", fill="y")
+
+        varbinds_tree = ttk.Treeview(tree_frame, columns=("OID", "Value", "Type"),
+                                     show="headings", yscrollcommand=tree_scroll.set, height=10)
+        varbinds_tree.pack(fill="both", expand=True)
+        tree_scroll.config(command=varbinds_tree.yview)
+
+        # Configure columns
+        varbinds_tree.heading("OID", text="OID")
+        varbinds_tree.heading("Value", text="Value")
+        varbinds_tree.heading("Type", text="Type")
+
+        varbinds_tree.column("OID", width=300)
+        varbinds_tree.column("Value", width=300)
+        varbinds_tree.column("Type", width=150)
+
+        # Populate with varbinds
+        for vb in varbinds:
+            vb_oid = vb.get("oid_str", "unknown")
+            vb_value = vb.get("value", "")
+            vb_type = vb.get("type", "")
+            varbinds_tree.insert("", "end", values=(vb_oid, vb_value, vb_type))
+
+        # Close button
+        close_btn = ctk.CTkButton(dialog, text="Close", command=dialog.destroy, width=100)
+        close_btn.pack(pady=(0, 20))
+
+        # Center the dialog on the parent window
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (dialog.winfo_width() // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+
     def _expand_all(self) -> None:
         """Expand all nodes in the tree."""
         def _recurse(item: str) -> None:
@@ -1409,10 +1893,13 @@ class SNMPControllerGUI:
                     mib_val = self.oid_metadata.get(oid_str, {}).get("mib") or "N/A"
 
                 display_text = stored_name if stored_name else str(key)
-                
+
                 # Add INDEX indicator to type column for known index columns
                 if stored_name in ["ifIndex", "ifStackHigherLayer", "ifStackLowerLayer", "ifRcvAddressAddress"]:
                     type_val += " [INDEX]"
+
+                # Display "Empty Node" if value is empty
+                display_val = val if val else "Empty Node"
 
                 img = None
                 if getattr(self, 'oid_icon_images', None):
@@ -1420,7 +1907,7 @@ class SNMPControllerGUI:
                 img_ref = cast(Any, img) if img is not None else ""
 
                 node = self.oid_tree.insert(parent, "end", text=display_text, image=img_ref,
-                                           values=(oid_str, instance_str, val, type_val, access_val, mib_val),
+                                           values=(oid_str, instance_str, display_val, type_val, access_val, mib_val),
                                            tags=(row_tag,))
                 self.oid_to_item[oid_str] = node
             else:
@@ -1437,7 +1924,7 @@ class SNMPControllerGUI:
                         img = self.oid_icon_images.get(icon_key)
                     img_ref = cast(Any, img) if img is not None else ""
                     node = self.oid_tree.insert(parent, "end", text=display_text, image=img_ref,
-                                               values=(oid_str, "", "", type_val, access_val, mib_val),
+                                               values=(oid_str, "", "Empty Node", type_val, access_val, mib_val),
                                                tags=(row_tag, 'table'))
                     self.oid_to_item[oid_str] = node
                     # Insert placeholder to make it expandable
@@ -1454,7 +1941,7 @@ class SNMPControllerGUI:
                         img = self.oid_icon_images.get(icon_key)
                     img_ref = cast(Any, img) if img is not None else ""
                     node = self.oid_tree.insert(parent, "end", text=display_text, image=img_ref,
-                                               values=(oid_str, "", "", type_val, access_val, mib_val),
+                                               values=(oid_str, "", "Empty Node", type_val, access_val, mib_val),
                                                tags=(row_tag,))
                     self.oid_to_item[oid_str] = node
                     # Recurse into children
@@ -1487,6 +1974,13 @@ class SNMPControllerGUI:
             return
 
         if not item:
+            return
+
+        # Check if this is a leaf node (no children)
+        children = self.oid_tree.get_children(item)
+        if children:
+            # This is a container node (folder/table), don't allow editing
+            messagebox.showinfo("Cannot Edit", "Only leaf nodes can be edited. Container nodes cannot be edited directly.")
             return
 
         # Get the OID and instance
@@ -2120,6 +2614,31 @@ class SNMPControllerGUI:
             messagebox.showerror("Error", "No index columns found")
             return
 
+        # Get non-key column values from the last row
+        instances = schema.get("instances", [])
+        columns_meta = schema.get("columns", {})
+        index_column_names = [name for name, _ in index_columns]
+        column_defaults = {}
+
+        if instances:
+            # Get the last instance
+            last_instance = instances[-1]
+
+            # Fetch values for all non-index columns from the last row
+            for col_name, col_info in columns_meta.items():
+                if col_name not in index_column_names:
+                    # This is a non-key column, get its value from the last row
+                    col_oid = ".".join(str(x) for x in col_info["oid"])
+                    full_oid = f"{col_oid}.{last_instance}"
+
+                    try:
+                        resp = requests.get(f"{self.api_url}/value", params={"oid": full_oid}, timeout=5)
+                        if resp.status_code == 200:
+                            value_data = resp.json()
+                            column_defaults[col_name] = str(value_data.get("value", ""))
+                    except Exception as e:
+                        self._log(f"Could not fetch value for {col_name}: {e}", "WARNING")
+
         # Create dialog for index values
         dialog = ctk.CTkToplevel(self.root)
         dialog.title("Add Table Instance")
@@ -2187,7 +2706,7 @@ class SNMPControllerGUI:
                 payload = {
                     "table_oid": table_oid,
                     "index_values": index_values,
-                    "column_values": {}  # Can be extended for additional columns
+                    "column_values": column_defaults  # Copy non-key values from last row
                 }
                 resp = requests.post(f"{self.api_url}/table-row", json=payload, timeout=5)
                 if resp.status_code == 200:
@@ -2302,8 +2821,17 @@ class SNMPControllerGUI:
         # Get the type information from metadata
         metadata = self.oid_metadata.get(base_oid_str, {})
         value_type = metadata.get("type", "Unknown")
-        
+        access = metadata.get("access", "read-only").lower()
+
         print(f"DEBUG: Looking up metadata for base_oid={base_oid_str}, found metadata={metadata}")
+
+        # Check if this is an index/key column
+        type_from_tree = self.oid_tree.set(item, "type")
+        is_index = "[INDEX]" in type_from_tree
+
+        if is_index:
+            messagebox.showinfo("Cannot Edit", "Index/key columns cannot be edited.")
+            return
 
         # Create custom dialog using customtkinter
         dialog = ctk.CTkToplevel(self.root)
@@ -2370,10 +2898,14 @@ class SNMPControllerGUI:
         unlock_var = ctk.BooleanVar(value=False)
         unlock_checkbox = None
 
-        print(f"DEBUG: is_writable={is_writable}, creating checkbox: {not is_writable}")
+        # Only show checkbox for read-only items
+        # write-only and read-write items don't need a checkbox
+        show_checkbox = (access == "read-only")
 
-        if not is_writable:
-            print("DEBUG: Creating unlock checkbox")
+        print(f"DEBUG: access={access}, show_checkbox={show_checkbox}")
+
+        if show_checkbox:
+            print("DEBUG: Creating unlock checkbox for read-only item")
             def on_checkbox_toggle() -> None:
                 """Handle checkbox toggle - reset value when unchecked."""
                 unlocked = unlock_var.get()
@@ -2389,14 +2921,14 @@ class SNMPControllerGUI:
             value_entry.configure(state="disabled")  # Start disabled
             print("DEBUG: Checkbox created and packed, entry disabled")
         else:
-            print("DEBUG: No checkbox needed for writable OID")
+            print(f"DEBUG: No checkbox needed for {access} OID")
 
         # Buttons - right side
         def on_ok() -> None:
             new_value = value_var.get()
             if new_value is not None:
                 # For read-only items, only allow if unlocked
-                if not is_writable and not unlock_var.get():
+                if show_checkbox and not unlock_var.get():
                     messagebox.showwarning("Read-Only", "Please check 'Unlock for editing' to modify this read-only object.")
                     return
                 # Only proceed if value has actually changed
@@ -2421,10 +2953,12 @@ class SNMPControllerGUI:
         ok_button.pack(side="right")
 
         # Focus handling
-        if is_writable:
+        if not show_checkbox:
+            # For write-only and read-write, entry is enabled by default
             value_entry.focus()
             value_entry.select_range(0, 'end')
         elif unlock_checkbox:
+            # For read-only, focus on checkbox
             unlock_checkbox.focus()
 
         # Bind keys
@@ -2981,16 +3515,7 @@ def main() -> None:
                 _app.port_var.set("" if port_val is None else str(port_val))
             
             # Load trap configuration
-            if "trap_destinations" in saved:
-                # Ensure ports are integers when loading from config
-                trap_dests = saved["trap_destinations"]
-                if isinstance(trap_dests, list):
-                    _app.trap_destinations = [(host, int(port) if isinstance(port, str) else port) for host, port in trap_dests]
-                else:
-                    _app.trap_destinations = trap_dests
-                # Refresh destinations display if traps tab exists
-                if hasattr(_app, 'dest_tree') and _app.dest_tree:
-                    _app._update_dest_display()
+            # Note: trap_destinations are now loaded from app config via API, not GUI config
             if "selected_trap" in saved and saved["selected_trap"] != "No traps available" and hasattr(_app, 'trap_var'):
                 _app.trap_var.set(saved["selected_trap"])
             if "trap_index" in saved and hasattr(_app, 'trap_index_var'):
