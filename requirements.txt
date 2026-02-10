@@ -1,7 +1,12 @@
 customtkinter==5.2.2
 dynaconf==3.2.12
-pyasn1==0.6.1
+pyasn1==0.6.0
 pytest==9.0.2
 pytest-mock==3.15.1
 PyYAML==6.0.3
 requests==2.32.5
+
+# Optional: Required for MIB Browser functionality
+# Note: pysnmp ecosystem is in transition - use one of these:
+# pysnmp-lextudio>=6.3.0
+# or check current pysnmp documentation for latest package name

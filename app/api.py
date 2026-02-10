@@ -221,6 +221,9 @@ def get_table_schema(oid: str) -> dict[str, Any]:
     entry_info = None
     entry_name = None
 
+    # For debugging: collect candidate tables that look like the requested OID
+    candidate_tables: list[tuple[str, tuple[int, ...]]] = []
+
     for mib, schema in schemas.items():
         # Handle both old flat structure and new {"objects": ..., "traps": ...} structure
         if isinstance(schema, dict):
@@ -234,13 +237,23 @@ def get_table_schema(oid: str) -> dict[str, Any]:
             for obj_name, obj_data in objects.items():
                 if isinstance(obj_data, dict) and "oid" in obj_data:
                     obj_oid = obj_data["oid"]
-                    if obj_oid == parts and obj_data.get("type") == "MibTable":
+                    obj_oid_t = tuple(obj_oid)
+                    # Save candidate MibTable objects for debug logging
+                    if obj_data.get("type") == "MibTable":
+                        candidate_tables.append((f"{mib}.{obj_name}", obj_oid_t))
+
+                    if obj_oid_t == parts and obj_data.get("type") == "MibTable":
                         table_info = obj_data
                         table_name = obj_name
                         mib_name = mib
-                    elif len(obj_oid) == len(parts) + 1 and obj_oid[:-1] == parts and obj_oid[-1] == 1 and obj_data.get("type") == "MibTableRow":
+                    elif len(obj_oid_t) == len(parts) + 1 and obj_oid_t[:-1] == parts and obj_oid_t[-1] == 1 and obj_data.get("type") == "MibTableRow":
                         entry_info = obj_data
                         entry_name = obj_name
+
+    # Debug: if we didn't find a table, log candidates for diagnostic purposes
+    if table_info is None:
+        logger.debug(f"/table-schema: requested OID {parts} - candidate tables found: {candidate_tables}")
+
 
     if not table_info:
         raise HTTPException(status_code=404, detail="Table not found")
@@ -267,19 +280,66 @@ def get_table_schema(oid: str) -> dict[str, Any]:
 
         for obj_name, obj_data in objects.items():
             if isinstance(obj_data, dict) and "oid" in obj_data:
+                # Normalize oid to tuple for reliable comparison
                 obj_oid = obj_data["oid"]
-                if len(obj_oid) > len(entry_oid) and obj_oid[:len(entry_oid)] == entry_oid:
+                obj_oid_t = tuple(obj_oid)
+                if len(obj_oid_t) > len(entry_oid) and obj_oid_t[:len(entry_oid)] == entry_oid:
                     # This is a column in the table
                     col_name = obj_name
                     is_index = col_name in index_columns
                     columns[col_name] = {
-                        "oid": obj_oid,
+                        "oid": list(obj_oid_t),
                         "type": obj_data.get("type", ""),
                         "access": obj_data.get("access", ""),
                         "is_index": is_index,
                         "default": obj_data.get("initial", ""),
                         "enums": obj_data.get("enums")
                     }
+
+    logger.info(f"/table-schema: columns found for {parts}: {list(columns.keys())}")
+
+    # Get row instances from table_info
+    rows_data = table_info.get("rows", []) if table_info else []
+    instances = []
+    for row_data in rows_data:
+        if isinstance(row_data, dict):
+            # Validate and fix index columns: ensure they don't have invalid values (like 0 for InterfaceIndex)
+            # Only fix if the column type has constraints that exclude 0
+            for idx_col in index_columns:
+                if idx_col in row_data and idx_col in columns:
+                    idx_value = row_data[idx_col]
+                    col_info = columns[idx_col]
+                    col_type = col_info.get("type", "")
+                    
+                    # Only fix 0 values for types that have constraints excluding 0
+                    # (like InterfaceIndex which requires min value of 1)
+                    should_fix_zero = False
+                    if col_type in ("InterfaceIndex", "InterfaceIndexOrZero"):
+                        # InterfaceIndex must be > 0
+                        should_fix_zero = col_type == "InterfaceIndex"
+                    
+                    if should_fix_zero and idx_value == 0 and isinstance(idx_value, int):
+                        row_data[idx_col] = 1
+                        logger.debug(f"Fixed invalid index value 0 for column {idx_col} ({col_type}) in {table_name}; changed to 1")
+            
+            # Build instance identifier from index columns
+            instance_parts = []
+            for idx_col in index_columns:
+                if idx_col in row_data:
+                    idx_value = row_data[idx_col]
+                    instance_parts.append(str(idx_value))
+            instances.append(".".join(instance_parts) if instance_parts else "1")
+
+    # Add dynamically-created instances from the persisted state file
+    oid_str = ".".join(str(x) for x in parts)
+    if snmp_agent and oid_str in snmp_agent.table_instances:
+        for instance_key in snmp_agent.table_instances[oid_str].keys():
+            if instance_key not in instances:
+                instances.append(instance_key)
+    
+    # Remove deleted instances
+    if snmp_agent:
+        instances = [inst for inst in instances if f"{oid_str}.{inst}" not in snmp_agent.deleted_instances]
 
     return {
         "name": table_name,
@@ -288,7 +348,8 @@ def get_table_schema(oid: str) -> dict[str, Any]:
         "entry_oid": entry_oid,
         "entry_name": entry_name,
         "index_columns": index_columns,
-        "columns": columns
+        "columns": columns,
+        "instances": instances
     }
 
 
@@ -517,76 +578,151 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
     
     try:
+        logger.debug(f"Creating table instance for {request.table_oid} with indices {request.index_values}")
+        
         # Parse table OID
         table_parts = tuple(int(x) for x in request.table_oid.split(".")) if request.table_oid else ()
         entry_oid = table_parts + (1,)
         
-        # Get the first index value to create the instance OID
+        # Get the index values to create the instance OID
         if not request.index_values:
             raise HTTPException(status_code=400, detail="No index values provided")
         
-        # Extract first index value
-        first_index_value = list(request.index_values.values())[0]
-        
-        # Set the index value first
-        index_oid = entry_oid + (1, int(first_index_value))
+        # Fetch table schema to get index column types
         try:
-            snmp_agent.set_scalar_value(index_oid, first_index_value)
-            logger.info(f"Created table instance: {index_oid}")
+            import httpx
+            schema_response = httpx.get(
+                "http://127.0.0.1:8800/table-schema",
+                params={"oid": request.table_oid},
+                timeout=5
+            )
+            schema_response.raise_for_status()
+            table_schema = schema_response.json()
+            columns = table_schema.get("columns", {})
+            index_columns = table_schema.get("index_columns", [])
         except Exception as e:
-            logger.warning(f"Could not set index value: {e}")
+            logger.warning(f"Could not fetch table schema: {e}")
+            # Fall back to simple integer conversion
+            columns = {}
+            index_columns = list(request.index_values.keys())
         
-        # Set other column values if provided
-        created_columns = [str(index_oid)]
+        # Helper function to convert index value based on column type
+        def convert_index_value(col_name: str, value: str | int) -> int | tuple[int, ...] | str:
+            """Convert index value to appropriate format based on column type."""
+            if col_name not in columns:
+                # Try to parse as int, otherwise keep as string
+                if isinstance(value, int):
+                    return value
+                try:
+                    return int(value)
+                except (ValueError, TypeError):
+                    return str(value)
+            
+            col_info = columns[col_name]
+            col_type = col_info.get("type", "")
+            
+            # Convert based on type
+            if col_type == "IpAddress" or "IpAddress" in col_type:
+                # Convert "192.168.1.1" to (192, 168, 1, 1)
+                if isinstance(value, str):
+                    try:
+                        parts = tuple(int(p) for p in value.split("."))
+                        return parts
+                    except (ValueError, AttributeError):
+                        return str(value)
+                return value
+            elif "Integer" in col_type or col_type in ("Integer32", "Integer64", "Unsigned32", "Gauge32", "Counter32", "Counter64"):
+                # Integer types
+                if isinstance(value, int):
+                    return value
+                try:
+                    return int(value)
+                except (ValueError, TypeError):
+                    return str(value)
+            else:
+                # String or unknown types - keep as-is
+                return str(value) if not isinstance(value, str) else value
         
-        # Load schemas to find column OIDs
-        from app.cli_load_model import load_all_schemas
-        import os
+        # Convert all index values
+        converted_indices = {}
+        for col_name in index_columns:
+            if col_name in request.index_values:
+                converted_indices[col_name] = convert_index_value(col_name, request.index_values[col_name])
         
-        schema_dir = "mock-behaviour"
-        if not os.path.exists(schema_dir):
-            raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
+        # Build the instance OID from ALL converted index values (not just the first)
+        # OID format: entry_oid + (1,) + <first_index_components> + <second_index_components> + ...
+        index_oid = entry_oid + (1,)  # Start with column index 1
+        instance_index_str = ""
         
-        schemas = load_all_schemas(schema_dir)
+        # Append each index value to the OID in order
+        for idx_col_name in index_columns:
+            if idx_col_name not in request.index_values:
+                raise HTTPException(status_code=400, detail=f"Missing required index column: {idx_col_name}")
+            
+            converted_val = converted_indices.get(idx_col_name)
+            if converted_val is None:
+                converted_val = convert_index_value(idx_col_name, request.index_values[idx_col_name])
+            
+            if isinstance(converted_val, tuple):
+                # For IpAddress and similar tuple types, expand the tuple into the OID
+                index_oid = index_oid + converted_val
+                instance_index_str += "." + ".".join(str(x) for x in converted_val)
+            else:
+                # For single values
+                int_val = int(converted_val) if isinstance(converted_val, (int, float)) else int(str(converted_val))
+                index_oid = index_oid + (int_val,)
+                instance_index_str += f".{int_val}"
         
-        # Set each column value
-        for col_name, col_value in request.column_values.items():
-            # Find the column OID in schemas
-            for mib, schema in schemas.items():
-                if isinstance(schema, dict):
-                    if "objects" in schema:
-                        objects = schema["objects"]
-                    else:
-                        objects = schema
-                else:
-                    continue  # type: ignore[unreachable]
-
-                if col_name in objects:
-                    col_data = objects[col_name]
-                    if isinstance(col_data, dict) and "oid" in col_data:
-                        col_oid = tuple(col_data["oid"])
-                        # Create instance OID for this column
-                        instance_col_oid = col_oid + (int(first_index_value),)
-                        try:
-                            snmp_agent.set_scalar_value(instance_col_oid, col_value)
-                            created_columns.append(str(instance_col_oid))
-                            logger.info(f"Set {col_name} for instance {first_index_value}")
-                        except Exception as e:
-                            logger.warning(f"Could not set {col_name}: {e}")
-                        break
+        # Persist the table instance to disk
+        instance_oid = snmp_agent.add_table_instance(
+            table_oid=request.table_oid,
+            index_values=request.index_values,
+            column_values=request.column_values or {}
+        )
+        
+        logger.info(f"Successfully created table instance: {instance_oid}")
         
         return {
             "status": "ok",
             "table_oid": request.table_oid,
-            "instance_index": first_index_value,
-            "instance_oid": f"{request.table_oid}.1.{first_index_value}",
-            "columns_created": created_columns
+            "instance_index": instance_index_str.lstrip("."),
+            "instance_oid": instance_oid,
+            "columns_created": [str(col) for col in request.column_values.keys()] if request.column_values else []
         }
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Error creating table row: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create table row: {str(e)}")
+        logger.error(f"Failed to create table instance: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create instance: {str(e)}")
+
+
+@app.delete("/table-row")
+def delete_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
+    """Delete a table instance (soft delete, marks as deleted)."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+    
+    try:
+        # Delete the instance
+        success = snmp_agent.delete_table_instance(
+            table_oid=request.table_oid,
+            index_values=request.index_values
+        )
+        
+        if success:
+            logger.info(f"Deleted table instance: {request.table_oid} with indices {request.index_values}")
+            return {
+                "status": "deleted",
+                "table_oid": request.table_oid,
+                "index_values": request.index_values
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Table instance not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete table instance: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to delete instance: {str(e)}")
 
 
 @app.get("/config")

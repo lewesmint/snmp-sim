@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import pytest
 
 from app.snmp_agent import SNMPAgent
 
@@ -43,7 +42,7 @@ def test_setup_signal_handlers_registers_signals(monkeypatch: Any) -> None:
     monkeypatch.setattr(signal, "signal", fake_signal)
 
     # Construct agent which calls _setup_signal_handlers in __init__
-    agent = SNMPAgent(config_path="agent_config.yaml")
+    SNMPAgent(config_path="agent_config.yaml")
 
     assert signal.SIGTERM in calls
     assert signal.SIGINT in calls

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from typing import Any, Dict, Optional, Set
 
@@ -64,10 +63,9 @@ class MibRegistrar:
             return
 
         # Load the type registry from the exported JSON file
+        from pathlib import Path
         if type_registry_path is None:
-            type_registry_path = os.path.join(
-                os.path.dirname(__file__), "..", "data", "types.json"
-            )
+            type_registry_path = str(Path(__file__).resolve().parent.parent / "data" / "types.json")
 
         try:
             with open(type_registry_path, "r") as f:
@@ -125,12 +123,14 @@ class MibRegistrar:
                 self.logger.info(f"Updated sysORTable with {len(sysor_rows)} rows")
 
                 # Re-register SNMPv2-MIB to apply the updated sysORTable
+                from pathlib import Path
+                type_registry_path_obj: Path
                 if type_registry_path is None:
-                    type_registry_path = os.path.join(
-                        os.path.dirname(__file__), "..", "data", "types.json"
-                    )
+                    type_registry_path_obj = Path(__file__).resolve().parent.parent / "data" / "types.json"
+                else:
+                    type_registry_path_obj = Path(type_registry_path)
                 try:
-                    with open(type_registry_path, "r") as f:
+                    with type_registry_path_obj.open("r", encoding="utf-8") as f:
                         type_registry = json.load(f)
                 except Exception:
                     type_registry = {}
@@ -138,6 +138,22 @@ class MibRegistrar:
                 # Update only the sysORTable symbols
                 # If the MIB uses new structure, pass the full structured schema so register_mib handles it
                 self.register_mib("SNMPv2-MIB", snmp2, type_registry)
+                
+                # Persist the updated schema back to disk so API calls see the updated rows
+                schema_dir = Path(__file__).resolve().parent.parent / "mock-behaviour"
+                snmp2_schema_file = schema_dir / "SNMPv2-MIB" / "schema.json"
+                try:
+                    snmp2_schema_file.parent.mkdir(parents=True, exist_ok=True)
+                    output_data = {
+                        "objects": snmp2["objects"] if "objects" in snmp2 else snmp2,
+                        "traps": snmp2.get("traps", {}),
+                    }
+                    with snmp2_schema_file.open("w", encoding="utf-8") as f:
+                        json.dump(output_data, f, indent=2)
+                    self.logger.info(f"Persisted updated sysORTable schema to {snmp2_schema_file}")
+                except Exception as e:
+                    self.logger.warning(f"Could not persist schema to disk: {e}")
+                
                 self.logger.info("sysORTable successfully populated with MIB implementations")
         except Exception as e:
             self.logger.error(f"Error populating sysORTable: {e}", exc_info=True)
@@ -426,24 +442,23 @@ class MibRegistrar:
                             )
 
                             try:
-                                overrides_path = os.path.join(
-                                    os.path.dirname(__file__), "..", "data", "overrides.json"
-                                )
-                                os.makedirs(os.path.dirname(overrides_path), exist_ok=True)
+                                from pathlib import Path
+                                overrides_path = Path(__file__).resolve().parent.parent / "data" / "overrides.json"
+                                overrides_path.parent.mkdir(parents=True, exist_ok=True)
                                 try:
-                                    with open(overrides_path, "r") as f:
+                                    with open(overrides_path, "r", encoding="utf-8") as f:
                                         overrides_data = json.load(f)
                                 except Exception:
                                     overrides_data = {}
                                 overrides_data[final_dotted] = _serialize_value(
                                     getattr(inst, "syntax", None)
                                 )
-                                with open(overrides_path, "w") as f:
+                                with open(overrides_path, "w", encoding="utf-8") as f:
                                     json.dump(overrides_data, f, indent=2, sort_keys=True)
                                 _logger.info(
                                     "Saved override for %s to %s",
                                     final_dotted,
-                                    overrides_path,
+                                    str(overrides_path),
                                 )
                             except Exception:
                                 _logger.exception("Failed to persist overrides.json")
@@ -503,6 +518,58 @@ class MibRegistrar:
                 continue
 
         return export_symbols
+
+    def _expand_index_value_to_oid_components(self, value: Any, index_type: str) -> tuple[int, ...]:
+        """Expand an index value into OID components based on its type.
+        
+        For complex types like IpAddress, this expands them into multiple integers.
+        For simple integer types, returns a single-element tuple.
+        
+        Args:
+            value: The index value (could be int, string, etc.)
+            index_type: The SNMP type of the index (e.g., "IpAddress", "Integer32")
+            
+        Returns:
+            Tuple of integers representing the OID components
+        """
+        # Handle IpAddress type - convert "a.b.c.d" to (a, b, c, d)
+        if index_type == "IpAddress":
+            if isinstance(value, str):
+                try:
+                    parts = [int(x) for x in value.split(".")]
+                    if len(parts) == 4:
+                        return tuple(parts)
+                except (ValueError, AttributeError):
+                    pass
+            # Fallback: treat as 0.0.0.0
+            return (0, 0, 0, 0)
+        
+        # Handle OctetString and DisplayString - convert to length-prefixed or just octets
+        # For now, we'll use IMPLIED encoding (no length prefix) for string indexes
+        elif index_type in ("OctetString", "DisplayString", "PhysAddress"):
+            if isinstance(value, str):
+                return tuple(ord(c) for c in value)
+            elif isinstance(value, bytes):
+                return tuple(value)
+            elif isinstance(value, int):
+                return (value,)
+            return ()
+        
+        # Handle integer types - simple single value
+        elif index_type in ("Integer32", "Unsigned32", "Integer", "Gauge32", "Counter32", "TimeTicks"):
+            try:
+                return (int(value),)
+            except (ValueError, TypeError):
+                return (0,)
+        
+        # Default: try to convert to int
+        try:
+            return (int(value),)
+        except (ValueError, TypeError):
+            # Last resort: if it's a string, use ASCII values
+            if isinstance(value, str):
+                return tuple(ord(c) for c in value)
+            return (0,)
 
     def _build_table_symbols(
         self,
@@ -613,8 +680,9 @@ class MibRegistrar:
                 )
                 col_is_writable = col_access in ("readwrite", "readcreate")
                 symbols[col_name] = col_obj
-                # Store writable flag alongside oid and base_type so it's available when creating instances
-                columns_by_name[col_name] = (col_oid, base_type, col_is_writable)
+                # Store writable flag alongside oid and *declared* type so it's available when creating instances
+                # Use the declared column type name (col_type_name) for index handling (e.g., IpAddress)
+                columns_by_name[col_name] = (col_oid, col_type_name, col_is_writable)
             except Exception as e:
                 self.logger.warning(f"Error creating column {col_name}: {e}")
                 continue
@@ -637,10 +705,24 @@ class MibRegistrar:
                 continue
 
             # Build index tuple from the index column values in row_data
-            index_tuple = tuple(
-                row_data.get(idx_name, row_idx + 1 if i == 0 else 0)
-                for i, idx_name in enumerate(index_names)
-            )
+            # For multi-field indexes or complex types like IpAddress, expand properly
+            index_components: list[int] = []
+            for i, idx_name in enumerate(index_names):
+                idx_value = row_data.get(idx_name, row_idx + 1 if i == 0 else 0)
+                
+                # Get the type of this index column
+                idx_type = "Integer32"  # default
+                if idx_name in columns_by_name:
+                    _, idx_type, _ = columns_by_name[idx_name]
+
+                # Log what we're expanding for diagnostics
+                self.logger.info(f"Expanding index: {idx_name} value={idx_value} type={idx_type}")
+                # Expand the value into OID components
+                components = self._expand_index_value_to_oid_components(idx_value, idx_type)
+                self.logger.info(f"Expanded components for {idx_name}: {components}")
+                index_components.extend(components)
+            
+            index_tuple = tuple(index_components)
 
             if table_name == "sysORTable":
                 self.logger.info(
@@ -684,6 +766,16 @@ class MibRegistrar:
 
                     inst_name = f"{col_name}Inst_{'_'.join(map(str, index_tuple))}"
                     symbols[inst_name] = inst
+
+                    try:
+                        # Log instance OID for diagnostics
+                        try:
+                            inst_name_tuple = tuple(inst.name)
+                        except Exception:
+                            inst_name_tuple = tuple(col_oid + index_tuple)
+                        self.logger.info(f"Registered instance {inst_name} -> {inst_name_tuple}")
+                    except Exception:
+                        pass
 
                     # Attach writeCommit/writeTest wrappers for table column instances
                     try:
@@ -795,24 +887,23 @@ class MibRegistrar:
                                 )
 
                                 try:
-                                    overrides_path = os.path.join(
-                                        os.path.dirname(__file__), "..", "data", "overrides.json"
-                                    )
-                                    os.makedirs(os.path.dirname(overrides_path), exist_ok=True)
+                                    from pathlib import Path
+                                    overrides_path = Path(__file__).resolve().parent.parent / "data" / "overrides.json"
+                                    overrides_path.parent.mkdir(parents=True, exist_ok=True)
                                     try:
-                                        with open(overrides_path, "r") as f:
+                                        with open(overrides_path, "r", encoding="utf-8") as f:
                                             overrides_data = json.load(f)
                                     except Exception:
                                         overrides_data = {}
                                     overrides_data[final_dotted] = _serialize_value(
                                         getattr(inst_ref, "syntax", None)
                                     )
-                                    with open(overrides_path, "w") as f:
+                                    with open(overrides_path, "w", encoding="utf-8") as f:
                                         json.dump(overrides_data, f, indent=2, sort_keys=True)
                                     _logger.info(
                                         "Saved override for %s to %s",
                                         final_dotted,
-                                        overrides_path,
+                                        str(overrides_path),
                                     )
                                 except Exception:
                                     _logger.exception("Failed to persist overrides.json")

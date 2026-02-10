@@ -40,7 +40,7 @@ def main() -> None:
         except Exception:
             pass
 
-    agent_proc = subprocess.Popen(args.agent_cmd.split(), stdout=agent_log.open("w"), stderr=subprocess.STDOUT)
+    subprocess.Popen(args.agent_cmd.split(), stdout=agent_log.open("w"), stderr=subprocess.STDOUT)
 
     try:
         print(f"Waiting {args.gui_delay} seconds for agent to start initializing...")

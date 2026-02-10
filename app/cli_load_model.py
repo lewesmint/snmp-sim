@@ -16,11 +16,12 @@ def load_all_schemas(schema_dir: str) -> TypeRegistry:
         print(f"Schema directory not found: {schema_dir}", file=sys.stderr)
         return model
 
+    from pathlib import Path
     for item in os.listdir(schema_dir):
-        mib_dir = os.path.join(schema_dir, item)
-        if os.path.isdir(mib_dir):
-            schema_path = os.path.join(mib_dir, "schema.json")
-            if os.path.exists(schema_path):
+        mib_dir = Path(schema_dir) / item
+        if mib_dir.is_dir():
+            schema_path = mib_dir / "schema.json"
+            if schema_path.exists():
                 try:
                     with open(schema_path, "r", encoding="utf-8") as f:
                         schema = json.load(f)
@@ -38,12 +39,18 @@ def print_model_summary(model: Dict[str, Dict[str, Any]]) -> None:
     """Print a summary of the loaded model."""
     print(f"Loaded {len(model)} MIB schemas:")
     for mib, schema in model.items():
-        object_count = len(schema)
+        # Handle both old flat structure and new {"objects": ..., "traps": ...} structure
+        if isinstance(schema, dict) and "objects" in schema:
+            objects = schema["objects"]
+        else:
+            objects = schema
+        
+        object_count = len(objects) if isinstance(objects, dict) else 0
         table_count = sum(
             1
-            for obj in schema.values()
+            for obj in objects.values()
             if isinstance(obj, dict) and obj.get("type") == "MibTable"
-        )
+        ) if isinstance(objects, dict) else 0
         print(f"  {mib}: {object_count} objects, {table_count} tables")
 
 

@@ -109,7 +109,7 @@ def test_table_display() -> bool:
             break  # Test only one entry
 
     if not found_entries:
-        print(f"ERROR: Table children don't appear to be entry instances")
+        print("ERROR: Table children don't appear to be entry instances")
         return False
 
     print("SUCCESS: Table display shows entries with columns grouped under them!")

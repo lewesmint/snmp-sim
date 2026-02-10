@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Any, Literal, Optional, Tuple, cast
 
-from pysnmp.hlapi.v3arch.asyncio import (
+from pysnmp.hlapi.asyncio import (
     CommunityData,
     ContextData,
     NotificationType,

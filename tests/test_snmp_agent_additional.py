@@ -313,14 +313,15 @@ def test_run_success_path_with_mib_compilation_and_generation(monkeypatch: pytes
 
     # Mock MibCompiler to create a compiled file
     class FakeCompiler:
-        def __init__(self, compiled_dir: str, app_config: Any) -> None:
-            self.compiled_dir = compiled_dir
+        def __init__(self, _compiled_dir: str, app_config: Any) -> None:
+            # Force compiled_dir to our test temp directory
+            self.compiled_dir = str(compiled_dir)
 
         def compile(self, mib_name: str) -> str:
-            py_path = os.path.join(self.compiled_dir, f"{mib_name}.py")
-            with open(py_path, 'w') as f:
-                f.write("# fake compiled")
-            return py_path
+            from pathlib import Path
+            py_path = Path(self.compiled_dir) / f"{mib_name}.py"
+            py_path.write_text("# fake compiled", encoding="utf-8")
+            return str(py_path)
 
     monkeypatch.setattr("app.snmp_agent.MibCompiler", FakeCompiler)
 
@@ -344,13 +345,13 @@ def test_run_success_path_with_mib_compilation_and_generation(monkeypatch: pytes
             self.json_dir = json_dir
 
         def generate(self, py_path: str) -> None:
+            from pathlib import Path
             # Create schema.json
-            mib_name = os.path.basename(py_path).replace('.py', '')
-            mib_dir = os.path.join(self.json_dir, mib_name)
-            os.makedirs(mib_dir, exist_ok=True)
-            schema_path = os.path.join(mib_dir, "schema.json")
-            with open(schema_path, 'w') as f:
-                json.dump({"test": "schema"}, f)
+            mib_name = Path(py_path).stem
+            mib_dir = Path(self.json_dir) / mib_name
+            mib_dir.mkdir(parents=True, exist_ok=True)
+            schema_path = mib_dir / "schema.json"
+            schema_path.write_text(json.dumps({"test": "schema"}), encoding="utf-8")
 
     monkeypatch.setattr("app.generator.BehaviourGenerator", FakeGenerator)
 

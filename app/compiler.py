@@ -56,16 +56,16 @@ class MibCompiler:
         )
 
         # Add sources: the directory containing the MIB file and standard locations
-        compiler.add_sources(FileReader(mib_dir))
-        compiler.add_sources(FileReader("."))
+        compiler.addSources(FileReader(mib_dir))
+        compiler.addSources(FileReader("."))
 
         # Add data/mibs and all its subdirectories recursively
         mib_data_dir = "data/mibs"
         if os.path.exists(mib_data_dir):
-            compiler.add_sources(FileReader(mib_data_dir))
+            compiler.addSources(FileReader(mib_data_dir))
             for root, dirs, files in os.walk(mib_data_dir):
                 if root != mib_data_dir:  # Don't add the root twice
-                    compiler.add_sources(FileReader(root))
+                    compiler.addSources(FileReader(root))
 
         # Add system MIB directory (Net-SNMP default location on Windows)
         # AppConfig should be passed in by the caller for config access
@@ -79,10 +79,10 @@ class MibCompiler:
             and system_mib_dir
             and os.path.exists(system_mib_dir)
         ):
-            compiler.add_sources(FileReader(system_mib_dir))
+            compiler.addSources(FileReader(system_mib_dir))
 
         # Add searchers for already compiled MIBs
-        compiler.add_searchers(PyFileSearcher(self.output_dir))
+        compiler.addSearchers(PyFileSearcher(self.output_dir))
 
         # Compile the MIB
         results = compiler.compile(mib_filename)
@@ -120,7 +120,8 @@ class MibCompiler:
         if actual_mib_name is None:
             raise MibCompilationError(f"No MIB module found in {mib_filename}")
 
-        compiled_py = os.path.join(self.output_dir, f"{actual_mib_name}.py")
+        from pathlib import Path
+        compiled_py = str(Path(self.output_dir) / f"{actual_mib_name}.py")
 
         # If there are missing dependencies, provide helpful error message
         if missing_deps:

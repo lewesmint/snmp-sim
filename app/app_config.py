@@ -32,9 +32,10 @@ class AppConfig:
         if not hasattr(self, "settings"):
             # If caller passed the default name, prefer data/agent_config.yaml if present
             if config_path == "agent_config.yaml":
-                data_path = os.path.join("data", "agent_config.yaml")
-                if os.path.exists(data_path):
-                    config_path = data_path
+                from pathlib import Path
+                data_path = Path("data") / "agent_config.yaml"
+                if data_path.exists():
+                    config_path = str(data_path)
 
             if not os.path.exists(config_path):
                 raise FileNotFoundError(f"Config file {config_path} not found")

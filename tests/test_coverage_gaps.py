@@ -205,8 +205,8 @@ def test_snmp_agent_register_mib_objects_missing_type_registry_file(caplog: pyte
     setattr(agent, "MibTableRow", mocker.Mock())
     setattr(agent, "MibTableColumn", mocker.Mock())
     
-    # Make the type registry file not exist
-    mocker.patch('app.snmp_agent.os.path.join', return_value="/nonexistent/types.json")
+    # Make the type registry file not exist (patch Path.exists used by the registrar)
+    mocker.patch('app.mib_registrar.Path.exists', return_value=False)
     with caplog.at_level(logging.ERROR):
         agent._register_mib_objects()
     

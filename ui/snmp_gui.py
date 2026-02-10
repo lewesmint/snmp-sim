@@ -1,13 +1,33 @@
 import customtkinter as ctk
 from tkinter import messagebox, ttk
 import tkinter as tk
-from typing import Any, Dict, Tuple, List
+import tkinter.font as tkfont
+from typing import Any, Dict, Tuple, List, cast, Optional
 import concurrent.futures
 import requests
 from datetime import datetime
 import argparse
 import json
 from pathlib import Path
+
+# Import common utilities and MIB browser
+try:
+    from ui.common import Logger, save_gui_log
+    from ui.mib_browser import MIBBrowserWindow
+except ImportError:
+    # Fallback for when running from ui directory
+    try:
+        from common import Logger, save_gui_log  # type: ignore[no-redef]
+        from mib_browser import MIBBrowserWindow  # type: ignore[no-redef]
+    except ImportError:
+        # If module is not found, import from ui using absolute path
+        import sys
+        from pathlib import Path
+        ui_dir = str(Path(__file__).parent)
+        if ui_dir not in sys.path:
+            sys.path.insert(0, ui_dir)
+        from common import Logger, save_gui_log  # type: ignore[no-redef]
+        from mib_browser import MIBBrowserWindow  # type: ignore[no-redef]
 
 # Set appearance mode and color theme
 ctk.set_appearance_mode("system")  # Modes: "System" (default), "Dark", "Light"
@@ -31,6 +51,13 @@ class SNMPControllerGUI:
         self.oid_to_item: Dict[str, str] = {}  # oid_str -> tree item id
         # Executor for background value fetching
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+        
+        # Initialize logger (will set log widget after UI setup)
+        self.logger = Logger()
+        
+        # MIB Browser instance (will be created when tab is added)
+        self.mib_browser: Optional[MIBBrowserWindow] = None
+        
         self._setup_ui()
         self._log("Application started")
 
@@ -68,9 +95,12 @@ class SNMPControllerGUI:
         log_label = ctk.CTkLabel(log_frame, text="Log Output:", anchor="w")
         log_label.pack(fill="x", padx=5, pady=(5, 0))
 
-        self.log_text = ctk.CTkTextbox(log_frame, height=150, font=("Courier", 11))
+        self.log_text = tk.Text(log_frame, height=150, font=("Courier", 11), bg="#2b2b2b", fg="#ffffff")
         self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
         self.log_text.configure(state="disabled")
+        
+        # Set log widget for logger
+        self.logger.set_log_widget(self.log_text)
 
         # Status bar
         self.status_var = ctk.StringVar(value="Disconnected")
@@ -101,6 +131,22 @@ class SNMPControllerGUI:
         search_btn = ctk.CTkButton(toolbar, text="Go", command=self._on_search, width=50)
         search_btn.pack(side="left")
 
+        # Selected item details (OID, value, type) - copyable, non-editable
+        self.selected_info_var = ctk.StringVar(value="")
+        self.selected_info_entry = ctk.CTkEntry(
+            toolbar,
+            textvariable=self.selected_info_var,
+            font=("Courier", 13),
+            state="readonly",
+        )
+        self.selected_info_entry.pack(side="left", padx=(12, 12), fill="x", expand=True)
+
+        # Font size controls
+        font_inc_btn = ctk.CTkButton(toolbar, text="+", width=32, command=lambda: self._adjust_tree_font_size(1))
+        font_dec_btn = ctk.CTkButton(toolbar, text="-", width=32, command=lambda: self._adjust_tree_font_size(-1))
+        font_inc_btn.pack(side="right", padx=(6, 0))
+        font_dec_btn.pack(side="right")
+
         # Frame for treeview (ttk.Treeview is used as customtkinter doesn't have a tree widget)
         tree_frame = ctk.CTkFrame(oid_frame)
         tree_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -109,8 +155,10 @@ class SNMPControllerGUI:
         style = ttk.Style()
         # style.theme_use("default")
         style.theme_use('clam')                       # optional: helps rowheight be respected on some platforms
-        style.configure("Treeview", font=('Helvetica', 22), rowheight=30)
-        style.configure("Treeview.Heading", font=('Helvetica', 23, 'bold'))
+        self.tree_font_size = 22
+        self.tree_row_height = 40
+        style.configure("Treeview", font=('Helvetica', self.tree_font_size), rowheight=self.tree_row_height)
+        style.configure("Treeview.Heading", font=('Helvetica', self.tree_font_size + 1, 'bold'))
 
         # Configure colors based on appearance mode
 
@@ -121,25 +169,34 @@ class SNMPControllerGUI:
         # Alternating row colors for better readability
         alt_bg = "#333333" if ctk.get_appearance_mode() == "Dark" else "#f0f0f0"
 
-        style.configure("OID.Treeview",
-                       background=bg_color,
-                       foreground=fg_color,
-                       fieldbackground=bg_color,
-                       borderwidth=2,
-                       relief="solid",
-                       rowheight=40)
-        style.configure("OID.Treeview.Heading",
-                       background="#1f1f1f" if ctk.get_appearance_mode() == "Dark" else "#e0e0e0",
-                       foreground=fg_color,
-                       borderwidth=2,
-                       relief="groove",  # groove gives a 3D inset effect
-                       padding=5)
+        style.configure(
+            "OID.Treeview",
+            background=bg_color,
+            foreground=fg_color,
+            fieldbackground=bg_color,
+            borderwidth=2,
+            relief="solid",
+            rowheight=40,
+        )
+        style.configure(
+            "OID.Treeview.Heading",
+            background="#1f1f1f" if ctk.get_appearance_mode() == "Dark" else "#e0e0e0",
+            foreground=fg_color,
+            borderwidth=2,
+            relief="groove",  # groove gives a 3D inset effect
+            padding=5,
+        )
         style.map("OID.Treeview",
                  background=[("selected", selected_bg)])
 
         # Treeview for OIDs (add columns for instance, value, type, access, mib)
-        self.oid_tree = ttk.Treeview(tree_frame, columns=("oid", "instance", "value", "type", "access", "mib"),
-                                     show="tree headings", style="OID.Treeview")
+        self.oid_tree = ttk.Treeview(
+            tree_frame,
+            columns=("oid", "instance", "value", "type", "access", "mib"),
+            show="tree headings",
+            style="OID.Treeview",
+            selectmode="browse",
+        )
         self.oid_tree.heading("#0", text="📋 MIB/Object")
         self.oid_tree.heading("oid", text="🔢 OID")
         self.oid_tree.heading("instance", text="Instance")
@@ -151,7 +208,7 @@ class SNMPControllerGUI:
         # Configure columns with borders for better separation
         self.oid_tree.column("#0", width=250, minwidth=150, stretch=False)
         self.oid_tree.column("oid", width=200, minwidth=150, stretch=True, anchor="w")
-        self.oid_tree.column("instance", width=80, minwidth=60, stretch=False, anchor="center")
+        self.oid_tree.column("instance", width=160, minwidth=120, stretch=False, anchor="center")
         self.oid_tree.column("value", width=200, minwidth=100, stretch=True, anchor="w")
         self.oid_tree.column("type", width=120, minwidth=80, stretch=False, anchor="w")
         self.oid_tree.column("access", width=100, minwidth=80, stretch=False, anchor="center")
@@ -191,11 +248,11 @@ class SNMPControllerGUI:
         icons = {}
         icons_dir = Path(__file__).parent / "icons"
 
-        def make_generated(color, inner=None):
+        def make_generated(color: str, inner: str | None = None) -> tk.PhotoImage:
             img = tk.PhotoImage(width=size, height=size)
-            img.put(color, to=(0,0,size-1,size-1))
+            img.put(color, to=(0, 0))
             if inner:
-                img.put(inner, to=(2,2,size-3,size-3))
+                img.put(inner, to=(2, 2))
             return img
 
         # Try to load from ui/icons/<name>.png, otherwise generate a simple icon
@@ -310,6 +367,12 @@ class SNMPControllerGUI:
                 self.tabview.delete("Scripts")
                 self.tabview.add("Scripts")
                 self._setup_scripts_tab()
+    
+    def enable_mib_browser_tab(self) -> None:
+        """Enable the 'MIB Browser' tab after connecting."""
+        if "MIB Browser" not in self.tabview._tab_dict:
+            self.tabview.add("MIB Browser")
+            self._setup_mib_browser_tab()
     
     def _setup_config_tab(self) -> None:
         """Setup the configuration tab."""
@@ -1192,6 +1255,23 @@ class SNMPControllerGUI:
         for root in self.oid_tree.get_children(""):
             _recurse(root)
 
+    def _setup_mib_browser_tab(self) -> None:
+        """Setup the MIB Browser tab for testing SNMP commands."""
+        browser_frame = self.tabview.tab("MIB Browser")
+        
+        # Get connection settings for MIB browser
+        host = self.host_var.get().strip() if hasattr(self, 'host_var') else "127.0.0.1"
+        
+        # Create embedded MIB browser
+        self.mib_browser = MIBBrowserWindow(
+            parent=browser_frame,
+            logger=self.logger,
+            default_host=host,
+            default_port=161,
+            default_community="public",
+            oid_metadata=self.oid_metadata
+        )
+
     def _populate_oid_tree(self) -> None:
         """Populate the OID tree with data."""
         # Clear existing
@@ -1337,8 +1417,9 @@ class SNMPControllerGUI:
                 img = None
                 if getattr(self, 'oid_icon_images', None):
                     img = self.oid_icon_images.get(icon_key)
+                img_ref = cast(Any, img) if img is not None else ""
 
-                node = self.oid_tree.insert(parent, "end", text=display_text, image=img,
+                node = self.oid_tree.insert(parent, "end", text=display_text, image=img_ref,
                                            values=(oid_str, instance_str, val, type_val, access_val, mib_val),
                                            tags=(row_tag,))
                 self.oid_to_item[oid_str] = node
@@ -1354,7 +1435,8 @@ class SNMPControllerGUI:
                     img = None
                     if getattr(self, 'oid_icon_images', None):
                         img = self.oid_icon_images.get(icon_key)
-                    node = self.oid_tree.insert(parent, "end", text=display_text, image=img,
+                    img_ref = cast(Any, img) if img is not None else ""
+                    node = self.oid_tree.insert(parent, "end", text=display_text, image=img_ref,
                                                values=(oid_str, "", "", type_val, access_val, mib_val),
                                                tags=(row_tag, 'table'))
                     self.oid_to_item[oid_str] = node
@@ -1370,7 +1452,8 @@ class SNMPControllerGUI:
                     img = None
                     if getattr(self, 'oid_icon_images', None):
                         img = self.oid_icon_images.get(icon_key)
-                    node = self.oid_tree.insert(parent, "end", text=display_text, image=img,
+                    img_ref = cast(Any, img) if img is not None else ""
+                    node = self.oid_tree.insert(parent, "end", text=display_text, image=img_ref,
                                                values=(oid_str, "", "", type_val, access_val, mib_val),
                                                tags=(row_tag,))
                     self.oid_to_item[oid_str] = node
@@ -1432,10 +1515,12 @@ class SNMPControllerGUI:
     def _on_tree_select(self, event: Any) -> None:
         """Handler called when tree selection changes; populates Table View if table or table entry selected."""
         selected_items = self.oid_tree.selection()
+        print(f"\n[DEBUG] _on_tree_select called, selected_items: {selected_items}")
         if not selected_items:
             # Hide table tab if no selection
             if "Table View" in self.tabview._tab_dict:
                 self.tabview.delete("Table View")
+            self._update_selected_info(None)
             return
 
         # Check if any selected item is a table, table entry, or table column
@@ -1466,6 +1551,11 @@ class SNMPControllerGUI:
                     table_entry_item = parent
                 break
 
+        # Update the selected item display for the first selected item
+        print(f"[DEBUG] Calling _ensure_oid_name_width for item: {selected_items[0]}")
+        self._ensure_oid_name_width(selected_items[0])
+        self._update_selected_info(selected_items[0])
+
         if table_item or table_entry_item:
             # Determine which table to show
             if table_entry_item and not table_item:
@@ -1478,7 +1568,11 @@ class SNMPControllerGUI:
                 # Show table tab if not already shown
                 if "Table View" not in self.tabview._tab_dict:
                     self.enable_table_tab()
-                
+                table_oid = self.oid_tree.set(table_item, "oid")
+                self._log(
+                    f"Table selection: table_oid={table_oid}, selected_instance={selected_instance}",
+                    "DEBUG",
+                )
                 self._populate_table_view(table_item, selected_instance)
                 # Enable add button
                 self.add_instance_btn.configure(state="normal")
@@ -1486,6 +1580,175 @@ class SNMPControllerGUI:
             # Hide table tab if not on table-related item
             if "Table View" in self.tabview._tab_dict:
                 self.tabview.delete("Table View")
+
+    def _update_selected_info(self, item: str | None) -> None:
+        """Update the toolbar display with OID, value, and type for the selected item."""
+        if not item:
+            self._set_selected_info_text("")
+            return
+
+        oid_str = self.oid_tree.set(item, "oid")
+        instance_str = self.oid_tree.set(item, "instance")
+        type_str = self.oid_tree.set(item, "type")
+        tags = self.oid_tree.item(item, "tags")
+
+        if not oid_str:
+            self._set_selected_info_text("")
+            return
+
+        full_oid = oid_str
+        if instance_str:
+            full_oid = f"{oid_str}.{instance_str}"
+
+        if "table-index" in tags:
+            value_str = "N/A"
+        else:
+            value_str = self.oid_tree.set(item, "value")
+        if not value_str:
+            try:
+                resp = requests.get(
+                    f"{self.api_url}/value",
+                    params={"oid": full_oid},
+                    timeout=2,
+                )
+                if resp.status_code == 200:
+                    value_str = str(resp.json().get("value", ""))
+                else:
+                    value_str = "N/A"
+            except Exception:
+                value_str = "N/A"
+
+        display = self._format_selected_info(full_oid, type_str, value_str)
+        self._set_selected_info_text(display)
+
+    def _ensure_oid_name_width(self, item: str) -> None:
+        """Ensure the name column is wide enough to display the selected item's text."""
+        try:
+            text = self.oid_tree.item(item, "text") or ""
+            if not text:
+                print(f"[DEBUG] No text for item {item}, skipping expansion")
+                return
+            
+            # Get the actual font size from our stored value
+            size = getattr(self, "tree_font_size", 22)
+            font = tkfont.Font(family="Helvetica", size=size)
+            
+            text_width = font.measure(text)
+            
+            # Calculate indentation based on depth in tree
+            depth = 0
+            parent = self.oid_tree.parent(item)
+            while parent:
+                depth += 1
+                parent = self.oid_tree.parent(parent)
+            
+            # Standard tree values: ~20px indent per level, ~20px for icon/image
+            indent_per_level = 20
+            icon_width = 20
+            indentation = depth * indent_per_level + icon_width
+            
+            # More generous padding to ensure text is fully visible
+            padding = 40
+            desired_width = indentation + text_width + padding
+            current_width = int(self.oid_tree.column("#0", "width"))
+            
+            print("[DEBUG] _ensure_oid_name_width:")
+            print(f"  text: '{text}'")
+            print(f"  depth: {depth}, indentation: {indentation}px (indent/level: {indent_per_level}, icon: {icon_width})")
+            print(f"  font size: {size}, text_width: {text_width}px")
+            print(f"  padding: {padding}px")
+            print(f"  desired_width: {indentation} + {text_width} + {padding} = {desired_width}px")
+            print(f"  current_width: {current_width}px")
+            
+            if desired_width > current_width:
+                print(f"  ACTION: Expanding column from {current_width} to {desired_width}")
+                self.oid_tree.column("#0", width=desired_width)
+            else:
+                print(f"  ACTION: No expansion needed (desired {desired_width} <= current {current_width})")
+        except Exception as e:
+            print(f"[DEBUG] Exception in _ensure_oid_name_width: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _adjust_tree_font_size(self, delta: int) -> None:
+        """Increase or decrease the tree font size and row height."""
+        try:
+            size = int(getattr(self, "tree_font_size", 22)) + delta
+            size = max(12, min(34, size))
+            self.tree_font_size = size
+            self.tree_row_height = max(24, size + 8)
+            style = ttk.Style()
+            style.configure("Treeview", font=('Helvetica', size), rowheight=self.tree_row_height)
+            style.configure("Treeview.Heading", font=('Helvetica', size + 1, 'bold'))
+            self._ensure_oid_name_width(self.oid_tree.focus())
+        except Exception:
+            pass
+
+    def _format_selected_info(self, full_oid: str, type_str: str, value_str: str) -> str:
+        """Format selected item display to match snmpget-like output."""
+        if not full_oid.startswith("."):
+            full_oid = "." + full_oid
+        if type_str:
+            return f"{full_oid} = {type_str}: {value_str}"
+        return f"{full_oid} = {value_str}"
+
+    def _extract_index_values(
+        self,
+        instance: str,
+        index_columns: list[str],
+        columns_meta: Dict[str, Any],
+    ) -> Dict[str, str]:
+        """Decode index values from a dotted instance string."""
+        parts = instance.split(".") if instance else []
+        values: Dict[str, str] = {}
+        pos = 0
+        for col_name in index_columns:
+            col_info = columns_meta.get(col_name, {}) if columns_meta else {}
+            col_type = str(col_info.get("type", "")).lower()
+            if col_type == "ipaddress":
+                if pos + 4 <= len(parts):
+                    values[col_name] = ".".join(parts[pos:pos + 4])
+                    pos += 4
+                else:
+                    values[col_name] = instance
+            else:
+                if pos < len(parts):
+                    values[col_name] = parts[pos]
+                    pos += 1
+                else:
+                    values[col_name] = instance
+        return values
+
+    def _build_instance_from_index_values(
+        self,
+        index_values: Dict[str, str],
+        index_columns: list[str],
+        columns_meta: Dict[str, Any],
+    ) -> str:
+        """Encode index values into a dotted instance string."""
+        parts: list[str] = []
+        for col_name in index_columns:
+            col_info = columns_meta.get(col_name, {}) if columns_meta else {}
+            col_type = str(col_info.get("type", "")).lower()
+            raw_val = str(index_values.get(col_name, ""))
+            if col_type == "ipaddress":
+                ip_parts = [p for p in raw_val.split(".") if p]
+                if len(ip_parts) == 4:
+                    parts.extend(ip_parts)
+                else:
+                    parts.append(raw_val)
+            else:
+                parts.append(raw_val)
+        return ".".join(parts)
+
+    def _set_selected_info_text(self, text: str) -> None:
+        """Set the selected info textbox content in a copyable way."""
+        try:
+            self.selected_info_entry.configure(state="normal")
+            self.selected_info_var.set(text)
+            self.selected_info_entry.configure(state="readonly")
+        except Exception:
+            pass
 
     def _on_table_row_select(self, event: Any) -> None:
         """Handler called when table row selection changes."""
@@ -1509,7 +1772,7 @@ class SNMPControllerGUI:
         if not item or not column:
             return
         
-        # Don't allow editing the index column (column 0)
+        # Don't allow editing the index display column (column 0)
         col_num = int(column[1:]) - 1  # Convert #1, #2, etc to 0, 1, etc
         if col_num == 0:
             return
@@ -1605,21 +1868,45 @@ class SNMPControllerGUI:
             
             col_name, col_oid, _ = columns[col_num - 1]
             instance_index = item_values[0]  # First value is the instance index
-            full_oid = f"{col_oid}.{instance_index}"
-            
-            # Update via API
-            resp = requests.post(f"{self.api_url}/value", 
-                               json={"oid": full_oid, "value": new_value}, 
-                               timeout=5)
-            
-            if resp.status_code == 200:
-                # Update the cell display
+
+            index_columns = getattr(self, "_current_index_columns", [])
+            columns_meta = getattr(self, "_current_columns_meta", {})
+            if col_name in index_columns:
                 updated_values = list(item_values)
                 updated_values[col_num] = new_value
+                index_values: Dict[str, str] = {}
+                for idx_name in index_columns:
+                    try:
+                        idx_pos = [c[0] for c in columns].index(idx_name)
+                        index_values[idx_name] = str(updated_values[1 + idx_pos])
+                    except ValueError:
+                        index_values[idx_name] = ""
+                new_instance = self._build_instance_from_index_values(
+                    index_values,
+                    index_columns,
+                    columns_meta,
+                )
+                updated_values[0] = new_instance
                 self.table_tree.item(self.editing_item, values=updated_values)
-                self._log(f"Updated {col_name} to: {new_value}")
+                self._log(f"Updated index {col_name} to: {new_value}")
             else:
-                messagebox.showerror("Error", f"Failed to update value: {resp.text}")
+                full_oid = f"{col_oid}.{instance_index}"
+
+                # Update via API
+                resp = requests.post(
+                    f"{self.api_url}/value",
+                    json={"oid": full_oid, "value": new_value},
+                    timeout=5,
+                )
+
+                if resp.status_code == 200:
+                    # Update the cell display
+                    updated_values = list(item_values)
+                    updated_values[col_num] = new_value
+                    self.table_tree.item(self.editing_item, values=updated_values)
+                    self._log(f"Updated {col_name} to: {new_value}")
+                else:
+                    messagebox.showerror("Error", f"Failed to update value: {resp.text}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save cell: {e}")
         finally:
@@ -1668,53 +1955,72 @@ class SNMPControllerGUI:
         
         self._log(f"Found {len(columns)} columns for table {oid_str}")
 
-        # Find instances with timeout mechanism
-        first_col_oid = columns[0][1]
-        instances: list[str] = []
-        index = 1
-        max_attempts = 20  # Limit the number of attempts to prevent infinite loading
-        while len(instances) < max_attempts:
-            try:
-                resp = requests.get(f"{self.api_url}/value", params={"oid": first_col_oid + "." + str(index)}, timeout=1)
-                if resp.status_code == 200:
-                    instances.append(str(index))
-                    index += 1
-                else:
-                    break
-            except Exception as e:
-                self._log(f"Error loading instance {index}: {e}", "DEBUG")
-                break
-
-        self._log(f"Loaded {len(instances)} instances from {first_col_oid}")
-        if len(instances) == max_attempts:
-            messagebox.showwarning("Warning", "Reached maximum attempts while loading instances.")
+        # Get table schema including instances from API
+        index_columns: list[str] = []
+        schema: Dict[str, Any] = {}  # Initialize to empty dict
+        try:
+            resp = requests.get(f"{self.api_url}/table-schema", params={"oid": oid_str}, timeout=5)
+            if resp.status_code == 200:
+                schema = resp.json()
+                instances = schema.get("instances", [])
+                index_columns = schema.get("index_columns", [])
+                self._log(
+                    f"Loaded {len(instances)} instances from table schema for {oid_str}: "
+                    f"instances={instances}, index_columns={index_columns}",
+                    "DEBUG",
+                )
+            else:
+                self._log("Failed to get table schema, using fallback discovery", "WARNING")
+                instances = self._discover_instances_fallback(columns[0][1])
+        except Exception as e:
+            self._log(f"Error loading table schema: {e}, using fallback discovery", "WARNING")
+            instances = self._discover_instances_fallback(columns[0][1])
 
         # Set columns
         col_names = [col[0] for col in columns]
         self.table_tree["columns"] = ("index",) + tuple(col_names)
         self.table_tree.heading("index", text="Index")
         self.table_tree.column("index", width=100, minwidth=50, stretch=False, anchor="center")
+        index_column_set = {name.lower() for name in index_columns}
         for col_name in col_names:
-            self.table_tree.heading(col_name, text=col_name)
+            if col_name.lower() in index_column_set:
+                header_text = f"🔑 {col_name}"
+            else:
+                header_text = col_name
+            self.table_tree.heading(col_name, text=header_text)
             self.table_tree.column(col_name, width=150, minwidth=100, stretch=True, anchor="w")
         
         # Store columns for later use in cell editing
         self._current_table_columns = columns
+        self._current_index_columns = index_columns
+        self._current_columns_meta = schema.get("columns", {})
+        self._current_table_item = table_item
 
         # Populate rows
         row_items = []
+        index_column_set = {name.lower() for name in index_columns}
+        columns_meta = schema.get("columns", {})
         for inst in instances:
             values = [inst]
+            inst_str = str(inst)
+            index_values = self._extract_index_values(inst_str, index_columns, columns_meta)
             for name, col_oid, col_num in columns:
-                full_oid = f"{col_oid}.{inst}"
-                try:
-                    resp = requests.get(f"{self.api_url}/value", params={"oid": full_oid}, timeout=1)
-                    if resp.status_code == 200:
-                        val = resp.json().get("value", "")
-                    else:
+                if name.lower() in index_column_set:
+                    val = index_values.get(name, inst_str)
+                else:
+                    full_oid = f"{col_oid}.{inst_str}"
+                    try:
+                        resp = requests.get(
+                            f"{self.api_url}/value",
+                            params={"oid": full_oid},
+                            timeout=1,
+                        )
+                        if resp.status_code == 200:
+                            val = resp.json().get("value", "")
+                        else:
+                            val = ""
+                    except Exception:
                         val = ""
-                except Exception:
-                    val = ""
                 values.append(val)
             item = self.table_tree.insert("", "end", values=values)
             row_items.append((inst, item))
@@ -1729,6 +2035,32 @@ class SNMPControllerGUI:
                     self.remove_instance_btn.configure(state="normal")
                     break
 
+    def _discover_instances_fallback(self, first_col_oid: str) -> list[str]:
+        """Fallback method to discover table instances by trying sequential indexes.
+        
+        This is used when the table-schema API doesn't return instances.
+        Only works for simple single-index tables.
+        """
+        instances: list[str] = []
+        index = 1
+        max_attempts = 20  # Limit the number of attempts to prevent infinite loading
+        while len(instances) < max_attempts:
+            try:
+                resp = requests.get(f"{self.api_url}/value", params={"oid": first_col_oid + "." + str(index)}, timeout=1)
+                if resp.status_code == 200:
+                    instances.append(str(index))
+                    index += 1
+                else:
+                    break
+            except Exception as e:
+                self._log(f"Error loading instance {index}: {e}", "DEBUG")
+                break
+        
+        if len(instances) == max_attempts:
+            self._log("Reached maximum attempts while discovering instances", "WARNING")
+        
+        return instances
+
     def _add_instance(self) -> None:
         """Add a new instance to the current table."""
         try:
@@ -1738,13 +2070,28 @@ class SNMPControllerGUI:
             messagebox.showerror("Error", f"Error getting selected item: {e}")
             return
         if not selected_items:
-            return
+            selected_items = ()
         table_item = None
         for item in selected_items:
             if 'table' in self.oid_tree.item(item, 'tags'):
                 table_item = item
                 break
+            if 'table-entry' in self.oid_tree.item(item, 'tags'):
+                parent = self.oid_tree.parent(item)
+                if parent and 'table' in self.oid_tree.item(parent, 'tags'):
+                    table_item = parent
+                    break
+            if 'table-column' in self.oid_tree.item(item, 'tags'):
+                parent = self.oid_tree.parent(item)
+                if parent and 'table-entry' in self.oid_tree.item(parent, 'tags'):
+                    table_parent = self.oid_tree.parent(parent)
+                    if table_parent and 'table' in self.oid_tree.item(table_parent, 'tags'):
+                        table_item = table_parent
+                        break
         if not table_item:
+            table_item = getattr(self, "_current_table_item", None)
+        if not table_item:
+            messagebox.showwarning("No Table Selected", "Select a table or table entry first.")
             return
 
         table_oid = self.oid_tree.set(table_item, "oid")
@@ -1790,10 +2137,26 @@ class SNMPControllerGUI:
 
         # Create entry fields for each index column
         entries = {}
+        instances = [str(inst) for inst in schema.get("instances", [])]
+        index_column_names = [name for name, _ in index_columns]
+        columns_meta = schema.get("columns", {})
+        last_idx_default = None
+        if instances and index_column_names:
+            last_name = index_column_names[-1]
+            numeric_vals: list[int] = []
+            for inst in instances:
+                index_values = self._extract_index_values(inst, index_column_names, columns_meta)
+                last_val = index_values.get(last_name, "")
+                if last_val.isdigit():
+                    numeric_vals.append(int(last_val))
+            if numeric_vals:
+                last_idx_default = str(max(numeric_vals) + 1)
         row = 0
         for col_name, col_info in index_columns:
             ctk.CTkLabel(input_frame, text=f"{col_name}:").grid(row=row, column=0, sticky="w", pady=5, padx=10)
             default_val = str(col_info.get("default", ""))
+            if index_column_names and col_name == index_column_names[-1] and last_idx_default is not None:
+                default_val = last_idx_default
             entry = ctk.CTkEntry(input_frame)
             entry.insert(0, default_val)
             entry.grid(row=row, column=1, sticky="ew", pady=5, padx=(0, 10))
@@ -1852,14 +2215,80 @@ class SNMPControllerGUI:
                 messagebox.showwarning("No Selection", "Please select an instance to remove.")
                 return
             
-            # For now, just show info - actual deletion would require API support
-            messagebox.showinfo("Remove Instance", "Table instance removal functionality coming soon")
-            self._log(f"Remove instance requested for {len(selected_rows)} row(s)", "INFO")
+            # Confirm deletion
+            if len(selected_rows) == 1:
+                msg = "Are you sure you want to delete this instance?"
+            else:
+                msg = f"Are you sure you want to delete {len(selected_rows)} instances?"
+            
+            if not messagebox.askyesno("Confirm Deletion", msg):
+                return
+            
+            # Get table OID from current table item
+            if not hasattr(self, "_current_table_item"):
+                messagebox.showerror("Error", "No table selected")
+                return
+            
+            try:
+                table_oid = self.oid_tree.set(self._current_table_item, "oid")
+            except Exception as e:
+                messagebox.showerror("Error", f"Could not get table OID: {e}")
+                return
+            
+            if not table_oid:
+                messagebox.showerror("Error", "Table OID not found")
+                return
+            
+            # Delete each selected instance
+            deleted_count = 0
+            failed_count = 0
+            
+            for selected_item in selected_rows:
+                try:
+                    # Get the row values
+                    values = self.table_tree.item(selected_item, "values")
+                    if not values:
+                        failed_count += 1
+                        continue
+                    
+                    # First value is the instance string
+                    instance_str = values[0]
+                    
+                    # Extract index values from the instance string
+                    index_columns = getattr(self, "_current_index_columns", [])
+                    columns_meta = getattr(self, "_current_columns_meta", {})
+                    
+                    index_values = self._extract_index_values(instance_str, index_columns, columns_meta)
+                    
+                    # Call DELETE /table-row endpoint
+                    payload = {
+                        "table_oid": table_oid,
+                        "index_values": index_values
+                    }
+                    resp = requests.delete(f"{self.api_url}/table-row", json=payload, timeout=5)
+                    
+                    if resp.status_code == 200:
+                        deleted_count += 1
+                        self._log(f"Deleted instance: {instance_str}", "INFO")
+                    else:
+                        failed_count += 1
+                        self._log(f"Failed to delete instance {instance_str}: {resp.text}", "ERROR")
+                except Exception as e:
+                    failed_count += 1
+                    self._log(f"Error deleting instance: {e}", "ERROR")
+            
+            # Show result and refresh
+            if deleted_count > 0:
+                messagebox.showinfo("Success", f"Deleted {deleted_count} instance(s)")
+                # Refresh table view
+                self._populate_table_view(self._current_table_item)
+            
+            if failed_count > 0:
+                messagebox.showwarning("Partial Failure", f"Failed to delete {failed_count} instance(s)")
+        
         except Exception as e:
             messagebox.showerror("Error", f"Error removing instance: {e}")
             self._log(f"Error in _remove_instance: {e}", "ERROR")
-        else:
-            messagebox.showerror("Error", "No columns found")
 
     def _show_edit_dialog(self, oid: str, current_value: str, item: str, is_writable: bool) -> None:
         """Show a dialog to edit the value of an OID."""
@@ -2122,6 +2551,8 @@ class SNMPControllerGUI:
 
     def _discover_table_instances(self, item: str, entry_oid: str) -> None:
         """Discover table instances and populate the tree."""
+        self._log(f"Discovering table instances for table OID {entry_oid}", "DEBUG")
+
         # Find the entry name
         entry_name = None
         entry_tuple = tuple(int(x) for x in (entry_oid + '.1').split("."))
@@ -2145,21 +2576,50 @@ class SNMPControllerGUI:
             return
 
         instances: list[str] = []
-        index = 1
-        max_attempts = 20  # Limit the number of attempts to prevent infinite loading
-        while len(instances) < max_attempts:
-            try:
-                resp = requests.get(f"{self.api_url}/value", params={"oid": first_col_oid + "." + str(index)}, timeout=1)
-                if resp.status_code == 200:
-                    instances.append(str(index))
-                    index += 1
-                else:
-                    break
-            except Exception:
-                break
+        index_columns: list[str] = []
+        try:
+            resp = requests.get(f"{self.api_url}/table-schema", params={"oid": entry_oid}, timeout=5)
+            if resp.status_code == 200:
+                schema = resp.json()
+                instances = [str(inst) for inst in schema.get("instances", [])]
+                index_columns = list(schema.get("index_columns", []))
+                self._log(
+                    f"Table schema loaded for {entry_oid}: instances={instances}, index_columns={index_columns}",
+                    "DEBUG",
+                )
+            else:
+                self._log(
+                    f"Table schema request failed for {entry_oid}: {resp.status_code} {resp.text}",
+                    "WARNING",
+                )
+        except Exception as e:
+            self._log(f"Error loading table schema for {entry_oid}: {e}", "WARNING")
 
-        if len(instances) == max_attempts:
-            messagebox.showwarning("Warning", "Reached maximum attempts while loading instances.")
+        if not instances:
+            index = 1
+            max_attempts = 20  # Limit the number of attempts to prevent infinite loading
+            while len(instances) < max_attempts:
+                try:
+                    resp = requests.get(
+                        f"{self.api_url}/value",
+                        params={"oid": first_col_oid + "." + str(index)},
+                        timeout=1,
+                    )
+                    if resp.status_code == 200:
+                        instances.append(str(index))
+                        index += 1
+                    else:
+                        break
+                except Exception:
+                    break
+
+            if len(instances) == max_attempts:
+                messagebox.showwarning("Warning", "Reached maximum attempts while loading instances.")
+
+            self._log(
+                f"Fallback instance discovery used for {entry_oid}: instances={instances}",
+                "DEBUG",
+            )
 
         # Get columns
         columns = []
@@ -2170,33 +2630,55 @@ class SNMPControllerGUI:
                 columns.append((name, col_oid, col_num))
         columns.sort(key=lambda x: x[2])
 
+        grouped: Dict[str, List[Tuple[str, str, str, str, bool]]] = {}
+        for inst in instances:
+            grouped[inst] = []
+            for name, col_oid, col_num in columns:
+                full_col_oid = f"{col_oid}.{inst}"
+                is_index = name.lower() in {idx.lower() for idx in index_columns}
+                value_here = self.oid_values.get(full_col_oid, "")
+                if is_index:
+                    value_here = "N/A"
+                elif value_here == "":
+                    try:
+                        resp = requests.get(
+                            f"{self.api_url}/value",
+                            params={"oid": full_col_oid},
+                            timeout=2,
+                        )
+                        if resp.status_code == 200:
+                            value_here = str(resp.json().get("value", ""))
+                            self.oid_values[full_col_oid] = value_here
+                    except Exception:
+                        value_here = ""
+                grouped[inst].append((name, col_oid, full_col_oid, value_here, is_index))
+
         # Update UI
         def update_ui() -> None:
             # Remove existing children
             for child in self.oid_tree.get_children(item):
                 self.oid_tree.delete(child)
-            
-            # Group columns by instance
-            grouped: Dict[str, List[Tuple[str, str, str]]] = {}
-            for inst in instances:
-                grouped[inst] = []
-                for name, col_oid, col_num in columns:
-                    full_col_oid = f"{col_oid}.{inst}"
-                    grouped[inst].append((name, col_oid, full_col_oid))
 
             # Add entry nodes under the table
+            index_column_set = {name.lower() for name in index_columns}
             for inst, cols in grouped.items():
                 entry_display = f"{entry_name}.{inst}"
                 entry_full_oid = f"{entry_oid}.1.{inst}"
                 mib_val = self.oid_metadata.get(entry_full_oid, {}).get("mib") or "N/A"
-                entry_item = self.oid_tree.insert(item, "end", text=entry_display, values=(entry_full_oid, "", "", "Unknown", "N/A", mib_val), tags=('table-entry',))
+                entry_item = self.oid_tree.insert(
+                    item,
+                    "end",
+                    text=entry_display,
+                    values=(entry_full_oid, inst, "", "Entry", "N/A", mib_val),
+                    tags=("table-entry",),
+                )
 
                 # Add columns under the entry
-                for name, col_oid, full_col_oid in cols:
+                for name, col_oid, full_col_oid, value_here, is_index in cols:
                     access = str(self.oid_metadata.get(col_oid, {}).get("access", "")).lower()
                     type_str = self.oid_metadata.get(col_oid, {}).get("type") or "Unknown"
                     access_str = self.oid_metadata.get(col_oid, {}).get("access") or "N/A"
-                    if "index" in name.lower():
+                    if name.lower() in index_column_set:
                         icon_key = "key"
                     elif "write" in access:
                         icon_key = "edit"
@@ -2210,8 +2692,15 @@ class SNMPControllerGUI:
                     if getattr(self, 'oid_icon_images', None):
                         img = self.oid_icon_images.get(icon_key)
                     mib_val = self.oid_metadata.get(col_oid, {}).get("mib") or "N/A"
-                    value_here = self.oid_values.get(full_col_oid, "")
-                    self.oid_tree.insert(entry_item, "end", text=display_text, image=img, values=(col_oid, inst, value_here, type_str, access_str, mib_val), tags=('evenrow', 'table-column'))
+                    img_ref = cast(Any, img) if img is not None else ""
+                    self.oid_tree.insert(
+                        entry_item,
+                        "end",
+                        text=display_text,
+                        image=img_ref,
+                        values=(col_oid, inst, value_here, type_str, access_str, mib_val),
+                        tags=("evenrow", "table-column", "table-index") if is_index else ("evenrow", "table-column"),
+                    )
 
         self.root.after(0, update_ui)
     
@@ -2230,14 +2719,22 @@ class SNMPControllerGUI:
             if not self.oid_tree.get_children(child):
                 oid_str = self.oid_tree.set(child, "oid")
                 instance_str = self.oid_tree.set(child, "instance")
+                tags = self.oid_tree.item(child, "tags")
                 if not oid_str:
                     continue
 
-                # Fetch values for scalars (instance = "0") or table columns (instance is digit)
+                if "table-index" in tags:
+                    continue
+
+                # Fetch values for scalars (instance = "0") or table columns (instance is numeric or dotted)
                 if instance_str == "0":
                     fetch_oid = oid_str + ".0"
-                elif instance_str and instance_str.isdigit():
-                    fetch_oid = oid_str + "." + instance_str
+                elif instance_str:
+                    parts = instance_str.split(".")
+                    if all(part.isdigit() for part in parts if part):
+                        fetch_oid = oid_str + "." + instance_str
+                    else:
+                        continue
                 else:
                     continue
 
@@ -2324,6 +2821,13 @@ class SNMPControllerGUI:
             # Enable Traps tab when connected
             self.enable_traps_tab()
             
+            # Enable MIB Browser tab when connected
+            self.enable_mib_browser_tab()
+            
+            # Update MIB browser with OID metadata if it exists
+            if self.mib_browser:
+                self.mib_browser.set_oid_metadata(self.oid_metadata)
+            
             # Populate OID tree with OIDs
             self._populate_oid_tree()
             
@@ -2367,35 +2871,14 @@ class SNMPControllerGUI:
         self._log("Disconnected")
     
     def _log(self, message: str, level: str = "INFO") -> None:
-        """Add a message to the log window. For now, just print or use status."""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        log_entry = f"[{timestamp}] {level}: {message}\n"
-        # Print to stdout for developer convenience
-        print(log_entry, end="")
-
-        # Append to GUI log area if available
-        try:
-            self.log_text.configure(state="normal")
-            self.log_text.insert("end", log_entry)
-            self.log_text.see("end")
-            self.log_text.configure(state="disabled")
-        except Exception:
-            # If log area not created yet, ignore
-            pass
+        """Add a message to the log window using the logger."""
+        self.logger.log(message, level)
 
     def _on_close(self) -> None:
         """Save GUI log and configuration then quit."""
         try:
-            # Save GUI log to logs/gui.log
-            logs_dir = Path("logs")
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            gui_log_path = logs_dir / "gui.log"
-            with open(gui_log_path, "w", encoding="utf-8") as f:
-                try:
-                    text = self.log_text.get("1.0", "end")
-                except Exception:
-                    text = ""
-                f.write(text)
+            # Save GUI log using common utility
+            save_gui_log(self.log_text)
 
             # Save trap config to server via API
             cfg = {

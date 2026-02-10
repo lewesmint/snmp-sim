@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from typing import Any, Dict, cast
 
@@ -13,12 +12,14 @@ from app.app_config import AppConfig
 
 def load_mib_schema(mib_name: str, schema_dir: str) -> Dict[str, Any] | None:
     """Load schema.json for a given MIB."""
-    schema_path = os.path.join(schema_dir, mib_name, "schema.json")
-    if not os.path.exists(schema_path):
+    from pathlib import Path
+
+    schema_path = Path(schema_dir) / mib_name / "schema.json"
+    if not schema_path.exists():
         print(f"Warning: Schema not found: {schema_path}", file=sys.stderr)
         return None
     try:
-        with open(schema_path, "r", encoding="utf-8") as f:
+        with schema_path.open("r", encoding="utf-8") as f:
             return cast(Dict[str, Any], json.load(f))
     except json.JSONDecodeError as e:
         print(f"Error: Failed to parse {schema_path}: {e}", file=sys.stderr)
@@ -39,12 +40,18 @@ def print_model_summary(model: Dict[str, Dict[str, Any]]) -> None:
     """Print a summary of the loaded model."""
     print(f"Loaded {len(model)} MIB schemas:")
     for mib, schema in model.items():
-        object_count = len(schema)
+        # Handle both old flat structure and new {"objects": ..., "traps": ...} structure
+        if isinstance(schema, dict) and "objects" in schema:
+            objects = schema["objects"]
+        else:
+            objects = schema
+        
+        object_count = len(objects) if isinstance(objects, dict) else 0
         table_count = sum(
             1
-            for obj in schema.values()
+            for obj in objects.values()
             if isinstance(obj, dict) and obj.get("type") == "MibTable"
-        )
+        ) if isinstance(objects, dict) else 0
         print(f"  {mib}: {object_count} objects, {table_count} tables")
 
 

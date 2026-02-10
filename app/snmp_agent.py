@@ -51,6 +51,10 @@ class SNMPAgent:
         self._shutdown_requested = False
         # Overrides: dotted OID -> JSON-serializable value
         self.overrides: dict[str, object] = {}
+        # Table instances: table_oid -> {index_str -> {index_values, column_values}}
+        self.table_instances: dict[str, dict[str, Any]] = {}
+        # Deleted instances: list of instance OIDs marked for deletion
+        self.deleted_instances: list[str] = []
         # Map of initial values captured after registration: dotted OID -> JSON-serializable value
         self._initial_values: dict[str, object] = {}
         # Set of dotted OIDs that are writable (read-write)
@@ -107,29 +111,93 @@ class SNMPAgent:
             # Exit cleanly - use os._exit to ensure termination
             os._exit(0)
 
+    def _find_source_mib_file(self, mib_name: str) -> Optional["Path"]:
+        """Find the source .mib file for a given MIB name.
+        
+        Searches in data/mibs and all its subdirectories.
+        Returns the Path to the .mib file if found, None otherwise.
+        """
+        from pathlib import Path
+
+        mib_data_dir = Path(__file__).resolve().parent.parent / "data" / "mibs"
+        if not mib_data_dir.exists():
+            return None
+
+        # Iterate all files in the tree looking for a matching module
+        for candidate in mib_data_dir.rglob("*"):
+            if not candidate.is_file():
+                continue
+            if candidate.suffix.lower() in (".mib", ".txt", ".my"):
+                try:
+                    with candidate.open("r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read(2000)
+                        if f"{mib_name} DEFINITIONS ::= BEGIN" in content:
+                            return candidate
+                        if candidate.name.upper().startswith(mib_name.upper()):
+                            return candidate
+                except Exception:
+                    continue
+
+        return None
+
+    def _should_recompile(self, mib_name: str, compiled_file: "Path | str") -> bool:
+        """Check if a MIB should be recompiled based on timestamp comparison.
+        
+        Returns True if:
+        - The compiled file doesn't exist, OR
+        - The source .mib file is newer than the compiled .py file
+        """
+        from pathlib import Path
+
+        compiled_path = Path(compiled_file)
+        if not compiled_path.exists():
+            return True
+
+        source_file = self._find_source_mib_file(mib_name)
+        if source_file is None:
+            # Can't find source, assume compiled version is fine
+            return False
+
+        try:
+            source_mtime = source_file.stat().st_mtime
+            compiled_mtime = compiled_path.stat().st_mtime
+
+            if source_mtime > compiled_mtime:
+                self.logger.info(
+                    f"Source MIB {source_file} is newer than compiled version, will recompile"
+                )
+                return True
+        except OSError as e:
+            self.logger.warning(f"Error comparing timestamps for {mib_name}: {e}")
+            return False
+
+        return False
+
     def run(self) -> None:
         self.logger.info("Starting SNMP Agent setup workflow...")
         # Compile MIBs and generate behavior JSONs as before
         mibs = cast(list[str], self.app_config.get("mibs", []))
-        compiled_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "compiled-mibs")
-        )
-        json_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "mock-behaviour")
-        )
-        os.makedirs(json_dir, exist_ok=True)
+        from pathlib import Path
+        compiled_dir = Path(__file__).resolve().parent.parent / "compiled-mibs"
+        json_dir = Path(__file__).resolve().parent.parent / "mock-behaviour"
+        json_dir.mkdir(parents=True, exist_ok=True)
 
         # Build and export the canonical type registry
         from app.type_registry import TypeRegistry
 
         compiled_mib_paths: list[str] = []
-        compiler = MibCompiler(compiled_dir, self.app_config)
+        compiler = MibCompiler(str(compiled_dir), self.app_config)
         
-        # Always check if compiled MIBs exist; compile any missing ones
+        # Check if compiled MIBs exist and if source files are newer (timestamp-based recompilation)
         for mib_name in mibs:
-            compiled_file = os.path.join(compiled_dir, f"{mib_name}.py")
-            if not os.path.exists(compiled_file):
-                self.logger.info(f"Compiling missing MIB: {mib_name}")
+            compiled_file = compiled_dir / f"{mib_name}.py"
+            
+            if self._should_recompile(mib_name, compiled_file):
+                if compiled_file.exists():
+                    self.logger.info(f"Recompiling outdated MIB: {mib_name}")
+                else:
+                    self.logger.info(f"Compiling missing MIB: {mib_name}")
+                
                 try:
                     # Pass just the module name; pysmi will find .mib files by name
                     py_path = compiler.compile(mib_name)
@@ -141,21 +209,22 @@ class SNMPAgent:
                     )
                     continue
             else:
-                compiled_mib_paths.append(compiled_file)
+                compiled_mib_paths.append(str(compiled_file))
         
-        if self.preloaded_model and os.path.exists("data/types.json"):
+        types_json_path = Path("data") / "types.json"
+        if self.preloaded_model and types_json_path.exists():
             self.logger.info(
                 "Using preloaded model and existing types.json, skipping full MIB compilation"
             )
             # Load existing type registry
-            with open("data/types.json", "r") as f:
+            with types_json_path.open("r", encoding="utf-8") as f:
                 type_registry_data = json.load(f)
             type_registry = TypeRegistry(Path(""))  # dummy
             type_registry._registry = type_registry_data
         else:
-            type_registry = TypeRegistry(Path(compiled_dir))
+            type_registry = TypeRegistry(compiled_dir)
             type_registry.build()
-            type_registry.export_to_json("data/types.json")
+            type_registry.export_to_json(str(types_json_path))
             self.logger.info(
                 f"Exported type registry to data/types.json with {len(type_registry.registry)} types."
             )
@@ -179,26 +248,35 @@ class SNMPAgent:
             # Generate schema JSON for each MIB
             from app.generator import BehaviourGenerator
 
-            generator = BehaviourGenerator(json_dir)
-            for py_path in compiled_mib_paths:
-                self.logger.info(f"Generating schema JSON for: {py_path}")
+            generator = BehaviourGenerator(str(json_dir))
+            # Build a map of MIB name -> compiled Python path
+            mib_to_py_path: dict[str, str] = {}
+            for mib in mibs:
+                py_file = compiled_dir / f"{mib}.py"
+                if py_file.exists():
+                    mib_to_py_path[mib] = str(py_file)
+            
+            # Generate schemas for each MIB that was compiled
+            for mib_name, py_path in mib_to_py_path.items():
+                self.logger.info(f"Generating schema JSON for {mib_name}: {py_path}")
                 try:
-                    generator.generate(py_path)
-                    self.logger.info(f"Schema JSON generated for {py_path}")
+                    # Pass the MIB name explicitly to avoid ambiguity
+                    generator.generate(py_path, mib_name=mib_name)
+                    self.logger.info(f"Schema JSON generated for {mib_name}")
                 except Exception as e:
                     self.logger.error(
-                        f"Failed to generate schema JSON for {py_path}: {e}",
+                        f"Failed to generate schema JSON for {mib_name}: {e}",
                         exc_info=True,
                     )
 
             # Load schema JSONs for SNMP serving
             # Directory structure: {json_dir}/{MIB_NAME}/schema.json
             for mib in mibs:
-                mib_dir = os.path.join(json_dir, mib)
-                schema_path = os.path.join(mib_dir, "schema.json")
+                mib_dir = json_dir / mib
+                schema_path = mib_dir / "schema.json"
 
-                if os.path.exists(schema_path):
-                    with open(schema_path, "r") as jf:
+                if schema_path.exists():
+                    with schema_path.open("r", encoding="utf-8") as jf:
                         self.mib_jsons[mib] = json.load(jf)
                     self.logger.info(f"Loaded schema for {mib} from {schema_path}")
                 else:
@@ -207,7 +285,7 @@ class SNMPAgent:
         self.logger.info(f"Loaded {len(self.mib_jsons)} MIB schemas for SNMP serving.")
 
         # Setup SNMP engine and transport
-        self._setup_snmpEngine(compiled_dir)
+        self._setup_snmpEngine(str(compiled_dir))
         if self.snmpEngine is not None:
             self._setup_transport()
             self._setup_community()
@@ -216,7 +294,7 @@ class SNMPAgent:
             # Capture initial scalar values (for comparison) and apply overrides
             try:
                 self._capture_initial_values()
-                self._load_overrides()
+                self._load_mib_state()  # Load unified state (scalars, tables, deletions)
                 self._apply_overrides()
             except Exception as e:
                 self.logger.error(f"Error applying overrides: {e}", exc_info=True)
@@ -600,53 +678,225 @@ class SNMPAgent:
         return None, None
 
     # ---- Overrides persistence helpers ----
-    def _overrides_file_path(self) -> str:
-        return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "overrides.json"))
+    def _state_file_path(self) -> str:
+        """Return path to unified state file (scalars, tables, deletions)."""
+        from pathlib import Path
+        return str(Path(__file__).resolve().parent.parent / "data" / "mib_state.json")
 
-    def _load_overrides(self) -> None:
-        path = self._overrides_file_path()
+    def _load_mib_state(self) -> None:
+        """Load unified MIB state (scalars, tables, deletions) from disk."""
+        path = self._state_file_path()
+        mib_state: dict[str, Any] = {}
+        
         if os.path.exists(path):
             try:
                 with open(path, "r") as f:
-                    self.overrides = json.load(f)
-                self.logger.info(f"Loaded {len(self.overrides)} overrides from {path}")
-                # Prune any overrides that are identical to initial values
-                if self._initial_values:
-                    removed = []
-                    for k in list(self.overrides.keys()):
-                        init = self._initial_values.get(k)
-                        if init is not None and self.overrides.get(k) == init:
-                            removed.append(k)
-                            self.overrides.pop(k, None)
-                    if removed:
-                        self.logger.info(f"Pruned {len(removed)} redundant overrides: {removed}")
-                        # Persist pruned result
-                        try:
-                            self._save_overrides()
-                        except Exception:
-                            self.logger.exception("Failed to save overrides after pruning")
+                    mib_state = json.load(f)
+                self.logger.info(f"Loaded MIB state from {path}")
             except Exception as e:
-                self.logger.error(f"Failed to load overrides from {path}: {e}", exc_info=True)
-                self.overrides = {}
+                self.logger.error(f"Failed to load MIB state from {path}: {e}", exc_info=True)
         else:
-            self.overrides = {}
+            # Try to migrate legacy files (overrides.json and table_instances.json)
+            try:
+                self._migrate_legacy_state_files()
+                if os.path.exists(path):
+                    with open(path, "r") as f:
+                        mib_state = json.load(f)
+                    self.logger.info(f"Migrated legacy state files to {path}")
+            except Exception as e:
+                self.logger.warning(f"No legacy state files to migrate: {e}")
+        
+        # Extract scalars (overrides)
+        self.overrides = mib_state.get("scalars", {})
+        
+        # Extract tables
+        self.table_instances = mib_state.get("tables", {})
+        
+        # Extract deleted instances list
+        self.deleted_instances = mib_state.get("deleted_instances", [])
+        
+        self.logger.info(
+            f"Loaded state: {len(self.overrides)} scalars, {sum(len(v) for v in self.table_instances.values())} table instances, "
+            f"{len(self.deleted_instances)} deleted instances"
+        )
+
+    def _migrate_legacy_state_files(self) -> None:
+        """Migrate legacy overrides.json and table_instances.json to unified format."""
+        legacy_overrides = Path(__file__).resolve().parent.parent / "data" / "overrides.json"
+        legacy_tables = Path(__file__).resolve().parent.parent / "data" / "table_instances.json"
+        
+        mib_state: dict[str, Any] = {
+            "scalars": {},
+            "tables": {},
+            "deleted_instances": []
+        }
+        
+        if legacy_overrides.exists():
+            try:
+                with open(legacy_overrides) as f:
+                    mib_state["scalars"] = json.load(f)
+                self.logger.info(f"Migrated scalars from {legacy_overrides}")
+            except Exception as e:
+                self.logger.warning(f"Failed to migrate {legacy_overrides}: {e}")
+        
+        if legacy_tables.exists():
+            try:
+                with open(legacy_tables) as f:
+                    mib_state["tables"] = json.load(f)
+                self.logger.info(f"Migrated tables from {legacy_tables}")
+            except Exception as e:
+                self.logger.warning(f"Failed to migrate {legacy_tables}: {e}")
+        
+        # Save unified file
+        if mib_state["scalars"] or mib_state["tables"]:
+            self._save_mib_state()
+
+    def _save_mib_state(self) -> None:
+        """Save unified MIB state to disk."""
+        path = self._state_file_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        
+        mib_state = {
+            "scalars": self.overrides,
+            "tables": self.table_instances,
+            "deleted_instances": self.deleted_instances
+        }
+        
+        try:
+            with open(path, "w") as f:
+                json.dump(mib_state, f, indent=2, sort_keys=True)
+            self.logger.debug(f"Saved MIB state to {path}")
+        except Exception as e:
+            self.logger.error(f"Failed to save MIB state to {path}: {e}", exc_info=True)
+
+    def _overrides_file_path(self) -> str:
+        """Legacy method for backward compatibility."""
+        from pathlib import Path
+        return str(Path(__file__).resolve().parent.parent / "data" / "overrides.json")
+
+    def _load_overrides(self) -> None:
+        """Legacy method - now uses unified state file via _load_mib_state()."""
+        # Pruning: remove overrides that match initial values
+        if self._initial_values:
+            removed = []
+            for k in list(self.overrides.keys()):
+                init = self._initial_values.get(k)
+                if init is not None and self.overrides.get(k) == init:
+                    removed.append(k)
+                    self.overrides.pop(k, None)
+            if removed:
+                self.logger.info(f"Pruned {len(removed)} redundant overrides: {removed}")
+                self._save_mib_state()
 
     def _save_overrides(self) -> None:
-        path = self._overrides_file_path()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        try:
-            # Only persist overrides that differ from initial values (don't store defaults)
-            to_persist = {}
-            for k, v in self.overrides.items():
-                init = self._initial_values.get(k)
-                if init is None or v != init:
-                    to_persist[k] = v
+        """Legacy method - now delegates to _save_mib_state()."""
+        # Only persist overrides that differ from initial values
+        to_persist = {}
+        for k, v in self.overrides.items():
+            init = self._initial_values.get(k)
+            if init is None or v != init:
+                to_persist[k] = v
+        
+        self.overrides = to_persist
+        self._save_mib_state()
 
-            with open(path, "w") as f:
-                json.dump(to_persist, f, indent=2, sort_keys=True)
-            self.logger.info(f"Saved {len(to_persist)} overrides to {path}")
-        except Exception as e:
-            self.logger.error(f"Failed to save overrides to {path}: {e}", exc_info=True)
+    def _table_instances_file_path(self) -> str:
+        """Legacy method - deprecated in favor of unified state file."""
+        return "data/table_instances.json"
+
+    def _load_table_instances(self) -> None:
+        """Legacy method - now uses unified state file via _load_mib_state()."""
+        # Already loaded in _load_mib_state()
+        pass
+
+    def add_table_instance(self, table_oid: str, index_values: dict[str, Any], column_values: dict[str, Any] | None = None) -> str:
+        """Add a new table instance and persist it.
+        
+        Args:
+            table_oid: The OID of the table (e.g., "1.3.6.1.4.1.99998.1.3.1")
+            index_values: Dict mapping index column names to values
+            column_values: Optional dict mapping column names to values
+            
+        Returns:
+            The instance OID as a string
+        """
+        if column_values is None:
+            column_values = {}
+            
+        # Create an instance key from index values
+        index_str = ".".join(str(v) for v in index_values.values())
+        instance_oid = f"{table_oid}.{index_str}"
+        
+        # Store the instance
+        if table_oid not in self.table_instances:
+            self.table_instances[table_oid] = {}
+        
+        self.table_instances[table_oid][index_str] = {
+            "index_values": index_values,
+            "column_values": column_values,
+            "created_at": time.time()
+        }
+        
+        # Remove from deleted list if it was previously deleted
+        if instance_oid in self.deleted_instances:
+            self.deleted_instances.remove(instance_oid)
+        
+        # Persist to unified state file
+        self._save_mib_state()
+        
+        self.logger.info(f"Added table instance: {instance_oid}")
+        return instance_oid
+
+    def delete_table_instance(self, table_oid: str, index_values: dict[str, Any]) -> bool:
+        """Mark a table instance as deleted (soft delete).
+        
+        Works for both dynamically-created instances and static MIB instances.
+        
+        Args:
+            table_oid: The OID of the table
+            index_values: Dict mapping index column names to values
+            
+        Returns:
+            True if instance was successfully marked as deleted
+        """
+        index_str = ".".join(str(v) for v in index_values.values())
+        instance_oid = f"{table_oid}.{index_str}"
+        
+        # Remove from active dynamic instances if it exists
+        if table_oid in self.table_instances and index_str in self.table_instances[table_oid]:
+            del self.table_instances[table_oid][index_str]
+            
+            # Cleanup empty table entry
+            if not self.table_instances[table_oid]:
+                del self.table_instances[table_oid]
+        
+        # Always track deletion (works for static schema instances too)
+        if instance_oid not in self.deleted_instances:
+            self.deleted_instances.append(instance_oid)
+            self._save_mib_state()
+            self.logger.info(f"Deleted table instance: {instance_oid}")
+        
+        return True
+
+    def restore_table_instance(self, table_oid: str, index_values: dict[str, Any], column_values: dict[str, Any] | None = None) -> bool:
+        """Restore a previously deleted table instance.
+        
+        Args:
+            table_oid: The OID of the table
+            index_values: Dict mapping index column names to values
+            column_values: Optional dict mapping column names to values
+            
+        Returns:
+            True if instance was restored
+        """
+        instance_oid = f"{table_oid}.{'.'.join(str(v) for v in index_values.values())}"
+        
+        if instance_oid in self.deleted_instances:
+            # Re-add the instance
+            self.add_table_instance(table_oid, index_values, column_values or {})
+            return True
+        
+        return False
 
     def _serialize_value(self, value: Any) -> object:
         # Convert pysnmp types and other non-JSON-friendly values into JSON-serializable forms

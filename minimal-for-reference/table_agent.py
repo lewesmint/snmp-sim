@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any, Tuple, Type, cast
 
 from pysnmp.carrier.asyncio.dgram import udp
@@ -26,9 +25,11 @@ TYPE_MAP: dict[str, Type[Any]] = {
 
 def load_data(json_file: str = "data.json") -> dict[str, Any]:
     """Load SNMP data from JSON file."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    json_path = os.path.join(script_dir, json_file)
-    with open(json_path, "r", encoding="utf-8") as handle:
+    from pathlib import Path
+
+    script_dir = Path(__file__).resolve().parent
+    json_path = script_dir / json_file
+    with json_path.open("r", encoding="utf-8") as handle:
         return cast(dict[str, Any], json.load(handle))
 
 

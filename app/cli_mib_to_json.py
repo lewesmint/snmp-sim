@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 from typing import Iterable
 
 from app.generator import BehaviourGenerator
@@ -40,8 +41,9 @@ def check_imported_mibs(mib_txt_path: str, compiled_dir: str) -> None:
                 imported_mibs.add(mib_name)
 
     for mib in imported_mibs:
-        py_path = os.path.join(compiled_dir, f"{mib}.py")
-        if not os.path.exists(py_path):
+        from pathlib import Path
+        py_path = Path(compiled_dir) / f"{mib}.py"
+        if not py_path.exists():
             print(
                 f"WARNING: MIB imports {mib}, but {py_path} is missing. "
                 "Compile this MIB to avoid runtime errors."
@@ -94,14 +96,14 @@ def main(argv: Iterable[str] | None = None) -> int:
             print("No MIBs configured", file=sys.stderr)
             return 1
         for mib in mibs:
-            compiled_path = os.path.join("compiled-mibs", f"{mib}.py")
-            if not os.path.exists(compiled_path):
+            compiled_path = Path("compiled-mibs") / f"{mib}.py"
+            if not compiled_path.exists():
                 print(
                     f"Warning: Compiled MIB not found: {compiled_path}", file=sys.stderr
                 )
                 continue
             json_path = generator.generate(
-                compiled_path, mib_name=mib, force_regenerate=True
+                str(compiled_path), mib_name=mib, force_regenerate=True
             )
             print(f"Schema JSON written to {json_path}")
     else:
