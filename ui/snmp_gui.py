@@ -3755,13 +3755,17 @@ class SNMPControllerGUI:
             selected_preset: list[str | None] = [None]
 
             def on_load() -> None:
-                selection = preset_listbox.curselection()
+                selection = None
+                # try:
+                #     selection = preset_listbox.curselection()[0]
+                # except IndexError:
+                #     pass
                 if not selection:
                     messagebox.showwarning("No Selection", "Please select a preset")
                     return
 
-                selected_preset[0] = presets[selection[0]]
-                dialog.destroy()
+                # selected_preset[0] = presets[selection[0]]
+                # dialog.destroy()
 
             def on_cancel() -> None:
                 dialog.destroy()
