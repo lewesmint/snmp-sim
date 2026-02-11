@@ -18,9 +18,9 @@
       "initial": 1,
       "dynamic_function": null,
       "enums": {
-        "red": 1,
-        "green": 2,
         "blue": 3,
+        "green": 2,
+        "red": 1,
         "yellow": 4
       }
     },
@@ -42,10 +42,10 @@
       "initial": 10,
       "dynamic_function": null,
       "enums": {
-        "low": 10,
-        "medium": 20,
+        "critical": 50,
         "high": 30,
-        "critical": 50
+        "low": 10,
+        "medium": 20
       }
     },
     "testEnumTable": {
@@ -131,9 +131,9 @@
       "initial": 1,
       "dynamic_function": null,
       "enums": {
-        "red": 1,
-        "green": 2,
         "blue": 3,
+        "green": 2,
+        "red": 1,
         "yellow": 4
       }
     },
@@ -156,10 +156,10 @@
       "initial": 10,
       "dynamic_function": null,
       "enums": {
-        "low": 10,
-        "medium": 20,
+        "critical": 50,
         "high": 30,
-        "critical": 50
+        "low": 10,
+        "medium": 20
       }
     },
     "endPointTable": {
@@ -317,7 +317,7 @@
           "name": "endPointNotes"
         }
       ],
-      "description": "Notification sent when an endpoint status changes",
+      "description": "",
       "status": "current",
       "mib": "TEST-ENUM-MIB"
     }
