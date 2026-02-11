@@ -1,0 +1,1791 @@
+{
+  "objects": {
+    "hrSystemUptime": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        1,
+        1
+      ],
+      "type": "TimeTicks",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrSystemDate": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        1,
+        2
+      ],
+      "type": "DateAndTime",
+      "access": "read-write",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrSystemInitialLoadDevice": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        1,
+        3
+      ],
+      "type": "Integer32",
+      "access": "read-write",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrSystemInitialLoadParameters": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        1,
+        4
+      ],
+      "type": "InternationalDisplayString",
+      "access": "read-write",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrSystemNumUsers": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        1,
+        5
+      ],
+      "type": "Gauge32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrSystemProcesses": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        1,
+        6
+      ],
+      "type": "Gauge32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrSystemMaxProcesses": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        1,
+        7
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrMemorySize": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        2,
+        2
+      ],
+      "type": "KBytes",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrStorageTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        2,
+        3
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "rows": [
+        {
+          "hrStorageIndex": 1,
+          "hrStorageType": [
+            0,
+            0
+          ],
+          "hrStorageDescr": "unset",
+          "hrStorageAllocationUnits": 0,
+          "hrStorageSize": 0,
+          "hrStorageUsed": 0,
+          "hrStorageAllocationFailures": 0
+        }
+      ]
+    },
+    "hrStorageEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        2,
+        3,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "indexes": [
+        "hrStorageIndex"
+      ]
+    },
+    "hrStorageIndex": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        2,
+        3,
+        1,
+        1
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null
+    },
+    "hrStorageType": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        2,
+        3,
+        1,
+        2
+      ],
+      "type": "AutonomousType",
+      "access": "read-only",
+      "initial": [
+        0,
+        0
+      ],
+      "dynamic_function": null
+    },
+    "hrStorageDescr": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        2,
+        3,
+        1,
+        3
+      ],
+      "type": "DisplayString",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrStorageAllocationUnits": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        2,
+        3,
+        1,
+        4
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrStorageSize": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        2,
+        3,
+        1,
+        5
+      ],
+      "type": "Integer32",
+      "access": "read-write",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrStorageUsed": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        2,
+        3,
+        1,
+        6
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrStorageAllocationFailures": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        2,
+        3,
+        1,
+        7
+      ],
+      "type": "Counter32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrDeviceTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        2
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "rows": [
+        {
+          "hrDeviceIndex": 1,
+          "hrDeviceType": [
+            0,
+            0
+          ],
+          "hrDeviceDescr": "unset",
+          "hrDeviceID": [
+            0,
+            0
+          ],
+          "hrDeviceStatus": 1,
+          "hrDeviceErrors": 0
+        }
+      ]
+    },
+    "hrDeviceEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        2,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "indexes": [
+        "hrDeviceIndex"
+      ]
+    },
+    "hrDeviceIndex": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        2,
+        1,
+        1
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null
+    },
+    "hrDeviceType": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        2,
+        1,
+        2
+      ],
+      "type": "AutonomousType",
+      "access": "read-only",
+      "initial": [
+        0,
+        0
+      ],
+      "dynamic_function": null
+    },
+    "hrDeviceDescr": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        2,
+        1,
+        3
+      ],
+      "type": "DisplayString",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrDeviceID": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        2,
+        1,
+        4
+      ],
+      "type": "ProductID",
+      "access": "read-only",
+      "initial": [
+        0,
+        0
+      ],
+      "dynamic_function": null
+    },
+    "hrDeviceStatus": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        2,
+        1,
+        5
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null,
+      "enums": {
+        "unknown": 1,
+        "running": 2,
+        "warning": 3,
+        "testing": 4,
+        "down": 5
+      }
+    },
+    "hrDeviceErrors": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        2,
+        1,
+        6
+      ],
+      "type": "Counter32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrProcessorTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        3
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "rows": [
+        {
+          "hrProcessorFrwID": [
+            0,
+            0
+          ],
+          "hrProcessorLoad": 0
+        }
+      ]
+    },
+    "hrProcessorEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        3,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "index_from": [
+        {
+          "mib": "HOST-RESOURCES-MIB",
+          "column": "hrDeviceIndex"
+        }
+      ],
+      "indexes": [
+        "hrDeviceIndex"
+      ]
+    },
+    "hrProcessorFrwID": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        3,
+        1,
+        1
+      ],
+      "type": "ProductID",
+      "access": "read-only",
+      "initial": [
+        0,
+        0
+      ],
+      "dynamic_function": null
+    },
+    "hrProcessorLoad": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        3,
+        1,
+        2
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrNetworkTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        4
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "rows": [
+        {
+          "hrNetworkIfIndex": 0
+        }
+      ]
+    },
+    "hrNetworkEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        4,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "index_from": [
+        {
+          "mib": "HOST-RESOURCES-MIB",
+          "column": "hrDeviceIndex"
+        }
+      ],
+      "indexes": [
+        "hrDeviceIndex"
+      ]
+    },
+    "hrNetworkIfIndex": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        4,
+        1,
+        1
+      ],
+      "type": "InterfaceIndexOrZero",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrPrinterTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        5
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "rows": [
+        {
+          "hrPrinterStatus": 1,
+          "hrPrinterDetectedErrorState": "unset"
+        }
+      ]
+    },
+    "hrPrinterEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        5,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "index_from": [
+        {
+          "mib": "HOST-RESOURCES-MIB",
+          "column": "hrDeviceIndex"
+        }
+      ],
+      "indexes": [
+        "hrDeviceIndex"
+      ]
+    },
+    "hrPrinterStatus": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        5,
+        1,
+        1
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null,
+      "enums": {
+        "other": 1,
+        "unknown": 2,
+        "idle": 3,
+        "printing": 4,
+        "warmup": 5
+      }
+    },
+    "hrPrinterDetectedErrorState": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        5,
+        1,
+        2
+      ],
+      "type": "OctetString",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrDiskStorageTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        6
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "rows": [
+        {
+          "hrDiskStorageAccess": 1,
+          "hrDiskStorageMedia": 1,
+          "hrDiskStorageRemoveble": 1,
+          "hrDiskStorageCapacity": 0
+        }
+      ]
+    },
+    "hrDiskStorageEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        6,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "index_from": [
+        {
+          "mib": "HOST-RESOURCES-MIB",
+          "column": "hrDeviceIndex"
+        }
+      ],
+      "indexes": [
+        "hrDeviceIndex"
+      ]
+    },
+    "hrDiskStorageAccess": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        6,
+        1,
+        1
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null,
+      "enums": {
+        "readWrite": 1,
+        "readOnly": 2
+      }
+    },
+    "hrDiskStorageMedia": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        6,
+        1,
+        2
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null,
+      "enums": {
+        "other": 1,
+        "unknown": 2,
+        "hardDisk": 3,
+        "floppyDisk": 4,
+        "opticalDiskROM": 5,
+        "opticalDiskWORM": 6,
+        "opticalDiskRW": 7,
+        "ramDisk": 8
+      }
+    },
+    "hrDiskStorageRemoveble": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        6,
+        1,
+        3
+      ],
+      "type": "TruthValue",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null,
+      "enums": {
+        "true": 1,
+        "false": 2
+      }
+    },
+    "hrDiskStorageCapacity": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        6,
+        1,
+        4
+      ],
+      "type": "KBytes",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrPartitionTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        7
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "rows": [
+        {
+          "hrPartitionIndex": 1,
+          "hrPartitionLabel": "unset",
+          "hrPartitionID": "unset",
+          "hrPartitionSize": 0,
+          "hrPartitionFSIndex": 0
+        }
+      ]
+    },
+    "hrPartitionEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        7,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "index_from": [
+        {
+          "mib": "HOST-RESOURCES-MIB",
+          "column": "hrDeviceIndex"
+        }
+      ],
+      "indexes": [
+        "hrDeviceIndex",
+        "hrPartitionIndex"
+      ]
+    },
+    "hrPartitionIndex": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        7,
+        1,
+        1
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null
+    },
+    "hrPartitionLabel": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        7,
+        1,
+        2
+      ],
+      "type": "InternationalDisplayString",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrPartitionID": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        7,
+        1,
+        3
+      ],
+      "type": "OctetString",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrPartitionSize": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        7,
+        1,
+        4
+      ],
+      "type": "KBytes",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrPartitionFSIndex": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        7,
+        1,
+        5
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrFSTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        8
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "rows": [
+        {
+          "hrFSIndex": 1,
+          "hrFSMountPoint": "unset",
+          "hrFSRemoteMountPoint": "unset",
+          "hrFSType": [
+            0,
+            0
+          ],
+          "hrFSAccess": 1,
+          "hrFSBootable": 1,
+          "hrFSStorageIndex": 0,
+          "hrFSLastFullBackupDate": "unset",
+          "hrFSLastPartialBackupDate": "unset"
+        }
+      ]
+    },
+    "hrFSEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        8,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "indexes": [
+        "hrFSIndex"
+      ]
+    },
+    "hrFSIndex": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        8,
+        1,
+        1
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null
+    },
+    "hrFSMountPoint": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        8,
+        1,
+        2
+      ],
+      "type": "InternationalDisplayString",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrFSRemoteMountPoint": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        8,
+        1,
+        3
+      ],
+      "type": "InternationalDisplayString",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrFSType": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        8,
+        1,
+        4
+      ],
+      "type": "AutonomousType",
+      "access": "read-only",
+      "initial": [
+        0,
+        0
+      ],
+      "dynamic_function": null
+    },
+    "hrFSAccess": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        8,
+        1,
+        5
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null,
+      "enums": {
+        "readWrite": 1,
+        "readOnly": 2
+      }
+    },
+    "hrFSBootable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        8,
+        1,
+        6
+      ],
+      "type": "TruthValue",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null,
+      "enums": {
+        "true": 1,
+        "false": 2
+      }
+    },
+    "hrFSStorageIndex": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        8,
+        1,
+        7
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrFSLastFullBackupDate": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        8,
+        1,
+        8
+      ],
+      "type": "DateAndTime",
+      "access": "read-write",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrFSLastPartialBackupDate": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        3,
+        8,
+        1,
+        9
+      ],
+      "type": "DateAndTime",
+      "access": "read-write",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrSWOSIndex": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        4,
+        1
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrSWRunTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        4,
+        2
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "rows": [
+        {
+          "hrSWRunIndex": 1,
+          "hrSWRunName": "unset",
+          "hrSWRunID": [
+            0,
+            0
+          ],
+          "hrSWRunPath": "unset",
+          "hrSWRunParameters": "unset",
+          "hrSWRunType": 1,
+          "hrSWRunStatus": 1
+        }
+      ]
+    },
+    "hrSWRunEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        4,
+        2,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "indexes": [
+        "hrSWRunIndex"
+      ]
+    },
+    "hrSWRunIndex": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        4,
+        2,
+        1,
+        1
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null
+    },
+    "hrSWRunName": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        4,
+        2,
+        1,
+        2
+      ],
+      "type": "InternationalDisplayString",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrSWRunID": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        4,
+        2,
+        1,
+        3
+      ],
+      "type": "ProductID",
+      "access": "read-only",
+      "initial": [
+        0,
+        0
+      ],
+      "dynamic_function": null
+    },
+    "hrSWRunPath": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        4,
+        2,
+        1,
+        4
+      ],
+      "type": "InternationalDisplayString",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrSWRunParameters": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        4,
+        2,
+        1,
+        5
+      ],
+      "type": "InternationalDisplayString",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrSWRunType": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        4,
+        2,
+        1,
+        6
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null,
+      "enums": {
+        "unknown": 1,
+        "operatingSystem": 2,
+        "deviceDriver": 3,
+        "application": 4
+      }
+    },
+    "hrSWRunStatus": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        4,
+        2,
+        1,
+        7
+      ],
+      "type": "Integer32",
+      "access": "read-write",
+      "initial": 1,
+      "dynamic_function": null,
+      "enums": {
+        "running": 1,
+        "runnable": 2,
+        "notRunnable": 3,
+        "invalid": 4
+      }
+    },
+    "hrSWRunPerfTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        5,
+        1
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "rows": [
+        {
+          "hrSWRunPerfCPU": 0,
+          "hrSWRunPerfMem": 0
+        }
+      ]
+    },
+    "hrSWRunPerfEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        5,
+        1,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "index_from": [
+        {
+          "mib": "HOST-RESOURCES-MIB",
+          "column": "hrSWRunIndex"
+        }
+      ],
+      "indexes": [
+        "hrSWRunIndex"
+      ]
+    },
+    "hrSWRunPerfCPU": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        5,
+        1,
+        1,
+        1
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrSWRunPerfMem": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        5,
+        1,
+        1,
+        2
+      ],
+      "type": "KBytes",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrSWInstalledLastChange": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        6,
+        1
+      ],
+      "type": "TimeTicks",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrSWInstalledLastUpdateTime": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        6,
+        2
+      ],
+      "type": "TimeTicks",
+      "access": "read-only",
+      "initial": 0,
+      "dynamic_function": null
+    },
+    "hrSWInstalledTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        6,
+        3
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "rows": [
+        {
+          "hrSWInstalledIndex": 1,
+          "hrSWInstalledName": "unset",
+          "hrSWInstalledID": [
+            0,
+            0
+          ],
+          "hrSWInstalledType": 1,
+          "hrSWInstalledDate": "unset"
+        }
+      ]
+    },
+    "hrSWInstalledEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        6,
+        3,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "initial": null,
+      "dynamic_function": null,
+      "indexes": [
+        "hrSWInstalledIndex"
+      ]
+    },
+    "hrSWInstalledIndex": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        6,
+        3,
+        1,
+        1
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null
+    },
+    "hrSWInstalledName": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        6,
+        3,
+        1,
+        2
+      ],
+      "type": "InternationalDisplayString",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    },
+    "hrSWInstalledID": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        6,
+        3,
+        1,
+        3
+      ],
+      "type": "ProductID",
+      "access": "read-only",
+      "initial": [
+        0,
+        0
+      ],
+      "dynamic_function": null
+    },
+    "hrSWInstalledType": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        6,
+        3,
+        1,
+        4
+      ],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null,
+      "enums": {
+        "unknown": 1,
+        "operatingSystem": 2,
+        "deviceDriver": 3,
+        "application": 4
+      }
+    },
+    "hrSWInstalledDate": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        2,
+        1,
+        25,
+        6,
+        3,
+        1,
+        5
+      ],
+      "type": "DateAndTime",
+      "access": "read-only",
+      "initial": "unset",
+      "dynamic_function": null
+    }
+  },
+  "traps": {}
+}

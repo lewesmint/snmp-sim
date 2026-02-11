@@ -140,7 +140,7 @@ class MibRegistrar:
                 self.register_mib("SNMPv2-MIB", snmp2, type_registry)
                 
                 # Persist the updated schema back to disk so API calls see the updated rows
-                schema_dir = Path(__file__).resolve().parent.parent / "mock-behaviour"
+                schema_dir = Path(__file__).resolve().parent.parent / "agent-model"
                 snmp2_schema_file = schema_dir / "SNMPv2-MIB" / "schema.json"
                 try:
                     snmp2_schema_file.parent.mkdir(parents=True, exist_ok=True)
@@ -326,6 +326,30 @@ class MibRegistrar:
                 scalar_inst.setMaxAccess(max_access)
                 is_writable = max_access in ("readwrite", "readcreate")
 
+                # Special handling for sysUpTime: make it dynamic
+                if name == "sysUpTime":
+                    original_read_get = getattr(scalar_inst, "readGet", None)
+                    registrar_start_time = self.start_time
+
+                    def _sysuptime_read_get(
+                        inst: Any,
+                        *args: Any,
+                        _start_time: float = registrar_start_time,
+                        _pysnmp_type: Any = pysnmp_type,
+                        **kwargs: Any,
+                    ) -> Any:
+                        # Calculate current uptime
+                        uptime_seconds = time.time() - _start_time
+                        uptime_centiseconds = int(uptime_seconds * 100)
+                        # Update the instance's syntax with the current value
+                        inst.syntax = _pysnmp_type(uptime_centiseconds)
+                        # Call original readGet if it exists
+                        if original_read_get:
+                            return original_read_get(*args, **kwargs)
+                        return inst.syntax
+
+                    scalar_inst.readGet = types.MethodType(_sysuptime_read_get, scalar_inst)
+
                 export_symbols[f"{name}Inst"] = scalar_inst
                 # Attach a small write-commit wrapper so network-originated SNMP SETs
                 # are surfaced immediately in the agent logs. pysnmp will call
@@ -441,27 +465,9 @@ class MibRegistrar:
                                 _format_value(getattr(inst, "syntax", None)),
                             )
 
-                            try:
-                                from pathlib import Path
-                                overrides_path = Path(__file__).resolve().parent.parent / "data" / "overrides.json"
-                                overrides_path.parent.mkdir(parents=True, exist_ok=True)
-                                try:
-                                    with open(overrides_path, "r", encoding="utf-8") as f:
-                                        overrides_data = json.load(f)
-                                except Exception:
-                                    overrides_data = {}
-                                overrides_data[final_dotted] = _serialize_value(
-                                    getattr(inst, "syntax", None)
-                                )
-                                with open(overrides_path, "w", encoding="utf-8") as f:
-                                    json.dump(overrides_data, f, indent=2, sort_keys=True)
-                                _logger.info(
-                                    "Saved override for %s to %s",
-                                    final_dotted,
-                                    str(overrides_path),
-                                )
-                            except Exception:
-                                _logger.exception("Failed to persist overrides.json")
+                            # Note: Persistence is handled by the agent's set_scalar_value() method
+                            # which saves to mib_state.json. Direct SNMP SET operations via
+                            # pysnmp's writeCommit are not automatically persisted.
                         except Exception:
                             pass
 
@@ -886,27 +892,9 @@ class MibRegistrar:
                                     _format_value(getattr(inst_ref, "syntax", None)),
                                 )
 
-                                try:
-                                    from pathlib import Path
-                                    overrides_path = Path(__file__).resolve().parent.parent / "data" / "overrides.json"
-                                    overrides_path.parent.mkdir(parents=True, exist_ok=True)
-                                    try:
-                                        with open(overrides_path, "r", encoding="utf-8") as f:
-                                            overrides_data = json.load(f)
-                                    except Exception:
-                                        overrides_data = {}
-                                    overrides_data[final_dotted] = _serialize_value(
-                                        getattr(inst_ref, "syntax", None)
-                                    )
-                                    with open(overrides_path, "w", encoding="utf-8") as f:
-                                        json.dump(overrides_data, f, indent=2, sort_keys=True)
-                                    _logger.info(
-                                        "Saved override for %s to %s",
-                                        final_dotted,
-                                        str(overrides_path),
-                                    )
-                                except Exception:
-                                    _logger.exception("Failed to persist overrides.json")
+                                # Note: Persistence is handled by the agent's set_scalar_value() method
+                                # which saves to mib_state.json. Direct SNMP SET operations via
+                                # pysnmp's writeCommit are not automatically persisted.
                             except Exception:
                                 pass
 

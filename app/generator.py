@@ -23,7 +23,7 @@ class BehaviourGenerator:
     """
 
     def __init__(
-        self, output_dir: str = "mock-behaviour", load_default_plugins: bool = True
+        self, output_dir: str = "agent-model", load_default_plugins: bool = True
     ) -> None:
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)

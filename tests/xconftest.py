@@ -83,7 +83,7 @@ def type_registry_file(temp_dir: Path, sample_type_registry: Dict[str, Any]) -> 
 @pytest.fixture
 def mib_schema_dir(temp_dir: Path, sample_mib_schema: Dict[str, Any]) -> Path:
     """Create a temporary MIB schema directory structure."""
-    schema_dir = temp_dir / "mock-behaviour"
+    schema_dir = temp_dir / "agent-model"
     mib_dir = schema_dir / "SNMPv2-MIB"
     mib_dir.mkdir(parents=True)
     

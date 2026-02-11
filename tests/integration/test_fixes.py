@@ -12,7 +12,7 @@ import json
 def test_default_value_fixes() -> None:
     """Test the default value fixes."""
     # Create a generator
-    gen = BehaviourGenerator('mock-behaviour', load_default_plugins=False)
+    gen = BehaviourGenerator('agent-model', load_default_plugins=False)
 
     # Load the compiled MIB manually
     mibBuilder = builder.MibBuilder()

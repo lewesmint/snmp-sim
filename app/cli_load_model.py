@@ -56,12 +56,12 @@ def print_model_summary(model: Dict[str, Dict[str, Any]]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Load all existing MIB schemas from mock-behaviour directory without config."
+        description="Load all existing MIB schemas from agent-model directory without config."
     )
     parser.add_argument(
         "--schema-dir",
-        default="mock-behaviour",
-        help="Directory containing MIB schema subdirectories (default: mock-behaviour)",
+        default="agent-model",
+        help="Directory containing MIB schema subdirectories (default: agent-model)",
     )
     parser.add_argument(
         "--output",

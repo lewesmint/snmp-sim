@@ -68,8 +68,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     parser.add_argument(
         "--output-dir",
-        default="mock-behaviour",
-        help="Base directory for MIB schemas (default: mock-behaviour)",
+        default="agent-model",
+        help="Base directory for MIB schemas (default: agent-model)",
     )
     parser.add_argument(
         "--no-plugins",

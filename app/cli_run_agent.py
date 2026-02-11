@@ -17,8 +17,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--schema-dir",
-        default="mock-behaviour",
-        help="Directory containing MIB schema subdirectories (default: mock-behaviour)",
+        default="agent-model",
+        help="Directory containing MIB schema subdirectories (default: agent-model)",
     )
     parser.add_argument(
         "--host",

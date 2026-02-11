@@ -126,11 +126,11 @@ def check_ready() -> dict[str, Any]:
 @app.get("/mibs")
 def list_mibs() -> dict[str, Any]:
     """List all MIBs implemented by the agent."""
-    # Load all schema files from mock-behaviour directory
+    # Load all schema files from agent-model directory
     from app.cli_load_model import load_all_schemas
     import os
 
-    schema_dir = "mock-behaviour"
+    schema_dir = "agent-model"
     if not os.path.exists(schema_dir):
         return {"count": 0, "mibs": []}
 
@@ -155,11 +155,11 @@ def get_oid_metadata() -> dict[str, Any]:
     if snmp_agent is None:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
 
-    # Load all schema files from mock-behaviour directory
+    # Load all schema files from agent-model directory
     from app.cli_load_model import load_all_schemas
     import os
 
-    schema_dir = "mock-behaviour"
+    schema_dir = "agent-model"
     if not os.path.exists(schema_dir):
         raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
 
@@ -214,7 +214,7 @@ def get_table_schema(oid: str) -> dict[str, Any]:
     from app.cli_load_model import load_all_schemas
     import os
 
-    schema_dir = "mock-behaviour"
+    schema_dir = "agent-model"
     if not os.path.exists(schema_dir):
         raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
 
@@ -400,6 +400,43 @@ def get_oid_value(oid: str) -> dict[str, Any]:
     return {"oid": parts, "value": serializable}
 
 
+@app.get("/values/bulk")
+def get_all_values() -> dict[str, Any]:
+    """Get all OID values in bulk for efficient loading."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    # Helper to make values JSON-serializable
+    def _make_jsonable(v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, (str, int, float, bool)):
+            return v
+        if isinstance(v, (list, tuple)):
+            return [_make_jsonable(x) for x in v]
+        try:
+            return str(v)
+        except Exception:
+            return repr(v)
+
+    # Get all registered OIDs
+    all_oids = snmp_agent.get_all_oids()
+    values = {}
+
+    # Fetch value for each OID
+    for oid_str in all_oids.keys():
+        try:
+            parts = oid_str_to_tuple(oid_str)
+            value = snmp_agent.get_scalar_value(parts)
+            values[oid_str] = _make_jsonable(value)
+        except Exception:
+            # Skip OIDs that can't be fetched (e.g., tables, containers)
+            pass
+
+    logger.info(f"Bulk fetched {len(values)} OID values")
+    return {"count": len(values), "values": values}
+
+
 class OIDValueUpdate(BaseModel):
     oid: str
     value: str
@@ -440,7 +477,7 @@ def list_traps() -> dict[str, Any]:
     from app.cli_load_model import load_all_schemas
     import os
 
-    schema_dir = "mock-behaviour"
+    schema_dir = "agent-model"
     if not os.path.exists(schema_dir):
         raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
 
@@ -612,66 +649,114 @@ class TrapSendRequest(BaseModel):
     dest_port: Optional[int] = 162
     community: Optional[str] = "public"
 
-
 @app.post("/send-trap")
-def send_trap(request: TrapSendRequest) -> dict[str, Any]:
-    """Send an SNMP trap/notification."""
+async def send_trap(request: TrapSendRequest) -> dict[str, Any]:
+    """Send an SNMP trap/notification.
+
+    Uses PySNMP NotificationType, so mandatory SNMPv2 varbinds (sysUpTime.0 and
+    snmpTrapOID.0) are generated automatically.
+    """
     if snmp_agent is None:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
 
-    # Load all schemas to find the trap
+    # Load all schemas to find which MIB defines this trap
     from app.cli_load_model import load_all_schemas
-    from app.trap_sender import TrapSender
     import os
 
-    schema_dir = "mock-behaviour"
+    from pysnmp.hlapi.v3arch.asyncio import (
+        CommunityData,
+        ContextData,
+        NotificationType,
+        ObjectIdentity,
+        UdpTransportTarget,
+        send_notification,
+    )
+    from pysnmp.smi import view
+    from pysnmp.smi.error import MibNotFoundError, SmiError
+
+    schema_dir = "agent-model"
     if not os.path.exists(schema_dir):
         raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
 
     schemas = load_all_schemas(schema_dir)
 
-    # Find the trap in schemas
     trap_info = None
+    mib_name = None
 
-    for mib_name, schema in schemas.items():
+    for candidate_mib_name, schema in schemas.items():
         if isinstance(schema, dict) and "traps" in schema:
             if request.trap_name in schema["traps"]:
                 trap_info = schema["traps"][request.trap_name]
+                mib_name = candidate_mib_name
                 break
 
-    if not trap_info:
+    if not trap_info or mib_name is None:
         raise HTTPException(status_code=404, detail=f"Trap '{request.trap_name}' not found")
 
-    # Get trap OID
-    trap_oid = tuple(trap_info["oid"])
+    # Use the agent's SnmpEngine so traps have the correct uptime
+    snmp_engine = getattr(snmp_agent, "snmpEngine", None)
+    if snmp_engine is None:
+        raise HTTPException(status_code=500, detail="SNMP agent engine not initialized")
+
+    mib_builder = snmp_engine.get_mib_builder()
+    mib_view = view.MibViewController(mib_builder)
 
     try:
-        # Create trap sender with agent's start time for accurate sysUpTime
-        sender = TrapSender(
-            dest=(request.dest_host or "localhost", request.dest_port or 162),
-            community=request.community or "public",
-            logger=logger,
-            start_time=snmp_agent.start_time if snmp_agent else None,
+        mib_builder.load_modules(mib_name)
+    except MibNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=f"MIB module not found: {mib_name}. {exc}")
+
+    try:
+        notif = NotificationType(ObjectIdentity(mib_name, request.trap_name)).resolve_with_mib(mib_view)
+    except (SmiError, ValueError, TypeError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to resolve notification {mib_name}::{request.trap_name}. {exc}",
         )
 
-        # Send the trap
-        # Send with None to only include mandatory varbinds (sysUpTime and snmpTrapOID)
-        # In future we could populate additional varbinds from trap_info["objects"]
-        sender.send_trap(trap_oid, None, trap_type=request.trap_type)
+    # No need to manually set sysUpTime - the agent's engine already has it via readGet wrapper
 
-        logger.info(f"Sent {request.trap_type} for trap {request.trap_name} (OID: {trap_oid})")
-        
-        return {
-            "status": "ok",
-            "trap_name": request.trap_name,
-            "trap_oid": trap_oid,
-            "trap_type": request.trap_type,
-            "destination": f"{request.dest_host}:{request.dest_port}",
-            "objects": trap_info.get("objects", []),
-        }
-    except Exception as e:
-        logger.exception(f"Failed to send trap {request.trap_name}")
-        raise HTTPException(status_code=500, detail=f"Failed to send trap: {str(e)}")
+    try:
+        error_indication, error_status, error_index, _ = await send_notification(
+            snmp_engine,
+            CommunityData(request.community or "public"),
+            await UdpTransportTarget.create((request.dest_host or "localhost", request.dest_port or 162)),
+            ContextData(),
+            request.trap_type,
+            notif,
+        )
+    except Exception as exc:
+        logger.exception("Failed to send trap")
+        raise HTTPException(status_code=500, detail=f"Failed to send trap: {exc}")
+
+    if error_indication:
+        raise HTTPException(status_code=502, detail=f"SNMP send error: {error_indication}")
+
+    if error_status:
+        raise HTTPException(status_code=502, detail=f"SNMP send error: {error_status} at {error_index}")
+
+    trap_oid = tuple(trap_info["oid"])
+
+    logger.info(
+        "Sent %s for trap %s (%s::%s, OID: %s) to %s:%s",
+        request.trap_type,
+        request.trap_name,
+        mib_name,
+        request.trap_name,
+        trap_oid,
+        request.dest_host,
+        request.dest_port,
+    )
+
+    return {
+        "status": "ok",
+        "trap_name": request.trap_name,
+        "trap_oid": trap_oid,
+        "trap_type": request.trap_type,
+        "destination": f"{request.dest_host}:{request.dest_port}",
+        "mib": mib_name,
+        "objects": trap_info.get("objects", []),
+    }
 
 
 class CreateTableRowRequest(BaseModel):
@@ -1019,44 +1104,256 @@ def clear_received_traps() -> dict[str, Any]:
 
 
 class TestTrapRequest(BaseModel):
-    """Request to send a test trap."""
     dest_host: str = "localhost"
     dest_port: int = 16662
     community: str = "public"
-    message: str = "Test trap from SNMP Simulator UI"
-
 
 @app.post("/send-test-trap")
-def send_test_trap(request: TestTrapRequest) -> dict[str, Any]:
+async def send_test_trap(request: TestTrapRequest) -> dict[str, Any]:
     """Send a test trap to the specified destination."""
-    from app.trap_sender import TrapSender
-    from pysnmp.proto import rfc1902
+    from pysnmp.hlapi.v3arch.asyncio import (
+        CommunityData,
+        ContextData,
+        NotificationType,
+        ObjectIdentity,
+        UdpTransportTarget,
+        send_notification,
+    )
+    from pysnmp.smi import view
+    from pysnmp.smi.error import MibNotFoundError, SmiError
 
-    # Use the test trap OID defined in TrapReceiver
-    test_trap_oid = (1, 3, 6, 1, 4, 1, 99999, 0, 1)
+    # Choose a test notification that actually exists in a MIB
+    # If you have a custom TEST-MIB, use that here instead.
+    test_mib = "SNMPv2-MIB"
+    test_notification = "coldStart"
+
+    # Use the agent's SnmpEngine so traps have the correct uptime
+    snmp_engine = getattr(snmp_agent, "snmpEngine", None)
+    if snmp_engine is None:
+        raise HTTPException(status_code=500, detail="SNMP agent engine not initialized")
+
+    mib_builder = snmp_engine.get_mib_builder()
+    mib_view = view.MibViewController(mib_builder)
 
     try:
-        sender = TrapSender(
-            dest=(request.dest_host, request.dest_port),
-            community=request.community,
-            logger=logger,
+        mib_builder.load_modules(test_mib)
+    except MibNotFoundError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load MIB {test_mib}: {exc}",
         )
 
-        # Send the test trap with the message
-        sender.send_trap(
-            test_trap_oid,
-            rfc1902.OctetString(request.message),
-            trap_type="trap"
+    try:
+        notif = NotificationType(
+            ObjectIdentity(test_mib, test_notification)
+        ).resolve_with_mib(mib_view)
+    except (SmiError, ValueError, TypeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to resolve test notification: {exc}",
         )
 
-        logger.info(f"Sent test trap to {request.dest_host}:{request.dest_port}")
+    # No need to manually set sysUpTime - the agent's engine already has it via readGet wrapper
+
+    try:
+        error_indication, error_status, error_index, _ = await send_notification(
+            snmp_engine,
+            CommunityData(request.community),
+            await UdpTransportTarget.create((request.dest_host, request.dest_port)),
+            ContextData(),
+            "trap",
+            notif,
+        )
+    except Exception as exc:
+        logger.exception("Failed to send test trap")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    if error_indication:
+        raise HTTPException(status_code=502, detail=str(error_indication))
+
+    if error_status:
+        raise HTTPException(
+            status_code=502,
+            detail=f"{error_status} at {error_index}",
+        )
+
+    logger.info(
+        "Sent test trap %s::%s to %s:%s",
+        test_mib,
+        test_notification,
+        request.dest_host,
+        request.dest_port,
+    )
+
+    return {
+        "status": "ok",
+        "mib": test_mib,
+        "notification": test_notification,
+        "destination": f"{request.dest_host}:{request.dest_port}",
+    }
+
+
+# ============================================================================
+# Baking and Preset Management Endpoints
+# ============================================================================
+
+
+@app.post("/bake-state")
+def bake_state() -> dict[str, Any]:
+    """
+    Bake current MIB state into agent-model schema files.
+
+    This endpoint:
+    1. Backs up existing agent-model directory
+    2. Reads current state from data/mib_state.json
+    3. Merges state values into schema files as initial_value
+    """
+    from app.cli_bake_state import backup_schemas, load_mib_state, bake_state_into_schemas
+    from pathlib import Path
+
+    schema_dir = Path("agent-model")
+    state_file = Path("data/mib_state.json")
+    backup_base = Path("agent-model-backups")
+
+    try:
+        # Backup existing schemas
+        backup_dir = backup_schemas(schema_dir, backup_base)
+
+        # Load current state
+        state = load_mib_state(state_file)
+
+        # Bake state into schemas
+        baked_count = bake_state_into_schemas(schema_dir, state)
 
         return {
             "status": "ok",
-            "message": f"Test trap sent to {request.dest_host}:{request.dest_port}",
-            "trap_oid": oid_tuple_to_str(test_trap_oid),
-            "destination": f"{request.dest_host}:{request.dest_port}"
+            "baked_count": baked_count,
+            "backup_dir": str(backup_dir),
+            "message": f"Successfully baked {baked_count} value(s) into schemas",
         }
     except Exception as e:
-        logger.exception("Failed to send test trap")
-        raise HTTPException(status_code=500, detail=f"Failed to send test trap: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to bake state: {e}")
+
+
+class PresetRequest(BaseModel):
+    preset_name: str
+
+
+@app.get("/presets")
+def list_presets() -> dict[str, Any]:
+    """List all available agent-model presets."""
+    from app.cli_preset_manager import list_presets
+    from pathlib import Path
+
+    preset_base = Path("agent-model-presets")
+    presets = list_presets(preset_base)
+
+    return {
+        "presets": presets,
+        "count": len(presets),
+    }
+
+
+@app.post("/presets/save")
+def save_preset(request: PresetRequest) -> dict[str, Any]:
+    """Save current agent-model as a preset."""
+    from app.cli_preset_manager import save_preset
+    from pathlib import Path
+    import sys
+    from io import StringIO
+
+    schema_dir = Path("agent-model")
+    preset_base = Path("agent-model-presets")
+
+    # Capture output
+    old_stdout = sys.stdout
+    sys.stdout = StringIO()
+
+    try:
+        result = save_preset(schema_dir, preset_base, request.preset_name)
+        output = sys.stdout.getvalue()
+        sys.stdout = old_stdout
+
+        if result != 0:
+            raise HTTPException(status_code=400, detail=f"Failed to save preset: {output}")
+
+        return {
+            "status": "ok",
+            "preset_name": request.preset_name,
+            "message": f"Preset '{request.preset_name}' saved successfully",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        sys.stdout = old_stdout
+        raise HTTPException(status_code=500, detail=f"Failed to save preset: {e}")
+
+
+@app.post("/presets/load")
+def load_preset(request: PresetRequest) -> dict[str, Any]:
+    """Load a preset to replace current agent-model."""
+    from app.cli_preset_manager import load_preset as load_preset_impl
+    from pathlib import Path
+    import sys
+    from io import StringIO
+
+    schema_dir = Path("agent-model")
+    preset_base = Path("agent-model-presets")
+    backup_base = Path("agent-model-backups")
+
+    # Capture output
+    old_stdout = sys.stdout
+    sys.stdout = StringIO()
+
+    try:
+        result = load_preset_impl(schema_dir, preset_base, request.preset_name, backup_base, no_backup=False)
+        output = sys.stdout.getvalue()
+        sys.stdout = old_stdout
+
+        if result != 0:
+            raise HTTPException(status_code=400, detail=f"Failed to load preset: {output}")
+
+        return {
+            "status": "ok",
+            "preset_name": request.preset_name,
+            "message": f"Preset '{request.preset_name}' loaded successfully. Restart agent to apply changes.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        sys.stdout = old_stdout
+        raise HTTPException(status_code=500, detail=f"Failed to load preset: {e}")
+
+
+@app.delete("/presets/{preset_name}")
+def delete_preset(preset_name: str) -> dict[str, Any]:
+    """Delete a preset."""
+    from app.cli_preset_manager import delete_preset as delete_preset_impl
+    from pathlib import Path
+    import sys
+    from io import StringIO
+
+    preset_base = Path("agent-model-presets")
+
+    # Capture output
+    old_stdout = sys.stdout
+    sys.stdout = StringIO()
+
+    try:
+        result = delete_preset_impl(preset_base, preset_name)
+        output = sys.stdout.getvalue()
+        sys.stdout = old_stdout
+
+        if result != 0:
+            raise HTTPException(status_code=400, detail=f"Failed to delete preset: {output}")
+
+        return {
+            "status": "ok",
+            "preset_name": preset_name,
+            "message": f"Preset '{preset_name}' deleted successfully",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        sys.stdout = old_stdout
+        raise HTTPException(status_code=500, detail=f"Failed to delete preset: {e}")

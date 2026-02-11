@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import customtkinter as ctk
 from tkinter import messagebox, ttk
 import tkinter as tk
 import tkinter.font as tkfont
-from typing import Any, Dict, Tuple, List, cast, Optional
+from typing import Any, Dict, Tuple, List, Literal,cast, TypedDict, Optional
 import concurrent.futures
 import requests
 from datetime import datetime
@@ -34,6 +36,20 @@ except ImportError:
 ctk.set_appearance_mode("system")  # Modes: "System" (default), "Dark", "Light"
 ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
 
+TrapType = Literal["trap", "inform"]
+
+class SendTrapPayload(TypedDict):
+    trap_name: str
+    trap_type: TrapType
+    dest_host: str
+    dest_port: int
+    community: str
+
+
+def _oid_list_to_str(oid: Any) -> str:
+    if isinstance(oid, (list, tuple)):
+        return ".".join(str(x) for x in oid)
+    return str(oid)
 
 class SNMPControllerGUI:
     """GUI application for controlling SNMP agent with modern tabbed interface."""
@@ -66,6 +82,9 @@ class SNMPControllerGUI:
         self.current_trap_overrides: Dict[str, str] = {}
         self.oid_rows: List[Dict[str, Any]] = []
 
+        # Set initial sash position after window is displayed
+        self.root.after(100, self._set_initial_sash_position)
+
         # Bind close handler to save GUI log and config
         try:
             self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -75,7 +94,7 @@ class SNMPControllerGUI:
     def _setup_ui(self) -> None:
         """Setup the user interface components."""
         # Create a PanedWindow to split main content and log
-        self.main_paned = tk.PanedWindow(self.root, orient=tk.VERTICAL, sashwidth=5, bg="#2b2b2b")
+        self.main_paned: tk.PanedWindow = tk.PanedWindow(self.root, orient=tk.VERTICAL, sashwidth=5, bg="#2b2b2b")
         self.main_paned.pack(fill="both", expand=True, padx=10, pady=10)
 
         # Top pane: Main tabview for tabs
@@ -103,9 +122,23 @@ class SNMPControllerGUI:
         log_label = ctk.CTkLabel(log_frame, text="Log Output:", anchor="w")
         log_label.pack(fill="x", padx=5, pady=(5, 0))
 
-        self.log_text = tk.Text(log_frame, height=5, font=("Courier", 12), bg="#2b2b2b", fg="#ffffff")
-        self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
+        # Create frame for log text with scrollbars
+        log_text_frame = tk.Frame(log_frame, bg="#2b2b2b")
+        log_text_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Add vertical scrollbar only
+        log_scrollbar_y = tk.Scrollbar(log_text_frame)
+        log_scrollbar_y.pack(side="right", fill="y")
+
+        # Create text widget with reduced height and vertical scrollbar only
+        # Use wrap="word" so text wraps to fit window width
+        self.log_text = tk.Text(log_text_frame, height=3, font=("Courier", 12), bg="#2b2b2b", fg="#ffffff",
+                               yscrollcommand=log_scrollbar_y.set, wrap="word")
+        self.log_text.pack(side="left", fill="both", expand=True)
         self.log_text.configure(state="disabled")
+
+        # Configure scrollbar
+        log_scrollbar_y.config(command=self.log_text.yview)
 
         # Set log widget for logger
         self.logger.set_log_widget(self.log_text)
@@ -115,7 +148,20 @@ class SNMPControllerGUI:
         status_bar = ctk.CTkLabel(self.root, textvariable=self.status_var, anchor="w",
                                    fg_color=("gray85", "gray25"), corner_radius=0, height=25)
         status_bar.pack(fill="x", side="bottom")
-    
+
+    def _set_initial_sash_position(self) -> None:
+        """Set the initial position of the log window splitter."""
+        try:
+            window_height = self.root.winfo_height()
+            # Put splitter to give log pane ~120 pixels (enough for 3 lines + label + scrollbars + padding)
+            sash_pos = window_height - 120 - 20  # 20 for padding
+            if sash_pos > 300:  # Ensure main content area gets at least 300 pixels
+                # Use sash_place for tkinter.PanedWindow (not ttk.PanedWindow)
+                cast(Any, self.main_paned.sash_place)(0, 0, sash_pos)
+        except Exception as e:
+            # If setting sash position fails, just log and continue
+            print(f"Warning: Could not set initial sash position: {e}")
+
     def _setup_oid_tab(self) -> None:
         """Setup the OID tree view tab."""
         oid_frame = self.tabview.tab("OID Tree")
@@ -423,7 +469,44 @@ class SNMPControllerGUI:
         self.mibs_textbox = ctk.CTkTextbox(mibs_outer_frame, height=100, font=("", 12))
         self.mibs_textbox.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         self.mibs_textbox.configure(state="disabled")
-    
+
+        # State Management section
+        state_frame = ctk.CTkFrame(config_frame)
+        state_frame.pack(fill="x", padx=10, pady=(0, 10))
+
+        state_label = ctk.CTkLabel(state_frame, text="State Management", font=("", 14, "bold"))
+        state_label.pack(pady=(10, 10), padx=10, anchor="w")
+
+        # Baking section
+        bake_frame = ctk.CTkFrame(state_frame, fg_color="transparent")
+        bake_frame.pack(fill="x", padx=10, pady=(0, 10))
+
+        bake_info = ctk.CTkLabel(bake_frame, text="Bake current state into agent-model schemas:",
+                                font=("", 12))
+        bake_info.pack(side="left", padx=(0, 10))
+
+        self.bake_btn = ctk.CTkButton(bake_frame, text="Bake State", command=self._bake_state,
+                                      width=120, height=28)
+        self.bake_btn.pack(side="left")
+
+        # Preset management section
+        preset_frame = ctk.CTkFrame(state_frame, fg_color="transparent")
+        preset_frame.pack(fill="x", padx=10, pady=(0, 10))
+
+        preset_info = ctk.CTkLabel(preset_frame, text="Manage presets (scenarios):",
+                                  font=("", 12))
+        preset_info.pack(side="left", padx=(0, 10))
+
+        self.save_preset_btn = ctk.CTkButton(preset_frame, text="Save Preset",
+                                            command=self._save_preset_dialog,
+                                            width=120, height=28)
+        self.save_preset_btn.pack(side="left", padx=(0, 5))
+
+        self.load_preset_btn = ctk.CTkButton(preset_frame, text="Load Preset",
+                                            command=self._load_preset_dialog,
+                                            width=120, height=28)
+        self.load_preset_btn.pack(side="left")
+
     def _setup_scripts_tab(self) -> None:
         """Setup the Scripts tab."""
         scripts_frame = self.tabview.tab("Scripts")
@@ -500,8 +583,8 @@ class SNMPControllerGUI:
             fieldbackground=dest_bg_color,
             borderwidth=1,
             relief="solid",
-            rowheight=20,  # Smaller row height for compact display
-            font=('Helvetica', 10)  # Smaller font
+            rowheight=24,  # Larger row height for better readability
+            font=('Helvetica', 12)  # Larger font
         )
         dest_style.configure(
             "Dest.Treeview.Heading",
@@ -509,8 +592,8 @@ class SNMPControllerGUI:
             foreground=dest_fg_color,
             borderwidth=1,
             relief="groove",
-            padding=3,
-            font=('Helvetica', 10, 'bold')
+            padding=5,
+            font=('Helvetica', 12, 'bold')  # Larger font
         )
         dest_style.map("Dest.Treeview",
                       background=[("selected", dest_selected_bg)])
@@ -671,10 +754,16 @@ class SNMPControllerGUI:
         header_frame = ctk.CTkFrame(right_frame, fg_color="transparent")
         header_frame.pack(fill="x", padx=10, pady=(0, 5))
 
-        ctk.CTkLabel(header_frame, text="OID", font=("", 10, "bold"), width=200).grid(row=0, column=0, padx=(0, 5))
-        ctk.CTkLabel(header_frame, text="Current Value", font=("", 10, "bold"), width=100).grid(row=0, column=1, padx=(0, 5))
-        ctk.CTkLabel(header_frame, text="Force Override", font=("", 10, "bold")).grid(row=0, column=2, padx=(0, 5))
-        ctk.CTkLabel(header_frame, text="Override Value", font=("", 10, "bold"), width=120).grid(row=0, column=3)
+        # Configure grid columns to match row layout
+        header_frame.grid_columnconfigure(0, weight=2, minsize=250)  # OID name
+        header_frame.grid_columnconfigure(1, weight=1, minsize=100)  # Current value
+        header_frame.grid_columnconfigure(2, weight=0, minsize=30)   # Checkbox
+        header_frame.grid_columnconfigure(3, weight=1, minsize=150)  # Override value
+
+        ctk.CTkLabel(header_frame, text="OID", font=("", 10, "bold"), anchor="w").grid(row=0, column=0, padx=(5, 5), sticky="ew")
+        ctk.CTkLabel(header_frame, text="Current Value", font=("", 10, "bold"), anchor="w").grid(row=0, column=1, padx=(0, 5), sticky="ew")
+        ctk.CTkLabel(header_frame, text="Force Override", font=("", 10, "bold"), anchor="center").grid(row=0, column=2, padx=(0, 5))
+        ctk.CTkLabel(header_frame, text="Override Value", font=("", 10, "bold"), anchor="w").grid(row=0, column=3, padx=(0, 5), sticky="ew")
 
         # Scrollable table for OID overrides
         table_frame = ctk.CTkScrollableFrame(right_frame, height=200)
@@ -738,6 +827,12 @@ class SNMPControllerGUI:
         row_frame = ctk.CTkFrame(self.oid_table_frame)
         row_frame.pack(fill="x", pady=2)
 
+        # Configure grid columns with proper weights
+        row_frame.grid_columnconfigure(0, weight=2, minsize=250)  # OID name - flexible, min 250px
+        row_frame.grid_columnconfigure(1, weight=1, minsize=100)  # Current value - flexible, min 100px
+        row_frame.grid_columnconfigure(2, weight=0, minsize=30)   # Checkbox - fixed
+        row_frame.grid_columnconfigure(3, weight=1, minsize=150)  # Override value - flexible, min 150px
+
         # Check if this is a table OID (ends with .N where N is a digit)
         is_table_oid = False
         base_oid_name = oid_name
@@ -756,13 +851,13 @@ class SNMPControllerGUI:
         # Check if this is sysUpTime (special case - always real-time)
         is_sysuptime = self._is_sysuptime_varbind(oid_name)
 
-        # OID name label (display the full name including .index)
-        oid_label = ctk.CTkLabel(row_frame, text=oid_name, width=200, anchor="w", font=("", 10))
-        oid_label.grid(row=0, column=0, padx=(5, 5), sticky="w")
+        # OID name label (display the full name including .index) - no fixed width, let grid handle it
+        oid_label = ctk.CTkLabel(row_frame, text=oid_name, anchor="w", font=("", 10))
+        oid_label.grid(row=0, column=0, padx=(5, 5), sticky="ew")
 
-        # Current value label (updated by _refresh_current_values)
-        current_label = ctk.CTkLabel(row_frame, text=current_value if current_value else "Loading...", width=100, anchor="w", font=("", 10))
-        current_label.grid(row=0, column=1, padx=(0, 5), sticky="w")
+        # Current value label (updated by _refresh_current_values) - no fixed width, let grid handle it
+        current_label = ctk.CTkLabel(row_frame, text=current_value if current_value else "Loading...", anchor="w", font=("", 10))
+        current_label.grid(row=0, column=1, padx=(0, 5), sticky="ew")
 
         # Force override checkbox (hidden for index varbinds and sysUpTime)
         use_override_var = ctk.BooleanVar(value=False)
@@ -1342,136 +1437,52 @@ class SNMPControllerGUI:
             if len(parts) == 2 and parts[1].isdigit():
                 base_name = parts[0]
                 index_str = parts[1]
-                
+
                 # Look up the base OID in metadata by name
                 for oid, metadata in self.oid_metadata.items():
                     metadata_name = metadata.get("name", "")
                     mib_name = metadata.get("mib", "")
                     full_name = f"{mib_name}::{metadata_name}"
-                    
+
                     if full_name == base_name:
                         # Found the base OID, append the index
                         return f"{oid}.{index_str}"
-        
-        # For regular OIDs, try to find them in metadata
-        for oid, metadata in self.oid_metadata.items():
-            if oid_str in oid:
-                return oid
-        
+
+        # For MIB::name format without instance, try to find exact match
+        if "::" in oid_str:
+            for oid, metadata in self.oid_metadata.items():
+                metadata_name = metadata.get("name", "")
+                mib_name = metadata.get("mib", "")
+                full_name = f"{mib_name}::{metadata_name}"
+
+                if full_name == oid_str:
+                    # Found exact match, but no instance specified
+                    # Check if this is a scalar or table column
+                    obj_type = metadata.get("type", "")
+                    access = metadata.get("access", "").lower()
+
+                    # Check if this is a table column by looking at parent OID
+                    oid_parts = tuple(int(x) for x in oid.split("."))
+                    if len(oid_parts) > 1:
+                        # Get parent OID
+                        parent_oid = ".".join(str(x) for x in oid_parts[:-1])
+                        parent_metadata = self.oid_metadata.get(parent_oid, {})
+                        parent_type = parent_metadata.get("type", "")
+
+                        # If parent is MibTableRow, this is a table column
+                        if parent_type == "MibTableRow":
+                            # Table column without instance - cannot resolve
+                            return None
+
+                    # Not a table column, check if it's a scalar
+                    if "not-accessible" not in access and obj_type not in ["MibTable", "MibTableRow"]:
+                        # Scalar - append .0
+                        return f"{oid}.0"
+                    else:
+                        # Cannot resolve
+                        return None
+
         return None
-
-    def _send_trap(self) -> None:
-        """Send the selected trap to all configured destinations."""
-        trap_name = self.trap_var.get()
-        if not trap_name or trap_name == "No traps available":
-            messagebox.showwarning("No Trap Selected", "Please select a trap to send.")
-            return
-        
-        if not self.trap_destinations:
-            messagebox.showerror("No Destinations", "Please add at least one trap destination.")
-            return
-
-        try:
-            # Collect overrides from table
-            trap_overrides = {}
-            for row in self.oid_rows:
-                # Skip sysUpTime (always real-time) and index varbinds
-                if row.get("is_sysuptime", False) or row.get("is_index", False):
-                    continue
-                if row["use_override_var"].get():
-                    oid_name = row["oid_name"]
-                    override_value = row["override_entry"].get().strip()
-                    if override_value:
-                        trap_overrides[oid_name] = override_value
-            
-            # First, apply any trap-specific forced OID values
-            force_updates = []
-            for oid_str, value in trap_overrides.items():
-                try:
-                    # Handle table OIDs with [index] suffix
-                    if "::" in oid_str and "[" in oid_str and "]" in oid_str:
-                        # Resolve table OID to actual instance
-                        actual_oid = self._resolve_table_oid(oid_str)
-                        if actual_oid:
-                            update_payload = {"oid": actual_oid, "value": value}
-                        else:
-                            self._log(f"Could not resolve table OID: {oid_str}", "WARNING")
-                            continue
-                    else:
-                        # Regular scalar OID - try to find the actual OID
-                        actual_oid = None
-                        for oid, metadata in self.oid_metadata.items():
-                            if oid_str in oid or oid_str in metadata.get("name", ""):
-                                actual_oid = oid
-                                break
-                        if actual_oid:
-                            update_payload = {"oid": actual_oid, "value": value}
-                        else:
-                            self._log(f"Could not find OID for: {oid_str}", "WARNING")
-                            continue
-                    
-                    response = requests.post(f"{self.api_url}/value", json=update_payload, timeout=5)
-                    if response.status_code == 200:
-                        force_updates.append(oid_str)
-                        self._log(f"Set OID {oid_str} = {value}")
-                    else:
-                        self._log(f"Failed to set OID {oid_str}: {response.text}", "WARNING")
-                except Exception as e:
-                    self._log(f"Error setting OID {oid_str}: {e}", "WARNING")
-                    continue
-            
-            if force_updates:
-                self._log(f"Applied {len(force_updates)} trap-specific OID override(s)")
-
-            # Send trap to each destination
-            success_count = 0
-            for dest_host, dest_port in self.trap_destinations:
-                payload = {
-                    "trap_name": trap_name,
-                    "trap_type": "trap",  # Send actual trap packets
-                    "dest_host": dest_host,
-                    "dest_port": dest_port,
-                    "community": "public"
-                }
-                
-                try:
-                    response = requests.post(f"{self.api_url}/send-trap", json=payload, timeout=5)
-                    response.raise_for_status()
-                    result = response.json()
-                    
-                    # Log success for this destination
-                    timestamp = datetime.now().strftime("%H:%M:%S")
-                    trap_oid = result.get("trap_oid", "")
-                    oid_str = ".".join(str(x) for x in trap_oid) if isinstance(trap_oid, (list, tuple)) else str(trap_oid)
-                    
-                    log_msg = f"[{timestamp}] Sent to {dest_host}:{dest_port}: {trap_name} (OID: {oid_str})"
-
-                    # Log to main log window with blank line before
-                    self.log_text.insert("end", "\n" + log_msg + "\n")
-                    self.log_text.see("end")
-
-                    success_count += 1
-                    
-                except requests.exceptions.RequestException as e:
-                    error_msg = f"Failed to send trap to {dest_host}:{dest_port}: {e}"
-                    self._log(error_msg, "ERROR")
-                    # Still log the attempt
-                    timestamp = datetime.now().strftime("%H:%M:%S")
-                    log_msg = f"[{timestamp}] Failed to {dest_host}:{dest_port}: {trap_name} - {str(e)}"
-                    # Log to main log window with blank line before
-                    self.log_text.insert("end", "\n" + log_msg + "\n")
-                    self.log_text.see("end")
-            
-            if success_count > 0:
-                self._log(f"Successfully sent trap '{trap_name}' to {success_count}/{len(self.trap_destinations)} destination(s)")
-                messagebox.showinfo("Success", f"Trap '{trap_name}' sent to {success_count} destination(s)!")
-            else:
-                messagebox.showerror("Error", "Failed to send trap to any destination")
-            
-        except Exception as e:
-            error_msg = f"Unexpected error sending trap: {e}"
-            self._log(error_msg, "ERROR")
-            messagebox.showerror("Error", error_msg)
 
     def _start_trap_receiver(self) -> None:
         """Start the trap receiver."""
@@ -1518,142 +1529,12 @@ class SNMPControllerGUI:
             self._log(error_msg, "ERROR")
             messagebox.showerror("Error", error_msg)
 
-    def _send_test_trap(self) -> None:
-        """Send the selected trap to localhost on the receiver port."""
-        trap_name = self.trap_var.get()
-        if not trap_name or trap_name == "No traps available":
-            messagebox.showwarning("No Trap Selected", "Please select a trap to send.")
-            return
-
-        try:
-            port = int(self.receiver_port_var.get())
-
-            # Collect overrides from table (same as _send_trap)
-            trap_overrides = {}
-            for row in self.oid_rows:
-                # Skip sysUpTime (always real-time) and index varbinds
-                if row.get("is_sysuptime", False) or row.get("is_index", False):
-                    continue
-                if row["use_override_var"].get():
-                    oid_name = row["oid_name"]
-                    override_value = row["override_entry"].get().strip()
-                    if override_value:
-                        trap_overrides[oid_name] = override_value
-
-            # Apply any trap-specific forced OID values
-            for oid_str, value in trap_overrides.items():
-                try:
-                    # Handle table OIDs with [index] suffix
-                    if "::" in oid_str and "[" in oid_str and "]" in oid_str:
-                        actual_oid = self._resolve_table_oid(oid_str)
-                        if actual_oid:
-                            update_payload = {"oid": actual_oid, "value": value}
-                        else:
-                            self._log(f"Could not resolve table OID: {oid_str}", "WARNING")
-                            continue
-                    else:
-                        # Regular scalar OID
-                        actual_oid = None
-                        for oid, metadata in self.oid_metadata.items():
-                            if oid_str in oid or oid_str in metadata.get("name", ""):
-                                actual_oid = oid
-                                break
-                        if actual_oid:
-                            update_payload = {"oid": actual_oid, "value": value}
-                        else:
-                            self._log(f"Could not find OID for: {oid_str}", "WARNING")
-                            continue
-
-                    response = requests.post(f"{self.api_url}/value", json=update_payload, timeout=5)
-                    if response.status_code == 200:
-                        self._log(f"Set OID {oid_str} = {value}")
-                except Exception as e:
-                    self._log(f"Error setting OID {oid_str}: {e}", "WARNING")
-                    continue
-
-            # Send trap to localhost on receiver port
-            payload = {
-                "trap_name": trap_name,
-                "trap_type": "trap",
-                "dest_host": "localhost",
-                "dest_port": port,
-                "community": "public"
-            }
-
-            response = requests.post(f"{self.api_url}/send-trap", json=payload, timeout=5)
-            response.raise_for_status()
-            result = response.json()
-
-            # Log success
-            timestamp = datetime.now().strftime("%H:%M:%S")
-            trap_oid = result.get("trap_oid", "")
-            oid_str = ".".join(str(x) for x in trap_oid) if isinstance(trap_oid, (list, tuple)) else str(trap_oid)
-
-            log_msg = f"[{timestamp}] Sent test trap to localhost:{port}: {trap_name} (OID: {oid_str})"
-
-            # Log to main log window with blank line before
-            self.log_text.insert("end", "\n" + log_msg + "\n")
-            self.log_text.see("end")
-
-            self._log(f"Test trap sent to localhost:{port}")
-
-            # Wait a moment for the trap to be received, then check
-            time.sleep(0.5)
-
-            # Check if trap was received
-            try:
-                check_response = requests.get(f"{self.api_url}/trap-receiver/traps?limit=1", timeout=2)
-                if check_response.status_code == 200:
-                    check_result = check_response.json()
-                    traps = check_result.get("traps", [])
-                    if traps:
-                        received_trap = traps[0]
-                        recv_timestamp = received_trap.get("timestamp", "")
-                        recv_oid = received_trap.get("trap_oid_str", "unknown")
-                        varbinds = received_trap.get("varbinds", [])
-
-                        # Log the received trap with all varbinds to main log window
-                        recv_log_msg = f"[{recv_timestamp}] Received trap: {trap_name} (OID: {recv_oid})"
-                        # Add blank line before trap message
-                        self.log_text.insert("end", "\n" + recv_log_msg + "\n")
-
-                        # Log all varbinds
-                        for vb in varbinds:
-                            vb_oid = vb.get("oid_str", "unknown")
-                            vb_value = vb.get("value", "")
-                            self.log_text.insert("end", f"  - {vb_oid} = {vb_value}\n")
-
-                        self.log_text.see("end")
-
-                        # Show custom popup notification with varbinds table
-                        self._show_trap_notification(trap_name, recv_oid, recv_timestamp, varbinds)
-                    else:
-                        messagebox.showwarning(
-                            "Trap Sent",
-                            f"Test trap '{trap_name}' was sent to localhost:{port}\n\n"
-                            "But no trap was received. Make sure the receiver is running."
-                        )
-            except Exception:
-                # If we can't check, just show that it was sent
-                messagebox.showinfo("Trap Sent", f"Test trap '{trap_name}' sent to localhost:{port}")
-
-        except ValueError:
-            messagebox.showerror("Error", "Invalid port number")
-        except Exception as e:
-            error_msg = f"Failed to send test trap: {e}"
-            self._log(error_msg, "ERROR")
-            messagebox.showerror("Error", error_msg)
-
-
-
-
-
     def _show_trap_notification(self, trap_name: str, trap_oid: str, timestamp: str, varbinds: list[dict[str, Any]]) -> None:
         """Show a custom notification dialog with trap details and varbinds table."""
         # Create custom dialog window
         dialog = ctk.CTkToplevel(self.root)
         dialog.title("Test Trap Received!")
-        dialog.geometry("800x500")  # Wider window
+        dialog.geometry("700x400")  # Smaller window
 
         # Make it modal
         dialog.transient(self.root)
@@ -1898,8 +1779,12 @@ class SNMPControllerGUI:
                 if stored_name in ["ifIndex", "ifStackHigherLayer", "ifStackLowerLayer", "ifRcvAddressAddress"]:
                     type_val += " [INDEX]"
 
-                # Display "Empty Node" if value is empty
-                display_val = val if val else "Empty Node"
+                # For Unknown types with no value, show "Empty Node" in Type column, not Value column
+                if type_val == "Unknown" and not val:
+                    type_val = "Empty Node"
+                    display_val = ""
+                else:
+                    display_val = val
 
                 img = None
                 if getattr(self, 'oid_icon_images', None):
@@ -1924,7 +1809,7 @@ class SNMPControllerGUI:
                         img = self.oid_icon_images.get(icon_key)
                     img_ref = cast(Any, img) if img is not None else ""
                     node = self.oid_tree.insert(parent, "end", text=display_text, image=img_ref,
-                                               values=(oid_str, "", "Empty Node", type_val, access_val, mib_val),
+                                               values=(oid_str, "", "", type_val, access_val, mib_val),
                                                tags=(row_tag, 'table'))
                     self.oid_to_item[oid_str] = node
                     # Insert placeholder to make it expandable
@@ -1941,7 +1826,7 @@ class SNMPControllerGUI:
                         img = self.oid_icon_images.get(icon_key)
                     img_ref = cast(Any, img) if img is not None else ""
                     node = self.oid_tree.insert(parent, "end", text=display_text, image=img_ref,
-                                               values=(oid_str, "", "Empty Node", type_val, access_val, mib_val),
+                                               values=(oid_str, "", "", type_val, access_val, mib_val),
                                                tags=(row_tag,))
                     self.oid_to_item[oid_str] = node
                     # Recurse into children
@@ -3024,22 +2909,42 @@ class SNMPControllerGUI:
         # First, search in already loaded items
         for oid, item_id in self.oid_to_item.items():
             if search_term in oid or search_term.lower() in self.oid_tree.item(item_id, "text").lower():
+                # Expand path to make it visible
+                self._expand_path_to_item(item_id)
                 self.oid_tree.see(item_id)
                 self.oid_tree.selection_set(item_id)
                 return
 
-        # If not found, search in oids_data and expand path if needed
+        # If not found, search in metadata by name
+        for oid_str, metadata in self.oid_metadata.items():
+            name = metadata.get("name", "")
+            mib = metadata.get("mib", "")
+            full_name = f"{mib}::{name}" if mib else name
+
+            if (search_term.lower() in name.lower() or
+                search_term.lower() in full_name.lower() or
+                search_term in oid_str):
+                # Found it, check if it's in the tree
+                if oid_str in self.oid_to_item:
+                    item_id = self.oid_to_item[oid_str]
+                    # Expand path to make it visible
+                    self._expand_path_to_item(item_id)
+                    self.oid_tree.see(item_id)
+                    self.oid_tree.selection_set(item_id)
+                    return
+
+        # Fallback: search in oids_data
         for name, oid_tuple in self.oids_data.items():
             oid_str = ".".join(str(x) for x in oid_tuple)
             if search_term in oid_str or search_term.lower() in name.lower():
-                # Found it, expand the path to make it visible
-                self._expand_path_to_oid(oid_tuple)
-                # Now it should be in oid_to_item
+                # Found it, check if it's in the tree
                 if oid_str in self.oid_to_item:
                     item_id = self.oid_to_item[oid_str]
+                    # Expand path to make it visible
+                    self._expand_path_to_item(item_id)
                     self.oid_tree.see(item_id)
                     self.oid_tree.selection_set(item_id)
-                return
+                    return
 
         messagebox.showinfo("Search", f"No match found for '{search_term}'")
 
@@ -3048,29 +2953,23 @@ class SNMPControllerGUI:
         if not self.oids_data:
             return
 
-        # Start from root
-        current_item = ""
-        for i, num in enumerate(target_oid):
-            # Find the child with this number
-            found = False
-            for child in self.oid_tree.get_children(current_item):
-                # Get the OID from the item
-                oid_str = self.oid_tree.set(child, "oid")
-                if oid_str:
-                    oid_parts = tuple(int(x) for x in oid_str.split("."))
-                    if oid_parts == target_oid[:i+1]:
-                        # This is the correct child
-                        self.oid_tree.item(child, open=True)
-                        current_item = child
-                        found = True
-                        break
-            if not found:
-                # The path doesn't exist yet, need to expand parent
-                if current_item:
-                    self.oid_tree.item(current_item, open=True)
-                    # Trigger lazy loading if needed
-                    self.executor.submit(self._fetch_values_for_node, current_item)
-                break
+        # Build the full path by checking each prefix of the target OID
+        path_oids = []
+        for i in range(1, len(target_oid) + 1):
+            partial_oid = target_oid[:i]
+            oid_str = ".".join(str(x) for x in partial_oid)
+            # Check if this OID exists in our data
+            if oid_str in self.oid_to_item:
+                path_oids.append(oid_str)
+
+        # Expand each node in the path from root to target
+        for path_oid in path_oids:
+            if path_oid in self.oid_to_item:
+                item = self.oid_to_item[path_oid]
+                # Expand this node
+                self.oid_tree.item(item, open=True)
+                # Force UI update
+                self.oid_tree.update_idletasks()
 
     def _expand_path_to_item(self, item: str) -> None:
         """Expand all ancestors of the given item."""
@@ -3082,6 +2981,13 @@ class SNMPControllerGUI:
         path.reverse()
         for node in path:
             self.oid_tree.item(node, open=True)
+            # If this is a table node with placeholder, trigger table discovery
+            if 'table' in self.oid_tree.item(node, 'tags'):
+                children = self.oid_tree.get_children(node)
+                if children and 'placeholder' in self.oid_tree.item(children[0], 'tags'):
+                    oid_str = self.oid_tree.set(node, "oid")
+                    if oid_str:
+                        self.executor.submit(self._discover_table_instances, node, oid_str)
 
     def _discover_table_instances(self, item: str, entry_oid: str) -> None:
         """Discover table instances and populate the tree."""
@@ -3170,21 +3076,35 @@ class SNMPControllerGUI:
             for name, col_oid, col_num in columns:
                 full_col_oid = f"{col_oid}.{inst}"
                 is_index = name.lower() in {idx.lower() for idx in index_columns}
-                value_here = self.oid_values.get(full_col_oid, "")
-                if is_index:
-                    value_here = "N/A"
-                elif value_here == "":
-                    try:
-                        resp = requests.get(
-                            f"{self.api_url}/value",
-                            params={"oid": full_col_oid},
-                            timeout=2,
-                        )
-                        if resp.status_code == 200:
-                            value_here = str(resp.json().get("value", ""))
+
+                # Check if value is already loaded (from bulk or previous fetch)
+                if full_col_oid in self.oid_values:
+                    value_here = self.oid_values[full_col_oid]
+                    if is_index:
+                        value_here = "N/A"
+                else:
+                    # Not loaded yet - try to fetch it once
+                    if is_index:
+                        value_here = "N/A"
+                        self.oid_values[full_col_oid] = value_here
+                    else:
+                        try:
+                            resp = requests.get(
+                                f"{self.api_url}/value",
+                                params={"oid": full_col_oid},
+                                timeout=2,
+                            )
+                            if resp.status_code == 200:
+                                value_here = str(resp.json().get("value", ""))
+                                self.oid_values[full_col_oid] = value_here
+                            else:
+                                # Mark as attempted to avoid repeated failures
+                                value_here = ""
+                                self.oid_values[full_col_oid] = value_here
+                        except Exception:
+                            # Mark as attempted to avoid repeated failures
+                            value_here = ""
                             self.oid_values[full_col_oid] = value_here
-                    except Exception:
-                        value_here = ""
                 grouped[inst].append((name, col_oid, full_col_oid, value_here, is_index))
 
         # Update UI
@@ -3272,9 +3192,11 @@ class SNMPControllerGUI:
                 else:
                     continue
 
-                if fetch_oid in self.oid_values and self.oid_values[fetch_oid] != "":
-                    continue  # already fetched
+                # Skip if already fetched (even if empty) since we now do bulk loading
+                if fetch_oid in self.oid_values:
+                    continue  # already fetched in bulk or previously
 
+                # Only fetch if not already loaded (for backwards compatibility with lazy loading)
                 try:
                     self._log(f"Fetching value for OID {fetch_oid} (instance={instance_str})")
                     resp = requests.get(f"{self.api_url}/value", params={"oid": fetch_oid}, timeout=3)
@@ -3289,6 +3211,8 @@ class SNMPControllerGUI:
                     self.root.after(0, update_ui)
                     self._log(f"Fetched value for OID {fetch_oid}: {val_str}")
                 except Exception as e:
+                    # Mark as attempted to avoid repeated failures
+                    self.oid_values[fetch_oid] = ""
                     self._log(f"Failed to fetch value for OID {fetch_oid}: {e}", "WARNING")
             else:
                 # Non-leaf: optionally prefetch its leaf children; skip to avoid deep recursion
@@ -3336,9 +3260,7 @@ class SNMPControllerGUI:
             except Exception:
                 converted = {}
             self.oids_data = converted
-            # Do not fetch values eagerly; use lazy background loading on expand
-            self.oid_values = {}
-            
+
             # Fetch OID metadata
             try:
                 response = requests.get(f"{self.api_url}/oid-metadata", timeout=5)
@@ -3348,6 +3270,18 @@ class SNMPControllerGUI:
             except Exception as e:
                 self._log(f"Failed to fetch OID metadata: {e}", "WARNING")
                 self.oid_metadata = {}
+
+            # Fetch all OID values in bulk for efficient loading
+            self._log("Loading all OID values in bulk...")
+            try:
+                response = requests.get(f"{self.api_url}/values/bulk", timeout=30)
+                response.raise_for_status()
+                values_data = response.json()
+                self.oid_values = values_data.get("values", {})
+                self._log(f"Loaded {len(self.oid_values)} OID values")
+            except Exception as e:
+                self._log(f"Failed to fetch bulk values: {e}", "WARNING")
+                self.oid_values = {}
             
             # Enable OID Tree tab when connected
             self.enable_oid_tree_tab()
@@ -3458,6 +3392,434 @@ class SNMPControllerGUI:
         except Exception as e:
             self._log(f"Failed to save config locally: {e}", "ERROR")
 
+    def _collect_trap_overrides(self) -> Dict[str, str]:
+        """Collect override values from the UI table."""
+        trap_overrides: Dict[str, str] = {}
+
+        for row in self.oid_rows:
+            # Skip sysUpTime (always real-time) and index varbinds
+            if row.get("is_sysuptime", False) or row.get("is_index", False):
+                continue
+
+            if row["use_override_var"].get():
+                oid_name = row["oid_name"]
+                override_value = row["override_entry"].get().strip()
+                if override_value:
+                    trap_overrides[oid_name] = override_value
+
+        return trap_overrides
+
+
+    def _resolve_oid_str_to_actual_oid(self, oid_str: str) -> Optional[Any]:
+        """Resolve a UI OID label like 'IF-MIB::ifOperStatus[2]' to an actual OID instance."""
+        # Table OID with [index]
+        if "::" in oid_str and "[" in oid_str and "]" in oid_str:
+            return self._resolve_table_oid(oid_str)
+
+        # Regular scalar: find an OID in metadata
+        for oid, metadata in self.oid_metadata.items():
+            if oid_str in oid or oid_str in metadata.get("name", ""):
+                return oid
+
+        return None
+
+
+    def _apply_trap_overrides(self, trap_overrides: Dict[str, str]) -> int:
+        """Apply trap override values by POSTing to /value. Returns count of successful updates."""
+        applied = 0
+
+        for oid_str, value in trap_overrides.items():
+            try:
+                actual_oid = self._resolve_oid_str_to_actual_oid(oid_str)
+                if not actual_oid:
+                    self._log(f"Could not resolve OID: {oid_str}", "WARNING")
+                    continue
+
+                update_payload = {"oid": actual_oid, "value": value}
+                response = requests.post(f"{self.api_url}/value", json=update_payload, timeout=5)
+
+                if response.status_code == 200:
+                    applied += 1
+                    self._log(f"Set OID {oid_str} = {value}")
+                else:
+                    self._log(f"Failed to set OID {oid_str}: {response.text}", "WARNING")
+
+            except Exception as exc:
+                self._log(f"Error setting OID {oid_str}: {exc}", "WARNING")
+
+        return applied
+
+
+    def _build_send_trap_payload(
+        self,
+        trap_name: str,
+        dest_host: str,
+        dest_port: int,
+        community: str = "public",
+        trap_type: TrapType = "trap",
+    ) -> SendTrapPayload:
+        return {
+            "trap_name": trap_name,
+            "trap_type": trap_type,
+            "dest_host": dest_host,
+            "dest_port": dest_port,
+            "community": community,
+        }
+
+
+    def _post_send_trap(self, payload: SendTrapPayload) -> Dict[str, Any]:
+        response = requests.post(f"{self.api_url}/send-trap", json=payload, timeout=5)
+        response.raise_for_status()
+        return cast(Dict[str, Any], response.json())
+
+    def _log_send_result(
+        self,
+        dest_host: str,
+        dest_port: int,
+        trap_name: str,
+        result: Dict[str, Any],
+    ) -> None:
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        trap_oid = result.get("trap_oid", "")
+        oid_str = _oid_list_to_str(trap_oid)
+
+        log_msg = f"[{timestamp}] Sent to {dest_host}:{dest_port}: {trap_name} (OID: {oid_str})"
+        self.log_text.insert("end", "\n" + log_msg + "\n")
+        self.log_text.see("end")
+
+
+    def _log_send_failure(
+        self,
+        dest_host: str,
+        dest_port: int,
+        trap_name: str,
+        error: Exception,
+    ) -> None:
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_msg = f"[{timestamp}] Failed to {dest_host}:{dest_port}: {trap_name} - {error}"
+        self.log_text.insert("end", "\n" + log_msg + "\n")
+        self.log_text.see("end")
+
+
+    def _send_test_trap(self) -> None:
+        """Send the selected trap to localhost on the receiver port."""
+        trap_name = self.trap_var.get()
+        if not trap_name or trap_name == "No traps available":
+            messagebox.showwarning("No Trap Selected", "Please select a trap to send.")
+            return
+
+        try:
+            port = int(self.receiver_port_var.get())
+
+            trap_overrides = self._collect_trap_overrides()
+            self._apply_trap_overrides(trap_overrides)
+
+            payload = self._build_send_trap_payload(
+                trap_name=trap_name,
+                dest_host="localhost",
+                dest_port=port,
+                community="public",
+                trap_type="trap",
+            )
+
+            result = self._post_send_trap(payload)
+
+            # Log success
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            trap_oid = result.get("trap_oid", "")
+            oid_str = _oid_list_to_str(trap_oid)
+
+            log_msg = f"[{timestamp}] Sent test trap to localhost:{port}: {trap_name} (OID: {oid_str})"
+            self.log_text.insert("end", "\n" + log_msg + "\n")
+            self.log_text.see("end")
+
+            self._log(f"Test trap sent to localhost:{port}")
+
+            # Wait a moment for the trap to be received, then check
+            time.sleep(0.5)
+
+            # Check if trap was received
+            try:
+                check_response = requests.get(f"{self.api_url}/trap-receiver/traps?limit=1", timeout=2)
+                if check_response.status_code == 200:
+                    check_result = check_response.json()
+                    traps = check_result.get("traps", [])
+                    if traps:
+                        received_trap = traps[0]
+                        recv_timestamp = received_trap.get("timestamp", "")
+                        recv_oid = received_trap.get("trap_oid_str", "unknown")
+                        varbinds = received_trap.get("varbinds", [])
+
+                        recv_log_msg = f"[{recv_timestamp}] Received trap: {trap_name} (OID: {recv_oid})"
+                        self.log_text.insert("end", "\n" + recv_log_msg + "\n")
+
+                        for vb in varbinds:
+                            vb_oid = vb.get("oid_str", "unknown")
+                            vb_value = vb.get("value", "")
+                            self.log_text.insert("end", f"  - {vb_oid} = {vb_value}\n")
+
+                        self.log_text.see("end")
+                        self._show_trap_notification(trap_name, recv_oid, recv_timestamp, varbinds)
+                    else:
+                        messagebox.showwarning(
+                            "Trap Sent",
+                            f"Test trap '{trap_name}' was sent to localhost:{port}\n\n"
+                            "But no trap was received. Make sure the receiver is running.",
+                        )
+            except Exception:
+                messagebox.showinfo("Trap Sent", f"Test trap '{trap_name}' sent to localhost:{port}")
+
+        except ValueError:
+            messagebox.showerror("Error", "Invalid port number")
+        except Exception as exc:
+            error_msg = f"Failed to send test trap: {exc}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+
+
+    def _send_trap(self) -> None:
+        """Send the selected trap to all configured destinations."""
+        trap_name = self.trap_var.get()
+        if not trap_name or trap_name == "No traps available":
+            messagebox.showwarning("No Trap Selected", "Please select a trap to send.")
+            return
+
+        if not self.trap_destinations:
+            messagebox.showerror("No Destinations", "Please add at least one trap destination.")
+            return
+
+        try:
+            trap_overrides = self._collect_trap_overrides()
+            applied = self._apply_trap_overrides(trap_overrides)
+
+            if applied:
+                self._log(f"Applied {applied} trap-specific OID override(s)")
+
+            success_count = 0
+
+            for dest_host, dest_port in self.trap_destinations:
+                payload = self._build_send_trap_payload(
+                    trap_name=trap_name,
+                    dest_host=dest_host,
+                    dest_port=dest_port,
+                    community="public",
+                    trap_type="trap",
+                )
+
+                try:
+                    result = self._post_send_trap(payload)
+                    self._log_send_result(dest_host, dest_port, trap_name, result)
+                    success_count += 1
+                except requests.exceptions.RequestException as exc:
+                    self._log(f"Failed to send trap to {dest_host}:{dest_port}: {exc}", "ERROR")
+                    self._log_send_failure(dest_host, dest_port, trap_name, exc)
+
+            if success_count > 0:
+                self._log(
+                    f"Successfully sent trap '{trap_name}' to "
+                    f"{success_count}/{len(self.trap_destinations)} destination(s)"
+                )
+                messagebox.showinfo(
+                    "Success",
+                    f"Trap '{trap_name}' sent to {success_count} destination(s)!",
+                )
+            else:
+                messagebox.showerror("Error", "Failed to send trap to any destination")
+
+        except Exception as exc:
+            error_msg = f"Unexpected error sending trap: {exc}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+
+    def _bake_state(self) -> None:
+        """Bake current MIB state into agent-model schema files."""
+        try:
+            # Confirm action
+            response = messagebox.askyesno(
+                "Bake State",
+                "This will bake the current MIB state into agent-model schema files.\n\n"
+                "A backup will be created automatically.\n\n"
+                "Continue?"
+            )
+
+            if not response:
+                return
+
+            self._log("Baking state into schemas...")
+
+            # Call API endpoint
+            resp = requests.post(f"{self.api_url}/bake-state", timeout=30)
+            resp.raise_for_status()
+            result = resp.json()
+
+            baked_count = result.get("baked_count", 0)
+            backup_dir = result.get("backup_dir", "")
+
+            self._log(f"✓ Baked {baked_count} value(s) into schemas")
+            self._log(f"Backup created: {backup_dir}")
+
+            messagebox.showinfo(
+                "Success",
+                f"Successfully baked {baked_count} value(s) into schemas!\n\n"
+                f"Backup: {backup_dir}"
+            )
+
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Failed to bake state: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error baking state: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+
+    def _save_preset_dialog(self) -> None:
+        """Show dialog to save current agent-model as a preset."""
+        try:
+            # Get preset name from user
+            from tkinter import simpledialog
+            preset_name = simpledialog.askstring(
+                "Save Preset",
+                "Enter a name for this preset:",
+                parent=self.root
+            )
+
+            if not preset_name:
+                return
+
+            self._log(f"Saving preset '{preset_name}'...")
+
+            # Call API endpoint
+            resp = requests.post(
+                f"{self.api_url}/presets/save",
+                json={"preset_name": preset_name},
+                timeout=30
+            )
+            resp.raise_for_status()
+
+            self._log(f"✓ Preset '{preset_name}' saved successfully")
+
+            messagebox.showinfo(
+                "Success",
+                f"Preset '{preset_name}' saved successfully!"
+            )
+
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Failed to save preset: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error saving preset: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+
+    def _load_preset_dialog(self) -> None:
+        """Show dialog to load a preset."""
+        try:
+            # Get list of presets
+            resp = requests.get(f"{self.api_url}/presets", timeout=5)
+            resp.raise_for_status()
+            result = resp.json()
+
+            presets = result.get("presets", [])
+
+            if not presets:
+                messagebox.showinfo("No Presets", "No presets available")
+                return
+
+            # Create custom dialog for preset selection
+            dialog = ctk.CTkToplevel(self.root)
+            dialog.title("Load Preset")
+            dialog.geometry("400x300")
+            dialog.transient(self.root)
+            dialog.grab_set()
+
+            ctk.CTkLabel(dialog, text="Select a preset to load:", font=("", 14, "bold")).pack(pady=10)
+
+            # Listbox for presets
+            from tkinter import ttk
+            listbox_frame = ctk.CTkFrame(dialog)
+            listbox_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+
+            scrollbar = ttk.Scrollbar(listbox_frame)
+            scrollbar.pack(side="right", fill="y")
+
+            preset_listbox = tk.Listbox(listbox_frame, yscrollcommand=scrollbar.set,
+                                       font=("", 12), bg="#2b2b2b", fg="#ffffff")
+            preset_listbox.pack(fill="both", expand=True)
+            scrollbar.config(command=preset_listbox.yview)
+
+            for preset in presets:
+                preset_listbox.insert("end", preset)
+
+            selected_preset: list[str | None] = [None]
+
+            def on_load() -> None:
+                selection = preset_listbox.curselection()
+                if not selection:
+                    messagebox.showwarning("No Selection", "Please select a preset")
+                    return
+
+                selected_preset[0] = presets[selection[0]]
+                dialog.destroy()
+
+            def on_cancel() -> None:
+                dialog.destroy()
+
+            # Buttons
+            btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+            btn_frame.pack(pady=10)
+
+            ctk.CTkButton(btn_frame, text="Load", command=on_load, width=100).pack(side="left", padx=5)
+            ctk.CTkButton(btn_frame, text="Cancel", command=on_cancel, width=100).pack(side="left", padx=5)
+
+            # Wait for dialog to close
+            self.root.wait_window(dialog)
+
+            if not selected_preset[0]:
+                return
+
+            preset_name = selected_preset[0]
+
+            # Confirm action
+            response = messagebox.askyesno(
+                "Load Preset",
+                f"This will replace the current agent-model with preset '{preset_name}'.\n\n"
+                f"A backup will be created automatically.\n\n"
+                f"You will need to restart the agent for changes to take effect.\n\n"
+                f"Continue?"
+            )
+
+            if not response:
+                return
+
+            self._log(f"Loading preset '{preset_name}'...")
+
+            # Call API endpoint
+            resp = requests.post(
+                f"{self.api_url}/presets/load",
+                json={"preset_name": preset_name},
+                timeout=30
+            )
+            resp.raise_for_status()
+            result = resp.json()
+
+            self._log(f"✓ Preset '{preset_name}' loaded successfully")
+
+            messagebox.showinfo(
+                "Success",
+                f"Preset '{preset_name}' loaded successfully!\n\n"
+                f"Please restart the agent for changes to take effect."
+            )
+
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Failed to load preset: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error loading preset: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
 
 def main() -> None:
     """Main entry point for the GUI application."""
@@ -3544,4 +3906,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

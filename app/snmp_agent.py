@@ -179,7 +179,7 @@ class SNMPAgent:
         mibs = cast(list[str], self.app_config.get("mibs", []))
         from pathlib import Path
         compiled_dir = Path(__file__).resolve().parent.parent / "compiled-mibs"
-        json_dir = Path(__file__).resolve().parent.parent / "mock-behaviour"
+        json_dir = Path(__file__).resolve().parent.parent / "agent-model"
         json_dir.mkdir(parents=True, exist_ok=True)
 
         # Build and export the canonical type registry
@@ -618,17 +618,17 @@ class SNMPAgent:
                         # Save override
                         self.overrides[dotted] = new_serial
                         try:
-                            self._save_overrides()
+                            self._save_mib_state()
                         except Exception:
-                            self.logger.exception("Failed to save overrides")
+                            self.logger.exception("Failed to save MIB state")
                     else:
                         # If we've reverted to initial, remove any existing override
                         if dotted in self.overrides:
                             self.overrides.pop(dotted, None)
                             try:
-                                self._save_overrides()
+                                self._save_mib_state()
                             except Exception:
-                                self.logger.exception("Failed to save overrides")
+                                self.logger.exception("Failed to save MIB state")
 
                     return
                     
@@ -769,45 +769,7 @@ class SNMPAgent:
         except Exception as e:
             self.logger.error(f"Failed to save MIB state to {path}: {e}", exc_info=True)
 
-    def _overrides_file_path(self) -> str:
-        """Legacy method for backward compatibility."""
-        from pathlib import Path
-        return str(Path(__file__).resolve().parent.parent / "data" / "overrides.json")
 
-    def _load_overrides(self) -> None:
-        """Legacy method - now uses unified state file via _load_mib_state()."""
-        # Pruning: remove overrides that match initial values
-        if self._initial_values:
-            removed = []
-            for k in list(self.overrides.keys()):
-                init = self._initial_values.get(k)
-                if init is not None and self.overrides.get(k) == init:
-                    removed.append(k)
-                    self.overrides.pop(k, None)
-            if removed:
-                self.logger.info(f"Pruned {len(removed)} redundant overrides: {removed}")
-                self._save_mib_state()
-
-    def _save_overrides(self) -> None:
-        """Legacy method - now delegates to _save_mib_state()."""
-        # Only persist overrides that differ from initial values
-        to_persist = {}
-        for k, v in self.overrides.items():
-            init = self._initial_values.get(k)
-            if init is None or v != init:
-                to_persist[k] = v
-        
-        self.overrides = to_persist
-        self._save_mib_state()
-
-    def _table_instances_file_path(self) -> str:
-        """Legacy method - deprecated in favor of unified state file."""
-        return "data/table_instances.json"
-
-    def _load_table_instances(self) -> None:
-        """Legacy method - now uses unified state file via _load_mib_state()."""
-        # Already loaded in _load_mib_state()
-        pass
 
     def add_table_instance(self, table_oid: str, index_values: dict[str, Any], column_values: dict[str, Any] | None = None) -> str:
         """Add a new table instance and persist it.
@@ -1049,9 +1011,9 @@ class SNMPAgent:
             for k in removed_invalid:
                 self.overrides.pop(k, None)
             try:
-                self._save_overrides()
+                self._save_mib_state()
             except Exception:
-                self.logger.exception("Failed to save overrides after pruning invalid entries")
+                self.logger.exception("Failed to save MIB state after pruning invalid entries")
             self.logger.info(f"Removed {len(removed_invalid)} invalid overrides: {removed_invalid}")
 
 

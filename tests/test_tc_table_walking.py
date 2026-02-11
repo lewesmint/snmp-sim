@@ -32,7 +32,7 @@ def compiled_dir(tmp_path: Path) -> str:
 @pytest.fixture
 def json_dir(tmp_path: Path) -> str:
     """Temporary directory for behavior JSONs."""
-    return str(tmp_path / "mock-behaviour")
+    return str(tmp_path / "agent-model")
 
 
 @pytest.fixture

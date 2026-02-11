@@ -289,7 +289,7 @@ def test_run_success_path_with_mib_compilation_and_generation(monkeypatch: pytes
     # Set up directories
     compiled_dir = tmp_path / "compiled-mibs"
     compiled_dir.mkdir()
-    json_dir = tmp_path / "mock-behaviour"
+    json_dir = tmp_path / "agent-model"
     json_dir.mkdir()
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -304,7 +304,7 @@ def test_run_success_path_with_mib_compilation_and_generation(monkeypatch: pytes
     def fake_abspath(path: str) -> str:
         if "compiled-mibs" in path:
             return str(compiled_dir)
-        elif "mock-behaviour" in path:
+        elif "agent-model" in path:
             return str(json_dir)
         else:
             return os.path.abspath(path)

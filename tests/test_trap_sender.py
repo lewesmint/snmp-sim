@@ -1,136 +1,151 @@
+"""Tests for TrapSender using NotificationType API."""
 import logging
 import pytest
 from pytest_mock import MockerFixture
-from typing import cast
 
 from pysnmp.proto import rfc1902
 
 from app.cli_trap_sender import main as cli_main
 from app.trap_sender import TrapSender
 
+
 @pytest.fixture
 def trap_sender() -> TrapSender:
     return TrapSender(dest=('localhost', 162), community='public')
 
+
 def test_init(trap_sender: TrapSender) -> None:
-    assert trap_sender.snmpEngine is not None
+    """Test TrapSender initialization."""
+    assert trap_sender.snmp_engine is not None
     assert trap_sender.dest == ('localhost', 162)
     assert trap_sender.community == 'public'
     assert isinstance(trap_sender.logger, logging.Logger)
-    assert trap_sender.start_time > 0
+
 
 def test_init_with_custom_params() -> None:
+    """Test TrapSender with custom parameters."""
     custom_sender = TrapSender(dest=('192.168.1.1', 1162), community='private')
     assert custom_sender.dest == ('192.168.1.1', 1162)
     assert custom_sender.community == 'private'
 
-def test_send_trap_invalid_type(trap_sender: TrapSender, mocker: MockerFixture) -> None:
-    mock_send = mocker.patch('app.trap_sender.send_notification')
-    mock_error = mocker.patch.object(trap_sender.logger, 'error')
 
-    from typing import Literal
-    trap_sender.send_trap((1, 3, 6, 1, 4, 1, 99999, 1, 0), rfc1902.OctetString('test'), trap_type=cast(Literal['trap', 'inform'], 'invalid'))
-    mock_error.assert_called_once()
-    assert 'Invalid trap_type' in mock_error.call_args[0][0]
-    mock_send.assert_not_called()
+def test_coerce_varbind_object_type(trap_sender: TrapSender) -> None:
+    """Test _coerce_varbind with ObjectType."""
+    from pysnmp.hlapi.v3arch.asyncio import ObjectType, ObjectIdentity
 
-def test_send_trap_success_trap(trap_sender: TrapSender, mocker: MockerFixture) -> None:
-    mock_send = mocker.patch('app.trap_sender.send_notification', new_callable=mocker.AsyncMock)
-    mock_run = mocker.patch('app.trap_sender.asyncio.run')
-    from typing import Awaitable, Any
-    def _run(coro: Awaitable[Any]) -> Any:
-        import asyncio
+    obj_type = ObjectType(ObjectIdentity('SNMPv2-MIB', 'sysDescr', 0), rfc1902.OctetString('test'))
+    result = trap_sender._coerce_varbind(obj_type)
+    assert result is obj_type
+
+
+def test_coerce_varbind_scalar_tuple(trap_sender: TrapSender) -> None:
+    """Test _coerce_varbind with scalar tuple (mib, symbol, value)."""
+    from pysnmp.hlapi.v3arch.asyncio import ObjectType
+
+    result = trap_sender._coerce_varbind(('SNMPv2-MIB', 'sysDescr', rfc1902.OctetString('test')))
+    assert isinstance(result, ObjectType)
+
+
+def test_coerce_varbind_indexed_tuple(trap_sender: TrapSender) -> None:
+    """Test _coerce_varbind with indexed tuple (mib, symbol, value, index)."""
+    from pysnmp.hlapi.v3arch.asyncio import ObjectType
+
+    result = trap_sender._coerce_varbind(('IF-MIB', 'ifOperStatus', rfc1902.Integer32(1), 2))
+    assert isinstance(result, ObjectType)
+
+
+def test_coerce_varbind_invalid_type(trap_sender: TrapSender) -> None:
+    """Test _coerce_varbind with invalid type."""
+    with pytest.raises(TypeError, match="extra_varbinds entries must be ObjectType or tuple"):
+        trap_sender._coerce_varbind("invalid")  # pyright: ignore[reportArgumentType]
+
+
+def test_send_mib_notification_sync(trap_sender: TrapSender, mocker: MockerFixture) -> None:
+    """Test synchronous send_mib_notification."""
+    mock_async = mocker.patch.object(trap_sender, 'send_mib_notification_async', new_callable=mocker.AsyncMock)
+    mock_async.return_value = None
+
+    # Mock asyncio.run to execute the coroutine
+    import asyncio
+    from typing import Any, Coroutine
+
+    def mock_run(coro: Coroutine[Any, Any, Any]) -> Any:
         loop = asyncio.new_event_loop()
         try:
             return loop.run_until_complete(coro)
         finally:
             loop.close()
-    mock_send.return_value = (None, 0, 0, [])
-    mock_run.side_effect = _run
-    mock_info = mocker.patch.object(trap_sender.logger, 'info')
-    trap_sender.send_trap((1, 3, 6, 1, 4, 1, 99999, 1, 0), rfc1902.OctetString('test'), trap_type='trap')
-    mock_run.assert_called_once()
-    mock_info.assert_called_once()
-    assert 'Trap sent' in mock_info.call_args[0][0]
 
-def test_send_trap_success_inform(trap_sender: TrapSender, mocker: MockerFixture) -> None:
-    mock_send = mocker.patch('app.trap_sender.send_notification', new_callable=mocker.AsyncMock)
-    mock_run = mocker.patch('app.trap_sender.asyncio.run')
-    from typing import Awaitable, Any
-    def _run(coro: Awaitable[Any]) -> Any:
-        import asyncio
-        loop = asyncio.new_event_loop()
-        try:
-            return loop.run_until_complete(coro)
-        finally:
-            loop.close()
-    mock_send.return_value = (None, 0, 0, [])
-    mock_run.side_effect = _run
-    mock_info = mocker.patch.object(trap_sender.logger, 'info')
-    trap_sender.send_trap((1, 3, 6, 1, 4, 1, 99999, 1, 0), rfc1902.Integer32(42), trap_type='inform')
-    mock_run.assert_called_once()
-    mock_info.assert_called_once()
-    assert 'Trap sent' in mock_info.call_args[0][0]
+    mocker.patch('asyncio.run', side_effect=mock_run)
+    mocker.patch('asyncio.get_running_loop', side_effect=RuntimeError("No running loop"))
 
-def test_send_trap_with_error_indication(trap_sender: TrapSender, mocker: MockerFixture) -> None:
-    mock_send = mocker.patch('app.trap_sender.send_notification', new_callable=mocker.AsyncMock)
-    mock_run = mocker.patch('app.trap_sender.asyncio.run')
-    from typing import Awaitable, Any
-    def _run(coro: Awaitable[Any]) -> Any:
-        import asyncio
-        loop = asyncio.new_event_loop()
-        try:
-            return loop.run_until_complete(coro)
-        finally:
-            loop.close()
-    mock_send.return_value = ('Network timeout', 0, 0, [])
-    mock_run.side_effect = _run
-    mock_error = mocker.patch.object(trap_sender.logger, 'error')
-    trap_sender.send_trap((1, 3, 6, 1, 4, 1, 99999, 1, 0), rfc1902.OctetString('test'), trap_type='trap')
-    mock_error.assert_called_once()
-    assert 'Trap send error' in mock_error.call_args[0][0]
+    trap_sender.send_mib_notification(
+        mib='SNMPv2-MIB',
+        notification='coldStart',
+        trap_type='trap'
+    )
 
-def test_send_trap_exception_during_send(trap_sender: TrapSender, mocker: MockerFixture) -> None:
-    mock_run = mocker.patch('app.trap_sender.asyncio.run')
-    from typing import Coroutine, Any
-    def _raise(coro: Coroutine[Any, Any, Any]) -> None:
-        coro.close()
-        raise RuntimeError('Connection failed')
-    mock_run.side_effect = _raise
-    mock_exception = mocker.patch.object(trap_sender.logger, 'exception')
-    trap_sender.send_trap((1, 3, 6, 1, 4, 1, 99999, 1, 0), rfc1902.OctetString('test'), trap_type='inform')
-    mock_exception.assert_called_once()
-    assert 'Exception while sending SNMP trap' in mock_exception.call_args[0][0]
-
-def test_send_trap_executes_async_send(trap_sender: TrapSender, mocker: MockerFixture) -> None:
-    mock_send = mocker.patch('app.trap_sender.send_notification', new_callable=mocker.AsyncMock)
-    mock_udp = mocker.patch('app.trap_sender.UdpTransportTarget.create', new_callable=mocker.AsyncMock)
-    mock_send.return_value = (None, 0, 0, [])
-    mock_udp.return_value = mocker.MagicMock()
-    mock_info = mocker.patch.object(trap_sender.logger, 'info')
-    trap_sender.send_trap((1, 3, 6, 1, 4, 1, 99999, 1, 0), rfc1902.OctetString('test'), trap_type='trap')
-    mock_send.assert_called_once()
-    mock_udp.assert_called_once()
-    mock_info.assert_called_once()
+    mock_async.assert_called_once_with(
+        mib='SNMPv2-MIB',
+        notification='coldStart',
+        trap_type='trap',
+        extra_varbinds=None
+    )
 
 
-def test_cli_invalid_oid(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = cli_main(["--oid", "bad.oid", "--value", "test"])
+def test_cli_missing_required_args(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test CLI with missing required arguments."""
+    with pytest.raises(SystemExit) as exc_info:
+        cli_main(["--mib", "SNMPv2-MIB"])
     output = capsys.readouterr()
-    assert exit_code == 1
-    assert "OID must be dot-separated integers" in output.err
+    assert exc_info.value.code == 2  # argparse exits with 2 for missing required args
+    assert "required" in output.err.lower()
 
 
-def test_cli_sends_trap(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_sends_notification(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
+    """Test CLI sends notification using new NotificationType API."""
     mock_sender = mocker.MagicMock()
     mocker.patch("app.cli_trap_sender.TrapSender", return_value=mock_sender)
 
     exit_code = cli_main([
-        "--oid", "1.3.6.1.4.1.99999.1.0",
-        "--value", "test",
-        "--value-type", "string",
+        "--mib", "SNMPv2-MIB",
+        "--notification", "coldStart",
+        "--host", "localhost",
+        "--port", "162",
         "--trap-type", "trap",
     ])
-    _output = capsys.readouterr()
+    output = capsys.readouterr()
     assert exit_code == 0
-    mock_sender.send_trap.assert_called_once()
+    assert "Sent trap SNMPv2-MIB::coldStart" in output.out
+    mock_sender.send_mib_notification.assert_called_once_with(
+        mib="SNMPv2-MIB",
+        notification="coldStart",
+        trap_type="trap",
+        extra_varbinds=None,
+    )
+
+
+def test_cli_sends_notification_with_varbinds(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
+    """Test CLI sends notification with extra varbinds."""
+    mock_sender = mocker.MagicMock()
+    mocker.patch("app.cli_trap_sender.TrapSender", return_value=mock_sender)
+
+    exit_code = cli_main([
+        "--mib", "IF-MIB",
+        "--notification", "linkDown",
+        "--varbind-index", "IF-MIB", "ifIndex", "1", "2",
+        "--varbind-index", "IF-MIB", "ifOperStatus", "2", "2",
+        "--trap-type", "inform",
+    ])
+    output = capsys.readouterr()
+    assert exit_code == 0
+    assert "Sent inform IF-MIB::linkDown" in output.out
+
+    # Verify send_mib_notification was called
+    mock_sender.send_mib_notification.assert_called_once()
+    call_args = mock_sender.send_mib_notification.call_args
+    assert call_args.kwargs["mib"] == "IF-MIB"
+    assert call_args.kwargs["notification"] == "linkDown"
+    assert call_args.kwargs["trap_type"] == "inform"
+    assert call_args.kwargs["extra_varbinds"] is not None
+    assert len(call_args.kwargs["extra_varbinds"]) == 2

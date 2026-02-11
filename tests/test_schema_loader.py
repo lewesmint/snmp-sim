@@ -36,7 +36,7 @@ class TestSchemaLoading:
 
     def test_load_multiple_schemas(self, temp_dir: Path) -> None:
         """Test loading multiple MIB schemas."""
-        schema_dir = temp_dir / "mock-behaviour"
+        schema_dir = temp_dir / "agent-model"
         
         # Create multiple MIB schemas
         mibs = {
@@ -65,7 +65,7 @@ class TestSchemaLoading:
 
     def test_schema_with_invalid_json(self, temp_dir: Path) -> None:
         """Test handling of invalid JSON in schema file."""
-        schema_dir = temp_dir / "mock-behaviour"
+        schema_dir = temp_dir / "agent-model"
         mib_dir = schema_dir / "BAD-MIB"
         mib_dir.mkdir(parents=True)
         
@@ -95,7 +95,7 @@ class TestBuildInternalModel:
 
     def test_build_model_from_schemas(self, temp_dir: Path) -> None:
         """Test building internal model from multiple schemas."""
-        schema_dir = temp_dir / "mock-behaviour"
+        schema_dir = temp_dir / "agent-model"
         
         # Create test schemas
         test_mibs = ["SNMPv2-MIB", "IF-MIB", "HOST-RESOURCES-MIB"]
@@ -119,7 +119,7 @@ class TestBuildInternalModel:
 
     def test_build_model_with_missing_schemas(self, temp_dir: Path) -> None:
         """Test building model when some schemas are missing."""
-        schema_dir = temp_dir / "mock-behaviour"
+        schema_dir = temp_dir / "agent-model"
         
         # Create only one schema
         mib_dir = schema_dir / "SNMPv2-MIB"

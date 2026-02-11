@@ -39,7 +39,7 @@ if __name__ == "__main__": # pragma: no cover
         if args.rebuild:
             print("Forcing rebuild of compiled MIBs and schemas...")
             compiled_dir = Path("compiled-mibs")
-            schema_dir = Path("mock-behaviour")
+            schema_dir = Path("agent-model")
             
             if compiled_dir.exists():
                 print(f"Removing {compiled_dir}...")
@@ -53,7 +53,7 @@ if __name__ == "__main__": # pragma: no cover
         
         if args.rebuild_schemas:
             print("Forcing regeneration of schemas...")
-            schema_dir = Path("mock-behaviour")
+            schema_dir = Path("agent-model")
             
             if schema_dir.exists():
                 print(f"Removing {schema_dir}...")
