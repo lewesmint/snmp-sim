@@ -519,6 +519,160 @@ def set_trap_overrides(trap_name: str, overrides: dict[str, str]) -> dict[str, A
     return {"status": "ok", "trap_name": trap_name, "overrides": overrides}
 
 
+@app.get("/trap-varbinds/{trap_name}")
+def get_trap_varbinds(trap_name: str) -> dict[str, Any]:
+    """Get detailed varbind metadata for a specific trap.
+
+    Returns information about each varbind including:
+    - Whether it's an index column
+    - The parent table (if applicable)
+    - Available instances for multi-index tables
+    - Type information
+    """
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    # Load all schema files
+    from app.cli_load_model import load_all_schemas
+    import os
+
+    schema_dir = "agent-model"
+    if not os.path.exists(schema_dir):
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
+
+    schemas = load_all_schemas(schema_dir)
+
+    # Find the trap
+    trap_info = None
+    mib_name = None
+
+    for candidate_mib_name, schema in schemas.items():
+        if isinstance(schema, dict) and "traps" in schema:
+            if trap_name in schema["traps"]:
+                trap_info = schema["traps"][trap_name]
+                mib_name = candidate_mib_name
+                break
+
+    if not trap_info or mib_name is None:
+        raise HTTPException(status_code=404, detail=f"Trap '{trap_name}' not found")
+
+    # Get varbind objects
+    varbind_objects = trap_info.get("objects", [])
+
+    # Build detailed varbind metadata
+    varbinds_metadata = []
+    parent_table_oid = None
+    parent_table_name = None
+    index_columns = []
+    instances = []
+    columns_meta = {}
+
+    for varbind_obj in varbind_objects:
+        obj_mib = varbind_obj.get("mib", "")
+        obj_name = varbind_obj.get("name", "")
+
+        # Find the object in the schema
+        obj_schema = schemas.get(obj_mib, {})
+        if isinstance(obj_schema, dict) and "objects" in obj_schema:
+            obj_data = obj_schema["objects"].get(obj_name, {})
+        else:
+            obj_data = obj_schema.get(obj_name, {})
+
+        if not obj_data:
+            # Object not found in schema
+            varbinds_metadata.append({
+                "mib": obj_mib,
+                "name": obj_name,
+                "oid": [],
+                "type": "Unknown",
+                "access": "unknown",
+                "is_index": False,
+                "parent_table": None
+            })
+            continue
+
+        obj_oid = obj_data.get("oid", [])
+        obj_type = obj_data.get("type", "Unknown")
+        obj_access = obj_data.get("access", "unknown")
+
+        # Check if this is a table column by looking at parent OID
+        is_index = False
+        parent_table = None
+
+        if len(obj_oid) > 2:
+            # Get parent OID (table row)
+            parent_oid = tuple(obj_oid[:-1])
+
+            # Find the parent in the schema
+            for check_name, check_data in obj_schema.get("objects", {}).items():
+                if isinstance(check_data, dict) and tuple(check_data.get("oid", [])) == parent_oid:
+                    # Found the parent (table row)
+                    if check_data.get("type") == "MibTableRow":
+                        # This is a table column
+                        # Get the table (parent of row)
+                        if len(parent_oid) > 0:
+                            table_oid = tuple(parent_oid[:-1])
+
+                            # Find the table and get index columns from the row entry
+                            for table_name, table_data in obj_schema.get("objects", {}).items():
+                                if isinstance(table_data, dict) and tuple(table_data.get("oid", [])) == table_oid:
+                                    if table_data.get("type") == "MibTable":
+                                        # Get index columns from the table row entry (not the table itself)
+                                        table_index_cols = check_data.get("indexes", [])
+                                        parent_table = {
+                                            "name": table_name,
+                                            "oid": list(table_oid),
+                                            "index_columns": table_index_cols
+                                        }
+
+                                        # Check if this column is an index
+                                        if obj_name in table_index_cols:
+                                            is_index = True
+
+                                        # Store table info for later (only once)
+                                        if parent_table_oid is None:
+                                            parent_table_oid = list(table_oid)
+                                            parent_table_name = table_name
+                                            index_columns = table_index_cols
+                                            instances = table_data.get("instances", [])
+
+                                            # Get all columns metadata from the table
+                                            for col_name, col_data in obj_schema.get("objects", {}).items():
+                                                if isinstance(col_data, dict):
+                                                    col_oid = tuple(col_data.get("oid", []))
+                                                    # Check if this column belongs to this table
+                                                    if len(col_oid) > len(parent_oid) and col_oid[:len(parent_oid)] == parent_oid:
+                                                        columns_meta[col_name] = {
+                                                            "oid": list(col_oid),
+                                                            "type": col_data.get("type", "Unknown"),
+                                                            "access": col_data.get("access", "unknown")
+                                                        }
+
+                                        break
+                    break
+
+        varbinds_metadata.append({
+            "mib": obj_mib,
+            "name": obj_name,
+            "oid": obj_oid,
+            "type": obj_type,
+            "access": obj_access,
+            "is_index": is_index,
+            "parent_table": parent_table
+        })
+
+    return {
+        "trap_name": trap_name,
+        "mib": mib_name,
+        "varbinds": varbinds_metadata,
+        "parent_table_oid": parent_table_oid,
+        "parent_table_name": parent_table_name,
+        "index_columns": index_columns,
+        "instances": instances,
+        "columns_meta": columns_meta
+    }
+
+
 @app.delete("/trap-overrides/{trap_name}")
 def clear_trap_overrides(trap_name: str) -> dict[str, Any]:
     """Clear all overrides for a specific trap."""

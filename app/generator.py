@@ -170,21 +170,21 @@ class BehaviourGenerator:
                                     # Check if type has constraints that exclude 0
                                     constraints = type_info.get("constraints", [])
                                     has_nonzero_constraint = any(
-                                        c.get("min", 0) > 0 if isinstance(c, dict) and c.get("type") == "ValueRangeConstraint" 
-                                        else False 
+                                        c.get("min", 0) > 0 if isinstance(c, dict) and c.get("type") == "ValueRangeConstraint"
+                                        else False
                                         for c in constraints
                                     )
                                     # Only fix to 1 if constraints require it
                                     if has_nonzero_constraint or col_type in ("InterfaceIndex",):
                                         default_value = 1
                                 default_row[col] = default_value
-                                col_info["initial"] = default_value
+                                # Don't set col_info["initial"] - table columns shouldn't have initial values
                             else:
                                 value = self._get_default_value_from_type_info(
                                     type_info, col
                                 )
                                 default_row[col] = value
-                                col_info["initial"] = value
+                                # Don't set col_info["initial"] - table columns shouldn't have initial values
                         if default_row:
                             symbol_info["rows"].append(default_row)
 
@@ -305,9 +305,11 @@ class BehaviourGenerator:
                     type_info = dict(type_info)  # Create a copy if not already done
                     type_info["constraints"] = extracted_type_info["constraints"]
 
-            # Provide sensible default initial values based on type (skip for structural types EXCEPT columns)
-            # Table columns should have defaults based on their type
-            if is_structural and symbol_type != "MibTableColumn":
+            # Provide sensible default initial values based on type
+            # Skip for structural types (tables, rows, columns)
+            # Table columns should NOT have initial values - they're just type definitions
+            # The actual values live in the table's "rows" array
+            if is_structural:
                 initial_value = None
                 dynamic_func = None
             else:
@@ -320,9 +322,13 @@ class BehaviourGenerator:
                 "oid": oid,
                 "type": type_name,
                 "access": access,
-                "initial": initial_value,
-                "dynamic_function": dynamic_func,
             }
+
+            # Only add initial and dynamic_function for non-structural types
+            # Structural types (tables, rows, columns) don't have initial values
+            if not is_structural:
+                entry["initial"] = initial_value
+                entry["dynamic_function"] = dynamic_func
             
             # Include enums in the schema if they exist
             # This is critical for fields like ifAdminStatus that have enum constraints

@@ -149,8 +149,6 @@
       ],
       "type": "MibTable",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "rows": [
         {
           "sysORIndex": 1,
@@ -244,8 +242,6 @@
       ],
       "type": "MibTableRow",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "indexes": [
         "sysORIndex"
       ]
@@ -264,9 +260,7 @@
         1
       ],
       "type": "Integer32",
-      "access": "not-accessible",
-      "initial": 1,
-      "dynamic_function": null
+      "access": "not-accessible"
     },
     "sysORID": {
       "oid": [
@@ -282,12 +276,7 @@
         2
       ],
       "type": "ObjectIdentifier",
-      "access": "read-only",
-      "initial": [
-        0,
-        0
-      ],
-      "dynamic_function": null
+      "access": "read-only"
     },
     "sysORDescr": {
       "oid": [
@@ -303,9 +292,7 @@
         3
       ],
       "type": "DisplayString",
-      "access": "read-only",
-      "initial": "unset",
-      "dynamic_function": null
+      "access": "read-only"
     },
     "sysORUpTime": {
       "oid": [
@@ -321,9 +308,7 @@
         4
       ],
       "type": "TimeStamp",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "snmpInPkts": {
       "oid": [

@@ -62,8 +62,6 @@
       ],
       "type": "MibTable",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "rows": [
         {
           "testEnumIndex": 1,
@@ -87,8 +85,6 @@
       ],
       "type": "MibTableRow",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "indexes": [
         "testEnumIndex"
       ]
@@ -108,9 +104,7 @@
         1
       ],
       "type": "Unsigned32",
-      "access": "not-accessible",
-      "initial": 1,
-      "dynamic_function": null
+      "access": "not-accessible"
     },
     "testRowColour": {
       "oid": [
@@ -128,8 +122,6 @@
       ],
       "type": "Integer32",
       "access": "read-only",
-      "initial": 1,
-      "dynamic_function": null,
       "enums": {
         "blue": 3,
         "green": 2,
@@ -153,8 +145,6 @@
       ],
       "type": "Integer32",
       "access": "read-only",
-      "initial": 10,
-      "dynamic_function": null,
       "enums": {
         "critical": 50,
         "high": 30,
@@ -176,8 +166,6 @@
       ],
       "type": "MibTable",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "rows": [
         {
           "endPointIpAddress": "192.168.1.1",
@@ -202,8 +190,6 @@
       ],
       "type": "MibTableRow",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "indexes": [
         "endPointIpAddress",
         "endPointPort"
@@ -224,9 +210,7 @@
         1
       ],
       "type": "IpAddress",
-      "access": "not-accessible",
-      "initial": "192.168.1.1",
-      "dynamic_function": null
+      "access": "not-accessible"
     },
     "endPointPort": {
       "oid": [
@@ -243,9 +227,7 @@
         2
       ],
       "type": "Unsigned32",
-      "access": "not-accessible",
-      "initial": 1,
-      "dynamic_function": null
+      "access": "not-accessible"
     },
     "endPointName": {
       "oid": [
@@ -262,9 +244,7 @@
         3
       ],
       "type": "DisplayString",
-      "access": "read-write",
-      "initial": "unset",
-      "dynamic_function": null
+      "access": "read-write"
     },
     "endPointNotes": {
       "oid": [
@@ -281,9 +261,7 @@
         4
       ],
       "type": "DisplayString",
-      "access": "read-write",
-      "initial": "unset",
-      "dynamic_function": null
+      "access": "read-write"
     }
   },
   "traps": {

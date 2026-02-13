@@ -17,8 +17,6 @@
       ],
       "type": "MibTable",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "rows": [
         {
           "coiAlarmIndex": 1,
@@ -53,8 +51,6 @@
       ],
       "type": "MibTableRow",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "indexes": [
         "coiAlarmIndex",
         "coiAlarmObjectIfIndex",
@@ -80,9 +76,7 @@
         1
       ],
       "type": "Integer32",
-      "access": "read-only",
-      "initial": 1,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "coiAlarmObjectIfIndex": {
       "oid": [
@@ -102,9 +96,7 @@
         2
       ],
       "type": "InterfaceIndexOrZero",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "coiAlarmObjectEntPhyIndex": {
       "oid": [
@@ -124,9 +116,7 @@
         3
       ],
       "type": "EntPhysicalIndexOrZero",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "coiAlarmObjectName": {
       "oid": [
@@ -146,9 +136,7 @@
         4
       ],
       "type": "DisplayString",
-      "access": "read-only",
-      "initial": "unset",
-      "dynamic_function": null
+      "access": "read-only"
     },
     "coiAlarmObjectType": {
       "oid": [
@@ -169,8 +157,6 @@
       ],
       "type": "CoiAlarmObjectTypeClass",
       "access": "read-only",
-      "initial": 1,
-      "dynamic_function": null,
       "enums": {
         "unknown": 1,
         "hwMemorySbe": 2,
@@ -260,9 +246,7 @@
         6
       ],
       "type": "DisplayString",
-      "access": "read-only",
-      "initial": "default",
-      "dynamic_function": null
+      "access": "read-only"
     },
     "coiAlarmTimeStamp": {
       "oid": [
@@ -282,9 +266,7 @@
         7
       ],
       "type": "Counter64",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "coiAlarmSeverity": {
       "oid": [
@@ -305,8 +287,6 @@
       ],
       "type": "Integer32",
       "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null,
       "enums": {
         "unknown": 0,
         "notReported": 1,
@@ -335,8 +315,6 @@
       ],
       "type": "Integer32",
       "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null,
       "enums": {
         "unknown": 0,
         "set": 1,
@@ -363,8 +341,6 @@
       ],
       "type": "Integer32",
       "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null,
       "enums": {
         "unknown": 0,
         "notServiceAffecting": 1,
@@ -389,9 +365,7 @@
         11
       ],
       "type": "DisplayString",
-      "access": "read-only",
-      "initial": "unset",
-      "dynamic_function": null
+      "access": "read-only"
     }
   },
   "traps": {

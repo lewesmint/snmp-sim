@@ -29,8 +29,6 @@
       ],
       "type": "MibTable",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "rows": [
         {
           "ifIndex": 1,
@@ -82,8 +80,6 @@
       ],
       "type": "MibTableRow",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "indexes": [
         "ifIndex"
       ]
@@ -102,9 +98,7 @@
         1
       ],
       "type": "InterfaceIndex",
-      "access": "read-only",
-      "initial": 1,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifDescr": {
       "oid": [
@@ -120,9 +114,7 @@
         2
       ],
       "type": "DisplayString",
-      "access": "read-only",
-      "initial": "unset",
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifType": {
       "oid": [
@@ -139,8 +131,6 @@
       ],
       "type": "IANAifType",
       "access": "read-only",
-      "initial": 1,
-      "dynamic_function": null,
       "enums": {
         "other": 1,
         "regular1822": 2,
@@ -457,9 +447,7 @@
         4
       ],
       "type": "Integer32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifSpeed": {
       "oid": [
@@ -475,9 +463,7 @@
         5
       ],
       "type": "Gauge32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifPhysAddress": {
       "oid": [
@@ -493,16 +479,7 @@
         6
       ],
       "type": "PhysAddress",
-      "access": "read-only",
-      "initial": [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
-      ],
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifAdminStatus": {
       "oid": [
@@ -519,8 +496,6 @@
       ],
       "type": "Integer32",
       "access": "read-write",
-      "initial": 1,
-      "dynamic_function": null,
       "enums": {
         "up": 1,
         "down": 2,
@@ -542,8 +517,6 @@
       ],
       "type": "Integer32",
       "access": "read-only",
-      "initial": 1,
-      "dynamic_function": null,
       "enums": {
         "up": 1,
         "down": 2,
@@ -568,9 +541,7 @@
         9
       ],
       "type": "TimeTicks",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifInOctets": {
       "oid": [
@@ -586,9 +557,7 @@
         10
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifInUcastPkts": {
       "oid": [
@@ -604,9 +573,7 @@
         11
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifInNUcastPkts": {
       "oid": [
@@ -622,9 +589,7 @@
         12
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifInDiscards": {
       "oid": [
@@ -640,9 +605,7 @@
         13
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifInErrors": {
       "oid": [
@@ -658,9 +621,7 @@
         14
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifInUnknownProtos": {
       "oid": [
@@ -676,9 +637,7 @@
         15
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifOutOctets": {
       "oid": [
@@ -694,9 +653,7 @@
         16
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifOutUcastPkts": {
       "oid": [
@@ -712,9 +669,7 @@
         17
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifOutNUcastPkts": {
       "oid": [
@@ -730,9 +685,7 @@
         18
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifOutDiscards": {
       "oid": [
@@ -748,9 +701,7 @@
         19
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifOutErrors": {
       "oid": [
@@ -766,9 +717,7 @@
         20
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifOutQLen": {
       "oid": [
@@ -784,9 +733,7 @@
         21
       ],
       "type": "Gauge32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifSpecific": {
       "oid": [
@@ -802,12 +749,7 @@
         22
       ],
       "type": "ObjectIdentifier",
-      "access": "read-only",
-      "initial": [
-        0,
-        0
-      ],
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifXTable": {
       "oid": [
@@ -823,8 +765,6 @@
       ],
       "type": "MibTable",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "rows": [
         {
           "ifName": "unset",
@@ -864,8 +804,6 @@
       ],
       "type": "MibTableRow",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "index_from": [
         {
           "mib": "IF-MIB",
@@ -891,9 +829,7 @@
         1
       ],
       "type": "DisplayString",
-      "access": "read-only",
-      "initial": "unset",
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifInMulticastPkts": {
       "oid": [
@@ -910,9 +846,7 @@
         2
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifInBroadcastPkts": {
       "oid": [
@@ -929,9 +863,7 @@
         3
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifOutMulticastPkts": {
       "oid": [
@@ -948,9 +880,7 @@
         4
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifOutBroadcastPkts": {
       "oid": [
@@ -967,9 +897,7 @@
         5
       ],
       "type": "Counter32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifHCInOctets": {
       "oid": [
@@ -986,9 +914,7 @@
         6
       ],
       "type": "Counter64",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifHCInUcastPkts": {
       "oid": [
@@ -1005,9 +931,7 @@
         7
       ],
       "type": "Counter64",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifHCInMulticastPkts": {
       "oid": [
@@ -1024,9 +948,7 @@
         8
       ],
       "type": "Counter64",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifHCInBroadcastPkts": {
       "oid": [
@@ -1043,9 +965,7 @@
         9
       ],
       "type": "Counter64",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifHCOutOctets": {
       "oid": [
@@ -1062,9 +982,7 @@
         10
       ],
       "type": "Counter64",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifHCOutUcastPkts": {
       "oid": [
@@ -1081,9 +999,7 @@
         11
       ],
       "type": "Counter64",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifHCOutMulticastPkts": {
       "oid": [
@@ -1100,9 +1016,7 @@
         12
       ],
       "type": "Counter64",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifHCOutBroadcastPkts": {
       "oid": [
@@ -1119,9 +1033,7 @@
         13
       ],
       "type": "Counter64",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifLinkUpDownTrapEnable": {
       "oid": [
@@ -1139,8 +1051,6 @@
       ],
       "type": "Integer32",
       "access": "read-write",
-      "initial": 1,
-      "dynamic_function": null,
       "enums": {
         "enabled": 1,
         "disabled": 2
@@ -1161,9 +1071,7 @@
         15
       ],
       "type": "Gauge32",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifPromiscuousMode": {
       "oid": [
@@ -1181,8 +1089,6 @@
       ],
       "type": "TruthValue",
       "access": "read-write",
-      "initial": 1,
-      "dynamic_function": null,
       "enums": {
         "true": 1,
         "false": 2
@@ -1204,8 +1110,6 @@
       ],
       "type": "TruthValue",
       "access": "read-only",
-      "initial": 1,
-      "dynamic_function": null,
       "enums": {
         "true": 1,
         "false": 2
@@ -1226,9 +1130,7 @@
         18
       ],
       "type": "DisplayString",
-      "access": "read-write",
-      "initial": "unset",
-      "dynamic_function": null
+      "access": "read-write"
     },
     "ifCounterDiscontinuityTime": {
       "oid": [
@@ -1245,9 +1147,7 @@
         19
       ],
       "type": "TimeStamp",
-      "access": "read-only",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifStackTable": {
       "oid": [
@@ -1263,8 +1163,6 @@
       ],
       "type": "MibTable",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "rows": [
         {
           "ifStackHigherLayer": 0,
@@ -1288,8 +1186,6 @@
       ],
       "type": "MibTableRow",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "indexes": [
         "ifStackHigherLayer",
         "ifStackLowerLayer"
@@ -1310,9 +1206,7 @@
         1
       ],
       "type": "InterfaceIndexOrZero",
-      "access": "not-accessible",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "not-accessible"
     },
     "ifStackLowerLayer": {
       "oid": [
@@ -1329,9 +1223,7 @@
         2
       ],
       "type": "InterfaceIndexOrZero",
-      "access": "not-accessible",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "not-accessible"
     },
     "ifStackStatus": {
       "oid": [
@@ -1349,8 +1241,6 @@
       ],
       "type": "RowStatus",
       "access": "read-create",
-      "initial": 0,
-      "dynamic_function": null,
       "enums": {
         "notExists": 0,
         "active": 1,
@@ -1375,8 +1265,6 @@
       ],
       "type": "MibTable",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "rows": [
         {
           "ifTestId": 0,
@@ -1409,8 +1297,6 @@
       ],
       "type": "MibTableRow",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "index_from": [
         {
           "mib": "IF-MIB",
@@ -1436,9 +1322,7 @@
         1
       ],
       "type": "TestAndIncr",
-      "access": "read-write",
-      "initial": 0,
-      "dynamic_function": null
+      "access": "read-write"
     },
     "ifTestStatus": {
       "oid": [
@@ -1456,8 +1340,6 @@
       ],
       "type": "Integer32",
       "access": "read-write",
-      "initial": 1,
-      "dynamic_function": null,
       "enums": {
         "notInUse": 1,
         "inUse": 2
@@ -1478,12 +1360,7 @@
         3
       ],
       "type": "AutonomousType",
-      "access": "read-write",
-      "initial": [
-        0,
-        0
-      ],
-      "dynamic_function": null
+      "access": "read-write"
     },
     "ifTestResult": {
       "oid": [
@@ -1501,8 +1378,6 @@
       ],
       "type": "Integer32",
       "access": "read-only",
-      "initial": 1,
-      "dynamic_function": null,
       "enums": {
         "none": 1,
         "success": 2,
@@ -1528,12 +1403,7 @@
         5
       ],
       "type": "ObjectIdentifier",
-      "access": "read-only",
-      "initial": [
-        0,
-        0
-      ],
-      "dynamic_function": null
+      "access": "read-only"
     },
     "ifTestOwner": {
       "oid": [
@@ -1550,9 +1420,7 @@
         6
       ],
       "type": "OwnerString",
-      "access": "read-write",
-      "initial": "unset",
-      "dynamic_function": null
+      "access": "read-write"
     },
     "ifRcvAddressTable": {
       "oid": [
@@ -1568,8 +1436,6 @@
       ],
       "type": "MibTable",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "rows": [
         {
           "ifRcvAddressAddress": "default",
@@ -1593,8 +1459,6 @@
       ],
       "type": "MibTableRow",
       "access": "not-accessible",
-      "initial": null,
-      "dynamic_function": null,
       "index_from": [
         {
           "mib": "IF-MIB",
@@ -1621,9 +1485,7 @@
         1
       ],
       "type": "PhysAddress",
-      "access": "not-accessible",
-      "initial": "default",
-      "dynamic_function": null
+      "access": "not-accessible"
     },
     "ifRcvAddressStatus": {
       "oid": [
@@ -1641,8 +1503,6 @@
       ],
       "type": "RowStatus",
       "access": "read-create",
-      "initial": 0,
-      "dynamic_function": null,
       "enums": {
         "notExists": 0,
         "active": 1,
@@ -1669,8 +1529,6 @@
       ],
       "type": "Integer32",
       "access": "read-create",
-      "initial": 1,
-      "dynamic_function": null,
       "enums": {
         "other": 1,
         "volatile": 2,
