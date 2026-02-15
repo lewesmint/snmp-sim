@@ -67,6 +67,8 @@ class SNMPControllerGUI:
         self.oid_metadata: Dict[str, Dict[str, Any]] = {}  # oid_str -> metadata
         self.table_instances_data: Dict[str, Dict[str, Any]] = {}  # Pre-loaded table instances data
         self.oid_to_item: Dict[str, str] = {}  # oid_str -> tree item id
+        self._pending_oid_focus: Dict[str, Optional[str]] | None = None
+        self._pending_oid_focus_retries: int = 0
         # Executor for background value fetching
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
         
@@ -104,6 +106,14 @@ class SNMPControllerGUI:
 
         self.tabview = ctk.CTkTabview(top_frame)
         self.tabview.pack(fill="both", expand=True)
+        try:
+            self.tabview.configure(command=self._on_tab_change)
+        except Exception:
+            try:
+                # Fall back to the segmented button command hook if available.
+                self.tabview._segmented_button.configure(command=self._on_tab_change)
+            except Exception:
+                pass
 
         # Tab 1: Configuration (always visible)
         self.tabview.add("Configuration")
@@ -166,6 +176,55 @@ class SNMPControllerGUI:
     def _setup_oid_tab(self) -> None:
         """Setup the OID tree view tab."""
         oid_frame = self.tabview.tab("OID Tree")
+
+        # State Management buttons (no captions)
+        state_frame = ctk.CTkFrame(oid_frame)
+        state_frame.pack(fill="x", padx=6, pady=(4, 0))
+
+        self.fresh_state_btn = ctk.CTkButton(
+            state_frame,
+            text="Fresh State",
+            command=self._fresh_state,
+            width=120,
+            height=28,
+        )
+        self.fresh_state_btn.pack(side="left", padx=(10, 6), pady=8)
+
+        self.bake_btn = ctk.CTkButton(
+            state_frame,
+            text="Bake State",
+            command=self._bake_state,
+            width=120,
+            height=28,
+        )
+        self.bake_btn.pack(side="left", padx=(0, 6), pady=8)
+
+        self.reset_state_btn = ctk.CTkButton(
+            state_frame,
+            text="Reset State",
+            command=self._reset_state,
+            width=120,
+            height=28,
+        )
+        self.reset_state_btn.pack(side="left", padx=(0, 6), pady=8)
+
+        self.load_preset_btn = ctk.CTkButton(
+            state_frame,
+            text="Load Preset",
+            command=self._load_preset_dialog,
+            width=120,
+            height=28,
+        )
+        self.load_preset_btn.pack(side="left", padx=(0, 6), pady=8)
+
+        self.save_preset_btn = ctk.CTkButton(
+            state_frame,
+            text="Save Preset",
+            command=self._save_preset_dialog,
+            width=120,
+            height=28,
+        )
+        self.save_preset_btn.pack(side="left", padx=(0, 10), pady=8)
 
         # Toolbar with expand/collapse
         toolbar = ctk.CTkFrame(oid_frame)
@@ -263,10 +322,10 @@ class SNMPControllerGUI:
         # Configure columns with borders for better separation
         self.oid_tree.column("#0", width=250, minwidth=150, stretch=False)
         self.oid_tree.column("oid", width=200, minwidth=150, stretch=False, anchor="w")
-        self.oid_tree.column("instance", width=160, minwidth=120, stretch=False, anchor="center")
+        self.oid_tree.column("instance", width=160, minwidth=120, stretch=False, anchor="w")
         self.oid_tree.column("value", width=200, minwidth=100, stretch=False, anchor="w")
         self.oid_tree.column("type", width=120, minwidth=80, stretch=False, anchor="w")
-        self.oid_tree.column("access", width=100, minwidth=80, stretch=False, anchor="center")
+        self.oid_tree.column("access", width=100, minwidth=80, stretch=False, anchor="w")
         self.oid_tree.column("mib", width=120, minwidth=80, stretch=False, anchor="w")
 
         # Track manual column resizes to avoid auto-expanding the tree column
@@ -365,7 +424,7 @@ class SNMPControllerGUI:
         # Table view treeview
         self.table_tree = ttk.Treeview(table_frame, columns=("index",), show="headings", style="OID.Treeview")
         self.table_tree.heading("index", text="Index")
-        self.table_tree.column("index", width=100, minwidth=50, stretch=False, anchor="center")
+        self.table_tree.column("index", width=100, minwidth=50, stretch=False, anchor="w")
 
         # Bind selection change
         self.table_tree.bind("<<TreeviewSelect>>", self._on_table_row_select)
@@ -390,9 +449,12 @@ class SNMPControllerGUI:
         # Create as child of root so place() uses absolute coordinates
         self.edit_overlay_frame = tk.Frame(self.root, bg="white", relief="solid", borderwidth=1)
         # Font size is tree_font_size - 1
-        # Use ttk.Combobox which can act as entry or dropdown
+        # Use ttk.Entry for text editing (will swap to Combobox for enums)
+        self.edit_overlay_entry = ttk.Entry(self.edit_overlay_frame, font=("Helvetica", max(8, self.tree_font_size - 1)))
+        self.edit_overlay_entry.pack(padx=2, pady=2, fill="both", expand=True)
+        # Also create a Combobox for enum fields (hidden by default)
         self.edit_overlay_combo = ttk.Combobox(self.edit_overlay_frame, font=("Helvetica", max(8, self.tree_font_size - 1)), width=40)
-        self.edit_overlay_combo.pack(padx=2, pady=2, fill="both", expand=True)
+        # Don't pack combo - will be managed dynamically
         
         # Store editing state
         self.editing_item: str | None = None
@@ -483,50 +545,17 @@ class SNMPControllerGUI:
         mibs_outer_frame = ctk.CTkFrame(config_frame)
         mibs_outer_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        mibs_label = ctk.CTkLabel(mibs_outer_frame, text="Implemented MIBs", font=("", 14, "bold"))
+        mibs_label = ctk.CTkLabel(mibs_outer_frame, text="Implemented MIBs (with Dependencies)", font=("", 14, "bold"))
         mibs_label.pack(pady=(10, 5), padx=10, anchor="w")
 
-        # Textbox for MIBs (customtkinter doesn't have Listbox, using CTkTextbox instead)
-        self.mibs_textbox = ctk.CTkTextbox(mibs_outer_frame, height=100, font=("", 12))
-        self.mibs_textbox.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-        self.mibs_textbox.configure(state="disabled")
+        # Create a text widget to show summary and dependencies
+        self.mibs_text = ctk.CTkTextbox(mibs_outer_frame, height=100, font=("Courier", 10))
+        self.mibs_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.mibs_text.configure(state="disabled")
 
-        # State Management section
-        state_frame = ctk.CTkFrame(config_frame)
-        state_frame.pack(fill="x", padx=10, pady=(0, 10))
+        # Store for later use
+        self.mibs_data: Dict[str, Dict[str, Any]] = {}
 
-        state_label = ctk.CTkLabel(state_frame, text="State Management", font=("", 14, "bold"))
-        state_label.pack(pady=(10, 10), padx=10, anchor="w")
-
-        # Baking section
-        bake_frame = ctk.CTkFrame(state_frame, fg_color="transparent")
-        bake_frame.pack(fill="x", padx=10, pady=(0, 10))
-
-        bake_info = ctk.CTkLabel(bake_frame, text="Bake current state into agent-model schemas:",
-                                font=("", 12))
-        bake_info.pack(side="left", padx=(0, 10))
-
-        self.bake_btn = ctk.CTkButton(bake_frame, text="Bake State", command=self._bake_state,
-                                      width=120, height=28)
-        self.bake_btn.pack(side="left")
-
-        # Preset management section
-        preset_frame = ctk.CTkFrame(state_frame, fg_color="transparent")
-        preset_frame.pack(fill="x", padx=10, pady=(0, 10))
-
-        preset_info = ctk.CTkLabel(preset_frame, text="Manage presets (scenarios):",
-                                  font=("", 12))
-        preset_info.pack(side="left", padx=(0, 10))
-
-        self.save_preset_btn = ctk.CTkButton(preset_frame, text="Save Preset",
-                                            command=self._save_preset_dialog,
-                                            width=120, height=28)
-        self.save_preset_btn.pack(side="left", padx=(0, 5))
-
-        self.load_preset_btn = ctk.CTkButton(preset_frame, text="Load Preset",
-                                            command=self._load_preset_dialog,
-                                            width=120, height=28)
-        self.load_preset_btn.pack(side="left")
 
     def _setup_scripts_tab(self) -> None:
         """Setup the Scripts tab."""
@@ -1678,6 +1707,8 @@ class SNMPControllerGUI:
                 self._expand_path_to_item(self.oid_to_item[system_oid])
                 # Fetch values for system scalars
                 self.executor.submit(self._fetch_values_for_node, self.oid_to_item[system_oid])
+            # Ensure tree column width accommodates visible items
+            self._ensure_tree_column_width()
         # If not connected or no data, leave empty
     
     def _build_tree_from_oids(self, parent: str, oids: Dict[str, Tuple[int, ...]]) -> None:
@@ -1884,6 +1915,9 @@ class SNMPControllerGUI:
         if not item:
             return
 
+        # Ensure the tree column is wide enough for this item
+        self._ensure_oid_name_width(item)
+
         # Schedule background fetch for this node's children
         self.executor.submit(self._fetch_values_for_node, item)
 
@@ -1949,6 +1983,13 @@ class SNMPControllerGUI:
         selected_items = self.oid_tree.selection()
         print(f"\n[DEBUG] _on_tree_select called, selected_items: {selected_items}")
         if not selected_items:
+            # Don't hide table tab if user is currently on it (viewing/editing)
+            try:
+                current_tab = self.tabview.get()
+                if current_tab == "Table View":
+                    return
+            except Exception:
+                pass
             # Hide table tab if no selection
             if "Table View" in self.tabview._tab_dict:
                 self.tabview.delete("Table View")
@@ -2009,6 +2050,13 @@ class SNMPControllerGUI:
                 # Enable add button
                 self.add_instance_btn.configure(state="normal")
         else:
+            # Don't hide table tab if user is currently on it (viewing/editing)
+            try:
+                current_tab = self.tabview.get()
+                if current_tab == "Table View":
+                    return
+            except Exception:
+                pass
             # Hide table tab if not on table-related item
             if "Table View" in self.tabview._tab_dict:
                 self.tabview.delete("Table View")
@@ -2049,6 +2097,56 @@ class SNMPControllerGUI:
 
         display = self._format_selected_info(full_oid, type_str, value_str)
         self._set_selected_info_text(display)
+
+    def _ensure_tree_column_width(self) -> None:
+        """Scan visible tree items and ensure column #0 is wide enough for all of them."""
+        try:
+            if getattr(self, "_oid_tree_user_resized", False):
+                return  # User manually resized, don't auto-adjust
+            
+            max_width = int(self.oid_tree.column("#0", "width"))
+            
+            def check_item(item: str, depth: int = 0) -> int:
+                """Recursively check item and its open children, return max width needed."""
+                nonlocal max_width
+                
+                # Check this item
+                text = self.oid_tree.item(item, "text")
+                if text:
+                    # Calculate text width
+                    try:
+                        font_obj = tkfont.Font(family='Helvetica', size=int(getattr(self, "tree_font_size", 22)))
+                        text_width = font_obj.measure(str(text))
+                    except Exception:
+                        text_width = len(text) * 10
+                    
+                    indent_per_level = 20
+                    icon_width = 20
+                    padding = 40
+                    indentation = depth * indent_per_level + icon_width
+                    desired_width = indentation + text_width + padding
+                    
+                    if desired_width > max_width:
+                        max_width = desired_width
+                
+                # Check children if item is open
+                if self.oid_tree.item(item, "open"):
+                    for child in self.oid_tree.get_children(item):
+                        check_item(child, depth + 1)
+                
+                return max_width
+            
+            # Check all root items
+            for root_item in self.oid_tree.get_children():
+                check_item(root_item, 0)
+            
+            # Update column width if needed
+            current_width = int(self.oid_tree.column("#0", "width"))
+            if max_width > current_width:
+                self.oid_tree.column("#0", width=max_width)
+                
+        except Exception as e:
+            print(f"[DEBUG] Exception in _ensure_tree_column_width: {e}")
 
     def _ensure_oid_name_width(self, item: str) -> None:
         """Ensure the name column is wide enough to display the selected item's text."""
@@ -2122,8 +2220,9 @@ class SNMPControllerGUI:
             style = ttk.Style()
             style.configure("Treeview", font=('Helvetica', size), rowheight=self.tree_row_height)
             style.configure("Treeview.Heading", font=('Helvetica', size + 1, 'bold'))
-            # Update edit overlay font as well
+            # Update edit overlay fonts as well
             self.edit_overlay_combo.configure(font=("Helvetica", max(8, size - 1)))
+            self.edit_overlay_entry.configure(font=("Helvetica", max(8, size - 1)))
             self._ensure_oid_name_width(self.oid_tree.focus())
         except Exception:
             pass
@@ -2217,6 +2316,15 @@ class SNMPControllerGUI:
         selected_rows = self.table_tree.selection()
         if selected_rows:
             self.remove_instance_btn.configure(state="normal")
+            try:
+                selected_values = self.table_tree.item(selected_rows[0], "values")
+                if selected_values:
+                    instance = str(selected_values[0])
+                    table_oid = getattr(self, "_current_table_oid", None)
+                    if table_oid:
+                        self._set_pending_oid_focus(table_oid, instance)
+            except Exception:
+                pass
         else:
             self.remove_instance_btn.configure(state="disabled")
 
@@ -2296,37 +2404,52 @@ class SNMPControllerGUI:
                     # Build list of "value (name)" strings, sorted by value
                     enum_values = [f"{val} ({name})" for name, val in sorted(enums.items(), key=lambda x: x[1])]
         
-        # Configure combobox for enum or text entry
+        # Use Entry for non-enum fields, Combobox for enums
         if enum_values:
+            # Hide entry, show combo
+            self.edit_overlay_entry.pack_forget()
+            self.edit_overlay_combo.pack(padx=2, pady=2, fill="both", expand=True)
+            
             self.edit_overlay_combo.config(values=enum_values, state="readonly")
             # Find and select the matching value
             for enum_val in enum_values:
                 if enum_val.startswith(current_value.split()[0]):  # Match the integer part
                     self.edit_overlay_combo.set(enum_val)
                     break
-        else:
-            self.edit_overlay_combo.config(values=[], state="normal")
-            self.edit_overlay_combo.delete(0, "end")
-            self.edit_overlay_combo.insert(0, current_value)
-        
-        self.edit_overlay_combo.focus()
-        if not enum_values:  # Only select text for non-enum fields
-            self.edit_overlay_combo.selection_range(0, "end")
-
-        # Unbind all previous events first to avoid duplicate handlers
-        self.edit_overlay_combo.unbind("<Return>")
-        self.edit_overlay_combo.unbind("<Escape>")
-        self.edit_overlay_combo.unbind("<<ComboboxSelected>>")
-        self.edit_overlay_combo.unbind("<FocusOut>")
-
-        # Bind keys for save/cancel
-        self.edit_overlay_combo.bind("<Return>", lambda e: self._save_cell_edit())
-        self.edit_overlay_combo.bind("<Escape>", lambda e: self._hide_edit_overlay())
-        # For readonly combobox (enums), save on selection
-        if enum_values:
+            
+            # Unbind all previous events first
+            self.edit_overlay_combo.unbind("<Return>")
+            self.edit_overlay_combo.unbind("<Escape>")
+            self.edit_overlay_combo.unbind("<<ComboboxSelected>>")
+            self.edit_overlay_combo.unbind("<FocusOut>")
+            
+            # Bind keys for save/cancel
+            self.edit_overlay_combo.bind("<Return>", lambda e: self._save_cell_edit())
+            self.edit_overlay_combo.bind("<Escape>", lambda e: self._hide_edit_overlay())
             self.edit_overlay_combo.bind("<<ComboboxSelected>>", lambda e: self._on_combo_selected())
-        # Save on focus out (clicking away)
-        self.edit_overlay_combo.bind("<FocusOut>", lambda e: self._on_edit_focus_out())
+            self.edit_overlay_combo.bind("<FocusOut>", lambda e: self._on_edit_focus_out())
+            
+            self.edit_overlay_combo.focus()
+        else:
+            # Hide combo, show entry
+            self.edit_overlay_combo.pack_forget()
+            self.edit_overlay_entry.pack(padx=2, pady=2, fill="both", expand=True)
+            
+            self.edit_overlay_entry.delete(0, "end")
+            self.edit_overlay_entry.insert(0, current_value)
+            self.edit_overlay_entry.selection_range(0, "end")
+            
+            # Unbind all previous events first
+            self.edit_overlay_entry.unbind("<Return>")
+            self.edit_overlay_entry.unbind("<Escape>")
+            self.edit_overlay_entry.unbind("<FocusOut>")
+            
+            # Bind keys for save/cancel
+            self.edit_overlay_entry.bind("<Return>", lambda e: self._save_cell_edit())
+            self.edit_overlay_entry.bind("<Escape>", lambda e: self._hide_edit_overlay())
+            self.edit_overlay_entry.bind("<FocusOut>", lambda e: self._on_edit_focus_out())
+            
+            self.edit_overlay_entry.focus()
     
     def _on_table_click(self, event: Any) -> None:
         """Handle click on table - save edit if clicking outside edit area."""
@@ -2335,8 +2458,8 @@ class SNMPControllerGUI:
         # Check if click is outside the edit overlay
         try:
             widget = event.widget.winfo_containing(event.x_root, event.y_root)
-            # If click is not in the edit combo, save the edit
-            if widget != self.edit_overlay_combo:
+            # If click is not in the edit widgets, save the edit
+            if widget not in (self.edit_overlay_combo, self.edit_overlay_entry):
                 self._save_cell_edit()
         except Exception:
             pass
@@ -2413,8 +2536,13 @@ class SNMPControllerGUI:
             editing_item = self.editing_item
             editing_column = self.editing_column
             
-            new_value = self.edit_overlay_combo.get()
-            self._log(f"DEBUG: Got value from combo: {new_value}", "DEBUG")
+            # Get value from whichever widget is packed (entry or combo)
+            if self.edit_overlay_combo.winfo_ismapped():
+                new_value = self.edit_overlay_combo.get()
+                self._log(f"DEBUG: Got value from combo: {new_value}", "DEBUG")
+            else:
+                new_value = self.edit_overlay_entry.get()
+                self._log(f"DEBUG: Got value from entry: {new_value}", "DEBUG")
             
             # Parse enum format "value (name)" to extract just the integer value
             if ' (' in new_value and new_value.endswith(')'):
@@ -2532,6 +2660,8 @@ class SNMPControllerGUI:
                             self._populate_table_view(self._current_table_item, new_instance)
                             # Immediately add new instance to OID tree (will handle sorting)
                             self._add_instance_to_oid_tree(self._current_table_item, new_instance)
+                            if table_oid:
+                                self._set_pending_oid_focus(table_oid, new_instance, col_oid)
                     else:
                         messagebox.showerror("Error", f"Failed to create new instance: {create_resp.text}")
                 except Exception as e:
@@ -2612,10 +2742,12 @@ class SNMPControllerGUI:
 
                         # Refresh the OID tree to show the updated value
                         self._refresh_oid_tree_value(full_oid, display_value)
+                        if table_oid:
+                            self._set_pending_oid_focus(table_oid, str(instance_index), col_oid)
 
                         # If this was a new instance, also refresh the entire table to show the new row
                         if is_new_instance and hasattr(self, "_current_table_item") and self._current_table_item:
-                            self._log(f"DEBUG: New instance detected, refreshing OID tree table", "DEBUG")
+                            self._log("DEBUG: New instance detected, refreshing OID tree table", "DEBUG")
                             self._refresh_oid_tree_table(self._current_table_item)
                     else:
                         error_msg = f"Failed to update value: {resp.status_code} - {resp.text}"
@@ -2764,7 +2896,7 @@ class SNMPControllerGUI:
                 index_width = 120
                 col_width = 150
         
-        self.table_tree.column("index", width=index_width, minwidth=50, stretch=False, anchor="center")
+        self.table_tree.column("index", width=index_width, minwidth=50, stretch=False, anchor="w")
         
         index_column_set = {name.lower() for name in index_columns}
         for i, col_name in enumerate(col_names):
@@ -2842,6 +2974,7 @@ class SNMPControllerGUI:
                     # Enable remove button since we have a selection
                     self.remove_instance_btn.configure(state="normal")
                     found_selection = True
+                    self._set_pending_oid_focus(oid_str, str(selected_instance))
                     break
 
         if not found_selection and preserved_yview is not None:
@@ -3511,6 +3644,19 @@ class SNMPControllerGUI:
             
             index_column_set = {name.lower() for name in index_columns}
             
+            # Sort instances using same logic as table view
+            def _instance_sort_key(inst: Any) -> list[tuple[int, Any]]:
+                parts = str(inst).split(".")
+                key: list[tuple[int, Any]] = []
+                for part in parts:
+                    if part.isdigit():
+                        key.append((0, int(part)))
+                    else:
+                        key.append((1, part))
+                return key
+            
+            instances = sorted(instances, key=_instance_sort_key)
+            
             # Group columns by instance
             for inst in instances:
                 entry_display = f"{entry_name}.{inst}"
@@ -3567,6 +3713,8 @@ class SNMPControllerGUI:
                     )
             
             self._log(f"Pre-populated {len(instances)} instances for table {table_oid}", "DEBUG")
+            # Ensure tree column is wide enough for new items
+            self._ensure_tree_column_width()
             
         except Exception as e:
             self._log(f"Error pre-populating table {table_oid}: {e}", "WARNING")
@@ -3653,6 +3801,19 @@ class SNMPControllerGUI:
                 col_oid = ".".join(str(x) for x in oid_t)
                 columns.append((name, col_oid, col_num))
         columns.sort(key=lambda x: x[2])
+
+        # Sort instances using same logic as table view
+        def _instance_sort_key(inst: Any) -> list[tuple[int, Any]]:
+            parts = str(inst).split(".")
+            key: list[tuple[int, Any]] = []
+            for part in parts:
+                if part.isdigit():
+                    key.append((0, int(part)))
+                else:
+                    key.append((1, part))
+            return key
+        
+        instances = sorted(instances, key=_instance_sort_key)
 
         # Build columns metadata dict for index value extraction
         columns_meta: Dict[str, Any] = {}
@@ -3778,6 +3939,8 @@ class SNMPControllerGUI:
             self._log(f"Successfully added {added_count} instances to OID tree", "INFO")
             # Expand the table node to show the new instances
             self.oid_tree.item(item, open=True)
+            # Ensure tree column is wide enough for new items
+            self._ensure_tree_column_width()
 
         self.root.after(0, update_ui)
     
@@ -3989,6 +4152,91 @@ class SNMPControllerGUI:
             import traceback
             traceback.print_exc()
 
+    def _on_tab_change(self) -> None:
+        """Handle tab changes to restore OID tree focus when returning from Table View."""
+        try:
+            current_tab = self.tabview.get()
+        except Exception:
+            current_tab = None
+
+        if current_tab == "OID Tree":
+            self._apply_pending_oid_focus()
+
+    def _set_pending_oid_focus(
+        self,
+        table_oid: str,
+        instance: str | None,
+        column_oid: str | None = None,
+    ) -> None:
+        """Store a pending focus request for the OID tree."""
+        self._pending_oid_focus = {
+            "table_oid": table_oid,
+            "instance": instance,
+            "column_oid": column_oid,
+        }
+        self._pending_oid_focus_retries = 0
+
+    def _apply_pending_oid_focus(self) -> None:
+        """Restore focus in the OID tree based on the last table selection/edit."""
+        if not self._pending_oid_focus:
+            return
+
+        table_oid = self._pending_oid_focus.get("table_oid")
+        instance = self._pending_oid_focus.get("instance")
+        column_oid = self._pending_oid_focus.get("column_oid")
+
+        if not table_oid:
+            return
+
+        table_item = self.oid_to_item.get(table_oid)
+        if not table_item:
+            return
+
+        self._expand_path_to_item(table_item)
+        self.oid_tree.item(table_item, open=True)
+
+        target_item = table_item
+        if instance:
+            entry_item = self._find_table_entry_item(table_item, instance)
+            if entry_item:
+                target_item = entry_item
+                if column_oid:
+                    column_item = self._find_table_column_item(entry_item, column_oid, instance)
+                    if column_item:
+                        target_item = column_item
+            else:
+                if self._pending_oid_focus_retries < 5:
+                    self._pending_oid_focus_retries += 1
+                    self.executor.submit(self._discover_table_instances, table_item, table_oid)
+                    self.root.after(200, self._apply_pending_oid_focus)
+                    return
+
+        self.oid_tree.selection_set(target_item)
+        self.oid_tree.focus(target_item)
+        self.oid_tree.see(target_item)
+        self._update_selected_info(target_item)
+        self._ensure_oid_name_width(target_item)
+        self._pending_oid_focus = None
+
+    def _find_table_entry_item(self, table_item: str, instance: str) -> str | None:
+        """Find a table-entry item under the table node for the given instance."""
+        for child in self.oid_tree.get_children(table_item):
+            if "table-entry" in self.oid_tree.item(child, "tags"):
+                child_instance = self.oid_tree.set(child, "instance")
+                if child_instance == instance:
+                    return child
+        return None
+
+    def _find_table_column_item(self, entry_item: str, column_oid: str, instance: str) -> str | None:
+        """Find a table-column item under an entry for a given column OID and instance."""
+        for child in self.oid_tree.get_children(entry_item):
+            if "table-column" in self.oid_tree.item(child, "tags"):
+                child_oid = self.oid_tree.set(child, "oid")
+                child_instance = self.oid_tree.set(child, "instance")
+                if child_oid == column_oid and child_instance == instance:
+                    return child
+        return None
+
     def _toggle_connection(self) -> None:
         """Connect or disconnect from the REST API."""
         if self.connected:
@@ -4006,18 +4254,27 @@ class SNMPControllerGUI:
             self.status_var.set("Connecting...")
             self._log(f"Connecting to {self.api_url}")
             
-            # Test connection by fetching MIBs
-            response = requests.get(f"{self.api_url}/mibs", timeout=5)
-            response.raise_for_status()
-            
-            mibs_data = response.json()
-            mibs = mibs_data.get("mibs", [])
+            # Test connection by fetching MIBs with dependencies
+            try:
+                response = requests.get(f"{self.api_url}/mibs-with-dependencies", timeout=5)
+                response.raise_for_status()
+                mibs_dep_data = response.json()
+            except Exception:
+                # Fallback to simple /mibs endpoint if the new endpoint is not available
+                response = requests.get(f"{self.api_url}/mibs", timeout=5)
+                response.raise_for_status()
+                mibs_data = response.json()
+                configured_mibs = mibs_data.get("mibs", [])
+                mibs_dep_data = {
+                    "configured_mibs": configured_mibs,
+                    "tree": {mib: {"direct_deps": [], "transitive_deps": [], "is_configured": True} for mib in configured_mibs},
+                }
 
-            self.mibs_textbox.configure(state="normal")
-            self.mibs_textbox.delete("1.0", "end")
-            for mib in mibs:
-                self.mibs_textbox.insert("end", f"{mib}\n")
-            self.mibs_textbox.configure(state="disabled")
+            # Populate MIB tree with dependencies
+            self._populate_mibs_tree(mibs_dep_data)
+            
+            # Get MIBs count for logging
+            configured_mibs_list = mibs_dep_data.get("configured_mibs", [])
             
             # Fetch OIDs
             response = requests.get(f"{self.api_url}/oids", timeout=5)
@@ -4090,7 +4347,7 @@ class SNMPControllerGUI:
             self.connected = True
             self.connect_button.configure(text="Disconnect")
             self.status_var.set("Connected")
-            self._log(f"Connected successfully. Found {len(mibs)} MIBs and {len(oids)} OIDs")
+            self._log(f"Connected successfully. Found {len(configured_mibs_list)} MIBs and {len(oids)} OIDs")
             
             # Load available traps
             self._load_traps()
@@ -4114,9 +4371,13 @@ class SNMPControllerGUI:
         self.connected = False
         self.connect_button.configure(text="Connect")
         self.status_var.set("Disconnected")
-        self.mibs_textbox.configure(state="normal")
-        self.mibs_textbox.delete("1.0", "end")
-        self.mibs_textbox.configure(state="disabled")
+        
+        # Clear MIB text display
+        self.mibs_text.configure(state="normal")
+        self.mibs_text.delete("1.0", "end")
+        self.mibs_text.configure(state="disabled")
+        self.mibs_data.clear()
+        self.current_mermaid_diagram = ""
         
         # Remove OID Tree and Traps tabs when disconnected
         if "OID Tree" in self.tabview._tab_dict:
@@ -4126,6 +4387,64 @@ class SNMPControllerGUI:
         
         self._log("Disconnected")
     
+    def _populate_mibs_tree(self, mibs_dep_data: Dict[str, Any]) -> None:
+        """Populate the MIBs display with dependency information.
+        
+        Args:
+            mibs_dep_data: Dictionary containing MIB dependency information from API.
+        """
+        try:
+            self.mibs_data.clear()
+
+            tree = mibs_dep_data.get("tree", {})
+            configured_mibs = mibs_dep_data.get("configured_mibs", [])
+            transitive_deps = mibs_dep_data.get("transitive_dependencies", [])
+            summary = mibs_dep_data.get("summary", {})
+
+            # Build display text
+            display_text = "MIB DEPENDENCY SUMMARY\n"
+            display_text += "="*60 + "\n\n"
+            display_text += f"Configured MIBs ({summary.get('configured_count', 0)}):\n"
+            if configured_mibs:
+                display_text += f"  {', '.join(configured_mibs)}\n"
+            else:
+                display_text += "  (none)\n"
+            
+            display_text += f"\nTransitive Dependencies ({summary.get('transitive_count', 0)}):\n"
+            if transitive_deps:
+                display_text += f"  {', '.join(transitive_deps)}\n"
+            else:
+                display_text += "  (none)\n"
+            
+            display_text += f"\nTotal Unique MIBs: {summary.get('total_count', 0)}\n"
+            display_text += "="*60 + "\n\n"
+            display_text += "DETAILED DEPENDENCIES\n"
+            display_text += "="*60 + "\n"
+
+            # Add detailed dependency information
+            for mib_name in configured_mibs:
+                if mib_name not in tree:
+                    continue
+                mib_info = tree[mib_name]
+                direct_deps = mib_info.get("direct_deps", [])
+                transitive = mib_info.get("transitive_deps", [])
+
+                display_text += f"\n{mib_name} (configured)\n"
+                display_text += f"  Direct imports: {', '.join(direct_deps) if direct_deps else '(none)'}\n"
+                if transitive:
+                    display_text += f"  Transitive: {', '.join(transitive)}\n"
+                self.mibs_data[mib_name] = mib_info
+
+            self.mibs_text.configure(state="normal")
+            self.mibs_text.delete("1.0", "end")
+            self.mibs_text.insert("1.0", display_text)
+            self.mibs_text.configure(state="disabled")
+
+            self._log(f"Populated MIB dependency display with {summary.get('total_count', 0)} total MIBs")
+
+        except Exception as e:
+            self._log(f"Error populating MIB display: {e}", "ERROR")
+
     def _log(self, message: str, level: str = "INFO") -> None:
         """Add a message to the log window using the logger."""
         self.logger.log(message, level)
@@ -4425,7 +4744,8 @@ class SNMPControllerGUI:
             # Confirm action
             response = messagebox.askyesno(
                 "Bake State",
-                "This will bake the current MIB state into agent-model schema files.\n\n"
+                "This will bake the current MIB state into agent-model schema files,\n"
+                "then clear the runtime state file (mib_state.json).\n\n"
                 "A backup will be created automatically.\n\n"
                 "Continue?"
             )
@@ -4445,11 +4765,13 @@ class SNMPControllerGUI:
 
             self._log(f"✓ Baked {baked_count} value(s) into schemas")
             self._log(f"Backup created: {backup_dir}")
+            self._log("✓ State file cleared")
 
             messagebox.showinfo(
                 "Success",
                 f"Successfully baked {baked_count} value(s) into schemas!\n\n"
-                f"Backup: {backup_dir}"
+                f"Backup: {backup_dir}\n\n"
+                "Runtime state file has been cleared."
             )
 
         except requests.exceptions.RequestException as e:
@@ -4458,6 +4780,69 @@ class SNMPControllerGUI:
             messagebox.showerror("Error", error_msg)
         except Exception as e:
             error_msg = f"Unexpected error baking state: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+
+    def _fresh_state(self) -> None:
+        """Regenerate schemas and empty the MIB state file."""
+        try:
+            response = messagebox.askyesno(
+                "Fresh State",
+                "This will regenerate schema files and clear mib_state.json.\n\n"
+                "You will need to restart the agent for schema changes to take effect.\n\n"
+                "Continue?",
+            )
+            if not response:
+                return
+
+            self._log("Regenerating schemas and clearing state...")
+            resp = requests.post(f"{self.api_url}/state/fresh", timeout=60)
+            resp.raise_for_status()
+            result = resp.json()
+
+            backup_dir = result.get("backup_dir", "")
+            regenerated = result.get("regenerated", 0)
+
+            self._log(f"✓ Fresh state complete. Regenerated {regenerated} schema(s)")
+            messagebox.showinfo(
+                "Success",
+                "Fresh State complete.\n\n"
+                f"Schemas regenerated: {regenerated}\n"
+                f"Backup: {backup_dir}\n\n"
+                "Please restart the agent for schema changes to take effect.",
+            )
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Failed to run Fresh State: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error during Fresh State: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+
+    def _reset_state(self) -> None:
+        """Clear mib_state.json without regenerating schemas."""
+        try:
+            response = messagebox.askyesno(
+                "Reset State",
+                "This will clear mib_state.json (tables, scalars, deleted instances).\n\n"
+                "Continue?",
+            )
+            if not response:
+                return
+
+            self._log("Resetting state...")
+            resp = requests.post(f"{self.api_url}/state/reset", timeout=20)
+            resp.raise_for_status()
+
+            self._log("✓ State reset")
+            messagebox.showinfo("Success", "State reset completed.")
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Failed to reset state: {e}"
+            self._log(error_msg, "ERROR")
+            messagebox.showerror("Error", error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error resetting state: {e}"
             self._log(error_msg, "ERROR")
             messagebox.showerror("Error", error_msg)
 
@@ -4476,6 +4861,10 @@ class SNMPControllerGUI:
                 return
 
             self._log(f"Saving preset '{preset_name}'...")
+
+            # Bake state before saving preset
+            bake_resp = requests.post(f"{self.api_url}/bake-state", timeout=30)
+            bake_resp.raise_for_status()
 
             # Call API endpoint
             resp = requests.post(
@@ -4543,17 +4932,13 @@ class SNMPControllerGUI:
             selected_preset: list[str | None] = [None]
 
             def on_load() -> None:
-                selection = None
-                # try:
-                #     selection = preset_listbox.curselection()[0]
-                # except IndexError:
-                #     pass
+                selection = cast(tuple[int, ...], preset_listbox.curselection())  # type: ignore[no-untyped-call]
                 if not selection:
                     messagebox.showwarning("No Selection", "Please select a preset")
                     return
 
-                # selected_preset[0] = presets[selection[0]]
-                # dialog.destroy()
+                selected_preset[0] = presets[selection[0]]
+                dialog.destroy()
 
             def on_cancel() -> None:
                 dialog.destroy()

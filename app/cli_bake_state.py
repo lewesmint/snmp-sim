@@ -89,7 +89,7 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                                 print(f"  Baked scalar {obj_name} ({oid}) = {value}")
             
             # Bake table instances
-            # table_instances format: {table_oid: {instance_str: {column_values: {...}, created_at: ...}}}
+            # table_instances format: {table_oid: {instance_str: {column_values: {...}}}}
             for table_oid, instances_dict in tables.items():
                 if not isinstance(instances_dict, dict):
                     continue
@@ -236,8 +236,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\nBaking state into schemas in {schema_dir}...")
     baked_count = bake_state_into_schemas(schema_dir, state)
     
+    # Clear the state file now that values have been baked
+    print(f"\nClearing state file {state_file}...")
+    with open(state_file, "w", encoding="utf-8") as f:
+        json.dump({"scalars": {}, "tables": {}, "deleted_instances": []}, f, indent=2, sort_keys=True)
+    print("✓ State file cleared")
+    
     print("\n" + "=" * 60)
     print(f"✓ Baking complete! Baked {baked_count} value(s) into schemas")
+    print("✓ State file has been cleared")
     print("=" * 60)
     
     return 0

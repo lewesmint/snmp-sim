@@ -3,6 +3,7 @@ from app.app_logger import AppLogger
 from pydantic import BaseModel
 from typing import Optional, Any, Literal
 from pathlib import Path
+import json
 
 from app.oid_utils import oid_str_to_tuple, oid_tuple_to_str
 from app.trap_receiver import TrapReceiver
@@ -137,6 +138,72 @@ def list_mibs() -> dict[str, Any]:
     schemas = load_all_schemas(schema_dir)
     mibs = sorted(list(schemas.keys()))
     return {"count": len(mibs), "mibs": mibs}
+
+
+@app.get("/mibs-with-dependencies")
+def list_mibs_with_dependencies() -> dict[str, Any]:
+    """List all MIBs with their dependency information."""
+    from app.cli_load_model import load_all_schemas
+    from app.mib_dependency_resolver import MibDependencyResolver
+    import os
+
+    schema_dir = "agent-model"
+    if not os.path.exists(schema_dir):
+        return {
+            "count": 0,
+            "mibs": [],
+            "configured_mibs": [],
+            "transitive_dependencies": [],
+            "tree": {},
+            "summary": {
+                "configured_count": 0,
+                "transitive_count": 0,
+                "total_count": 0,
+            },
+        }
+
+    schemas = load_all_schemas(schema_dir)
+    mibs = sorted(list(schemas.keys()))
+
+    # Resolve dependencies
+    resolver = MibDependencyResolver()
+    dependency_info = resolver.get_configured_mibs_with_deps(mibs)
+
+    return {
+        "count": len(mibs),
+        "mibs": mibs,
+        **dependency_info,
+    }
+
+
+@app.get("/mibs-dependencies-diagram")
+def get_mibs_dependencies_diagram() -> dict[str, Any]:
+    """Get a Mermaid diagram showing MIB dependencies."""
+    from app.cli_load_model import load_all_schemas
+    from app.mib_dependency_resolver import MibDependencyResolver
+    import os
+
+    schema_dir = "agent-model"
+    if not os.path.exists(schema_dir):
+        return {
+            "mermaid_code": "graph TD\n    Empty[No MIBs configured]",
+            "configured_mibs": [],
+            "transitive_dependencies": [],
+            "summary": {
+                "configured_count": 0,
+                "transitive_count": 0,
+                "total_count": 0,
+            },
+        }
+
+    schemas = load_all_schemas(schema_dir)
+    mibs = sorted(list(schemas.keys()))
+
+    # Generate Mermaid diagram
+    resolver = MibDependencyResolver()
+    diagram_data = resolver.generate_mermaid_diagram_json(mibs)
+
+    return diagram_data
 
 
 @app.get("/oids")
@@ -1518,6 +1585,13 @@ async def send_test_trap(request: TestTrapRequest) -> dict[str, Any]:
 # ============================================================================
 
 
+def _write_empty_state(state_file: Path) -> None:
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    state: dict[str, Any] = {"deleted_instances": [], "scalars": {}, "tables": {}}
+    with state_file.open("w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2, sort_keys=True)
+
+
 @app.post("/bake-state")
 def bake_state() -> dict[str, Any]:
     """
@@ -1545,14 +1619,98 @@ def bake_state() -> dict[str, Any]:
         # Bake state into schemas
         baked_count = bake_state_into_schemas(schema_dir, state)
 
+        # Clear the state file now that values have been baked into schemas
+        _write_empty_state(state_file)
+
+        # Clear the agent's in-memory state as well
+        if snmp_agent is not None:
+            snmp_agent.overrides = {}
+            snmp_agent.table_instances = {}
+            snmp_agent.deleted_instances = []
+            try:
+                snmp_agent._save_mib_state()
+            except Exception:
+                pass
+
         return {
             "status": "ok",
             "baked_count": baked_count,
             "backup_dir": str(backup_dir),
-            "message": f"Successfully baked {baked_count} value(s) into schemas",
+            "message": f"Successfully baked {baked_count} value(s) into schemas and cleared state",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to bake state: {e}")
+
+
+@app.post("/state/reset")
+def reset_state() -> dict[str, Any]:
+    """Clear mib_state.json (scalars, tables, deletions)."""
+    from pathlib import Path
+
+    state_file = Path("data/mib_state.json")
+
+    try:
+        _write_empty_state(state_file)
+
+        if snmp_agent is not None:
+            snmp_agent.overrides = {}
+            snmp_agent.table_instances = {}
+            snmp_agent.deleted_instances = []
+            try:
+                snmp_agent._save_mib_state()
+            except Exception:
+                pass
+
+        return {"status": "ok", "message": "State reset"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reset state: {e}")
+
+
+@app.post("/state/fresh")
+def fresh_state() -> dict[str, Any]:
+    """Regenerate schemas and clear mib_state.json."""
+    from app.cli_bake_state import backup_schemas
+    from app.app_config import AppConfig
+    from app.generator import BehaviourGenerator
+
+    schema_dir = Path("agent-model")
+    backup_base = Path("agent-model-backups")
+    state_file = Path("data/mib_state.json")
+
+    try:
+        backup_dir = backup_schemas(schema_dir, backup_base)
+
+        config = AppConfig()
+        mibs = config.get("mibs", [])
+        generator = BehaviourGenerator(output_dir=str(schema_dir))
+
+        regenerated = 0
+        for mib in mibs:
+            compiled_path = Path("compiled-mibs") / f"{mib}.py"
+            if not compiled_path.exists():
+                continue
+            generator.generate(str(compiled_path), mib_name=mib, force_regenerate=True)
+            regenerated += 1
+
+        _write_empty_state(state_file)
+
+        if snmp_agent is not None:
+            snmp_agent.overrides = {}
+            snmp_agent.table_instances = {}
+            snmp_agent.deleted_instances = []
+            try:
+                snmp_agent._save_mib_state()
+            except Exception:
+                pass
+
+        return {
+            "status": "ok",
+            "backup_dir": str(backup_dir),
+            "regenerated": regenerated,
+            "message": "Fresh state complete",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to run fresh state: {e}")
 
 
 class PresetRequest(BaseModel):
@@ -1632,6 +1790,20 @@ def load_preset(request: PresetRequest) -> dict[str, Any]:
 
         if result != 0:
             raise HTTPException(status_code=400, detail=f"Failed to load preset: {output}")
+
+        # Clear state after loading preset
+        try:
+            _write_empty_state(Path("data/mib_state.json"))
+            if snmp_agent is not None:
+                snmp_agent.overrides = {}
+                snmp_agent.table_instances = {}
+                snmp_agent.deleted_instances = []
+                try:
+                    snmp_agent._save_mib_state()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
         return {
             "status": "ok",

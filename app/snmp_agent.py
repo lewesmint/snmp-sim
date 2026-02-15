@@ -51,7 +51,7 @@ class SNMPAgent:
         self._shutdown_requested = False
         # Overrides: dotted OID -> JSON-serializable value
         self.overrides: dict[str, object] = {}
-        # Table instances: table_oid -> {index_str -> {column_values, created_at}}
+        # Table instances: table_oid -> {index_str -> {column_values}}
         self.table_instances: dict[str, dict[str, Any]] = {}
         # Deleted instances: list of instance OIDs marked for deletion
         self.deleted_instances: list[str] = []
@@ -258,11 +258,32 @@ class SNMPAgent:
             
             # Generate schemas for each MIB that was compiled
             for mib_name, py_path in mib_to_py_path.items():
-                self.logger.info(f"Generating schema JSON for {mib_name}: {py_path}")
+                self.logger.info(f"Processing schema for {mib_name}: {py_path}")
                 try:
-                    # Pass the MIB name explicitly to avoid ambiguity
-                    generator.generate(py_path, mib_name=mib_name)
-                    self.logger.info(f"Schema JSON generated for {mib_name}")
+                    mib_dir = json_dir / mib_name
+                    schema_path = mib_dir / "schema.json"
+                    
+                    # Check if schema exists and if compiled MIB file is newer than schema
+                    force_regen = True
+                    if schema_path.exists():
+                        schema_mtime = os.path.getmtime(schema_path)
+                        py_mtime = os.path.getmtime(py_path)
+                        if py_mtime <= schema_mtime:
+                            # Schema is up-to-date, don't regenerate
+                            force_regen = False
+                            self.logger.info(
+                                f"✓ Schema for {mib_name} is up-to-date (MIB: {py_mtime:.0f}, Schema: {schema_mtime:.0f}). "
+                                f"Preserving baked values. To regenerate, use Fresh State."
+                            )
+                        else:
+                            self.logger.info(f"Compiled MIB {mib_name} is newer than schema, regenerating")
+                    else:
+                        self.logger.info(f"Schema does not exist for {mib_name}, generating from compiled MIB")
+                    
+                    # Pass the MIB name explicitly and force_regenerate flag
+                    generator.generate(py_path, mib_name=mib_name, force_regenerate=force_regen)
+                    if force_regen:
+                        self.logger.info(f"Schema JSON generated for {mib_name}")
                 except Exception as e:
                     self.logger.error(
                         f"Failed to generate schema JSON for {mib_name}: {e}",
@@ -714,11 +735,183 @@ class SNMPAgent:
         
         # Extract deleted instances list
         self.deleted_instances = mib_state.get("deleted_instances", [])
+        self._filter_deleted_instances_against_schema()
         
         self.logger.info(
             f"Loaded state: {len(self.overrides)} scalars, {sum(len(v) for v in self.table_instances.values())} table instances, "
             f"{len(self.deleted_instances)} deleted instances"
         )
+
+    def _filter_deleted_instances_against_schema(self) -> None:
+        """Drop deleted instances that are not present in schema files."""
+        if not self.deleted_instances:
+            return
+
+        schema_instance_oids, saw_table = self._collect_schema_instance_oids()
+        if not saw_table:
+            return
+
+        before = len(self.deleted_instances)
+        self.deleted_instances = [
+            oid for oid in self.deleted_instances if oid in schema_instance_oids
+        ]
+        if len(self.deleted_instances) != before:
+            self._save_mib_state()
+            self.logger.info(
+                f"Filtered deleted instances against schema: {before} -> {len(self.deleted_instances)}"
+            )
+
+    def _collect_schema_instance_oids(self) -> tuple[set[str], bool]:
+        """Collect all instance OIDs that are defined in schema table rows."""
+        instance_oids: set[str] = set()
+        if not self.mib_jsons:
+            return instance_oids, False
+
+        saw_table = False
+
+        for schema in self.mib_jsons.values():
+            objects = schema.get("objects", schema) if isinstance(schema, dict) else {}
+            if not isinstance(objects, dict):
+                continue
+
+            for obj_data in objects.values():
+                if not isinstance(obj_data, dict):
+                    continue
+                if obj_data.get("type") != "MibTable":
+                    continue
+
+                saw_table = True
+
+                table_oid_list = obj_data.get("oid", [])
+                if not isinstance(table_oid_list, list) or not table_oid_list:
+                    continue
+                table_oid = ".".join(str(x) for x in table_oid_list)
+
+                entry_oid_list = list(table_oid_list) + [1]
+                entry_obj = None
+                for other_data in objects.values():
+                    if not isinstance(other_data, dict):
+                        continue
+                    if other_data.get("type") == "MibTableRow" and other_data.get("oid") == entry_oid_list:
+                        entry_obj = other_data
+                        break
+
+                if not entry_obj:
+                    continue
+
+                index_columns = entry_obj.get("indexes", [])
+                if not isinstance(index_columns, list) or not index_columns:
+                    continue
+
+                columns_meta: dict[str, Any] = {}
+                for col_name in index_columns:
+                    if col_name in objects:
+                        columns_meta[col_name] = objects[col_name]
+
+                rows = obj_data.get("rows", [])
+                if not isinstance(rows, list):
+                    continue
+
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    instance_str = self._build_instance_str_from_row(
+                        row, index_columns, columns_meta
+                    )
+                    if instance_str:
+                        instance_oids.add(f"{table_oid}.{instance_str}")
+
+        return instance_oids, saw_table
+
+    def _build_instance_str_from_row(
+        self,
+        row: dict[str, Any],
+        index_columns: list[str],
+        columns_meta: dict[str, Any],
+    ) -> str:
+        """Build a dotted instance string from a schema table row."""
+        parts: list[str] = []
+        for col_name in index_columns:
+            raw_val = row.get(col_name)
+            col_type = str(columns_meta.get(col_name, {}).get("type", "")).lower()
+            if col_type == "ipaddress":
+                if isinstance(raw_val, (list, tuple)):
+                    parts.extend(str(v) for v in raw_val)
+                else:
+                    raw_str = str(raw_val) if raw_val is not None else ""
+                    if raw_str:
+                        parts.extend(p for p in raw_str.split(".") if p)
+                    else:
+                        parts.append("")
+            else:
+                parts.append(str(raw_val) if raw_val is not None else "")
+        return ".".join(p for p in parts if p != "")
+
+    def _instance_defined_in_schema(self, table_oid: str, index_values: dict[str, Any]) -> bool:
+        """Return True if a table instance exists in schema rows."""
+        if not self.mib_jsons:
+            return False
+
+        for schema in self.mib_jsons.values():
+            objects = schema.get("objects", schema) if isinstance(schema, dict) else {}
+            if not isinstance(objects, dict):
+                continue
+
+            for obj_data in objects.values():
+                if not isinstance(obj_data, dict):
+                    continue
+                if obj_data.get("type") != "MibTable":
+                    continue
+
+                table_oid_list = obj_data.get("oid", [])
+                if not isinstance(table_oid_list, list) or not table_oid_list:
+                    continue
+                if ".".join(str(x) for x in table_oid_list) != table_oid:
+                    continue
+
+                entry_oid_list = list(table_oid_list) + [1]
+                entry_obj = None
+                for other_data in objects.values():
+                    if not isinstance(other_data, dict):
+                        continue
+                    if other_data.get("type") == "MibTableRow" and other_data.get("oid") == entry_oid_list:
+                        entry_obj = other_data
+                        break
+
+                if not entry_obj:
+                    return False
+
+                index_columns = entry_obj.get("indexes", [])
+                if not isinstance(index_columns, list) or not index_columns:
+                    return False
+
+                rows = obj_data.get("rows", [])
+                if not isinstance(rows, list):
+                    return False
+
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    matches = True
+                    for col_name in index_columns:
+                        row_val = row.get(col_name)
+                        row_val_str = self._format_index_value(row_val)
+                        idx_val_str = self._format_index_value(index_values.get(col_name))
+                        if row_val_str != idx_val_str:
+                            matches = False
+                            break
+                    if matches:
+                        return True
+
+        return False
+
+    def _format_index_value(self, value: Any) -> str:
+        """Normalize index values to a dotted string for comparison."""
+        if isinstance(value, (list, tuple)):
+            return ".".join(str(v) for v in value)
+        if value is None:
+            return ""
+        return str(value)
 
     def _migrate_legacy_state_files(self) -> None:
         """Migrate legacy overrides.json and table_instances.json to unified format."""
@@ -794,8 +987,7 @@ class SNMPAgent:
             self.table_instances[table_oid] = {}
         
         self.table_instances[table_oid][index_str] = {
-            "column_values": column_values,
-            "created_at": time.time()
+            "column_values": column_values
         }
         
         # Remove from deleted list if it was previously deleted
@@ -831,11 +1023,16 @@ class SNMPAgent:
             if not self.table_instances[table_oid]:
                 del self.table_instances[table_oid]
         
-        # Always track deletion (works for static schema instances too)
-        if instance_oid not in self.deleted_instances:
-            self.deleted_instances.append(instance_oid)
-            self._save_mib_state()
-            self.logger.info(f"Deleted table instance: {instance_oid}")
+        # Track deletion only when the instance exists in schema rows
+        if self._instance_defined_in_schema(table_oid, index_values):
+            if instance_oid not in self.deleted_instances:
+                self.deleted_instances.append(instance_oid)
+                self._save_mib_state()
+                self.logger.info(f"Deleted table instance: {instance_oid}")
+        else:
+            self.logger.info(
+                f"Skipping deleted_instances for {instance_oid} (not in schema rows)"
+            )
         
         return True
 
