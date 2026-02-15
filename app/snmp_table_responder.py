@@ -112,10 +112,15 @@ class SNMPTableResponder:
         for mib_name, mib_json in self.behavior_jsons.items():
             for obj_name, obj_data in mib_json.items():
                 if isinstance(obj_data, dict) and obj_data.get("type") == "MibTable":
-                    # Get the entry (row) definition
-                    entry_name = obj_name + "Entry"
-                    if entry_name in mib_json:
-                        entry_data = mib_json[entry_name]
+                    # Find the entry (row) definition by OID structure
+                    entry_data = None
+                    expected_entry_oid = list(obj_data["oid"]) + [1]
+                    for other_name, other_data in mib_json.items():
+                        if isinstance(other_data, dict) and other_data.get("type") == "MibTableRow":
+                            if list(other_data.get("oid", [])) == expected_entry_oid:
+                                entry_data = other_data
+                                break
+                    if entry_data:
                         if entry_data.get("type") == "MibTableRow":
                             # Get all rows in the table
                             rows = obj_data.get("initial", {})
@@ -152,12 +157,18 @@ class SNMPTableResponder:
         # We need to find which column and row this refers to
 
         mib_json = self.behavior_jsons[mib_name]
-        entry_name = table_name + "Entry"
-
-        if entry_name not in mib_json:
+        
+        # Find entry by OID structure
+        entry_data = None
+        expected_entry_oid = list(table_data["oid"]) + [1]
+        for other_name, other_data in mib_json.items():
+            if isinstance(other_data, dict) and other_data.get("type") == "MibTableRow":
+                if list(other_data.get("oid", [])) == expected_entry_oid:
+                    entry_data = other_data
+                    break
+        
+        if not entry_data:
             return None
-
-        entry_data = mib_json[entry_name]
         columns = entry_data.get("columns", {})
 
         # Find the column by OID

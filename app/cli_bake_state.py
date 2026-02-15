@@ -5,7 +5,7 @@ CLI tool to bake current MIB state into agent-model schema files.
 This tool:
 1. Backs up existing agent-model directory to agent-model-backups/{timestamp}/
 2. Reads current state from data/mib_state.json
-3. Merges state values into schema files as initial_value
+3. Merges state values into schema files as initial values
 4. Updates schema files in-place
 """
 
@@ -13,9 +13,10 @@ import argparse
 import json
 import shutil
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
 def backup_schemas(schema_dir: Path, backup_base: Path) -> Path:
@@ -33,19 +34,20 @@ def backup_schemas(schema_dir: Path, backup_base: Path) -> Path:
     return backup_dir
 
 
-def load_mib_state(state_file: Path) -> Dict[str, Any]:
+def load_mib_state(state_file: Path) -> dict[str, Any]:
     """Load current MIB state from mib_state.json."""
     if not state_file.exists():
         print(f"Warning: State file {state_file} does not exist")
         return {"scalars": {}, "tables": {}, "deleted_instances": []}
     
     with open(state_file, "r", encoding="utf-8") as f:
-        return json.load(f)
+        state: dict[str, Any] = json.load(f)
+        return state
 
 
-def bake_state_into_schemas(schema_dir: Path, state: Dict[str, Any]) -> int:
+def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
     """
-    Bake state values into schema files as initial_value.
+    Bake state values into schema files as initial values.
     
     Returns the number of values baked.
     """
@@ -60,26 +62,113 @@ def bake_state_into_schemas(schema_dir: Path, state: Dict[str, Any]) -> int:
                 schema = json.load(f)
             
             modified = False
-            objects = schema.get("objects", {})
+            
+            # Handle both old flat structure and new {"objects": ..., "traps": ...} structure
+            if "objects" in schema:
+                objects = schema["objects"]
+            else:
+                objects = schema
             
             # Bake scalar values
             for oid, value in scalars.items():
-                if oid in objects:
-                    objects[oid]["initial"] = value
-                    modified = True
-                    baked_count += 1
-                    print(f"  Baked scalar {oid} = {value}")
+                # Find object by OID string
+                for obj_name, obj_data in objects.items():
+                    if isinstance(obj_data, dict) and "oid" in obj_data:
+                        obj_oid_str = ".".join(str(x) for x in obj_data["oid"])
+                        if obj_oid_str == oid or oid.endswith(f".{obj_oid_str}.0"):
+                            # Strip instance suffix (.0) if present
+                            if oid.endswith(".0"):
+                                obj_oid_base = oid[:-2]
+                            else:
+                                obj_oid_base = oid
+                            
+                            if obj_oid_str == obj_oid_base:
+                                obj_data["initial"] = value
+                                modified = True
+                                baked_count += 1
+                                print(f"  Baked scalar {obj_name} ({oid}) = {value}")
             
             # Bake table instances
-            for table_oid, table_data in tables.items():
-                if table_oid in objects:
-                    # Store table rows in the schema
-                    # Merge instances from state into rows
-                    objects[table_oid]["rows"] = table_data.get("instances", [])
-                    modified = True
-                    row_count = len(objects[table_oid]["rows"])
-                    baked_count += row_count
-                    print(f"  Baked {row_count} row(s) for table {table_oid}")
+            # table_instances format: {table_oid: {instance_str: {column_values: {...}, created_at: ...}}}
+            for table_oid, instances_dict in tables.items():
+                if not isinstance(instances_dict, dict):
+                    continue
+                # Find the table object and entry by OID
+                for obj_name, obj_data in objects.items():
+                    if isinstance(obj_data, dict) and obj_data.get("type") == "MibTable":
+                        obj_oid_str = ".".join(str(x) for x in obj_data["oid"])
+                        if obj_oid_str == table_oid:
+                            # Find the entry object by OID structure (table_oid + [1])
+                            entry_obj = {}
+                            expected_entry_oid = list(obj_data["oid"]) + [1]
+                            for other_name, other_data in objects.items():
+                                if isinstance(other_data, dict) and other_data.get("type") == "MibTableRow":
+                                    if list(other_data.get("oid", [])) == expected_entry_oid:
+                                        entry_obj = other_data
+                                        break
+                            index_columns = entry_obj.get("indexes", [])
+                            
+                            # Build columns metadata for type info (needed for IpAddress parsing)
+                            columns_meta: dict[str, Any] = {}
+                            for col_name in index_columns:
+                                if col_name in objects:
+                                    columns_meta[col_name] = objects[col_name]
+                            
+                            # Convert instance dict to list of row dicts
+                            rows: list[dict[str, Any]] = []
+                            for instance_str, instance_data in instances_dict.items():
+                                # Reconstruct index values from instance_str and index_columns metadata
+                                row: dict[str, Any] = {}
+                                
+                                # Parse instance_str to extract index values
+                                parts = instance_str.split(".")
+                                pos = 0
+                                for col_name in index_columns:
+                                    col_meta = columns_meta.get(col_name, {})
+                                    col_type = col_meta.get("type", "")
+                                    
+                                    if col_type == "IpAddress":
+                                        # IpAddress uses 4 octets
+                                        if pos + 4 <= len(parts):
+                                            row[col_name] = ".".join(parts[pos:pos + 4])
+                                            pos += 4
+                                        else:
+                                            # Fallback: use remaining parts
+                                            row[col_name] = ".".join(parts[pos:])
+                                            pos = len(parts)
+                                    else:
+                                        # Single value
+                                        if pos < len(parts):
+                                            # Try to convert to int if it looks like a number
+                                            try:
+                                                row[col_name] = int(parts[pos])
+                                            except (ValueError, IndexError):
+                                                row[col_name] = parts[pos] if pos < len(parts) else ""
+                                            pos += 1
+                                
+                                # Add column values
+                                if isinstance(instance_data, dict):
+                                    if "column_values" in instance_data:
+                                        row.update(instance_data["column_values"])
+                                    elif "index_values" in instance_data:
+                                        # Legacy format with explicit index_values
+                                        row.update(instance_data["index_values"])
+                                        if "column_values" in instance_data:
+                                            row.update(instance_data["column_values"])
+                                else:
+                                    # Old format: instance_data is the row dict directly
+                                    if isinstance(instance_data, dict):
+                                        row.update(instance_data)
+                                
+                                if row:
+                                    rows.append(row)
+                            
+                            if rows:
+                                obj_data["rows"] = rows
+                                modified = True
+                                baked_count += len(rows)
+                                print(f"  Baked {len(rows)} row(s) for table {obj_name} ({table_oid})")
+                            break
             
             # Write back if modified
             if modified:
@@ -89,6 +178,7 @@ def bake_state_into_schemas(schema_dir: Path, state: Dict[str, Any]) -> int:
         
         except Exception as e:
             print(f"Error processing {schema_file}: {e}", file=sys.stderr)
+            traceback.print_exc()
     
     return baked_count
 
@@ -131,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     
     # Backup existing schemas
     if not args.no_backup:
-        backup_dir = backup_schemas(schema_dir, backup_base)
+        _backup_dir = backup_schemas(schema_dir, backup_base)
     else:
         print("Skipping backup (--no-backup specified)")
     

@@ -14,7 +14,7 @@ from pysnmp.hlapi.v3arch.asyncio import (
 from pysnmp.smi.rfc1902 import ObjectType, ObjectIdentity
 
 
-async def test_get_sysdescr():
+async def test_get_sysdescr() -> bool:
     """Test SNMP GET for sysDescr.0"""
     
     host = "127.0.0.1"
@@ -40,7 +40,7 @@ async def test_get_sysdescr():
             print(f"❌ Error: {errorIndication}")
             return False
         elif errorStatus:
-            print(f"❌ SNMP Error: {errorStatus.prettyPrint()} at {errorIndex}")
+            print(f"❌ SNMP Error: {errorStatus} at index {errorIndex}")
             return False
         else:
             print("✅ Success!")

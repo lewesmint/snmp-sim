@@ -51,7 +51,7 @@ class SNMPAgent:
         self._shutdown_requested = False
         # Overrides: dotted OID -> JSON-serializable value
         self.overrides: dict[str, object] = {}
-        # Table instances: table_oid -> {index_str -> {index_values, column_values}}
+        # Table instances: table_oid -> {index_str -> {column_values, created_at}}
         self.table_instances: dict[str, dict[str, Any]] = {}
         # Deleted instances: list of instance OIDs marked for deletion
         self.deleted_instances: list[str] = []
@@ -794,7 +794,6 @@ class SNMPAgent:
             self.table_instances[table_oid] = {}
         
         self.table_instances[table_oid][index_str] = {
-            "index_values": index_values,
             "column_values": column_values,
             "created_at": time.time()
         }

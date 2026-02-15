@@ -65,6 +65,7 @@ class SNMPControllerGUI:
         self.oids_data: Dict[str, Tuple[int, ...]] = {}  # Store OIDs for rebuilding (name -> OID tuple)
         self.oid_values: Dict[str, str] = {}  # oid_str -> value
         self.oid_metadata: Dict[str, Dict[str, Any]] = {}  # oid_str -> metadata
+        self.table_instances_data: Dict[str, Dict[str, Any]] = {}  # Pre-loaded table instances data
         self.oid_to_item: Dict[str, str] = {}  # oid_str -> tree item id
         # Executor for background value fetching
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
@@ -99,7 +100,7 @@ class SNMPControllerGUI:
 
         # Top pane: Main tabview for tabs
         top_frame = ctk.CTkFrame(self.main_paned)
-        self.main_paned.add(top_frame, minsize=300)
+        self.main_paned.add(top_frame, minsize=300, stretch="always")
 
         self.tabview = ctk.CTkTabview(top_frame)
         self.tabview.pack(fill="both", expand=True)
@@ -117,7 +118,7 @@ class SNMPControllerGUI:
 
         # Bottom pane: Log window
         log_frame = ctk.CTkFrame(self.main_paned)
-        self.main_paned.add(log_frame, minsize=60)
+        self.main_paned.add(log_frame, minsize=60, stretch="never")
 
         log_label = ctk.CTkLabel(log_frame, text="Log Output:", anchor="w")
         log_label.pack(fill="x", padx=5, pady=(5, 0))
@@ -132,7 +133,7 @@ class SNMPControllerGUI:
 
         # Create text widget with reduced height and vertical scrollbar only
         # Use wrap="word" so text wraps to fit window width
-        self.log_text = tk.Text(log_text_frame, height=3, font=("Courier", 12), bg="#2b2b2b", fg="#ffffff",
+        self.log_text = tk.Text(log_text_frame, height=3, font=("Courier", 14), bg="#2b2b2b", fg="#ffffff",
                                yscrollcommand=log_scrollbar_y.set, wrap="word")
         self.log_text.pack(side="left", fill="both", expand=True)
         self.log_text.configure(state="disabled")
@@ -261,12 +262,15 @@ class SNMPControllerGUI:
 
         # Configure columns with borders for better separation
         self.oid_tree.column("#0", width=250, minwidth=150, stretch=False)
-        self.oid_tree.column("oid", width=200, minwidth=150, stretch=True, anchor="w")
+        self.oid_tree.column("oid", width=200, minwidth=150, stretch=False, anchor="w")
         self.oid_tree.column("instance", width=160, minwidth=120, stretch=False, anchor="center")
-        self.oid_tree.column("value", width=200, minwidth=100, stretch=True, anchor="w")
+        self.oid_tree.column("value", width=200, minwidth=100, stretch=False, anchor="w")
         self.oid_tree.column("type", width=120, minwidth=80, stretch=False, anchor="w")
         self.oid_tree.column("access", width=100, minwidth=80, stretch=False, anchor="center")
         self.oid_tree.column("mib", width=120, minwidth=80, stretch=False, anchor="w")
+
+        # Track manual column resizes to avoid auto-expanding the tree column
+        self._oid_tree_user_resized = False
 
         # Configure tags for alternating row colors and column borders
         self.oid_tree.tag_configure("oddrow", background=alt_bg)
@@ -288,6 +292,8 @@ class SNMPControllerGUI:
         self.oid_tree.bind("<<TreeviewOpen>>", self._on_node_open)
         # Bind double-click for editing values
         self.oid_tree.bind("<Double-1>", self._on_double_click)
+        # Detect manual column resizing
+        self.oid_tree.bind("<ButtonRelease-1>", self._on_oid_tree_resize)
         # Bind selection change
         self._create_icon_images()
         self.oid_tree.bind("<<TreeviewSelect>>", self._on_tree_select)
@@ -365,6 +371,10 @@ class SNMPControllerGUI:
         self.table_tree.bind("<<TreeviewSelect>>", self._on_table_row_select)
         # Bind double-click for cell editing
         self.table_tree.bind("<Double-1>", self._on_table_double_click)
+        # Bind single click to save edit if clicking away from edit area
+        self.table_tree.bind("<Button-1>", self._on_table_click)
+        # Bind scroll and column resize to hide edit overlay
+        self.table_tree.bind("<Configure>", self._on_table_configure)
 
         # Scrollbars
         v_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.table_tree.yview)
@@ -379,13 +389,24 @@ class SNMPControllerGUI:
         # Edit overlay for in-place cell editing - using tk.Frame for proper overlay
         # Create as child of root so place() uses absolute coordinates
         self.edit_overlay_frame = tk.Frame(self.root, bg="white", relief="solid", borderwidth=1)
-        self.edit_overlay_entry = tk.Entry(self.edit_overlay_frame, font=("Courier", 12), width=40)
-        self.edit_overlay_entry.pack(padx=2, pady=2, fill="both", expand=True)
+        # Font size is tree_font_size - 1
+        # Use ttk.Combobox which can act as entry or dropdown
+        self.edit_overlay_combo = ttk.Combobox(self.edit_overlay_frame, font=("Helvetica", max(8, self.tree_font_size - 1)), width=40)
+        self.edit_overlay_combo.pack(padx=2, pady=2, fill="both", expand=True)
         
         # Store editing state
         self.editing_item: str | None = None
         self.editing_column: str | None = None
         self.editing_oid: str | None = None
+        self._saving_cell: bool = False  # Flag to prevent re-entrant saves
+        self._combo_just_selected: bool = False  # Flag to prevent double-save from FocusOut
+        
+        # Store current table context for cell editing
+        self._current_table_columns: list[tuple[str, str, int]] = []  # (name, col_oid, col_num)
+        self._current_index_columns: list[str] = []
+        self._current_columns_meta: dict[str, Any] = {}
+        self._current_table_item: str | None = None
+        self._current_table_oid: str | None = None
 
         # Message label for when no table is selected
         self.table_message_label = ctk.CTkLabel(table_frame, text="Select a table in the OID tree to view its data", font=("", 12))
@@ -1785,6 +1806,18 @@ class SNMPControllerGUI:
                     display_val = ""
                 else:
                     display_val = val
+                    # Add enum name if available
+                    metadata = self.oid_metadata.get(oid_str, {})
+                    enums = metadata.get("enums")
+                    if enums and val and val not in ("N/A", "unset", ""):
+                        try:
+                            int_value = int(val)
+                            for enum_name, enum_value in enums.items():
+                                if enum_value == int_value:
+                                    display_val = f"{val} ({enum_name})"
+                                    break
+                        except (ValueError, TypeError):
+                            pass
 
                 img = None
                 if getattr(self, 'oid_icon_images', None):
@@ -1812,8 +1845,15 @@ class SNMPControllerGUI:
                                                values=(oid_str, "", "", type_val, access_val, mib_val),
                                                tags=(row_tag, 'table'))
                     self.oid_to_item[oid_str] = node
-                    # Insert placeholder to make it expandable
-                    self.oid_tree.insert(node, "end", text="Loading...", values=("", "", "", "", "", ""), tags=('placeholder',))
+                    # Populate table instances immediately if we have the data
+                    if hasattr(self, 'table_instances_data') and oid_str in self.table_instances_data:
+                        self._log(f"Pre-populating table {oid_str} from table_instances_data", "DEBUG")
+                        self._populate_table_instances_immediate(node, oid_str)
+                    else:
+                        if hasattr(self, 'table_instances_data'):
+                            self._log(f"Table {oid_str} NOT in table_instances_data (have {len(self.table_instances_data)} tables)", "DEBUG")
+                        else:
+                            self._log(f"table_instances_data not loaded yet for table {oid_str}", "DEBUG")
                 else:
                     icon_key = "folder"
                     display_text = stored_name if stored_name else str(key)
@@ -1847,9 +1887,19 @@ class SNMPControllerGUI:
         # Schedule background fetch for this node's children
         self.executor.submit(self._fetch_values_for_node, item)
 
-        if 'table' in self.oid_tree.item(item, 'tags'):
+        # Check if this is a table that needs instance discovery/refresh
+        tags = self.oid_tree.item(item, 'tags')
+        if 'table' in tags:
+            # This is a table node - always refresh to show latest instances
             oid_str = self.oid_tree.set(item, "oid")
-            self.executor.submit(self._discover_table_instances, item, oid_str)
+            if oid_str:
+                children = self.oid_tree.get_children(item)
+                if not children:
+                    self._log(f"Table {oid_str} has no children, discovering instances...", "DEBUG")
+                else:
+                    self._log(f"Table {oid_str} has {len(children)} children, refreshing to show latest...", "INFO")
+                # Always refresh table instances when expanding to show latest data
+                self.executor.submit(self._discover_table_instances, item, oid_str)
 
     def _on_double_click(self, event: Any) -> None:
         """Handler called when a tree item is double-clicked; allows editing values for writable items."""
@@ -1864,8 +1914,11 @@ class SNMPControllerGUI:
         # Check if this is a leaf node (no children)
         children = self.oid_tree.get_children(item)
         if children:
-            # This is a container node (folder/table), don't allow editing
-            messagebox.showinfo("Cannot Edit", "Only leaf nodes can be edited. Container nodes cannot be edited directly.")
+            # This is a container node (folder/table/entry), toggle expand/collapse
+            if self.oid_tree.item(item, "open"):
+                self.oid_tree.item(item, open=False)
+            else:
+                self.oid_tree.item(item, open=True)
             return
 
         # Get the OID and instance
@@ -1969,7 +2022,6 @@ class SNMPControllerGUI:
         oid_str = self.oid_tree.set(item, "oid")
         instance_str = self.oid_tree.set(item, "instance")
         type_str = self.oid_tree.set(item, "type")
-        tags = self.oid_tree.item(item, "tags")
 
         if not oid_str:
             self._set_selected_info_text("")
@@ -1979,10 +2031,8 @@ class SNMPControllerGUI:
         if instance_str:
             full_oid = f"{oid_str}.{instance_str}"
 
-        if "table-index" in tags:
-            value_str = "N/A"
-        else:
-            value_str = self.oid_tree.set(item, "value")
+        # For index columns, the value is already extracted and stored in the tree
+        value_str = self.oid_tree.set(item, "value")
         if not value_str:
             try:
                 resp = requests.get(
@@ -2003,6 +2053,10 @@ class SNMPControllerGUI:
     def _ensure_oid_name_width(self, item: str) -> None:
         """Ensure the name column is wide enough to display the selected item's text."""
         try:
+            # Only skip auto-expand if user manually resized
+            if getattr(self, "_oid_tree_user_resized", False):
+                print("[DEBUG] User manually resized, skipping auto-expansion")
+                return
             text = self.oid_tree.item(item, "text") or ""
             if not text:
                 print(f"[DEBUG] No text for item {item}, skipping expansion")
@@ -2049,6 +2103,15 @@ class SNMPControllerGUI:
             import traceback
             traceback.print_exc()
 
+    def _on_oid_tree_resize(self, event: tk.Event[tk.Widget]) -> None:
+        """Track manual column resizing to avoid auto-expanding the tree column."""
+        try:
+            region = self.oid_tree.identify_region(event.x, event.y)
+            if region == "separator":
+                self._oid_tree_user_resized = True
+        except Exception:
+            return
+
     def _adjust_tree_font_size(self, delta: int) -> None:
         """Increase or decrease the tree font size and row height."""
         try:
@@ -2059,17 +2122,37 @@ class SNMPControllerGUI:
             style = ttk.Style()
             style.configure("Treeview", font=('Helvetica', size), rowheight=self.tree_row_height)
             style.configure("Treeview.Heading", font=('Helvetica', size + 1, 'bold'))
+            # Update edit overlay font as well
+            self.edit_overlay_combo.configure(font=("Helvetica", max(8, size - 1)))
             self._ensure_oid_name_width(self.oid_tree.focus())
         except Exception:
             pass
 
     def _format_selected_info(self, full_oid: str, type_str: str, value_str: str) -> str:
-        """Format selected item display to match snmpget-like output."""
+        """Format selected item display to match snmpget-like output with enum names."""
         if not full_oid.startswith("."):
             full_oid = "." + full_oid
+        
+        # Try to get enum name if this is an enum type
+        enum_display = ""
+        base_oid = full_oid.split(".0")[0] if full_oid.endswith(".0") else full_oid.rsplit(".", 1)[0]
+        metadata = self.oid_metadata.get(base_oid, {})
+        enums = metadata.get("enums")
+        
+        if enums and value_str and value_str not in ("N/A", "unset"):
+            try:
+                int_value = int(value_str)
+                # Find enum name for this value
+                for enum_name, enum_value in enums.items():
+                    if enum_value == int_value:
+                        enum_display = f" ({enum_name})"
+                        break
+            except (ValueError, TypeError):
+                pass
+        
         if type_str:
-            return f"{full_oid} = {type_str}: {value_str}"
-        return f"{full_oid} = {value_str}"
+            return f"{full_oid} = {type_str}: {value_str}{enum_display}"
+        return f"{full_oid} = {value_str}{enum_display}"
 
     def _extract_index_values(
         self,
@@ -2198,109 +2281,394 @@ class SNMPControllerGUI:
         self.edit_overlay_frame.place(x=overlay_x, y=overlay_y, width=cell_width, height=cell_height)
         self.edit_overlay_frame.lift()  # Bring to front
         
-        # Clear and populate the entry field
-        self.edit_overlay_entry.delete(0, "end")
-        self.edit_overlay_entry.insert(0, current_value)
-        self.edit_overlay_entry.focus()
-        self.edit_overlay_entry.selection_range(0, "end")
+        # Check if this column has enum metadata
+        enum_values: list[str] = []
+        if hasattr(self, '_current_table_columns'):
+            col_num = int(column[1:]) - 1  # Convert #1, #2, etc to 0-indexed
+            # Adjust for "index" display column - column #1 is "index", #2 is columns[0], etc.
+            data_col_index = col_num - 1
+            columns = self._current_table_columns
+            if 0 <= data_col_index < len(columns):
+                col_name, col_oid, _ = columns[data_col_index]
+                metadata = self.oid_metadata.get(col_oid, {})
+                enums = metadata.get("enums", {})
+                if enums:
+                    # Build list of "value (name)" strings, sorted by value
+                    enum_values = [f"{val} ({name})" for name, val in sorted(enums.items(), key=lambda x: x[1])]
         
+        # Configure combobox for enum or text entry
+        if enum_values:
+            self.edit_overlay_combo.config(values=enum_values, state="readonly")
+            # Find and select the matching value
+            for enum_val in enum_values:
+                if enum_val.startswith(current_value.split()[0]):  # Match the integer part
+                    self.edit_overlay_combo.set(enum_val)
+                    break
+        else:
+            self.edit_overlay_combo.config(values=[], state="normal")
+            self.edit_overlay_combo.delete(0, "end")
+            self.edit_overlay_combo.insert(0, current_value)
+        
+        self.edit_overlay_combo.focus()
+        if not enum_values:  # Only select text for non-enum fields
+            self.edit_overlay_combo.selection_range(0, "end")
+
+        # Unbind all previous events first to avoid duplicate handlers
+        self.edit_overlay_combo.unbind("<Return>")
+        self.edit_overlay_combo.unbind("<Escape>")
+        self.edit_overlay_combo.unbind("<<ComboboxSelected>>")
+        self.edit_overlay_combo.unbind("<FocusOut>")
+
         # Bind keys for save/cancel
-        self.edit_overlay_entry.bind("<Return>", lambda e: self._save_cell_edit())
-        self.edit_overlay_entry.bind("<Escape>", lambda e: self._hide_edit_overlay())
-        self.edit_overlay_entry.bind("<FocusOut>", lambda e: self._hide_edit_overlay())
+        self.edit_overlay_combo.bind("<Return>", lambda e: self._save_cell_edit())
+        self.edit_overlay_combo.bind("<Escape>", lambda e: self._hide_edit_overlay())
+        # For readonly combobox (enums), save on selection
+        if enum_values:
+            self.edit_overlay_combo.bind("<<ComboboxSelected>>", lambda e: self._on_combo_selected())
+        # Save on focus out (clicking away)
+        self.edit_overlay_combo.bind("<FocusOut>", lambda e: self._on_edit_focus_out())
+    
+    def _on_table_click(self, event: Any) -> None:
+        """Handle click on table - save edit if clicking outside edit area."""
+        if not self.editing_item:
+            return
+        # Check if click is outside the edit overlay
+        try:
+            widget = event.widget.winfo_containing(event.x_root, event.y_root)
+            # If click is not in the edit combo, save the edit
+            if widget != self.edit_overlay_combo:
+                self._save_cell_edit()
+        except Exception:
+            pass
+    
+    def _on_table_configure(self, event: Any) -> None:
+        """Handle table configuration changes (resize, scroll) - hide edit overlay."""
+        if self.editing_item:
+            self._save_cell_edit()
+    
+    def _on_combo_selected(self) -> None:
+        """Handle combobox selection - save immediately.
+
+        CRITICAL INSIGHT from testing: On macOS, FocusOut fires BEFORE ComboboxSelected!
+        By the time we get here, the dropdown grab is already released.
+        We can save immediately without any lockup.
+        """
+        if not self.editing_item:
+            return
+
+        self._log("DEBUG: Combo selected - saving immediately", "DEBUG")
+        # Save immediately - the grab is already released by this point
+        self._save_cell_edit()
+
+    def _on_edit_focus_out(self) -> None:
+        """Handle focus leaving edit entry.
+
+        On macOS, this fires BEFORE ComboboxSelected, so we don't save here.
+        For text entry fields (non-combo), we still need to save on FocusOut.
+        """
+        self._log("DEBUG: Edit focus out event (happens before ComboboxSelected on macOS)", "DEBUG")
+
+        # Only save if this is NOT a combobox selection
+        # (For text entry fields, we still need FocusOut to trigger save)
+        if self.editing_item and not hasattr(self, '_combo_just_selected'):
+            self._log("DEBUG: FocusOut triggering save for text entry", "DEBUG")
+            self.root.after(50, self._save_cell_edit)
     
     def _hide_edit_overlay(self) -> None:
         """Hide the edit overlay and cancel editing."""
+        self._log("DEBUG: _hide_edit_overlay called", "DEBUG")
+        
+        # DO NOT unbind events - this causes deadlock when called from event handlers
+        # The handlers check editing_item to know if they should do anything
+        
+        # Hide the overlay
         self.edit_overlay_frame.place_forget()
+        self._log("DEBUG: Overlay frame hidden", "DEBUG")
+        
+        # Clear editing state - this disables all event handlers
         self.editing_item = None
         self.editing_column = None
         self.editing_oid = None
-        # Unbind the keys
-        self.edit_overlay_entry.unbind("<Return>")
-        self.edit_overlay_entry.unbind("<Escape>")
-        self.edit_overlay_entry.unbind("<FocusOut>")
+        self._log("DEBUG: Editing state cleared", "DEBUG")
+        
+        # DO NOT try to set focus - let tkinter handle focus naturally
+        # Forcing focus changes during dropdown closure causes focus deadlock
+        
+        self._log("DEBUG: _hide_edit_overlay complete", "DEBUG")
+    
     
     def _save_cell_edit(self) -> None:
         """Save the edited cell value."""
-        if not self.editing_item or not self.editing_column:
-            self._hide_edit_overlay()
+        # Guard against multiple calls and re-entry
+        if not self.editing_item or not self.editing_column or self._saving_cell:
+            self._log("DEBUG: _save_cell_edit blocked - already saving or no edit active", "DEBUG")
             return
         
-        new_value = self.edit_overlay_entry.get()
+        # Set flag to prevent re-entry
+        self._saving_cell = True
+        self._log("DEBUG: _save_cell_edit STARTED", "DEBUG")
         
-        # Get the item's values to construct the OID
-        item_values = self.table_tree.item(self.editing_item, "values")
-        col_num = int(self.editing_column[1:]) - 1  # Convert #1, #2, etc to 0, 1, etc
-        
-        # Try to get table info and construct OID
-        # We need to find the column name and table OID from context
         try:
+            # Store editing context
+            editing_item = self.editing_item
+            editing_column = self.editing_column
+            
+            new_value = self.edit_overlay_combo.get()
+            self._log(f"DEBUG: Got value from combo: {new_value}", "DEBUG")
+            
+            # Parse enum format "value (name)" to extract just the integer value
+            if ' (' in new_value and new_value.endswith(')'):
+                # Extract the value part before the opening parenthesis
+                new_value = new_value.split(' (')[0]
+                self._log(f"DEBUG: Parsed enum value: {new_value}", "DEBUG")
+            
+            # Get the item's values to construct the OID
+            item_values = self.table_tree.item(editing_item, "values")
+            col_num = int(editing_column[1:]) - 1  # Convert #1, #2, etc to 0, 1, etc
+            
+            self._log(f"DEBUG: Saving cell edit - col_num={col_num}, new_value={new_value}", "DEBUG")
+            
+            # Try to get table info and construct OID
+            # We need to find the column name and table OID from context
             # Get the current table being shown
             if not hasattr(self, '_current_table_columns'):
-                self._hide_edit_overlay()
+                self._log("ERROR: _current_table_columns not found", "ERROR")
                 return
             
             columns = self._current_table_columns  # (name, col_oid, col_num)
-            if col_num - 1 < 0 or col_num - 1 >= len(columns):
-                self._hide_edit_overlay()
-                return
+            # col_num is the treeview column number (0=index, 1=first data col, etc)
+            # We need to map this to the columns array (0-indexed)
+            data_col_index = col_num - 1  # Subtract 1 because col 0 is the index display
             
-            col_name, col_oid, _ = columns[col_num - 1]
+            if data_col_index < 0 or data_col_index >= len(columns):
+                self._log(f"ERROR: data_col_index {data_col_index} out of bounds (columns len={len(columns)})", "ERROR")
+                messagebox.showerror("Error", "Column index out of bounds")
+                return  # This will trigger finally to clean up
+            
+            col_name, col_oid, _ = columns[data_col_index]
             instance_index = item_values[0]  # First value is the instance index
 
             index_columns = getattr(self, "_current_index_columns", [])
             columns_meta = getattr(self, "_current_columns_meta", {})
+            table_oid = getattr(self, "_current_table_oid", None)
+            
+            # Prepare column_values dict for API calls
+            column_values: Dict[str, str] = {}
+            
             if col_name in index_columns:
+                # For index column updates, we need to delete old instance and create new one
+                if not table_oid:
+                    messagebox.showerror("Error", "Table OID not available")
+                    return  # This will trigger finally to clean up
+                
+                # Build old index values from current instance
+                old_index_values: Dict[str, str] = self._extract_index_values(
+                    instance_index, index_columns, columns_meta
+                )
+                
+                # Build new index values with the updated value
                 updated_values = list(item_values)
                 updated_values[col_num] = new_value
-                index_values: Dict[str, str] = {}
+                new_index_values: Dict[str, str] = {}
                 for idx_name in index_columns:
                     try:
                         idx_pos = [c[0] for c in columns].index(idx_name)
-                        index_values[idx_name] = str(updated_values[1 + idx_pos])
+                        new_index_values[idx_name] = str(updated_values[1 + idx_pos])
                     except ValueError:
-                        index_values[idx_name] = ""
-                new_instance = self._build_instance_from_index_values(
-                    index_values,
-                    index_columns,
-                    columns_meta,
-                )
-                updated_values[0] = new_instance
-                self.table_tree.item(self.editing_item, values=updated_values)
-                self._log(f"Updated index {col_name} to: {new_value}")
+                        new_index_values[idx_name] = "unset"
+                
+                # Get all non-index column values
+                column_values = {}
+                for i, (c_name, _, _) in enumerate(columns):
+                    if c_name not in index_columns:
+                        val = str(updated_values[1 + i])
+                        # Strip enum format "value (name)" if present
+                        if ' (' in val and val.endswith(')'):
+                            val = val.split(' (')[0]
+                        column_values[c_name] = val
+                
+                try:
+                    # Delete old instance
+                    self._log("DEBUG: Calling DELETE /table-row for index update", "DEBUG")
+                    del_resp = requests.delete(
+                        f"{self.api_url}/table-row",
+                        json={
+                            "table_oid": table_oid,
+                            "index_values": old_index_values,
+                            "column_values": {}
+                        },
+                        timeout=5,
+                    )
+                    self._log(f"DEBUG: DELETE response: {del_resp.status_code}", "DEBUG")
+                    
+                    if del_resp.status_code != 200:
+                        messagebox.showerror("Error", f"Failed to delete old instance: {del_resp.text}")
+                        return
+
+                    # Immediately remove old instance from OID tree
+                    old_instance_str = ".".join(str(old_index_values[k]) for k in index_columns)
+                    if hasattr(self, "_current_table_item") and self._current_table_item:
+                        self._remove_instance_from_oid_tree(self._current_table_item, old_instance_str)
+
+                    # Create new instance with new index values
+                    self._log("DEBUG: Calling POST /table-row for index update", "DEBUG")
+                    create_resp = requests.post(
+                        f"{self.api_url}/table-row",
+                        json={
+                            "table_oid": table_oid,
+                            "index_values": new_index_values,
+                            "column_values": column_values
+                        },
+                        timeout=5,
+                    )
+
+                    if create_resp.status_code == 200:
+                        self._log(f"Updated index {col_name} from {old_index_values[col_name]} to {new_value}")
+                        # Refresh the entire table view
+                        if hasattr(self, "_current_table_item") and self._current_table_item:
+                            new_instance = ".".join(
+                                str(new_index_values.get(idx_name, "")) for idx_name in index_columns
+                            )
+                            self._populate_table_view(self._current_table_item, new_instance)
+                            # Immediately add new instance to OID tree (will handle sorting)
+                            self._add_instance_to_oid_tree(self._current_table_item, new_instance)
+                    else:
+                        messagebox.showerror("Error", f"Failed to create new instance: {create_resp.text}")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to update index: {e}")
+                    self._log(f"Error updating index: {e}", "ERROR")
             else:
-                full_oid = f"{col_oid}.{instance_index}"
-
-                # Update via API
-                resp = requests.post(
-                    f"{self.api_url}/value",
-                    json={"oid": full_oid, "value": new_value},
-                    timeout=5,
+                # For non-index column updates, use the table-row API
+                # which handles both creating and updating cell values
+                
+                # Extract current index values
+                index_values = self._extract_index_values(
+                    instance_index, index_columns, columns_meta
                 )
+                
+                # Build current column values from the row
+                column_values = {}
+                for i, (c_name, _, _) in enumerate(columns):
+                    if c_name not in index_columns:
+                        # Use the new value for the column being edited, current value for others
+                        if c_name == col_name:
+                            column_values[c_name] = new_value
+                        else:
+                            # Get current value from the table display
+                            col_index = i + 1  # +1 because column 0 is the index display
+                            if col_index < len(item_values):
+                                val = str(item_values[col_index])
+                                # Strip enum format "value (name)" if present
+                                if ' (' in val and val.endswith(')'):
+                                    val = val.split(' (')[0]
+                                column_values[c_name] = val
+                            else:
+                                column_values[c_name] = "unset"
+                
+                try:
+                    # Check if this instance exists in the OID tree before saving
+                    # If it doesn't exist, we're creating a new instance
+                    full_oid = f"{col_oid}.{instance_index}"
+                    is_new_instance = full_oid not in self.oid_values
 
-                if resp.status_code == 200:
-                    # Update the cell display
-                    updated_values = list(item_values)
-                    updated_values[col_num] = new_value
-                    self.table_tree.item(self.editing_item, values=updated_values)
-                    self._log(f"Updated {col_name} to: {new_value}")
-                else:
-                    messagebox.showerror("Error", f"Failed to update value: {resp.text}")
+                    # Use table-row endpoint to update (creates if doesn't exist)
+                    self._log(f"DEBUG: Calling POST /table-row for cell update (col={col_name}, val={new_value}, new_instance={is_new_instance})", "DEBUG")
+                    resp = requests.post(
+                        f"{self.api_url}/table-row",
+                        json={
+                            "table_oid": table_oid,
+                            "index_values": index_values,
+                            "column_values": column_values
+                        },
+                        timeout=5,
+                    )
+                    self._log(f"DEBUG: POST response: {resp.status_code}", "DEBUG")
+
+                    if resp.status_code == 200:
+                        self._log("DEBUG: Starting UI update for cell", "DEBUG")
+                        # Format value with enum name if applicable
+                        display_value = new_value
+                        col_metadata = self.oid_metadata.get(col_oid, {})
+                        enums = col_metadata.get("enums")
+                        if enums and new_value:
+                            try:
+                                int_value = int(new_value)
+                                for enum_name, enum_value in enums.items():
+                                    if enum_value == int_value:
+                                        display_value = f"{new_value} ({enum_name})"
+                                        break
+                            except (ValueError, TypeError):
+                                pass
+
+                        # Update the cell display
+                        updated_values = list(item_values)
+                        updated_values[col_num] = display_value
+                        self.table_tree.item(editing_item, values=updated_values)
+                        self._log("DEBUG: Cell display updated in treeview", "DEBUG")
+                        self._log(f"Updated {col_name} (OID {full_oid}) to: {new_value}")
+                        # Also update the oid_values cache
+                        self.oid_values[full_oid] = new_value
+                        self._log("DEBUG: Cache updated, cell save complete", "DEBUG")
+
+                        # Refresh the OID tree to show the updated value
+                        self._refresh_oid_tree_value(full_oid, display_value)
+
+                        # If this was a new instance, also refresh the entire table to show the new row
+                        if is_new_instance and hasattr(self, "_current_table_item") and self._current_table_item:
+                            self._log(f"DEBUG: New instance detected, refreshing OID tree table", "DEBUG")
+                            self._refresh_oid_tree_table(self._current_table_item)
+                    else:
+                        error_msg = f"Failed to update value: {resp.status_code} - {resp.text}"
+                        self._log(error_msg, "ERROR")
+                        messagebox.showerror("Error", error_msg)
+                except Exception as e:
+                    error_msg = f"Failed to update cell via table-row API: {e}"
+                    self._log(error_msg, "ERROR")
+                    messagebox.showerror("Error", error_msg)
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to save cell: {e}")
+            error_msg = f"Failed to save cell: {e}"
+            self._log(error_msg, "ERROR")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Error", error_msg)
         finally:
-            self._hide_edit_overlay()
+            # Clear the saving flag
+            self._log("DEBUG: Entering finally block - clearing flag", "DEBUG")
+            self._saving_cell = False
+            # Clear the combo selection flag
+            self._combo_just_selected = False
+            # CRITICAL for macOS: Use a time delay (not after_idle) to hide the overlay.
+            # On macOS, the dropdown maintains a modal grab that persists even after
+            # all events are processed. We need a real time delay (150ms) to ensure
+            # the grab is fully released before hiding the widget.
+            self.root.after(150, self._hide_edit_overlay)
+            self._log("DEBUG: finally block complete, hide deferred 150ms", "DEBUG")
 
     def _populate_table_view(self, table_item: str, selected_instance: str | None = None) -> None:
         """Populate the table view with data from the selected table."""
-        try:
-            oid_str = self.oid_tree.set(table_item, "oid")
-            if not oid_str:
-                self._log("No OID found for table item", "WARNING")
-                return
-        except Exception as e:
-            self._log(f"Error getting table OID: {e}", "ERROR")
+        oid_str = self.oid_tree.set(table_item, "oid")
+        if not oid_str:
+            self._log("No OID found for table item", "WARNING")
             return
+
+        preserved_yview = None
+        if self.table_tree.winfo_exists():
+            preserved_yview = self.table_tree.yview()
+        if selected_instance is None:
+            selected_rows = self.table_tree.selection()
+            if selected_rows:
+                selected_values = self.table_tree.item(selected_rows[0], "values")
+                if selected_values:
+                    selected_instance = str(selected_values[0])
+
+        # Preserve current column widths to avoid jarring resizes on refresh
+        existing_columns = self.table_tree["columns"]
+        preserved_widths: dict[str, int] = {}
+        for col_id in existing_columns:
+            try:
+                preserved_widths[col_id] = int(self.table_tree.column(col_id, "width"))
+            except Exception:
+                continue
 
         # Clear existing
         for child in self.table_tree.get_children():
@@ -2355,25 +2723,70 @@ class SNMPControllerGUI:
             self._log(f"Error loading table schema: {e}, using fallback discovery", "WARNING")
             instances = self._discover_instances_fallback(columns[0][1])
 
+        def _instance_sort_key(inst: Any) -> list[tuple[int, Any]]:
+            parts = str(inst).split(".")
+            key: list[tuple[int, Any]] = []
+            for part in parts:
+                if part.isdigit():
+                    key.append((0, int(part)))
+                else:
+                    key.append((1, part))
+            return key
+
+        instances = sorted(instances, key=_instance_sort_key)
+
         # Set columns
         col_names = [col[0] for col in columns]
         self.table_tree["columns"] = ("index",) + tuple(col_names)
         self.table_tree.heading("index", text="Index")
-        self.table_tree.column("index", width=100, minwidth=50, stretch=False, anchor="center")
+        
+        # Calculate column widths - use preserved if available, otherwise distribute available width
+        # Initialize defaults
+        index_width = 120
+        col_width = 150
+        
+        if preserved_widths:
+            # Use preserved widths
+            index_width = preserved_widths.get("index", 100)
+        else:
+            # Calculate widths to fill available space
+            try:
+                available_width = self.table_tree.winfo_width()
+                if available_width <= 1:  # Not yet rendered
+                    available_width = 800  # Reasonable default
+                # Reserve width for scrollbar
+                available_width -= 20
+                # Give index column slightly more space, distribute rest evenly
+                index_width = max(120, int(available_width * 0.15))
+                remaining_width = available_width - index_width
+                col_width = max(100, int(remaining_width / len(col_names))) if col_names else 150
+            except Exception:
+                index_width = 120
+                col_width = 150
+        
+        self.table_tree.column("index", width=index_width, minwidth=50, stretch=False, anchor="center")
+        
         index_column_set = {name.lower() for name in index_columns}
-        for col_name in col_names:
+        for i, col_name in enumerate(col_names):
             if col_name.lower() in index_column_set:
                 header_text = f"🔑 {col_name}"
             else:
                 header_text = col_name
             self.table_tree.heading(col_name, text=header_text)
-            self.table_tree.column(col_name, width=150, minwidth=100, stretch=True, anchor="w")
+            if preserved_widths:
+                width = preserved_widths.get(col_name, 150)
+            else:
+                width = col_width
+            # Make last column stretch to fill remaining space
+            is_last = (i == len(col_names) - 1)
+            self.table_tree.column(col_name, width=width, minwidth=100, stretch=is_last, anchor="w")
         
         # Store columns for later use in cell editing
         self._current_table_columns = columns
         self._current_index_columns = index_columns
         self._current_columns_meta = schema.get("columns", {})
         self._current_table_item = table_item
+        self._current_table_oid = oid_str
 
         # Populate rows
         row_items = []
@@ -2395,16 +2808,32 @@ class SNMPControllerGUI:
                             timeout=1,
                         )
                         if resp.status_code == 200:
-                            val = resp.json().get("value", "")
+                            val = resp.json().get("value", "unset")
                         else:
-                            val = ""
+                            val = "unset"
                     except Exception:
-                        val = ""
+                        val = "unset"
+                    
+                    # Add enum name if available
+                    if val not in ("unset", "N/A", ""):
+                        col_metadata = self.oid_metadata.get(col_oid, {})
+                        enums = col_metadata.get("enums")
+                        if enums:
+                            try:
+                                int_value = int(val)
+                                for enum_name, enum_value in enums.items():
+                                    if enum_value == int_value:
+                                        val = f"{val} ({enum_name})"
+                                        break
+                            except (ValueError, TypeError):
+                                pass
+                
                 values.append(val)
             item = self.table_tree.insert("", "end", values=values)
             row_items.append((inst, item))
 
         # Select the row corresponding to selected_instance if provided
+        found_selection = False
         if selected_instance:
             for inst, item in row_items:
                 if inst == selected_instance:
@@ -2412,7 +2841,11 @@ class SNMPControllerGUI:
                     self.table_tree.see(item)
                     # Enable remove button since we have a selection
                     self.remove_instance_btn.configure(state="normal")
+                    found_selection = True
                     break
+
+        if not found_selection and preserved_yview is not None:
+            self.table_tree.yview_moveto(preserved_yview[0])
 
     def _discover_instances_fallback(self, first_col_oid: str) -> list[str]:
         """Fallback method to discover table instances by trying sequential indexes.
@@ -2520,9 +2953,17 @@ class SNMPControllerGUI:
                         resp = requests.get(f"{self.api_url}/value", params={"oid": full_oid}, timeout=5)
                         if resp.status_code == 200:
                             value_data = resp.json()
-                            column_defaults[col_name] = str(value_data.get("value", ""))
+                            column_defaults[col_name] = str(value_data.get("value", "unset"))
+                        else:
+                            column_defaults[col_name] = "unset"
                     except Exception as e:
                         self._log(f"Could not fetch value for {col_name}: {e}", "WARNING")
+                        column_defaults[col_name] = "unset"
+        else:
+            # No existing instances, default all non-index columns to "unset"
+            for col_name, col_info in columns_meta.items():
+                if col_name not in index_column_names:
+                    column_defaults[col_name] = "unset"
 
         # Create dialog for index values
         dialog = ctk.CTkToplevel(self.root)
@@ -2599,6 +3040,9 @@ class SNMPControllerGUI:
                     messagebox.showinfo("Success", f"Instance added successfully: {result.get('instance_oid')}")
                     # Refresh table view
                     self._populate_table_view(table_item)
+                    # Immediately add to OID tree
+                    instance_str = ".".join(str(index_values[k]) for k in index_columns)
+                    self._add_instance_to_oid_tree(table_item, instance_str)
                     dialog.destroy()
                 else:
                     messagebox.showerror("Error", f"Failed to add instance: {resp.text}")
@@ -2629,7 +3073,7 @@ class SNMPControllerGUI:
                 return
             
             # Get table OID from current table item
-            if not hasattr(self, "_current_table_item"):
+            if not hasattr(self, "_current_table_item") or self._current_table_item is None:
                 messagebox.showerror("Error", "No table selected")
                 return
             
@@ -2674,6 +3118,9 @@ class SNMPControllerGUI:
                     if resp.status_code == 200:
                         deleted_count += 1
                         self._log(f"Deleted instance: {instance_str}", "INFO")
+                        # Immediately remove from OID tree
+                        if self._current_table_item:
+                            self._remove_instance_from_oid_tree(self._current_table_item, instance_str)
                     else:
                         failed_count += 1
                         self._log(f"Failed to delete instance {instance_str}: {resp.text}", "ERROR")
@@ -2685,7 +3132,8 @@ class SNMPControllerGUI:
             if deleted_count > 0:
                 messagebox.showinfo("Success", f"Deleted {deleted_count} instance(s)")
                 # Refresh table view
-                self._populate_table_view(self._current_table_item)
+                if self._current_table_item is not None:
+                    self._populate_table_view(self._current_table_item)
             
             if failed_count > 0:
                 messagebox.showwarning("Partial Failure", f"Failed to delete {failed_count} instance(s)")
@@ -2757,9 +3205,25 @@ class SNMPControllerGUI:
         value_label = ctk.CTkLabel(main_frame, text="New value:", font=ctk.CTkFont(weight="bold"))
         value_label.pack(anchor="w")
 
+        # Check if this OID has enum metadata
+        enums = metadata.get("enums", {})
         value_var = ctk.StringVar(value=current_value)
-        value_entry = ctk.CTkEntry(main_frame, textvariable=value_var, width=400)
-        value_entry.pack(pady=(5, 10), fill="x")
+        value_widget: Any  # Will be either CTkEntry or CTkComboBox
+        
+        if enums:
+            # Create dropdown with enum values in "value (name)" format
+            enum_values = [f"{val} ({name})" for name, val in sorted(enums.items(), key=lambda x: x[1])]
+            value_widget = ctk.CTkComboBox(main_frame, variable=value_var, values=enum_values, width=400, state="readonly")
+            # Find and set the current value
+            for enum_val in enum_values:
+                if enum_val.startswith(current_value.split()[0]):  # Match the integer part
+                    value_var.set(enum_val)
+                    break
+        else:
+            # Create text entry for non-enum values
+            value_widget = ctk.CTkEntry(main_frame, textvariable=value_var, width=400)
+        
+        value_widget.pack(pady=(5, 10), fill="x")
 
         # Track if value has changed from original
         original_value = current_value
@@ -2797,13 +3261,13 @@ class SNMPControllerGUI:
                 if not unlocked:
                     # Reset to original value when unchecked
                     value_var.set(original_value)
-                self._toggle_entry_state(value_entry, unlocked)
+                self._toggle_entry_state(value_widget, unlocked)
 
             unlock_checkbox = ctk.CTkCheckBox(bottom_frame, text="Unlock for editing",
                                             variable=unlock_var,
                                             command=on_checkbox_toggle)
             unlock_checkbox.pack(side="left", anchor="w")
-            value_entry.configure(state="disabled")  # Start disabled
+            value_widget.configure(state="disabled")  # Start disabled
             print("DEBUG: Checkbox created and packed, entry disabled")
         else:
             print(f"DEBUG: No checkbox needed for {access} OID")
@@ -2820,6 +3284,9 @@ class SNMPControllerGUI:
                 if not value_changed.get():
                     messagebox.showinfo("No Change", "Value has not been modified.")
                     return
+                # Parse enum format "value (name)" to extract just the integer value
+                if ' (' in new_value and new_value.endswith(')'):
+                    new_value = new_value.split(' (')[0]
                 # Send the new value to the API
                 self._set_oid_value(oid, new_value, item)
             dialog.destroy()
@@ -2839,9 +3306,11 @@ class SNMPControllerGUI:
 
         # Focus handling
         if not show_checkbox:
-            # For write-only and read-write, entry is enabled by default
-            value_entry.focus()
-            value_entry.select_range(0, 'end')
+            # For write-only and read-write, widget is enabled by default
+            value_widget.focus()
+            # Only select text for entry widgets (not combobox)
+            if not enums and hasattr(value_widget, 'select_range'):
+                value_widget.select_range(0, 'end')
         elif unlock_checkbox:
             # For read-only, focus on checkbox
             unlock_checkbox.focus()
@@ -2870,11 +3339,25 @@ class SNMPControllerGUI:
             # Update the local value cache
             self.oid_values[oid] = new_value
 
-            # Update the UI
-            self.oid_tree.set(item, "value", new_value)
+            # Update the UI with formatted value (include enum name if applicable)
+            display_value = new_value
+            # Get metadata to check for enums
+            base_oid = oid.rsplit('.', 1)[0] if '.' in oid else oid
+            metadata = self.oid_metadata.get(base_oid, {})
+            enums = metadata.get("enums")
+            if enums and new_value:
+                try:
+                    int_value = int(new_value)
+                    for enum_name, enum_value in enums.items():
+                        if enum_value == int_value:
+                            display_value = f"{new_value} ({enum_name})"
+                            break
+                except (ValueError, TypeError):
+                    pass
+            
+            self.oid_tree.set(item, "value", display_value)
 
             self._log(f"Successfully set value for OID {oid}")
-            messagebox.showinfo("Success", f"Value updated successfully for {oid}")
 
         except requests.exceptions.RequestException as e:
             error_msg = f"Failed to set value for OID {oid}: {e}"
@@ -2989,6 +3472,107 @@ class SNMPControllerGUI:
                     if oid_str:
                         self.executor.submit(self._discover_table_instances, node, oid_str)
 
+    def _populate_table_instances_immediate(self, table_item: str, table_oid: str) -> None:
+        """Pre-populate table instances from bulk-loaded data."""
+        try:
+            if table_oid not in self.table_instances_data:
+                self._log(f"Cannot pre-populate {table_oid}: not in table_instances_data", "DEBUG")
+                return
+            
+            table_data = self.table_instances_data[table_oid]
+            instances = table_data.get("instances", [])
+            entry_name = table_data.get("entry_name", "Entry")
+            index_columns = table_data.get("index_columns", [])
+            
+            self._log(f"Pre-populating table {table_oid}: {len(instances)} instances", "DEBUG")
+            
+            if not instances:
+                self._log(f"No instances to pre-populate for {table_oid}", "DEBUG")
+                return
+            
+            # Find entry OID (table + .1)
+            entry_oid = table_oid + ".1"
+            entry_tuple = tuple(int(x) for x in entry_oid.split("."))
+            
+            # Get columns for this table
+            columns = []
+            for name, oid_t in self.oids_data.items():
+                if oid_t[:len(entry_tuple)] == entry_tuple and len(oid_t) == len(entry_tuple) + 1:
+                    col_num = oid_t[-1]
+                    col_oid = ".".join(str(x) for x in oid_t)
+                    columns.append((name, col_oid, col_num))
+            columns.sort(key=lambda x: x[2])
+            
+            # Build columns metadata for index value extraction
+            columns_meta: dict[str, Any] = {}
+            for col_name, col_oid, _ in columns:
+                col_metadata = self.oid_metadata.get(col_oid, {})
+                columns_meta[col_name] = col_metadata
+            
+            index_column_set = {name.lower() for name in index_columns}
+            
+            # Group columns by instance
+            for inst in instances:
+                entry_display = f"{entry_name}.{inst}"
+                entry_item = self.oid_tree.insert(
+                    table_item,
+                    "end",
+                    text=entry_display,
+                    values=(table_oid, inst, "", "Entry", "N/A", self.oid_metadata.get(table_oid, {}).get("mib") or "N/A"),
+                    tags=("table-entry",),
+                )
+                
+                # Extract index values for this instance
+                index_values = self._extract_index_values(inst, index_columns, columns_meta)
+                
+                # Add columns under the entry
+                for name, col_oid, col_num in columns:
+                    full_col_oid = f"{col_oid}.{inst}"
+                    is_index = name.lower() in index_column_set
+                    
+                    # Get value - either from index or from bulk loaded values
+                    if is_index:
+                        value_here = index_values.get(name, "N/A")
+                    else:
+                        value_here = self.oid_values.get(full_col_oid, "unset")
+                    
+                    access = str(self.oid_metadata.get(col_oid, {}).get("access", "")).lower()
+                    type_str = self.oid_metadata.get(col_oid, {}).get("type") or "Unknown"
+                    access_str = self.oid_metadata.get(col_oid, {}).get("access") or "N/A"
+                    
+                    # Determine icon
+                    if is_index:
+                        icon_key = "key"
+                    elif "write" in access:
+                        icon_key = "edit"
+                    elif "read" in access or "not-accessible" in access or "none" in access:
+                        icon_key = "lock"
+                    else:
+                        icon_key = "chart"
+                    
+                    img = None
+                    if getattr(self, 'oid_icon_images', None):
+                        img = self.oid_icon_images.get(icon_key)
+                    mib_val = self.oid_metadata.get(col_oid, {}).get("mib") or "N/A"
+                    img_ref = cast(Any, img) if img is not None else ""
+                    
+                    tags = ("evenrow", "table-column", "table-index") if is_index else ("evenrow", "table-column")
+                    self.oid_tree.insert(
+                        entry_item,
+                        "end",
+                        text=name,
+                        image=img_ref,
+                        values=(col_oid, inst, value_here, type_str, access_str, mib_val),
+                        tags=tags,
+                    )
+            
+            self._log(f"Pre-populated {len(instances)} instances for table {table_oid}", "DEBUG")
+            
+        except Exception as e:
+            self._log(f"Error pre-populating table {table_oid}: {e}", "WARNING")
+            import traceback
+            traceback.print_exc()
+
     def _discover_table_instances(self, item: str, entry_oid: str) -> None:
         """Discover table instances and populate the tree."""
         self._log(f"Discovering table instances for table OID {entry_oid}", "DEBUG")
@@ -3024,8 +3608,8 @@ class SNMPControllerGUI:
                 instances = [str(inst) for inst in schema.get("instances", [])]
                 index_columns = list(schema.get("index_columns", []))
                 self._log(
-                    f"Table schema loaded for {entry_oid}: instances={instances}, index_columns={index_columns}",
-                    "DEBUG",
+                    f"Table schema loaded for {entry_oid}: found {len(instances)} instances: {instances}, index_columns={index_columns}",
+                    "INFO",
                 )
             else:
                 self._log(
@@ -3070,7 +3654,19 @@ class SNMPControllerGUI:
                 columns.append((name, col_oid, col_num))
         columns.sort(key=lambda x: x[2])
 
+        # Build columns metadata dict for index value extraction
+        columns_meta: Dict[str, Any] = {}
+        for name, col_oid, col_num in columns:
+            if name in index_columns:
+                col_metadata = self.oid_metadata.get(col_oid, {})
+                columns_meta[name] = col_metadata
+        
         grouped: Dict[str, List[Tuple[str, str, str, str, bool]]] = {}
+        # Extract index values once per instance for efficiency
+        instances_index_values: Dict[str, Dict[str, str]] = {}
+        for inst in instances:
+            instances_index_values[inst] = self._extract_index_values(inst, index_columns, columns_meta)
+        
         for inst in instances:
             grouped[inst] = []
             for name, col_oid, col_num in columns:
@@ -3081,11 +3677,13 @@ class SNMPControllerGUI:
                 if full_col_oid in self.oid_values:
                     value_here = self.oid_values[full_col_oid]
                     if is_index:
-                        value_here = "N/A"
+                        # Get the actual index value for display
+                        value_here = instances_index_values[inst].get(name, "N/A")
                 else:
                     # Not loaded yet - try to fetch it once
                     if is_index:
-                        value_here = "N/A"
+                        # Get the actual index value for display
+                        value_here = instances_index_values[inst].get(name, "N/A")
                         self.oid_values[full_col_oid] = value_here
                     else:
                         try:
@@ -3095,37 +3693,42 @@ class SNMPControllerGUI:
                                 timeout=2,
                             )
                             if resp.status_code == 200:
-                                value_here = str(resp.json().get("value", ""))
+                                value_here = str(resp.json().get("value", "unset"))
                                 self.oid_values[full_col_oid] = value_here
                             else:
                                 # Mark as attempted to avoid repeated failures
-                                value_here = ""
+                                value_here = "unset"
                                 self.oid_values[full_col_oid] = value_here
                         except Exception:
                             # Mark as attempted to avoid repeated failures
-                            value_here = ""
+                            value_here = "unset"
                             self.oid_values[full_col_oid] = value_here
                 grouped[inst].append((name, col_oid, full_col_oid, value_here, is_index))
 
         # Update UI
         def update_ui() -> None:
             # Remove existing children
-            for child in self.oid_tree.get_children(item):
+            existing_children = self.oid_tree.get_children(item)
+            self._log(f"Removing {len(existing_children)} existing children from table", "DEBUG")
+            for child in existing_children:
                 self.oid_tree.delete(child)
 
             # Add entry nodes under the table
+            self._log(f"Adding {len(grouped)} new instances to OID tree: {list(grouped.keys())}", "INFO")
             index_column_set = {name.lower() for name in index_columns}
+            added_count = 0
             for inst, cols in grouped.items():
                 entry_display = f"{entry_name}.{inst}"
-                entry_full_oid = f"{entry_oid}.1.{inst}"
-                mib_val = self.oid_metadata.get(entry_full_oid, {}).get("mib") or "N/A"
+                # Store table OID (not including instance) - _update_selected_info will append instance
+                mib_val = self.oid_metadata.get(entry_oid, {}).get("mib") or "N/A"
                 entry_item = self.oid_tree.insert(
                     item,
                     "end",
                     text=entry_display,
-                    values=(entry_full_oid, inst, "", "Entry", "N/A", mib_val),
+                    values=(entry_oid, inst, "", "Entry", "N/A", mib_val),
                     tags=("table-entry",),
                 )
+                added_count += 1
 
                 # Add columns under the entry
                 for name, col_oid, full_col_oid, value_here, is_index in cols:
@@ -3142,6 +3745,22 @@ class SNMPControllerGUI:
                         icon_key = "chart"
 
                     display_text = name
+                    
+                    # Format value with enum name if applicable
+                    display_value = value_here
+                    if value_here not in ("unset", "N/A", ""):
+                        col_metadata = self.oid_metadata.get(col_oid, {})
+                        enums = col_metadata.get("enums")
+                        if enums:
+                            try:
+                                int_value = int(value_here)
+                                for enum_name, enum_value in enums.items():
+                                    if enum_value == int_value:
+                                        display_value = f"{value_here} ({enum_name})"
+                                        break
+                            except (ValueError, TypeError):
+                                pass
+                    
                     img = None
                     if getattr(self, 'oid_icon_images', None):
                         img = self.oid_icon_images.get(icon_key)
@@ -3152,9 +3771,13 @@ class SNMPControllerGUI:
                         "end",
                         text=display_text,
                         image=img_ref,
-                        values=(col_oid, inst, value_here, type_str, access_str, mib_val),
+                        values=(col_oid, inst, display_value, type_str, access_str, mib_val),
                         tags=("evenrow", "table-column", "table-index") if is_index else ("evenrow", "table-column"),
                     )
+
+            self._log(f"Successfully added {added_count} instances to OID tree", "INFO")
+            # Expand the table node to show the new instances
+            self.oid_tree.item(item, open=True)
 
         self.root.after(0, update_ui)
     
@@ -3201,12 +3824,29 @@ class SNMPControllerGUI:
                     self._log(f"Fetching value for OID {fetch_oid} (instance={instance_str})")
                     resp = requests.get(f"{self.api_url}/value", params={"oid": fetch_oid}, timeout=3)
                     resp.raise_for_status()
-                    val = resp.json().get("value", "")
-                    val_str = "" if val is None else str(val)
+                    val = resp.json().get("value", "unset")
+                    val_str = "unset" if val is None else str(val)
                     self.oid_values[fetch_oid] = val_str
 
+                    # Format value with enum name if applicable
+                    display_val = val_str
+                    if val_str not in ("unset", "N/A", ""):
+                        # Get base OID for metadata lookup (strip instance)
+                        base_oid = oid_str
+                        metadata = self.oid_metadata.get(base_oid, {})
+                        enums = metadata.get("enums")
+                        if enums:
+                            try:
+                                int_value = int(val_str)
+                                for enum_name, enum_value in enums.items():
+                                    if enum_value == int_value:
+                                        display_val = f"{val_str} ({enum_name})"
+                                        break
+                            except (ValueError, TypeError):
+                                pass
+
                     # Update the UI on the main thread
-                    def update_ui(c: str = child, v: str = val_str) -> None:
+                    def update_ui(c: str = child, v: str = display_val) -> None:
                         self.oid_tree.set(c, "value", v)
                     self.root.after(0, update_ui)
                     self._log(f"Fetched value for OID {fetch_oid}: {val_str}")
@@ -3217,7 +3857,138 @@ class SNMPControllerGUI:
             else:
                 # Non-leaf: optionally prefetch its leaf children; skip to avoid deep recursion
                 continue
-    
+
+    def _refresh_oid_tree_value(self, full_oid: str, display_value: str) -> None:
+        """Refresh a specific OID value in the tree after it's been updated.
+
+        Args:
+            full_oid: The full OID including instance (e.g., "1.3.6.1.2.1.2.2.1.8.1")
+            display_value: The formatted display value to show
+        """
+        # Parse the OID to find the tree item
+        # For table columns, the OID format is: col_oid.instance
+        # We need to find the tree item that matches this
+
+        # Try to find the item in the OID tree
+        # The tree stores base OID (without instance) in the "oid" column
+        # and instance in the "instance" column
+
+        parts = full_oid.rsplit(".", 1)
+        if len(parts) == 2:
+            base_oid, instance = parts
+        else:
+            # Scalar OID
+            base_oid = full_oid
+            instance = ""
+
+        # Search through the tree for matching items
+        def find_and_update(item: str) -> bool:
+            """Recursively search for the matching tree item."""
+            try:
+                item_oid = self.oid_tree.set(item, "oid")
+                item_instance = self.oid_tree.set(item, "instance")
+
+                # Check if this item matches
+                if item_oid == base_oid and item_instance == instance:
+                    # Found it! Update the value
+                    self.oid_tree.set(item, "value", display_value)
+                    self._log(f"Refreshed OID tree value for {full_oid}: {display_value}", "DEBUG")
+                    return True
+
+                # Search children
+                for child in self.oid_tree.get_children(item):
+                    if find_and_update(child):
+                        return True
+
+            except Exception as e:
+                self._log(f"Error searching tree item: {e}", "DEBUG")
+
+            return False
+
+        # Start search from root
+        for root_item in self.oid_tree.get_children():
+            if find_and_update(root_item):
+                break
+
+    def _add_instance_to_oid_tree(self, table_item: str, instance: str) -> None:
+        """Add a single new instance to the OID tree immediately.
+
+        Args:
+            table_item: The tree item ID for the table node
+            instance: The instance string (e.g., "5" or "192.168.1.1")
+        """
+        try:
+            table_oid = self.oid_tree.set(table_item, "oid")
+            if not table_oid:
+                self._log("Cannot add instance: no table OID found", "WARNING")
+                return
+
+            self._log(f"Adding instance {instance} to OID tree table {table_oid}", "INFO")
+
+            # Just refresh the whole table - it's simpler and handles sorting
+            self.executor.submit(self._discover_table_instances, table_item, table_oid)
+
+        except Exception as e:
+            self._log(f"Error adding instance to OID tree: {e}", "ERROR")
+
+    def _remove_instance_from_oid_tree(self, table_item: str, instance: str) -> None:
+        """Remove a single instance from the OID tree immediately.
+
+        Args:
+            table_item: The tree item ID for the table node
+            instance: The instance string to remove (e.g., "5" or "192.168.1.1")
+        """
+        try:
+            table_oid = self.oid_tree.set(table_item, "oid")
+            if not table_oid:
+                self._log("Cannot remove instance: no table OID found", "WARNING")
+                return
+
+            self._log(f"Removing instance {instance} from OID tree table {table_oid}", "INFO")
+
+            # Find and delete the entry node for this instance
+            def delete_entry() -> None:
+                children = self.oid_tree.get_children(table_item)
+                for child in children:
+                    child_instance = self.oid_tree.set(child, "instance")
+                    if child_instance == instance:
+                        self.oid_tree.delete(child)
+                        self._log(f"Deleted instance {instance} from OID tree", "DEBUG")
+                        return
+                self._log(f"Instance {instance} not found in OID tree", "DEBUG")
+
+            # Delete on UI thread
+            self.root.after(0, delete_entry)
+
+        except Exception as e:
+            self._log(f"Error removing instance from OID tree: {e}", "ERROR")
+
+    def _refresh_oid_tree_table(self, table_item: str) -> None:
+        """Refresh a table in the OID tree to show new/updated instances.
+
+        This re-discovers table instances and rebuilds the tree nodes.
+
+        Args:
+            table_item: The tree item ID for the table node
+        """
+        try:
+            oid_str = self.oid_tree.set(table_item, "oid")
+            if not oid_str:
+                self._log("Cannot refresh table: no OID found", "WARNING")
+                return
+
+            self._log(f"Refreshing OID tree table {oid_str} - will re-query /table-schema", "INFO")
+
+            # Re-discover table instances in the background
+            # Note: This is called after edits. The main refresh happens in _on_node_open
+            # when the user expands the table node.
+            self.executor.submit(self._discover_table_instances, table_item, oid_str)
+
+        except Exception as e:
+            self._log(f"Error refreshing OID tree table: {e}", "ERROR")
+            import traceback
+            traceback.print_exc()
+
     def _toggle_connection(self) -> None:
         """Connect or disconnect from the REST API."""
         if self.connected:
@@ -3282,6 +4053,23 @@ class SNMPControllerGUI:
             except Exception as e:
                 self._log(f"Failed to fetch bulk values: {e}", "WARNING")
                 self.oid_values = {}
+            
+            # Fetch all table instances in bulk
+            self._log("Loading all table instances in bulk...")
+            try:
+                response = requests.get(f"{self.api_url}/tree/bulk", timeout=30)
+                response.raise_for_status()
+                tree_data = response.json()
+                self.table_instances_data = tree_data.get("tables", {})
+                total_instances = sum(len(t.get("instances", [])) for t in self.table_instances_data.values())
+                self._log(f"Loaded {len(self.table_instances_data)} tables with {total_instances} total instances")
+                if self.table_instances_data:
+                    self._log(f"Table OIDs loaded: {list(self.table_instances_data.keys())[:5]}...", "DEBUG")
+            except Exception as e:
+                self._log(f"Failed to fetch tree bulk data: {e}", "WARNING")
+                import traceback
+                traceback.print_exc()
+                self.table_instances_data = {}
             
             # Enable OID Tree tab when connected
             self.enable_oid_tree_tab()

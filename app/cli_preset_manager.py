@@ -75,7 +75,7 @@ def load_preset(schema_dir: Path, preset_base: Path, preset_name: str, backup_ba
         print(f"Backing up current schemas to {backup_dir}...")
         backup_base.mkdir(parents=True, exist_ok=True)
         shutil.copytree(schema_dir, backup_dir)
-        print(f"✓ Backup created")
+        print("✓ Backup created")
     
     # Remove current schemas
     if schema_dir.exists():

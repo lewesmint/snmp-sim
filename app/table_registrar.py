@@ -110,16 +110,21 @@ class TableRegistrar:
         for name, info in mib_json.items():
             if not isinstance(info, dict):
                 continue
-            if name.endswith("Table") and info.get("access") == "not-accessible":
-                # Found a table, now find its entry and columns
-                table_prefix = name[:-5]  # Remove "Table" suffix
-                entry_name = f"{table_prefix}Entry"
-
-                # Check if entry exists
-                if entry_name not in mib_json:
+            if info.get("type") == "MibTable" and info.get("access") == "not-accessible":
+                # Found a table, now find its entry by OID structure
+                expected_entry_oid = list(info["oid"]) + [1]
+                entry_name = None
+                entry_oid = None
+                
+                for other_name, other_data in mib_json.items():
+                    if isinstance(other_data, dict) and other_data.get("type") == "MibTableRow":
+                        if list(other_data.get("oid", [])) == expected_entry_oid:
+                            entry_name = other_name
+                            entry_oid = tuple(other_data["oid"])
+                            break
+                
+                if not entry_name or not entry_oid:
                     continue
-
-                entry_oid = tuple(mib_json[entry_name]["oid"])
 
                 # Collect all columns for this table by checking OID hierarchy
                 # Columns must be direct children of the entry OID
@@ -142,7 +147,6 @@ class TableRegistrar:
                         "table": info,
                         "entry": mib_json[entry_name],
                         "columns": columns,
-                        "prefix": table_prefix,
                     }
 
         # Register each table in the JSON model (but NOT in pysnmp to avoid index errors)
@@ -173,7 +177,7 @@ class TableRegistrar:
         Args:
             mib: MIB name
             table_name: Name of the table to register
-            table_data: Table structure (table, entry, columns, prefix)
+            table_data: Table structure (table, entry, columns)
             type_registry: Type registry for resolving column types
             mib_jsons: Full collection of MIBs (to update with table rows)
         """

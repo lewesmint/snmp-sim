@@ -370,12 +370,17 @@ def get_oid_value(oid: str) -> dict[str, Any]:
         logger.error(f"Invalid OID format requested: {oid}")
         raise HTTPException(status_code=400, detail="Invalid OID format")
 
+    # Try to get as scalar first
     try:
         value = snmp_agent.get_scalar_value(parts)
-    except ValueError as e:
-        # Expected: scalar not found for this OID — return 404 without full traceback
-        logger.warning(f"Scalar OID not found: {parts} - {e}")
-        raise HTTPException(status_code=404, detail=f"OID not found: {e}")
+    except ValueError:
+        # Scalar not found - try as table cell
+        value = _try_get_table_cell_value(oid, parts)
+        if value is not None:
+            return {"oid": parts, "value": value}
+        # Not a scalar or table cell
+        logger.warning(f"OID not found (not scalar or table cell): {parts}")
+        raise HTTPException(status_code=404, detail=f"OID not settable: Scalar OID {parts} not found")
     except Exception:
         # Unexpected errors should be logged with traceback and return 500
         logger.exception(f"Unexpected error fetching value for OID {parts}")
@@ -398,6 +403,78 @@ def get_oid_value(oid: str) -> dict[str, Any]:
     serializable = _make_jsonable(value)
     logger.info(f"Fetched value for OID {parts}: {serializable}")
     return {"oid": parts, "value": serializable}
+
+
+def _try_get_table_cell_value(oid: str, parts: tuple[int, ...]) -> Any | None:
+    """Try to get value as a table cell from table_instances.
+    
+    Args:
+        oid: OID as string
+        parts: OID as tuple
+        
+    Returns:
+        The cell value if found, None otherwise
+    """
+    if snmp_agent is None:
+        return None
+        
+    # Try to parse as table cell OID: table.entry.column.instance
+    # Example: 1.3.6.1.4.1.99998.1.3.1.3.192.168.1.1.60
+    #          table=1.3.6.1.4.1.99998.1.3, entry=1, column=3, instance=192.168.1.1.60
+    
+    # We need to find the table by trying progressively shorter prefixes
+    # and checking if they exist in table_instances
+    from app.cli_load_model import load_all_schemas
+    import os
+    
+    schema_dir = "agent-model"
+    if not os.path.exists(schema_dir):
+        return None
+    
+    schemas = load_all_schemas(schema_dir)
+    
+    # Find matching table by iterating through all tables
+    for table_oid_str, instances in snmp_agent.table_instances.items():
+        table_parts = tuple(int(x) for x in table_oid_str.split("."))
+        
+        # Check if OID starts with table_oid + .1 (entry)
+        if len(parts) > len(table_parts) + 1 and parts[:len(table_parts)] == table_parts and parts[len(table_parts)] == 1:
+            # This could be a cell in this table
+            # Format: table_parts + (1,) + (column_num,) + instance_parts
+            column_num = parts[len(table_parts) + 1]
+            instance_parts = parts[len(table_parts) + 2:]
+            instance_str = ".".join(str(x) for x in instance_parts)
+            
+            # Look up column name from schema
+            entry_oid = table_parts + (1,)
+            column_name = None
+            
+            for mib, schema in schemas.items():
+                if isinstance(schema, dict):
+                    objects = schema.get("objects", schema)
+                    for obj_name, obj_data in objects.items():
+                        if isinstance(obj_data, dict) and "oid" in obj_data:
+                            obj_oid_t = tuple(obj_data["oid"])
+                            # Check if this is the column we're looking for
+                            if obj_oid_t == entry_oid + (column_num,):
+                                column_name = obj_name
+                                break
+                    if column_name:
+                        break
+            
+            if not column_name:
+                logger.debug(f"Column name not found for column {column_num} in table {table_oid_str}")
+                continue
+            
+            # Look up value in table_instances
+            if instance_str in instances:
+                column_values = instances[instance_str].get("column_values", {})
+                if column_name in column_values:
+                    value = column_values[column_name]
+                    logger.info(f"Fetched table cell value for OID {parts}: {value}")
+                    return value
+    
+    return None
 
 
 @app.get("/values/bulk")
@@ -465,6 +542,95 @@ def set_oid_value(update: OIDValueUpdate) -> dict[str, Any]:
         # Unexpected errors should be logged with traceback and return 500
         logger.exception(f"Unexpected error setting value for OID {parts}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/tree/bulk")
+def get_tree_bulk_data() -> dict[str, Any]:
+    """Get complete tree data including all table instances for efficient GUI loading."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    from app.cli_load_model import load_all_schemas
+    import os
+
+    schema_dir = "agent-model"
+    if not os.path.exists(schema_dir):
+        return {"tables": {}}
+
+    schemas = load_all_schemas(schema_dir)
+
+    # Get all table instances with their full data
+    tables_data: dict[str, Any] = {}
+    
+    # Get schemas to find all tables
+    for mib_name, schema in schemas.items():
+        # Handle both old flat structure and new {"objects": ..., "traps": ...} structure
+        if "objects" in schema:
+            objects = schema["objects"]
+        else:
+            objects = schema
+
+        for obj_name, obj_data in objects.items():
+            if isinstance(obj_data, dict) and obj_data.get("type") == "MibTable":
+                table_oid = ".".join(str(x) for x in obj_data["oid"])
+                
+                # Find the entry object - it should be table OID + ".1" and type MibTableRow
+                entry_name = None
+                entry_obj = {}
+                table_oid_parts = obj_data["oid"]
+                expected_entry_oid = list(table_oid_parts) + [1]
+                
+                for other_name, other_data in objects.items():
+                    if isinstance(other_data, dict) and other_data.get("type") == "MibTableRow":
+                        if list(other_data.get("oid", [])) == expected_entry_oid:
+                            entry_name = other_name
+                            entry_obj = other_data
+                            break
+                
+                index_columns = entry_obj.get("indexes", [])
+                
+                # Get instances for this table
+                instances: list[str] = []
+                try:
+                    # Get instances from actual rows
+                    rows = obj_data.get("rows", [])
+                    if isinstance(rows, list):
+                        for row in rows:
+                            if isinstance(row, dict):
+                                # Build instance string from index columns
+                                parts = []
+                                for idx_col in index_columns:
+                                    if idx_col in row:
+                                        val = row[idx_col]
+                                        # Handle IpAddress expansion
+                                        col_meta = objects.get(idx_col, {})
+                                        if col_meta.get("type") == "IpAddress" and isinstance(val, str):
+                                            parts.extend(val.split("."))
+                                        else:
+                                            parts.append(str(val))
+                                if parts:
+                                    instances.append(".".join(parts))
+                    
+                    # Also add any dynamic instances from snmp_agent.table_instances
+                    if table_oid in snmp_agent.table_instances:
+                        for inst_key in snmp_agent.table_instances[table_oid].keys():
+                            if inst_key not in instances:
+                                instances.append(inst_key)
+                except Exception as e:
+                    logger.warning(f"Error getting instances for table {obj_name}: {e}")
+                
+                if instances:
+                    tables_data[table_oid] = {
+                        "table_name": obj_name,
+                        "entry_name": entry_name,
+                        "index_columns": index_columns,
+                        "instances": instances
+                    }
+    
+    logger.info(f"Bulk tree data: {len(tables_data)} tables with instances")
+    return {
+        "tables": tables_data
+    }
 
 
 @app.get("/traps")

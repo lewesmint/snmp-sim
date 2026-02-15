@@ -12,7 +12,7 @@ from typing import Iterable
 
 from pysnmp.proto import rfc1902
 
-from app.trap_sender import TrapSender
+from app.trap_sender import TrapSender, VarBindSpec
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -37,7 +37,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     # Build extra varbinds list
-    extra_varbinds = []
+    extra_varbinds: list[VarBindSpec] = []
 
     if args.varbind:
         for mib, symbol, value in args.varbind:
@@ -58,6 +58,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 parsed_value = rfc1902.OctetString(value)
 
             # Try to parse index as int, otherwise use string
+            parsed_index: int | str
             try:
                 parsed_index = int(index)
             except ValueError:

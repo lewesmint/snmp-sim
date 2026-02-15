@@ -94,10 +94,16 @@ class BehaviourGenerator:
                         symbol_info["rows"] = []
                     # Add at least one default row if empty
                     if not symbol_info["rows"]:
-                        # Try to find the corresponding entry and columns
-                        table_prefix = name[:-5] if name.endswith("Table") else name
-                        entry_name = f"{table_prefix}Entry"
-                        entry_info = info.get(entry_name, {})
+                        # Find the corresponding entry by OID structure
+                        entry_info = {}
+                        entry_name = None
+                        expected_entry_oid = list(symbol_info["oid"]) + [1]
+                        for other_name, other_data in info.items():
+                            if isinstance(other_data, dict) and other_data.get("type") == "MibTableRow":
+                                if list(other_data.get("oid", [])) == expected_entry_oid:
+                                    entry_info = other_data
+                                    entry_name = other_name
+                                    break
                         # If entry_info exists and has an OID, try to extract index columns from compiled MIB
                         # If not already present, add 'indexes' field to entry_info
                         if entry_info and "indexes" not in entry_info:
