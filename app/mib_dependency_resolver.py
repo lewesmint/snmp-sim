@@ -43,15 +43,21 @@ class MibDependencyResolver:
                 continue
             
             # Try direct match first
-            for ext in [".txt", ".mib"]:
+            for ext in [".txt", ".mib", ".my"]:
                 mib_path = os.path.join(search_dir, f"{mib_name}{ext}")
                 if os.path.exists(mib_path):
                     self._mib_file_cache[mib_name] = mib_path
                     return mib_path
             
-            # Search subdirectories recursively
+            # Search subdirectories recursively with depth limit
             for root, dirs, files in os.walk(search_dir):
-                for ext in [".txt", ".mib"]:
+                # Calculate depth and limit recursion to avoid infinite traversal
+                depth = root[len(search_dir):].count(os.sep)
+                if depth > 5:  # Limit depth to 5 levels
+                    dirs[:] = []  # Don't descend further
+                    continue
+                
+                for ext in [".txt", ".mib", ".my"]:
                     mib_filename = f"{mib_name}{ext}"
                     if mib_filename in files:
                         mib_path = os.path.join(root, mib_filename)

@@ -43,7 +43,7 @@ class IconTreeDemo:
         self._populate_demo_tree()
 
     def _configure_styles(self) -> None:
-        style: tb.Style = cast(tb.Style, tb.Style())
+        style: tb.Style = tb.Style()  # type: ignore[no-untyped-call]
 
         # Larger default font for the whole app (macOS defaults can be tiny)
         base_font = ("Helvetica", 14)
