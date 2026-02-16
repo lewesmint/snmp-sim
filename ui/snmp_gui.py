@@ -123,6 +123,10 @@ class SNMPControllerGUI:
         self.tabview.add("Scripts")
         self._setup_scripts_tab()
 
+        # Tab 3: MIB Browser (always available - works independently)
+        self.tabview.add("MIB Browser")
+        self._setup_mib_browser_tab()
+
         # OID Tree and Table View will be added dynamically when connected
         # Traps tab will also be added dynamically when connected
 
@@ -506,10 +510,9 @@ class SNMPControllerGUI:
                 self._setup_scripts_tab()
     
     def enable_mib_browser_tab(self) -> None:
-        """Enable the 'MIB Browser' tab after connecting."""
-        if "MIB Browser" not in self.tabview._tab_dict:
-            self.tabview.add("MIB Browser")
-            self._setup_mib_browser_tab()
+        """Enable the 'MIB Browser' tab after connecting (deprecated - now always enabled)."""
+        # MIB Browser is now created at startup, so this method is a no-op
+        pass
     
     def _setup_config_tab(self) -> None:
         """Setup the configuration tab."""
@@ -4334,10 +4337,7 @@ class SNMPControllerGUI:
             # Enable Traps tab when connected
             self.enable_traps_tab()
             
-            # Enable MIB Browser tab when connected
-            self.enable_mib_browser_tab()
-            
-            # Update MIB browser with OID metadata if it exists
+            # Update MIB browser with OID metadata if it exists (browser already created at startup)
             if self.mib_browser:
                 self.mib_browser.set_oid_metadata(self.oid_metadata)
             
