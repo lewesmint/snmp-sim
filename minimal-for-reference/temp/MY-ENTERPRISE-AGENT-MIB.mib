@@ -1,0 +1,108 @@
+MY-ENTERPRISE-AGENT-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+    MODULE-IDENTITY, OBJECT-TYPE, Integer32, Unsigned32, enterprises
+        FROM SNMPv2-SMI
+    DisplayString
+        FROM SNMPv2-TC;
+
+myEnterpriseAgent MODULE-IDENTITY
+    LAST-UPDATED "202602150000Z"
+    ORGANIZATION "Example"
+    CONTACT-INFO ""
+    DESCRIPTION
+        "Example AgentX subagent MIB for enterprise 99999."
+    ::= { enterprises 99999 }
+
+myEnterpriseObjects OBJECT IDENTIFIER ::= { myEnterpriseAgent 1 }
+myEnterpriseTables  OBJECT IDENTIFIER ::= { myEnterpriseAgent 2 }
+
+myString OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+        "Writable example string."
+    ::= { myEnterpriseObjects 1 }
+
+myCounter OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Incrementing counter."
+    ::= { myEnterpriseObjects 2 }
+
+myGauge OBJECT-TYPE
+    SYNTAX      Unsigned32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Example gauge value."
+    ::= { myEnterpriseObjects 3 }
+
+myWritableInt OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-write
+    STATUS      current
+    DESCRIPTION
+        "Writable example integer."
+    ::= { myEnterpriseObjects 4 }
+
+myTable OBJECT-TYPE
+    SYNTAX      SEQUENCE OF MyEntry
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION
+        "Example table of sensors."
+    ::= { myEnterpriseTables 1 }
+
+myEntry OBJECT-TYPE
+    SYNTAX      MyEntry
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION
+        "A single sensor row."
+    INDEX       { myIndex }
+    ::= { myTable 1 }
+
+MyEntry ::= SEQUENCE {
+    myIndex  Integer32,
+    myName   DisplayString,
+    myValue  Integer32,
+    myStatus DisplayString
+}
+
+myIndex OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Row index."
+    ::= { myEntry 1 }
+
+myName OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Sensor name."
+    ::= { myEntry 2 }
+
+myValue OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Sensor value."
+    ::= { myEntry 3 }
+
+myStatus OBJECT-TYPE
+    SYNTAX      DisplayString
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION
+        "Sensor status string."
+    ::= { myEntry 4 }
+
+END
