@@ -413,6 +413,30 @@ def get_table_schema(oid: str) -> dict[str, Any]:
     # Remove deleted instances
     if snmp_agent:
         instances = [inst for inst in instances if f"{oid_str}.{inst}" not in snmp_agent.deleted_instances]
+    
+    # For no-index tables, add virtual __index__ columns to support multi-part indexes
+    if not index_columns:
+        # Analyze instances to determine how many __index__ parts we need
+        max_parts = 1
+        for inst in instances:
+            parts_count = len(str(inst).split("."))
+            max_parts = max(max_parts, parts_count)
+        
+        # Add virtual __index__ columns
+        virtual_index_cols = []
+        for i in range(1, max_parts + 1):
+            col_name = "__index__" if i == 1 else f"__index_{i}__"
+            virtual_index_cols.append(col_name)
+            columns[col_name] = {
+                "oid": [],  # Virtual column has no real OID
+                "type": "Integer32",
+                "access": "read-write",  # Allow editing
+                "is_index": True,
+                "default": "1" if i == 1 else "",
+                "enums": None
+            }
+        
+        index_columns = virtual_index_cols
 
     return {
         "name": table_name,
@@ -1286,8 +1310,22 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
             index_columns = list(request.index_values.keys())
         
         def _extract_index_str(values: dict[str, Any]) -> str:
-            if "__index__" in values:
-                return str(values["__index__"])
+            """Extract instance string from index values, supporting multi-part __index__."""
+            # Handle multi-part __index__ (__index__, __index_2__, __index_3__, etc.)
+            index_parts = []
+            i = 1
+            while True:
+                key = "__index__" if i == 1 else f"__index_{i}__"
+                if key in values:
+                    index_parts.append(str(values[key]))
+                    i += 1
+                else:
+                    break
+            
+            if index_parts:
+                return ".".join(index_parts)
+            
+            # Legacy fallbacks
             if "index" in values:
                 return str(values["index"])
             if "instance" in values:
@@ -1298,9 +1336,17 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
 
         if not index_columns:
             index_str = _extract_index_str(request.index_values)
+            # Parse multi-part index string into separate __index__ values
+            # E.g., "1.2.3" → {"__index__": "1", "__index_2__": "2", "__index_3__": "3"}
+            index_parts = index_str.split(".")
+            parsed_index_values = {}
+            for i, part in enumerate(index_parts, 1):
+                key = "__index__" if i == 1 else f"__index_{i}__"
+                parsed_index_values[key] = part
+            
             instance_oid = snmp_agent.add_table_instance(
                 table_oid=request.table_oid,
-                index_values={"__index__": index_str},
+                index_values=parsed_index_values,
                 column_values=request.column_values or {},
             )
             logger.info(f"Successfully created table instance: {instance_oid}")
@@ -1410,8 +1456,22 @@ def delete_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
     
     try:
         def _extract_index_str(values: dict[str, Any]) -> str:
-            if "__index__" in values:
-                return str(values["__index__"])
+            """Extract instance string from index values, supporting multi-part __index__."""
+            # Handle multi-part __index__ (__index__, __index_2__, __index_3__, etc.)
+            index_parts = []
+            i = 1
+            while True:
+                key = "__index__" if i == 1 else f"__index_{i}__"
+                if key in values:
+                    index_parts.append(str(values[key]))
+                    i += 1
+                else:
+                    break
+            
+            if index_parts:
+                return ".".join(index_parts)
+            
+            # Legacy fallbacks
             if "index" in values:
                 return str(values["index"])
             if "instance" in values:
@@ -1422,11 +1482,19 @@ def delete_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
 
         index_values = request.index_values or {}
         index_str = _extract_index_str(index_values)
+        
+        # Parse multi-part index string into separate __index__ values
+        # E.g., "1.2.3" → {"__index__": "1", "__index_2__": "2", "__index_3__": "3"}
+        index_parts = index_str.split(".")
+        parsed_index_values = {}
+        for i, part in enumerate(index_parts, 1):
+            key = "__index__" if i == 1 else f"__index_{i}__"
+            parsed_index_values[key] = part
 
         # Delete the instance
         success = snmp_agent.delete_table_instance(
             table_oid=request.table_oid,
-            index_values={"__index__": index_str}
+            index_values=parsed_index_values
         )
         
         if success:

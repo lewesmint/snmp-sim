@@ -419,11 +419,16 @@ class SNMPControllerGUI:
 
         # Remove instance button
         self.remove_instance_btn = ctk.CTkButton(buttons_frame, text="Remove Instance", command=self._remove_instance, fg_color="red", hover_color="darkred")
-        self.remove_instance_btn.pack(side="left")
+        self.remove_instance_btn.pack(side="left", padx=(0, 10))
+        
+        # Add index column button (only for no-index tables)
+        self.add_index_col_btn = ctk.CTkButton(buttons_frame, text="Add Index Column", command=self._add_index_column, fg_color="green", hover_color="darkgreen")
+        self.add_index_col_btn.pack(side="left")
 
         # Initially disable buttons
         self.add_instance_btn.configure(state="disabled")
         self.remove_instance_btn.configure(state="disabled")
+        self.add_index_col_btn.configure(state="disabled")
 
         # Table view treeview
         self.table_tree = ttk.Treeview(table_frame, columns=("index",), show="headings", style="OID.Treeview")
@@ -2994,6 +2999,13 @@ class SNMPControllerGUI:
 
         if not found_selection and preserved_yview is not None:
             self.table_tree.yview_moveto(preserved_yview[0])
+        
+        # Enable "Add Index Column" button only for no-index tables  
+        is_no_index_table = all(col.startswith("__index") for col in index_columns) if index_columns else True
+        if is_no_index_table:
+            self.add_index_col_btn.configure(state="normal")
+        else:
+            self.add_index_col_btn.configure(state="disabled")
 
     def _discover_instances_fallback(self, first_col_oid: str) -> list[str]:
         """Fallback method to discover table instances by trying sequential indexes.
@@ -3075,8 +3087,9 @@ class SNMPControllerGUI:
             if col_name in schema.get("columns", {}):
                 col_info = schema["columns"][col_name]
                 index_columns.append((col_name, col_info))
-            elif col_name == "__index__":
-                index_columns.append(("__index__", {"default": "1", "type": "String"}))
+            elif col_name.startswith("__index"):
+                # Handle virtual index columns (__index__, __index_2__, etc.)
+                index_columns.append((col_name, {"default": "1" if col_name == "__index__" else "", "type": "String"}))
 
         if not index_columns:
             index_columns = [("__index__", {"default": "1", "type": "String"})]
@@ -3093,25 +3106,29 @@ class SNMPControllerGUI:
 
             # Fetch values for all non-index columns from the last row
             for col_name, col_info in columns_meta.items():
-                if col_name not in index_column_names:
-                    # This is a non-key column, get its value from the last row
-                    col_oid = ".".join(str(x) for x in col_info["oid"])
-                    full_oid = f"{col_oid}.{last_instance}"
+                # Skip index columns (both explicit and virtual __index__ columns)
+                if col_name in index_column_names or col_name.startswith("__index"):
+                    continue
+                    
+                # This is a non-key column, get its value from the last row
+                col_oid = ".".join(str(x) for x in col_info["oid"])
+                full_oid = f"{col_oid}.{last_instance}"
 
-                    try:
-                        resp = requests.get(f"{self.api_url}/value", params={"oid": full_oid}, timeout=5)
-                        if resp.status_code == 200:
-                            value_data = resp.json()
-                            column_defaults[col_name] = str(value_data.get("value", "unset"))
-                        else:
-                            column_defaults[col_name] = "unset"
-                    except Exception as e:
-                        self._log(f"Could not fetch value for {col_name}: {e}", "WARNING")
+                try:
+                    resp = requests.get(f"{self.api_url}/value", params={"oid": full_oid}, timeout=5)
+                    if resp.status_code == 200:
+                        value_data = resp.json()
+                        column_defaults[col_name] = str(value_data.get("value", "unset"))
+                    else:
                         column_defaults[col_name] = "unset"
+                except Exception as e:
+                    self._log(f"Could not fetch value for {col_name}: {e}", "WARNING")
+                    column_defaults[col_name] = "unset"
         else:
             # No existing instances, default all non-index columns to "unset"
             for col_name, col_info in columns_meta.items():
-                if col_name not in index_column_names:
+                # Skip index columns (both explicit and virtual __index__ columns)
+                if col_name not in index_column_names and not col_name.startswith("__index"):
                     column_defaults[col_name] = "unset"
 
         # Create dialog for index values
@@ -3129,35 +3146,89 @@ class SNMPControllerGUI:
         input_frame = ctk.CTkFrame(dialog)
         input_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
-        # Create entry fields for each index column
+        # State for dynamic index fields
         entries = {}
-        instances = [str(inst) for inst in schema.get("instances", [])]
-        index_column_names = [name for name, _ in index_columns]
-        columns_meta = schema.get("columns", {})
-        last_idx_default = None
-        if instances and index_column_names:
-            last_name = index_column_names[-1]
+        index_field_widgets = []  # Track widgets for cleanup
+        num_index_parts = len(index_columns) if index_columns else 1
+        
+        def get_next_default() -> str:
+            """Calculate default for the last index field based on existing instances."""
+            instances = [str(inst) for inst in schema.get("instances", [])]
+            columns_meta = schema.get("columns", {})
+            if not instances:
+                return "1"
+            
+            # Get all values for the last part of multi-part indexes
             numeric_vals: list[int] = []
             for inst in instances:
-                index_values = self._extract_index_values(inst, index_column_names, columns_meta)
-                last_val = index_values.get(last_name, "")
-                if last_val.isdigit():
-                    numeric_vals.append(int(last_val))
+                parts = str(inst).split(".")
+                if parts:
+                    last_part = parts[-1]
+                    if last_part.isdigit():
+                        numeric_vals.append(int(last_part))
+            
             if numeric_vals:
-                last_idx_default = str(max(numeric_vals) + 1)
-        row = 0
-        for col_name, col_info in index_columns:
-            ctk.CTkLabel(input_frame, text=f"{col_name}:").grid(row=row, column=0, sticky="w", pady=5, padx=10)
-            default_val = str(col_info.get("default", ""))
-            if index_column_names and col_name == index_column_names[-1] and last_idx_default is not None:
-                default_val = last_idx_default
-            entry = ctk.CTkEntry(input_frame)
-            entry.insert(0, default_val)
-            entry.grid(row=row, column=1, sticky="ew", pady=5, padx=(0, 10))
-            entries[col_name] = entry
-            row += 1
-
-        input_frame.columnconfigure(1, weight=1)
+                return str(max(numeric_vals) + 1)
+            return "1"
+        
+        def render_index_fields() -> None:
+            """Render index entry fields dynamically."""
+            nonlocal num_index_parts
+            
+            # Clear existing widgets
+            for widget_list in index_field_widgets:
+                for widget in widget_list:
+                    widget.destroy()
+            index_field_widgets.clear()
+            entries.clear()
+            
+            # Create entry fields for each index part
+            for i in range(num_index_parts):
+                col_name = "__index__" if i == 0 else f"__index_{i + 1}__"
+                
+                # Label
+                label = ctk.CTkLabel(input_frame, text=f"{col_name}:")
+                label.grid(row=i, column=0, sticky="w", pady=5, padx=10)
+                
+                # Entry
+                entry = ctk.CTkEntry(input_frame)
+                default_val = get_next_default() if i == num_index_parts - 1 else "1"
+                entry.insert(0, default_val)
+                entry.grid(row=i, column=1, sticky="ew", pady=5, padx=(0, 10))
+                
+                entries[col_name] = entry
+                index_field_widgets.append([label, entry])
+            
+            # Add +/- buttons row
+            button_row = num_index_parts
+            
+            add_btn = ctk.CTkButton(input_frame, text="+", width=40, command=add_index_part)
+            add_btn.grid(row=button_row, column=0, pady=5, padx=10, sticky="w")
+            
+            remove_btn = ctk.CTkButton(input_frame, text="-", width=40, command=remove_index_part)
+            remove_btn.grid(row=button_row, column=1, pady=5, padx=(0, 10), sticky="w")
+            if num_index_parts <= 1:
+                remove_btn.configure(state="disabled")
+            
+            index_field_widgets.append([add_btn, remove_btn])
+            
+            input_frame.columnconfigure(1, weight=1)
+        
+        def add_index_part() -> None:
+            """Add another index part field."""
+            nonlocal num_index_parts
+            num_index_parts += 1
+            render_index_fields()
+        
+        def remove_index_part() -> None:
+            """Remove the last index part field (minimum 1)."""
+            nonlocal num_index_parts
+            if num_index_parts > 1:
+                num_index_parts -= 1
+                render_index_fields()
+        
+        # Initial render
+        render_index_fields()
 
         # Buttons
         button_frame = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -3169,12 +3240,17 @@ class SNMPControllerGUI:
         def on_add() -> None:
             # Collect index values
             index_values = {}
-            for col_name in entries:
+            index_parts_ordered = []  # Keep track of order for building instance_str
+            for i in range(num_index_parts):
+                col_name = "__index__" if i == 0 else f"__index_{i + 1}__"
+                if col_name not in entries:
+                    continue
                 val = entries[col_name].get().strip()
                 if not val:
                     messagebox.showerror("Error", f"{col_name} cannot be empty")
                     return
                 index_values[col_name] = val
+                index_parts_ordered.append(val)
 
             # Create the table row using the new endpoint
             try:
@@ -3190,8 +3266,7 @@ class SNMPControllerGUI:
                     # Refresh table view
                     self._populate_table_view(table_item)
                     # Immediately add to OID tree
-                    # Extract just the column names from index_columns (which is a list of tuples)
-                    instance_str = ".".join(str(index_values[col_name]) for col_name, _ in index_columns)
+                    instance_str = ".".join(index_parts_ordered)
                     self._add_instance_to_oid_tree(table_item, instance_str)
                     dialog.destroy()
                 else:
@@ -3203,6 +3278,149 @@ class SNMPControllerGUI:
         cancel_btn.pack(side="right", padx=(10, 0))
 
         add_btn = ctk.CTkButton(button_frame, text="Add", command=on_add)
+        add_btn.pack(side="right")
+
+    def _add_index_column(self) -> None:
+        """Add an extra index column to a no-index table by recreating all instances."""
+        table_item = getattr(self, "_current_table_item", None)
+        if not table_item:
+            messagebox.showwarning("No Table Selected", "Select a table first.")
+            return
+
+        table_oid = self.oid_tree.set(table_item, "oid")
+        if not table_oid:
+            return
+
+        # Get table schema
+        try:
+            resp = requests.get(f"{self.api_url}/table-schema", params={"oid": table_oid}, timeout=5)
+            if resp.status_code != 200:
+                messagebox.showerror("Error", "Failed to get table schema")
+                return
+            schema = resp.json()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to get schema: {e}")
+            return
+
+        instances = schema.get("instances", [])
+        if not instances:
+            messagebox.showinfo("No Instances", "Table has no instances. Add instances first, then add more index columns.")
+            return
+        
+        index_columns = schema.get("index_columns", [])
+        columns_meta = schema.get("columns", {})
+        
+        # Determine current number of index parts
+        current_parts = len(index_columns) if index_columns else 1
+        
+        # Prompt for default value for the new index part
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("Add Index Column")
+        dialog.geometry("400x180")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ctk.CTkLabel(dialog, text=f"Add index part #{current_parts + 1}", font=("", 14, "bold")).pack(pady=10)
+        ctk.CTkLabel(dialog, text=f"This will recreate all {len(instances)} instances\nwith an extra index part.", font=("", 11)).pack(pady=5)
+
+        input_frame = ctk.CTkFrame(dialog)
+        input_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkLabel(input_frame, text="Default value for new index part:").pack(side="left", padx=(0, 10))
+        default_entry = ctk.CTkEntry(input_frame, width=100)
+        default_entry.insert(0, "1")
+        default_entry.pack(side="left")
+
+        button_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        button_frame.pack(fill="x", padx=20, pady=(0, 20))
+
+        def on_cancel() -> None:
+            dialog.destroy()
+
+        def on_add_column() -> None:
+            default_val = default_entry.get().strip()
+            if not default_val:
+                messagebox.showerror("Error", "Default value cannot be empty")
+                return
+            
+            dialog.destroy()
+            
+            # Process each instance: delete and recreate with extra index part
+            success_count = 0
+            fail_count = 0
+            
+            for inst in instances:
+                try:
+                    # Parse current index parts
+                    current_index_parts = str(inst).split(".")
+                    
+                    # Build current index_values dict
+                    current_index_values = {}
+                    for i, part in enumerate(current_index_parts):
+                        col_name = "__index__" if i == 0 else f"__index_{i + 1}__"
+                        current_index_values[col_name] = part
+                    
+                    # Get current column values for this instance
+                    column_values = {}
+                    for col_name, col_info in columns_meta.items():
+                        if col_name.startswith("__index"):
+                            continue
+                        col_oid = ".".join(str(x) for x in col_info["oid"])
+                        full_oid = f"{col_oid}.{inst}"
+                        try:
+                            resp = requests.get(f"{self.api_url}/value", params={"oid": full_oid}, timeout=5)
+                            if resp.status_code == 200:
+                                value_data = resp.json()
+                                column_values[col_name] = str(value_data.get("value", ""))
+                        except Exception:
+                            pass
+                    
+                    # Delete old instance
+                    del_payload = {
+                        "table_oid": table_oid,
+                        "index_values": current_index_values
+                    }
+                    resp = requests.delete(f"{self.api_url}/table-row", json=del_payload, timeout=5)
+                    if resp.status_code != 200:
+                        self._log(f"Failed to delete instance {inst}: {resp.text}", "WARNING")
+                        fail_count += 1
+                        continue
+                    
+                    # Create new instance with extra index part
+                    new_index_values = current_index_values.copy()
+                    new_col_name = f"__index_{current_parts + 1}__" if current_parts > 0 else "__index_2__"
+                    new_index_values[new_col_name] = default_val
+                    
+                    create_payload = {
+                        "table_oid": table_oid,
+                        "index_values": new_index_values,
+                        "column_values": column_values
+                    }
+                    resp = requests.post(f"{self.api_url}/table-row", json=create_payload, timeout=5)
+                    if resp.status_code == 200:
+                        success_count += 1
+                    else:
+                        self._log(f"Failed to recreate instance {inst}: {resp.text}", "WARNING")
+                        fail_count += 1
+                        
+                except Exception as e:
+                    self._log(f"Error processing instance {inst}: {e}", "ERROR")
+                    fail_count += 1
+            
+            # Show result
+            if fail_count == 0:
+                messagebox.showinfo("Success", f"Added index column to {success_count} instances")
+            else:
+                messagebox.showwarning("Partial Success", f"Updated {success_count} instances, {fail_count} failed")
+            
+            # Refresh both views
+            self._populate_table_view(table_item)
+            self._populate_oid_tree()
+
+        cancel_btn = ctk.CTkButton(button_frame, text="Cancel", command=on_cancel)
+        cancel_btn.pack(side="right", padx=(10, 0))
+
+        add_btn = ctk.CTkButton(button_frame, text="Add Column", command=on_add_column, fg_color="green", hover_color="darkgreen")
         add_btn.pack(side="right")
 
     def _remove_instance(self) -> None:

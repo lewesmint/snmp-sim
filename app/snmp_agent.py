@@ -596,18 +596,15 @@ class SNMPAgent:
         for module_name, symbols in self.mib_builder.mibSymbols.items():
             for symbol_name, symbol_obj in symbols.items():
                 if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == oid:
-                    # Update in-memory value
+                    # Update in-memory value - must use clone() to preserve pysnmp type
                     try:
-                        # If incoming value is a pysnmp type, assign directly
-                        symbol_obj.syntax = value
-                    except Exception:
-                        # Try to coerce using existing type class
-                        try:
-                            type_cls = type(symbol_obj.syntax)
-                            symbol_obj.syntax = type_cls(value)
-                        except Exception:
-                            # Fallback to raw assignment
-                            symbol_obj.syntax = value
+                        new_syntax = symbol_obj.syntax.clone(value)
+                        symbol_obj.syntax = new_syntax
+                    except Exception as e:
+                        self.logger.error(
+                            f"Failed to update scalar {oid} with value {value!r} "
+                            f"(type: {type(value).__name__}): {e}"
+                        )
 
                     # Persist override if different from initial
                     dotted = ".".join(str(x) for x in oid)
@@ -1028,19 +1025,17 @@ class SNMPAgent:
                 for module_name, symbols in self.mib_builder.mibSymbols.items():
                     for symbol_name, symbol_obj in symbols.items():
                         if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == cell_oid:
-                            # Update the value
+                            # Update the value - must always use proper pysnmp type object
                             try:
-                                # Try to use the existing type class
-                                type_cls = type(symbol_obj.syntax)
-                                symbol_obj.syntax = type_cls(value)
+                                # Clone the existing syntax object to preserve type constraints
+                                new_syntax = symbol_obj.syntax.clone(value)
+                                symbol_obj.syntax = new_syntax
                                 self.logger.debug(f"Updated MibScalarInstance {cell_oid} = {value}")
                             except Exception as e:
-                                # Fallback to direct assignment
-                                try:
-                                    symbol_obj.syntax = value
-                                    self.logger.debug(f"Updated MibScalarInstance {cell_oid} = {value} (direct)")
-                                except Exception as e2:
-                                    self.logger.error(f"Failed to update MibScalarInstance {cell_oid}: {e2}")
+                                self.logger.error(
+                                    f"Failed to update MibScalarInstance {cell_oid} with value {value!r} "
+                                    f"(type: {type(value).__name__}): {e}"
+                                )
                             break
             except Exception as e:
                 self.logger.error(f"Error updating column {column_name}: {e}", exc_info=True)
@@ -1098,13 +1093,35 @@ class SNMPAgent:
         return instance_oid
 
     def _build_index_str(self, index_values: dict[str, Any]) -> str:
-        """Build an instance index string, supporting implied/faux indices."""
+        """Build an instance index string, supporting implied/faux indices and multi-part indexes.
+        
+        Supports:
+        - __index__: "5" → "5"
+        - __index__, __index_2__: builds "5.10" from parts
+        - Regular index columns: joins all values with dots
+        """
         if not index_values:
             return "1"
-        if "__index__" in index_values:
-            return str(index_values["__index__"])
+        
+        # Handle multi-part __index__ values (__index__, __index_2__, __index_3__, etc.)
+        index_parts = []
+        i = 1
+        while True:
+            key = "__index__" if i == 1 else f"__index_{i}__"
+            if key in index_values:
+                index_parts.append(str(index_values[key]))
+                i += 1
+            else:
+                break
+        
+        if index_parts:
+            return ".".join(index_parts)
+        
+        # Legacy single __instance__ support
         if "__instance__" in index_values:
             return str(index_values["__instance__"])
+        
+        # Regular index columns
         return ".".join(str(v) for v in index_values.values())
 
     def delete_table_instance(self, table_oid: str, index_values: dict[str, Any]) -> bool:
@@ -1268,32 +1285,15 @@ class SNMPAgent:
                 for symbol_name, symbol_obj in symbols.items():
                     try:
                         if isinstance(symbol_obj, MibScalarInstance) and tuple(symbol_obj.name) in candidate_oids:
-                            # Determine target type class from existing syntax
+                            # Update value using clone() to preserve pysnmp type
                             try:
-                                type_cls = type(symbol_obj.syntax)
-                                # Try direct construction
-                                try:
-                                    symbol_obj.syntax = type_cls(stored)
-                                except Exception:
-                                    # Try numeric cast for integer-like types
-                                    try:
-                                        if isinstance(stored, str) and stored.isdigit():
-                                            symbol_obj.syntax = type_cls(int(stored))
-                                        else:
-                                            # For octet strings, pass bytes
-                                            if hasattr(type_cls, "__name__") and "Octet" in type_cls.__name__:
-                                                if isinstance(stored, str):
-                                                    symbol_obj.syntax = type_cls(stored.encode("latin1"))
-                                                else:
-                                                    symbol_obj.syntax = type_cls(stored)
-                                            else:
-                                                symbol_obj.syntax = type_cls(stored)
-                                    except Exception:
-                                        # Last resort: assign string representation
-                                        symbol_obj.syntax = type_cls(str(stored))
-                            except Exception:
-                                # fallback to raw assignment
-                                symbol_obj.syntax = stored
+                                new_syntax = symbol_obj.syntax.clone(stored)
+                                symbol_obj.syntax = new_syntax
+                            except Exception as e:
+                                self.logger.warning(
+                                    f"Failed to apply override for {dotted} with value {stored!r}: {e}"
+                                )
+                                continue
 
                             applied = True
                             break
