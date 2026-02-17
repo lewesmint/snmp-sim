@@ -107,6 +107,8 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                                         entry_obj = other_data
                                         break
                             index_columns = entry_obj.get("indexes", [])
+                            if not isinstance(index_columns, list):
+                                index_columns = []
                             
                             # Build columns metadata for type info (needed for IpAddress parsing)
                             columns_meta: dict[str, Any] = {}
@@ -119,6 +121,15 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                             for instance_str, instance_data in instances_dict.items():
                                 # Reconstruct index values from instance_str and index_columns metadata
                                 row: dict[str, Any] = {}
+
+                                if index_columns == ["__index__"]:
+                                    row["__index__"] = instance_str
+                                    # Apply column values if present
+                                    column_values = instance_data.get("column_values", {}) if isinstance(instance_data, dict) else {}
+                                    if isinstance(column_values, dict):
+                                        row.update(column_values)
+                                    rows.append(row)
+                                    continue
                                 
                                 # Parse instance_str to extract index values
                                 parts = instance_str.split(".")

@@ -1,4 +1,5 @@
 {
+  "schema_version": "1.0.1",
   "objects": {
     "testColour": {
       "oid": [
@@ -262,6 +263,81 @@
       ],
       "type": "DisplayString",
       "access": "read-write"
+    },
+    "testNoIndexTable": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        4,
+        1,
+        99998,
+        1,
+        4
+      ],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "rows": [
+        {
+          "__index__": "1",
+          "testNoIndexValueA": 0,
+          "testNoIndexValueB": 0
+        }
+      ]
+    },
+    "testNoIndexEntry": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        4,
+        1,
+        99998,
+        1,
+        4,
+        1
+      ],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "indexes": [
+        "__index__"
+      ]
+    },
+    "testNoIndexValueA": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        4,
+        1,
+        99998,
+        1,
+        4,
+        1,
+        1
+      ],
+      "type": "Integer32",
+      "access": "read-only"
+    },
+    "testNoIndexValueB": {
+      "oid": [
+        1,
+        3,
+        6,
+        1,
+        4,
+        1,
+        99998,
+        1,
+        4,
+        1,
+        2
+      ],
+      "type": "Integer32",
+      "access": "read-only"
     }
   },
   "traps": {

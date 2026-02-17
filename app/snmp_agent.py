@@ -317,6 +317,7 @@ class SNMPAgent:
                 self._capture_initial_values()
                 self._load_mib_state()  # Load unified state (scalars, tables, deletions)
                 self._apply_overrides()
+                self._apply_table_instances()  # Apply loaded table instance values to MIB cells
             except Exception as e:
                 self.logger.error(f"Error applying overrides: {e}", exc_info=True)
             self._populate_sysor_table()  # Populate sysORTable with actual MIBs
@@ -800,8 +801,8 @@ class SNMPAgent:
                     continue
 
                 index_columns = entry_obj.get("indexes", [])
-                if not isinstance(index_columns, list) or not index_columns:
-                    continue
+                if not isinstance(index_columns, list):
+                    index_columns = []
 
                 columns_meta: dict[str, Any] = {}
                 for col_name in index_columns:
@@ -830,6 +831,8 @@ class SNMPAgent:
         columns_meta: dict[str, Any],
     ) -> str:
         """Build a dotted instance string from a schema table row."""
+        if not index_columns:
+            return "1"
         parts: list[str] = []
         for col_name in index_columns:
             raw_val = row.get(col_name)
@@ -882,12 +885,15 @@ class SNMPAgent:
                     return False
 
                 index_columns = entry_obj.get("indexes", [])
-                if not isinstance(index_columns, list) or not index_columns:
-                    return False
+                if not isinstance(index_columns, list):
+                    index_columns = []
 
                 rows = obj_data.get("rows", [])
                 if not isinstance(rows, list):
                     return False
+
+                if not index_columns:
+                    return any(isinstance(row, dict) for row in rows)
 
                 for row in rows:
                     if not isinstance(row, dict):
@@ -962,6 +968,82 @@ class SNMPAgent:
         except Exception as e:
             self.logger.error(f"Failed to save MIB state to {path}: {e}", exc_info=True)
 
+    def _update_table_cell_values(self, table_oid: str, instance_str: str, column_values: dict[str, Any]) -> None:
+        """Update the MibScalarInstance objects for table cell values.
+        
+        Args:
+            table_oid: The table OID (e.g., "1.3.6.1.4.1.99998.1.4")
+            instance_str: The instance index as string (e.g., "1")
+            column_values: Dict mapping column names to values
+        """
+        if self.mib_builder is None:
+            return
+        
+        # Import MibScalarInstance for type checking
+        try:
+            MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
+        except Exception as e:
+            self.logger.error(f"Failed to import MibScalarInstance: {e}")
+            return
+        
+        # Parse table OID
+        table_parts = tuple(int(x) for x in table_oid.split("."))
+        entry_oid = table_parts + (1,)  # Entry is table + .1
+        
+        # Parse instance string to tuple
+        instance_parts = tuple(int(x) for x in instance_str.split("."))
+        
+        # For each column value, find and update the corresponding MibScalarInstance
+        for column_name, value in column_values.items():
+            try:
+                # Convert unhashable types (list, dict) to strings for storage
+                if isinstance(value, (list, dict)):
+                    self.logger.debug(f"Converting {type(value).__name__} to string for column {column_name}: {value}")
+                    if isinstance(value, list):
+                        # Convert list to dot-notation OID string
+                        value = ".".join(str(x) for x in value)
+                    elif isinstance(value, dict):
+                        # Convert dict to string representation
+                        value = str(value)
+                
+                # Search through MIB symbols to find the column by name
+                column_oid = None
+                for module_name, symbols in self.mib_builder.mibSymbols.items():
+                    if column_name in symbols:
+                        col_obj = symbols[column_name]
+                        if hasattr(col_obj, "name") and isinstance(col_obj.name, tuple):
+                            # Check if this column belongs to our table (starts with entry_oid)
+                            if len(col_obj.name) > len(entry_oid) and col_obj.name[:len(entry_oid)] == entry_oid:
+                                column_oid = col_obj.name
+                                break
+                
+                if not column_oid:
+                    self.logger.debug(f"Could not find column OID for {column_name}")
+                    continue
+                
+                # Build the full cell OID: column_oid + instance_parts
+                cell_oid = column_oid + instance_parts
+                
+                # Find and update the MibScalarInstance for this cell
+                for module_name, symbols in self.mib_builder.mibSymbols.items():
+                    for symbol_name, symbol_obj in symbols.items():
+                        if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == cell_oid:
+                            # Update the value
+                            try:
+                                # Try to use the existing type class
+                                type_cls = type(symbol_obj.syntax)
+                                symbol_obj.syntax = type_cls(value)
+                                self.logger.debug(f"Updated MibScalarInstance {cell_oid} = {value}")
+                            except Exception as e:
+                                # Fallback to direct assignment
+                                try:
+                                    symbol_obj.syntax = value
+                                    self.logger.debug(f"Updated MibScalarInstance {cell_oid} = {value} (direct)")
+                                except Exception as e2:
+                                    self.logger.error(f"Failed to update MibScalarInstance {cell_oid}: {e2}")
+                            break
+            except Exception as e:
+                self.logger.error(f"Error updating column {column_name}: {e}", exc_info=True)
 
 
     def add_table_instance(self, table_oid: str, index_values: dict[str, Any], column_values: dict[str, Any] | None = None) -> str:
@@ -977,9 +1059,21 @@ class SNMPAgent:
         """
         if column_values is None:
             column_values = {}
-            
+        
+        # Serialize any unhashable types in column_values
+        serialized_column_values = {}
+        for col_name, col_value in column_values.items():
+            if isinstance(col_value, list):
+                # Convert list to dot-notation string (for OIDs)
+                serialized_column_values[col_name] = ".".join(str(x) for x in col_value)
+            elif isinstance(col_value, dict):
+                # Convert dict to string
+                serialized_column_values[col_name] = str(col_value)
+            else:
+                serialized_column_values[col_name] = col_value
+
         # Create an instance key from index values
-        index_str = ".".join(str(v) for v in index_values.values())
+        index_str = self._build_index_str(index_values)
         instance_oid = f"{table_oid}.{index_str}"
         
         # Store the instance
@@ -987,18 +1081,31 @@ class SNMPAgent:
             self.table_instances[table_oid] = {}
         
         self.table_instances[table_oid][index_str] = {
-            "column_values": column_values
+            "column_values": serialized_column_values
         }
         
         # Remove from deleted list if it was previously deleted
         if instance_oid in self.deleted_instances:
             self.deleted_instances.remove(instance_oid)
         
+        # Update the actual MibScalarInstance objects for each column value
+        self._update_table_cell_values(table_oid, index_str, serialized_column_values)
+        
         # Persist to unified state file
         self._save_mib_state()
         
         self.logger.info(f"Added table instance: {instance_oid}")
         return instance_oid
+
+    def _build_index_str(self, index_values: dict[str, Any]) -> str:
+        """Build an instance index string, supporting implied/faux indices."""
+        if not index_values:
+            return "1"
+        if "__index__" in index_values:
+            return str(index_values["__index__"])
+        if "__instance__" in index_values:
+            return str(index_values["__instance__"])
+        return ".".join(str(v) for v in index_values.values())
 
     def delete_table_instance(self, table_oid: str, index_values: dict[str, Any]) -> bool:
         """Mark a table instance as deleted (soft delete).
@@ -1012,7 +1119,7 @@ class SNMPAgent:
         Returns:
             True if instance was successfully marked as deleted
         """
-        index_str = ".".join(str(v) for v in index_values.values())
+        index_str = self._build_index_str(index_values)
         instance_oid = f"{table_oid}.{index_str}"
         
         # Remove from active dynamic instances if it exists
@@ -1047,7 +1154,7 @@ class SNMPAgent:
         Returns:
             True if instance was restored
         """
-        instance_oid = f"{table_oid}.{'.'.join(str(v) for v in index_values.values())}"
+        instance_oid = f"{table_oid}.{self._build_index_str(index_values)}"
         
         if instance_oid in self.deleted_instances:
             # Re-add the instance
@@ -1211,6 +1318,22 @@ class SNMPAgent:
             except Exception:
                 self.logger.exception("Failed to save MIB state after pruning invalid entries")
             self.logger.info(f"Removed {len(removed_invalid)} invalid overrides: {removed_invalid}")
+
+    def _apply_table_instances(self) -> None:
+        """Apply loaded table instances to the in-memory MIB table cell instances."""
+        if not self.table_instances:
+            return
+        
+        self.logger.info("Applying table instances to MIB...")
+        
+        # For each table
+        for table_oid, instances in self.table_instances.items():
+            # For each instance in that table
+            for instance_str, instance_data in instances.items():
+                column_values = instance_data.get("column_values", {})
+                if column_values:
+                    self._update_table_cell_values(table_oid, instance_str, column_values)
+                    self.logger.debug(f"Applied table instance {table_oid}.{instance_str}")
 
 
 

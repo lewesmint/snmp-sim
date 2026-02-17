@@ -421,5 +421,6 @@
       "status": "current",
       "mib": "CISCO-ALARM-MIB"
     }
-  }
+  },
+  "schema_version": "1.0.1"
 }

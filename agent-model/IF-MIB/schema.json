@@ -1633,5 +1633,6 @@
       "status": "current",
       "mib": "IF-MIB"
     }
-  }
+  },
+  "schema_version": "1.0.1"
 }

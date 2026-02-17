@@ -10,6 +10,8 @@ from app.default_value_plugins import get_default_value
 
 logger = AppLogger.get(__name__)
 
+SCHEMA_VERSION = "1.0.1"
+
 
 class BehaviourGenerator:
     """Generates schema.json files from compiled MIB Python files.
@@ -160,6 +162,13 @@ class BehaviourGenerator:
                         if not hasattr(self, "_type_registry"):
                             self._type_registry = self._load_type_registry()
                         index_names = entry_info.get("indexes", [])
+                        if not index_names:
+                            # Missing INDEX: introduce a faux index column for schema/state handling
+                            index_names = ["__index__"]
+                            entry_info["indexes"] = index_names
+                        if "__index__" in index_names:
+                            default_row["__index__"] = "1"
+
                         for col in columns:
                             col_info = info[col]
                             col_type = col_info.get("type", "")
@@ -196,6 +205,7 @@ class BehaviourGenerator:
 
         # Write to JSON file (include both objects and traps)
         output_data = {
+            "schema_version": SCHEMA_VERSION,
             "objects": info,
             "traps": traps,
         }

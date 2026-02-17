@@ -500,46 +500,127 @@ def _try_get_table_cell_value(oid: str, parts: tuple[int, ...]) -> Any | None:
     
     schemas = load_all_schemas(schema_dir)
     
-    # Find matching table by iterating through all tables
-    for table_oid_str, instances in snmp_agent.table_instances.items():
-        table_parts = tuple(int(x) for x in table_oid_str.split("."))
+    # First, identify which table this OID belongs to by checking schemas
+    # Format: table_parts + (1,) + (column_num,) + instance_parts
+    table_oid_str = None
+    table_parts = None
+    column_num = None
+    instance_str = None
+    column_name = None
+    
+    for mib, schema in schemas.items():
+        if not isinstance(schema, dict):
+            continue  # type: ignore[unreachable]
+        objects = schema.get("objects", schema)
+        if not isinstance(objects, dict):
+            continue
+            
+        for obj_name, obj_data in objects.items():
+            if not isinstance(obj_data, dict) or obj_data.get("type") != "MibTable":
+                continue
+            candidate_table_parts = tuple(obj_data.get("oid", []))
+            entry_oid = candidate_table_parts + (1,)
+            
+            # Check if OID starts with table_oid + .1 (entry) 
+            if (len(parts) > len(candidate_table_parts) + 1 and 
+                parts[:len(candidate_table_parts)] == candidate_table_parts and 
+                parts[len(candidate_table_parts)] == 1):
+                # This could be a cell in this table
+                table_parts = candidate_table_parts
+                table_oid_str = ".".join(str(x) for x in table_parts)
+                column_num = parts[len(table_parts) + 1]
+                instance_parts = parts[len(table_parts) + 2:]
+                instance_str = ".".join(str(x) for x in instance_parts) if instance_parts else "1"
+                
+                # Look up column name
+                for col_name, col_data in objects.items():
+                    if isinstance(col_data, dict) and "oid" in col_data:
+                        col_oid_t = tuple(col_data["oid"])
+                        if col_oid_t == entry_oid + (column_num,):
+                            column_name = col_name
+                            break
+                break
+        if table_oid_str:
+            break
+    
+    if not table_oid_str or not column_name or table_parts is None:
+        return None
+    
+    # Now check table_instances for this specific table
+    if table_oid_str in snmp_agent.table_instances:
+        instances = snmp_agent.table_instances[table_oid_str]
+        if instance_str in instances:
+            column_values = instances[instance_str].get("column_values", {})
+            if column_name in column_values:
+                value = column_values[column_name]
+                logger.info(f"Fetched table cell value from table_instances for OID {parts}: {value}")
+                return value
+
+    # Fall back to schema rows for static instances
+    for mib, schema in schemas.items():
+        if not isinstance(schema, dict):
+            continue  # type: ignore[unreachable]
+        objects = schema.get("objects", schema)
+        if not isinstance(objects, dict):
+            continue
+
+        # Find the table and entry objects
+        table_obj = None
+        entry_obj = None
+        entry_oid = table_parts + (1,)
         
-        # Check if OID starts with table_oid + .1 (entry)
-        if len(parts) > len(table_parts) + 1 and parts[:len(table_parts)] == table_parts and parts[len(table_parts)] == 1:
-            # This could be a cell in this table
-            # Format: table_parts + (1,) + (column_num,) + instance_parts
-            column_num = parts[len(table_parts) + 1]
-            instance_parts = parts[len(table_parts) + 2:]
-            instance_str = ".".join(str(x) for x in instance_parts)
-            
-            # Look up column name from schema
-            entry_oid = table_parts + (1,)
-            column_name = None
-            
-            for mib, schema in schemas.items():
-                if isinstance(schema, dict):
-                    objects = schema.get("objects", schema)
-                    for obj_name, obj_data in objects.items():
-                        if isinstance(obj_data, dict) and "oid" in obj_data:
-                            obj_oid_t = tuple(obj_data["oid"])
-                            # Check if this is the column we're looking for
-                            if obj_oid_t == entry_oid + (column_num,):
-                                column_name = obj_name
-                                break
-                    if column_name:
-                        break
-            
-            if not column_name:
-                logger.debug(f"Column name not found for column {column_num} in table {table_oid_str}")
+        for obj_name, obj_data in objects.items():
+            if not isinstance(obj_data, dict):
+                continue
+            if obj_data.get("type") == "MibTable":
+                obj_oid = tuple(obj_data.get("oid", []))
+                if obj_oid == table_parts:
+                    table_obj = obj_data
+            elif obj_data.get("type") == "MibTableRow":
+                obj_oid = tuple(obj_data.get("oid", []))
+                if obj_oid == entry_oid:
+                    entry_obj = obj_data
+
+        if not table_obj or not entry_obj:
+            continue
+
+        index_columns = entry_obj.get("indexes", [])
+        if not isinstance(index_columns, list):
+            index_columns = []
+
+        rows = table_obj.get("rows", [])
+        if not isinstance(rows, list):
+            continue
+
+        # Build instance string from OID for matching
+        instance_str_from_oid = instance_str if instance_str else "1"
+
+        for row in rows:
+            if not isinstance(row, dict):
                 continue
             
-            # Look up value in table_instances
-            if instance_str in instances:
-                column_values = instances[instance_str].get("column_values", {})
-                if column_name in column_values:
-                    value = column_values[column_name]
-                    logger.info(f"Fetched table cell value for OID {parts}: {value}")
+            # For tables with no index columns (implied instance)
+            if not index_columns:
+                if instance_str_from_oid != "1":
+                    continue
+                if column_name in row:
+                    value = row[column_name]
+                    logger.info(f"Fetched table cell value from schema for OID {parts}: {value}")
                     return value
+                continue
+
+            # For tables with explicit index columns
+            row_instance_parts: list[str] = []
+            for idx_col in index_columns:
+                if idx_col in row:
+                    row_instance_parts.append(str(row[idx_col]))
+            row_instance_str = ".".join(row_instance_parts) if row_instance_parts else "1"
+            if row_instance_str != instance_str_from_oid:
+                continue
+            if column_name in row:
+                value = row[column_name]
+                logger.info(f"Fetched table cell value from schema for OID {parts}: {value}")
+                return value
     
     return None
 
@@ -1169,15 +1250,22 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
     
     try:
-        logger.debug(f"Creating table instance for {request.table_oid} with indices {request.index_values}")
+        logger.info(f"Creating table instance for {request.table_oid}")
+        logger.info(f"  index_values: {request.index_values} (type: {type(request.index_values)})")
+        logger.info(f"  column_values: {request.column_values}")
+        
+        # Log each column value's type
+        if request.column_values:
+            for col_name, col_val in request.column_values.items():
+                logger.info(f"    {col_name}: {col_val} (type: {type(col_val).__name__})")
         
         # Parse table OID
         table_parts = tuple(int(x) for x in request.table_oid.split(".")) if request.table_oid else ()
         entry_oid = table_parts + (1,)
         
         # Get the index values to create the instance OID
-        if not request.index_values:
-            raise HTTPException(status_code=400, detail="No index values provided")
+        if request.index_values is None:
+            request.index_values = {}  # type: ignore[unreachable]
         
         # Fetch table schema to get index column types
         try:
@@ -1197,6 +1285,33 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
             columns = {}
             index_columns = list(request.index_values.keys())
         
+        def _extract_index_str(values: dict[str, Any]) -> str:
+            if "__index__" in values:
+                return str(values["__index__"])
+            if "index" in values:
+                return str(values["index"])
+            if "instance" in values:
+                return str(values["instance"])
+            if not values:
+                return "1"
+            return ".".join(str(v) for v in values.values())
+
+        if not index_columns:
+            index_str = _extract_index_str(request.index_values)
+            instance_oid = snmp_agent.add_table_instance(
+                table_oid=request.table_oid,
+                index_values={"__index__": index_str},
+                column_values=request.column_values or {},
+            )
+            logger.info(f"Successfully created table instance: {instance_oid}")
+            return {
+                "status": "ok",
+                "table_oid": request.table_oid,
+                "instance_index": index_str,
+                "instance_oid": instance_oid,
+                "columns_created": [str(col) for col in request.column_values.keys()] if request.column_values else []
+            }
+
         # Helper function to convert index value based on column type
         def convert_index_value(col_name: str, value: str | int) -> int | tuple[int, ...] | str:
             """Convert index value to appropriate format based on column type."""
@@ -1294,10 +1409,24 @@ def delete_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
     
     try:
+        def _extract_index_str(values: dict[str, Any]) -> str:
+            if "__index__" in values:
+                return str(values["__index__"])
+            if "index" in values:
+                return str(values["index"])
+            if "instance" in values:
+                return str(values["instance"])
+            if not values:
+                return "1"
+            return ".".join(str(v) for v in values.values())
+
+        index_values = request.index_values or {}
+        index_str = _extract_index_str(index_values)
+
         # Delete the instance
         success = snmp_agent.delete_table_instance(
             table_oid=request.table_oid,
-            index_values=request.index_values
+            index_values={"__index__": index_str}
         )
         
         if success:
@@ -1305,7 +1434,7 @@ def delete_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
             return {
                 "status": "deleted",
                 "table_oid": request.table_oid,
-                "index_values": request.index_values
+                "index_values": index_values
             }
         else:
             raise HTTPException(status_code=404, detail="Table instance not found")

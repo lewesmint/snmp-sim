@@ -1,4 +1,5 @@
 {
   "objects": {},
-  "traps": {}
+  "traps": {},
+  "schema_version": "1.0.1"
 }

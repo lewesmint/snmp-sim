@@ -2263,10 +2263,15 @@ class SNMPControllerGUI:
         columns_meta: Dict[str, Any],
     ) -> Dict[str, str]:
         """Decode index values from a dotted instance string."""
+        if not index_columns:
+            return {"__index__": instance or "1"}
         parts = instance.split(".") if instance else []
         values: Dict[str, str] = {}
         pos = 0
         for col_name in index_columns:
+            if col_name == "__index__":
+                values[col_name] = instance or "1"
+                continue
             col_info = columns_meta.get(col_name, {}) if columns_meta else {}
             col_type = str(col_info.get("type", "")).lower()
             if col_type == "ipaddress":
@@ -2290,8 +2295,12 @@ class SNMPControllerGUI:
         columns_meta: Dict[str, Any],
     ) -> str:
         """Encode index values into a dotted instance string."""
+        if not index_columns:
+            return str(index_values.get("__index__", "1"))
         parts: list[str] = []
         for col_name in index_columns:
+            if col_name == "__index__":
+                return str(index_values.get(col_name, "1"))
             col_info = columns_meta.get(col_name, {}) if columns_meta else {}
             col_type = str(col_info.get("type", "")).lower()
             raw_val = str(index_values.get(col_name, ""))
@@ -2846,6 +2855,8 @@ class SNMPControllerGUI:
                 schema = resp.json()
                 instances = schema.get("instances", [])
                 index_columns = schema.get("index_columns", [])
+                if not index_columns:
+                    index_columns = ["__index__"]
                 self._log(
                     f"Loaded {len(instances)} instances from table schema for {oid_str}: "
                     f"instances={instances}, index_columns={index_columns}",
@@ -2873,7 +2884,8 @@ class SNMPControllerGUI:
         # Set columns
         col_names = [col[0] for col in columns]
         self.table_tree["columns"] = ("index",) + tuple(col_names)
-        self.table_tree.heading("index", text="Index")
+        index_header = "__Index__" if index_columns == ["__index__"] else "Index"
+        self.table_tree.heading("index", text=index_header)
         
         # Calculate column widths - use preserved if available, otherwise distribute available width
         # Initialize defaults
@@ -3063,10 +3075,11 @@ class SNMPControllerGUI:
             if col_name in schema.get("columns", {}):
                 col_info = schema["columns"][col_name]
                 index_columns.append((col_name, col_info))
+            elif col_name == "__index__":
+                index_columns.append(("__index__", {"default": "1", "type": "String"}))
 
         if not index_columns:
-            messagebox.showerror("Error", "No index columns found")
-            return
+            index_columns = [("__index__", {"default": "1", "type": "String"})]
 
         # Get non-key column values from the last row
         instances = schema.get("instances", [])
@@ -3177,7 +3190,8 @@ class SNMPControllerGUI:
                     # Refresh table view
                     self._populate_table_view(table_item)
                     # Immediately add to OID tree
-                    instance_str = ".".join(str(index_values[k]) for k in index_columns)
+                    # Extract just the column names from index_columns (which is a list of tuples)
+                    instance_str = ".".join(str(index_values[col_name]) for col_name, _ in index_columns)
                     self._add_instance_to_oid_tree(table_item, instance_str)
                     dialog.destroy()
                 else:
