@@ -172,5 +172,14 @@
       "status": "current",
       "mib": "TEST-ENUM-MIB"
     }
-  }
+  },
+  "links": [
+    {
+      "id": "endpoint-name-notes-link",
+      "columns": ["endPointName", "endPointNotes"],
+      "scope": "per-instance",
+      "type": "bidirectional",
+      "description": "Example: Keep endPointName and endPointNotes synchronized"
+    }
+  ]
 }

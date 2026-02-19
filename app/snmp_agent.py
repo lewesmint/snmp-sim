@@ -16,6 +16,7 @@ import json
 import time
 from typing import Any, Dict, Optional
 from pysnmp import debug as pysnmp_debug
+from app.value_links import get_link_manager
 
 # Load type converter plugins
 import plugins.date_and_time  # noqa: F401 - registers the converter
@@ -318,6 +319,14 @@ class SNMPAgent:
                     self.logger.warning(f"Schema not found for {mib} at {schema_path}")
 
         self.logger.info(f"Loaded {len(self.mib_jsons)} MIB schemas for SNMP serving.")
+        
+        # Load value links from schemas
+        link_manager = get_link_manager()
+        link_manager.clear()  # Clear any existing links
+        for mib_name, schema in self.mib_jsons.items():
+            link_manager.load_links_from_schema(schema)
+            
+        self.logger.info("Value links loaded from schemas")
 
         # Build relationships between tables that share indexes via AUGMENTS
         self._build_augmented_index_map()
@@ -753,6 +762,13 @@ class SNMPAgent:
         # Extract deleted instances list
         self.deleted_instances = mib_state.get("deleted_instances", [])
         self._filter_deleted_instances_against_schema()
+
+        # Extract links (state only) and load into link manager
+        try:
+            link_manager = get_link_manager()
+            link_manager.load_links_from_state(mib_state.get("links", []))
+        except Exception as e:
+            self.logger.error(f"Failed to load link state: {e}", exc_info=True)
         
         self.logger.info(
             f"Loaded state: {len(self.overrides)} scalars, {sum(len(v) for v in self.table_instances.values())} table instances, "
@@ -1287,10 +1303,12 @@ class SNMPAgent:
         path = self._state_file_path()
         os.makedirs(os.path.dirname(path), exist_ok=True)
         
+        link_manager = get_link_manager()
         mib_state = {
             "scalars": self.overrides,
             "tables": self.table_instances,
-            "deleted_instances": self.deleted_instances
+            "deleted_instances": self.deleted_instances,
+            "links": link_manager.export_state_links(),
         }
         
         try:
@@ -1300,16 +1318,21 @@ class SNMPAgent:
         except Exception as e:
             self.logger.error(f"Failed to save MIB state to {path}: {e}", exc_info=True)
 
-    def _update_table_cell_values(self, table_oid: str, instance_str: str, column_values: dict[str, Any]) -> None:
+    def _update_table_cell_values(self, table_oid: str, instance_str: str, column_values: dict[str, Any], _processed: set[str] | None = None) -> None:
         """Update the MibScalarInstance objects for table cell values.
         
         Args:
             table_oid: The table OID (e.g., "1.3.6.1.4.1.99998.1.4")
             instance_str: The instance index as string (e.g., "1")
             column_values: Dict mapping column names to values
+            _processed: Internal set of columns already processed in this update session
         """
         if self.mib_builder is None:
             return
+        
+        # Initialize processed set for top-level call
+        if _processed is None:
+            _processed = set()
         
         # Import MibScalarInstance for type checking
         try:
@@ -1325,9 +1348,32 @@ class SNMPAgent:
         # Parse instance string to tuple
         instance_parts = tuple(int(x) for x in instance_str.split("."))
         
-        # For each column value, find and update the corresponding MibScalarInstance
+        # Get link manager for propagating linked values
+        link_manager = get_link_manager()
+        instance_key = f"{table_oid}:{instance_str}"
+        
+        #For each column value, find and update the corresponding MibScalarInstance
         for column_name, value in column_values.items():
+            processed_key = f"{table_oid}:{column_name}"
+            # Skip if already processed in this update session
+            if processed_key in _processed:
+                self.logger.debug(
+                    f"Skipping {column_name} in {table_oid} (already processed via propagation)"
+                )
+                continue
+                
+            # Check if we should propagate this update to linked columns
+            if not link_manager.should_propagate(column_name, instance_key):
+                self.logger.debug(f"Skipping propagation for {column_name} (already updating)")
+                continue
+                
             try:
+                # Mark that we're updating this column (prevents infinite loops)
+                link_manager.begin_update(column_name, instance_key)
+                
+                # Mark as processed in this update session
+                _processed.add(processed_key)
+                
                 # Convert unhashable types (list, dict) to strings for storage
                 if isinstance(value, (list, dict)):
                     self.logger.debug(f"Converting {type(value).__name__} to string for column {column_name}: {value}")
@@ -1338,6 +1384,12 @@ class SNMPAgent:
                         # Convert dict to string representation
                         value = str(value)
                 
+                # Keep table_instances in sync for API reads
+                stored = False
+                if table_oid in self.table_instances and instance_str in self.table_instances[table_oid]:
+                    self.table_instances[table_oid][instance_str].setdefault("column_values", {})[column_name] = value
+                    stored = True
+
                 # Search through MIB symbols to find the column by name
                 column_oid = None
                 for module_name, symbols in self.mib_builder.mibSymbols.items():
@@ -1357,6 +1409,7 @@ class SNMPAgent:
                 cell_oid = column_oid + instance_parts
                 
                 # Find and update the MibScalarInstance for this cell
+                updated = False
                 for module_name, symbols in self.mib_builder.mibSymbols.items():
                     for symbol_name, symbol_obj in symbols.items():
                         if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == cell_oid:
@@ -1366,14 +1419,39 @@ class SNMPAgent:
                                 new_syntax = symbol_obj.syntax.clone(value)
                                 symbol_obj.syntax = new_syntax
                                 self.logger.debug(f"Updated MibScalarInstance {cell_oid} = {value}")
+                                updated = True
                             except Exception as e:
                                 self.logger.error(
                                     f"Failed to update MibScalarInstance {cell_oid} with value {value!r} "
                                     f"(type: {type(value).__name__}): {e}"
                                 )
                             break
+                
+                # If update succeeded or we stored in table_instances, propagate to linked columns
+                if updated or stored:
+                    linked_targets = link_manager.get_linked_targets(column_name, table_oid)
+                    if linked_targets:
+                        targets_display = [
+                            f"{t.table_oid}:{t.column_name}" for t in linked_targets
+                        ]
+                        self.logger.info(
+                            f"Propagating value from {column_name} to linked columns: {targets_display}"
+                        )
+                        for target in linked_targets:
+                            target_table = target.table_oid or table_oid
+                            linked_values = {target.column_name: value}
+                            self._update_table_cell_values(
+                                target_table,
+                                instance_str,
+                                linked_values,
+                                _processed,
+                            )
+                        
             except Exception as e:
                 self.logger.error(f"Error updating column {column_name}: {e}", exc_info=True)
+            finally:
+                # Always clear the update marker
+                link_manager.end_update(column_name, instance_key)
 
 
     def add_table_instance(

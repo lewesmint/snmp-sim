@@ -7,6 +7,7 @@ import json
 
 from app.oid_utils import oid_str_to_tuple, oid_tuple_to_str
 from app.trap_receiver import TrapReceiver
+from app.value_links import get_link_manager, ValueLinkEndpoint
 
 # Reference to the SNMPAgent instance will be set by main app
 snmp_agent: Optional[Any] = None
@@ -20,6 +21,21 @@ app = FastAPI()
 
 class SysDescrUpdate(BaseModel):
     value: str
+
+
+class LinkEndpoint(BaseModel):
+    table_oid: Optional[str] = None
+    column: str
+
+
+class LinkRequest(BaseModel):
+    id: Optional[str] = None
+    scope: Literal["per-instance", "global"] = "per-instance"
+    type: Literal["bidirectional"] = "bidirectional"
+    match: Literal["shared-index"] = "shared-index"
+    endpoints: list[LinkEndpoint]
+    description: Optional[str] = None
+    create_missing: bool = False
 
 
 @app.get("/sysdescr")
@@ -101,6 +117,162 @@ def list_types() -> dict[str, Any]:
     all_types = list(handler.type_registry.keys())
 
     return {"count": len(all_types), "types": sorted(all_types)}
+
+
+@app.get("/links")
+def list_links() -> dict[str, Any]:
+    """List all links (schema + state)."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    link_manager = get_link_manager()
+    return {"links": link_manager.export_links(include_schema=True)}
+
+
+@app.post("/links")
+def create_or_update_link(request: LinkRequest) -> dict[str, Any]:
+    """Create or update a link (state-backed)."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    if not request.endpoints or len(request.endpoints) < 2:
+        raise HTTPException(status_code=400, detail="At least two endpoints are required")
+
+    if request.scope == "per-instance":
+        for endpoint in request.endpoints:
+            if not endpoint.table_oid:
+                raise HTTPException(
+                    status_code=400,
+                    detail="table_oid is required for per-instance links",
+                )
+
+    def _build_table_columns_map() -> dict[str, set[str]]:
+        from app.cli_load_model import load_all_schemas
+        import os
+
+        table_columns: dict[str, set[str]] = {}
+        schema_dir = "agent-model"
+        if not os.path.exists(schema_dir):
+            return table_columns
+
+        schemas = load_all_schemas(schema_dir)
+        for schema in schemas.values():
+            objects = schema.get("objects", schema) if isinstance(schema, dict) else {}
+            if not isinstance(objects, dict):
+                continue
+
+            # Map entry OID to table OID for this schema
+            entry_to_table: dict[tuple[int, ...], str] = {}
+            for obj_data in objects.values():
+                if not isinstance(obj_data, dict):
+                    continue
+                if obj_data.get("type") == "MibTable":
+                    table_oid_list = obj_data.get("oid", [])
+                    if not table_oid_list:
+                        continue
+                    table_oid = ".".join(str(x) for x in table_oid_list)
+                    entry_to_table[tuple(table_oid_list + [1])] = table_oid
+
+            for obj_name, obj_data in objects.items():
+                if not isinstance(obj_data, dict):
+                    continue
+                oid_list = obj_data.get("oid", [])
+                if not isinstance(oid_list, list) or not oid_list:
+                    continue
+                oid_tuple = tuple(oid_list)
+                # Column OID format: entry_oid + column_id
+                for entry_oid, table_oid in entry_to_table.items():
+                    if len(oid_tuple) == len(entry_oid) + 1 and oid_tuple[: len(entry_oid)] == entry_oid:
+                        table_columns.setdefault(table_oid, set()).add(obj_name)
+                        break
+
+        return table_columns
+
+    if request.scope == "per-instance":
+        table_columns = _build_table_columns_map()
+        for endpoint in request.endpoints:
+            columns = table_columns.get(endpoint.table_oid or "")
+            if not columns:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown table OID: {endpoint.table_oid}",
+                )
+            if endpoint.column not in columns:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown column '{endpoint.column}' for table {endpoint.table_oid}",
+                )
+
+    link_manager = get_link_manager()
+    link_id = request.id or f"link_{len(link_manager.export_links(include_schema=True)) + 1}"
+
+    # Prevent overwriting schema links
+    existing = {l["id"]: l for l in link_manager.export_links(include_schema=True)}
+    if link_id in existing and existing[link_id].get("source") != "state":
+        raise HTTPException(status_code=400, detail="Cannot overwrite schema link")
+
+    # Replace existing state link if needed
+    link_manager.remove_link(link_id, source="state")
+
+    link_manager.add_link(
+        link_id,
+        endpoints=[ValueLinkEndpoint(e.table_oid, e.column) for e in request.endpoints],
+        scope=request.scope,
+        match=request.match,
+        source="state",
+        description=request.description,
+        create_missing=request.create_missing,
+    )
+
+    # Source-over-dest sync on creation: use first endpoint as source
+    if request.scope == "per-instance" and request.match == "shared-index":
+        source_ep = request.endpoints[0]
+        source_table = source_ep.table_oid
+        source_col = source_ep.column
+        if source_table:
+            source_instances = snmp_agent.table_instances.get(source_table, {})
+            for instance_str, payload in source_instances.items():
+                value = payload.get("column_values", {}).get(source_col)
+                if value is None:
+                    continue
+                for target_ep in request.endpoints[1:]:
+                    target_table = target_ep.table_oid
+                    target_col = target_ep.column
+                    if not target_table:
+                        continue
+                    if target_table not in snmp_agent.table_instances:
+                        continue
+                    if instance_str not in snmp_agent.table_instances[target_table]:
+                        continue
+                    snmp_agent._update_table_cell_values(
+                        target_table,
+                        instance_str,
+                        {target_col: value},
+                    )
+
+    snmp_agent._save_mib_state()
+
+    return {"status": "ok", "id": link_id}
+
+
+@app.delete("/links/{link_id}")
+def delete_link(link_id: str) -> dict[str, Any]:
+    """Delete a link (state-backed only)."""
+    if snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    link_manager = get_link_manager()
+    existing = {l["id"]: l for l in link_manager.export_links(include_schema=True)}
+    if link_id not in existing:
+        raise HTTPException(status_code=404, detail="Link not found")
+    if existing[link_id].get("source") != "state":
+        raise HTTPException(status_code=400, detail="Cannot delete schema link")
+
+    if not link_manager.remove_link(link_id, source="state"):
+        raise HTTPException(status_code=404, detail="Link not found")
+
+    snmp_agent._save_mib_state()
+    return {"status": "deleted", "id": link_id}
 
 
 @app.get("/ready")
