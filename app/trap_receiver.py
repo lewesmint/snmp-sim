@@ -116,6 +116,7 @@ class TrapReceiver:
         ntfrcv.NotificationReceiver(self.snmp_engine, self._trap_callback)
         
         self.logger.info(f"Listening for traps on UDP port {self.port}")
+        self.snmp_engine.transportDispatcher.jobStarted(1)
         
         # Run until stopped
         try:
@@ -125,7 +126,18 @@ class TrapReceiver:
                 self.snmp_engine.transportDispatcher.runDispatcher(timeout=0.1)
         finally:
             if self.snmp_engine:
-                self.snmp_engine.transportDispatcher.closeDispatcher()
+                try:
+                    self.snmp_engine.transportDispatcher.jobFinished(1)
+                except Exception:
+                    pass
+                # Only close dispatcher if event loop is still running
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop and not loop.is_closed():
+                        self.snmp_engine.transportDispatcher.closeDispatcher()
+                except RuntimeError:
+                    # Event loop already gone, cleanup will happen automatically
+                    pass
 
     def _trap_callback(
         self,

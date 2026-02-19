@@ -4,35 +4,10 @@ import pytest
 from pytest_mock import MockerFixture
 
 from pysnmp.proto import rfc1902
+from pysnmp.hlapi.v3arch.asyncio import ObjectIdentity, ObjectType, SnmpEngine
 
 from app.cli_trap_sender import main as cli_main
 from app.trap_sender import TrapSender
-
-
-@pytest.fixture(autouse=True)
-def reload_pysnmp_for_isolation() -> None:
-    """Reload pysnmp and trap_sender modules to ensure fresh ObjectType reference.
-    
-    This fixes test isolation issues where earlier tests (especially trap_receiver tests)
-    can corrupt the pysnmp ObjectType class reference, causing isinstance(obj, ObjectType)
-    to fail in trap_sender tests even though obj is a valid ObjectType instance.
-    """
-    import sys
-    import importlib
-    
-    # Reload pysnmp modules in order to get fresh import state
-    modules_to_reload = [
-        'pysnmp.smi.rfc1902',
-        'pysnmp.hlapi.v3arch.asyncio',
-        'app.trap_sender',
-    ]
-    
-    for mod_name in modules_to_reload:
-        try:
-            if mod_name in sys.modules:
-                importlib.reload(sys.modules[mod_name])
-        except Exception:
-            pass
 
 
 @pytest.fixture
@@ -56,9 +31,7 @@ def test_init_with_custom_params() -> None:
 
 
 def test_coerce_varbind_object_type(trap_sender: TrapSender) -> None:
-    """Test _coerce_varbind with ObjectType."""
-    from pysnmp.hlapi.v3arch.asyncio import ObjectType, ObjectIdentity
-
+    """Test _coerce_varbind with an ObjectType instance."""
     obj_type = ObjectType(ObjectIdentity('SNMPv2-MIB', 'sysDescr', 0), rfc1902.OctetString('test'))
     result = trap_sender._coerce_varbind(obj_type)
     assert result is obj_type
@@ -66,16 +39,12 @@ def test_coerce_varbind_object_type(trap_sender: TrapSender) -> None:
 
 def test_coerce_varbind_scalar_tuple(trap_sender: TrapSender) -> None:
     """Test _coerce_varbind with scalar tuple (mib, symbol, value)."""
-    from pysnmp.hlapi.v3arch.asyncio import ObjectType
-
     result = trap_sender._coerce_varbind(('SNMPv2-MIB', 'sysDescr', rfc1902.OctetString('test')))
     assert isinstance(result, ObjectType)
 
 
 def test_coerce_varbind_indexed_tuple(trap_sender: TrapSender) -> None:
     """Test _coerce_varbind with indexed tuple (mib, symbol, value, index)."""
-    from pysnmp.hlapi.v3arch.asyncio import ObjectType
-
     result = trap_sender._coerce_varbind(('IF-MIB', 'ifOperStatus', rfc1902.Integer32(1), 2))
     assert isinstance(result, ObjectType)
 
@@ -117,6 +86,63 @@ def test_send_mib_notification_sync(trap_sender: TrapSender, mocker: MockerFixtu
         trap_type='trap',
         extra_varbinds=None
     )
+
+
+def test_send_mib_notification_reuses_provided_engine(mocker: MockerFixture) -> None:
+    """Test provided snmp_engine is passed through to send_notification."""
+    external_engine = SnmpEngine()
+    sender = TrapSender(
+        dest=('localhost', 162),
+        community='public',
+        snmp_engine=external_engine,
+    )
+
+    mocker.patch('app.trap_sender.UdpTransportTarget.create', new_callable=mocker.AsyncMock, return_value=object())
+    mock_send = mocker.patch(
+        'app.trap_sender.send_notification',
+        new_callable=mocker.AsyncMock,
+        return_value=(None, 0, 0, []),
+    )
+
+    sender.send_mib_notification(
+        mib='SNMPv2-MIB',
+        notification='coldStart',
+        trap_type='trap',
+    )
+
+    assert mock_send.await_count == 1
+    assert mock_send.await_args is not None
+    call_args = mock_send.await_args.args
+    assert call_args[0] is external_engine
+
+
+def test_send_mib_notification_reuses_internal_engine(mocker: MockerFixture) -> None:
+    """Test internal sender mode uses same engine across sends."""
+    sender = TrapSender(dest=('localhost', 162), community='public')
+
+    mocker.patch('app.trap_sender.UdpTransportTarget.create', new_callable=mocker.AsyncMock, return_value=object())
+    mock_send = mocker.patch(
+        'app.trap_sender.send_notification',
+        new_callable=mocker.AsyncMock,
+        return_value=(None, 0, 0, []),
+    )
+
+    sender.send_mib_notification(
+        mib='SNMPv2-MIB',
+        notification='coldStart',
+        trap_type='trap',
+    )
+    sender.send_mib_notification(
+        mib='SNMPv2-MIB',
+        notification='coldStart',
+        trap_type='trap',
+    )
+
+    assert mock_send.await_count == 2
+    first_engine = mock_send.await_args_list[0].args[0]
+    second_engine = mock_send.await_args_list[1].args[0]
+    assert first_engine is sender.snmp_engine
+    assert second_engine is sender.snmp_engine
 
 
 def test_cli_missing_required_args(capsys: pytest.CaptureFixture[str]) -> None:

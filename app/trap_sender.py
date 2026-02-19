@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Literal, Optional, Sequence, Tuple, Union
+from typing import Any, Literal, Optional, Sequence, Tuple, Union, cast
+from pathlib import Path
 
 from pysnmp.hlapi.v3arch.asyncio import (
     CommunityData,
@@ -14,6 +15,8 @@ from pysnmp.hlapi.v3arch.asyncio import (
     UdpTransportTarget,
     send_notification,
 )
+from pysnmp.smi import error as snmp_error
+from pysnmp.smi import builder as snmp_builder
 
 OidIndex = Union[int, str, Tuple[int, ...]]
 VarBindSpec = Union[
@@ -36,20 +39,56 @@ class TrapSender:
 
     def __init__(
         self,
-        dest: Tuple[str, int] = ("localhost", 162),
+        dest: tuple[str, int] = ("localhost", 162),
         community: str = "public",
-        logger: Optional[logging.Logger] = None,
-        snmp_engine: Optional[Any] = None,
+        logger: logging.Logger | None = None,
+        snmp_engine: Any | None = None,
     ) -> None:
+        self._uses_external_engine = snmp_engine is not None
         self.snmp_engine = snmp_engine if snmp_engine is not None else SnmpEngine()
         self.dest = dest
         self.community = community
         self.logger = logger or logging.getLogger(__name__)
+        self._configure_mib_sources(self.snmp_engine)
+
+    def _configure_mib_sources(self, engine: Any) -> None:
+        try:
+            mib_builder = engine.getMibBuilder()
+        except Exception:
+            return
+
+        compiled_dir = Path(__file__).resolve().parent.parent / "compiled-mibs"
+        if not compiled_dir.exists():
+            return
+
+        mib_source = snmp_builder.DirMibSource(str(compiled_dir))
+
+        add_sources = getattr(mib_builder, "add_mib_sources", None)
+        if callable(add_sources):
+            try:
+                add_sources(mib_source)
+                return
+            except Exception:
+                pass
+
+        add_sources_alt = getattr(mib_builder, "addMibSources", None)
+        if callable(add_sources_alt):
+            try:
+                add_sources_alt(mib_source)
+            except Exception:
+                pass
 
     @staticmethod
     def _coerce_varbind(spec: VarBindSpec) -> ObjectType:
         if isinstance(spec, ObjectType):
             return spec
+
+        if (
+            spec.__class__.__name__ == "ObjectType"
+            and spec.__class__.__module__.startswith("pysnmp")
+            and hasattr(spec, "resolveWithMib")
+        ):
+            return cast(ObjectType, spec)
 
         if not isinstance(spec, tuple):
             raise TypeError(
@@ -81,6 +120,8 @@ class TrapSender:
         trap_type: Literal["trap", "inform"] = "inform",
         extra_varbinds: Optional[Sequence[VarBindSpec]] = None,
     ) -> None:
+        engine = self.snmp_engine
+
         # When using the agent's SnmpEngine, sysUpTime is already correct via the readGet wrapper
         # No need to manually set it - NotificationType will read from the engine's MIB
         notif = NotificationType(ObjectIdentity(mib, notification))
@@ -89,14 +130,27 @@ class TrapSender:
             coerced = [self._coerce_varbind(vb) for vb in extra_varbinds]
             notif = notif.add_var_binds(*coerced)
 
-        error_indication, error_status, error_index, _ = await send_notification(
-            self.snmp_engine,
-            CommunityData(self.community),
-            await UdpTransportTarget.create(self.dest),
-            ContextData(),
-            trap_type,
-            notif,
-        )
+        async def _send_with(target_engine: Any) -> tuple[Any, Any, Any, Any]:
+            return await send_notification(
+                target_engine,
+                CommunityData(self.community),
+                await UdpTransportTarget.create(self.dest),
+                ContextData(),
+                trap_type,
+                notif,
+            )
+
+        try:
+            error_indication, error_status, error_index, _ = await _send_with(engine)
+        except snmp_error.NoSuchInstanceError:
+            if self._uses_external_engine:
+                raise
+            self.logger.warning(
+                "Notification send hit NoSuchInstanceError; resetting internal SnmpEngine and retrying once"
+            )
+            self.snmp_engine = SnmpEngine()
+            self._configure_mib_sources(self.snmp_engine)
+            error_indication, error_status, error_index, _ = await _send_with(self.snmp_engine)
 
         if error_indication:
             self.logger.error("Notification send error: %s", error_indication)

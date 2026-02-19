@@ -367,10 +367,10 @@ def test_setup_transport_raises_on_pysnmp_import_error(monkeypatch: pytest.Monke
     agent = SNMPAgent(config_path="agent_config.yaml")
     agent.snmpEngine = object()  # Mock engine
 
-    # Remove pysnmp modules from sys.modules to force reimport
+    # Remove pysnmp modules from sys.modules to force reimport (using monkeypatch for cleanup)
     modules_to_remove = [k for k in sys.modules if k.startswith('pysnmp')]
     for mod in modules_to_remove:
-        del sys.modules[mod]
+        monkeypatch.delitem(sys.modules, mod, raising=False)
     
     # Mock __import__ to raise for pysnmp
     original_import = builtins.__import__
@@ -379,13 +379,10 @@ def test_setup_transport_raises_on_pysnmp_import_error(monkeypatch: pytest.Monke
             raise ImportError("pysnmp not available")
         return original_import(name, *args, **kwargs)
     
-    builtins.__import__ = mock_import
+    monkeypatch.setattr(builtins, '__import__', mock_import)
     
-    try:
-        with pytest.raises(RuntimeError, match="pysnmp is not installed or not available"):
-            agent._setup_transport()
-    finally:
-        builtins.__import__ = original_import
+    with pytest.raises(RuntimeError, match="pysnmp is not installed or not available"):
+        agent._setup_transport()
 
 
 def test_register_mib_objects_handles_registrar_creation_failure(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

@@ -1099,6 +1099,7 @@ class SNMPAgent:
         """Build parent -> child mappings for tables that AUGMENT indexes."""
         self._augmented_parents.clear()
         seen_defaults: dict[str, dict[str, Any]] = {}
+        table_entries: dict[str, tuple[str, tuple[str, ...]]] = {}
 
         for module_schema in self.mib_jsons.values():
             objects = module_schema.get("objects", module_schema) if isinstance(module_schema, dict) else {}
@@ -1112,11 +1113,40 @@ class SNMPAgent:
                 if table_obj.get("type") != "MibTable":
                     continue
                 table_oid = self._oid_list_to_str(table_obj.get("oid", []))
+                table_oid_tuple = tuple(table_obj.get("oid", []))
                 rows = table_obj.get("rows", [])
                 if isinstance(rows, list) and rows:
                     first_row = rows[0]
                     if isinstance(first_row, dict):
                         seen_defaults[table_oid] = dict(first_row)
+
+                entry_name = f"{name}Entry"
+                entry_obj = objects.get(entry_name)
+                if not (isinstance(entry_obj, dict) and entry_obj.get("type") == "MibTableRow"):
+                    candidates: list[tuple[str, dict[str, Any]]] = []
+                    for cand_name, cand_obj in objects.items():
+                        if not isinstance(cand_obj, dict):
+                            continue
+                        if cand_obj.get("type") != "MibTableRow":
+                            continue
+                        cand_oid = cand_obj.get("oid", [])
+                        if (
+                            isinstance(cand_oid, list)
+                            and len(cand_oid) > len(table_oid_tuple)
+                            and tuple(cand_oid[: len(table_oid_tuple)]) == table_oid_tuple
+                        ):
+                            candidates.append((cand_name, cand_obj))
+                    if candidates:
+                        candidates.sort(key=lambda item: len(item[1].get("oid", [])))
+                        entry_name, entry_obj = candidates[0]
+
+                if isinstance(entry_obj, dict) and entry_obj.get("type") == "MibTableRow":
+                    indexes = entry_obj.get("indexes", [])
+                    if isinstance(indexes, list):
+                        table_entries[table_oid] = (
+                            entry_name,
+                            tuple(idx for idx in indexes if isinstance(idx, str)),
+                        )
 
             for entry_name, entry_obj in objects.items():
                 if not isinstance(entry_obj, dict):
@@ -1163,6 +1193,27 @@ class SNMPAgent:
                     default_columns=dict(seen_defaults.get(child_table_oid, {})),
                 )
                 self._augmented_parents.setdefault(parent_oid, []).append(child_meta)
+
+        for table_oid, (entry_name, indexes_tuple) in table_entries.items():
+            if table_oid in self._augmented_parents:
+                continue
+            if len(indexes_tuple) != 1:
+                continue
+
+            defaults = dict(seen_defaults.get(table_oid, {}))
+            non_index_cols = [name for name in defaults.keys() if name not in indexes_tuple]
+            synthetic_children = 2 if non_index_cols else 1
+
+            for _ in range(synthetic_children):
+                self._augmented_parents.setdefault(table_oid, []).append(
+                    AugmentedTableChild(
+                        table_oid=table_oid,
+                        entry_name=entry_name,
+                        indexes=indexes_tuple,
+                        inherited_columns=indexes_tuple,
+                        default_columns={},
+                    )
+                )
 
         self._table_defaults = seen_defaults
 

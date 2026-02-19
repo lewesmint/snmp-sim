@@ -144,12 +144,27 @@ class MibRegistrar:
                 snmp2_schema_file = schema_dir / "SNMPv2-MIB" / "schema.json"
                 try:
                     snmp2_schema_file.parent.mkdir(parents=True, exist_ok=True)
-                    output_data = {
-                        "objects": snmp2["objects"] if "objects" in snmp2 else snmp2,
-                        "traps": snmp2.get("traps", {}),
-                    }
+                    
+                    # Load existing schema to preserve all metadata
+                    existing_schema = {}
+                    if snmp2_schema_file.exists():
+                        with snmp2_schema_file.open("r", encoding="utf-8") as f:
+                            existing_schema = json.load(f)
+                    
+                    # Merge updated data into existing schema
+                    if "objects" in snmp2:
+                        if "objects" not in existing_schema:
+                            existing_schema["objects"] = {}
+                        # Merge only the modified objects (sysORTable and sysOREntry)
+                        for obj_name, obj_data in snmp2["objects"].items():
+                            if obj_name in ("sysORTable", "sysOREntry") or obj_name.startswith("sysOR"):
+                                existing_schema["objects"][obj_name] = obj_data
+                    
+                    if "traps" in snmp2:
+                        existing_schema["traps"] = snmp2["traps"]
+                    
                     with snmp2_schema_file.open("w", encoding="utf-8") as f:
-                        json.dump(output_data, f, indent=2)
+                        json.dump(existing_schema, f, indent=2)
                     self.logger.info(f"Persisted updated sysORTable schema to {snmp2_schema_file}")
                 except Exception as e:
                     self.logger.warning(f"Could not persist schema to disk: {e}")
