@@ -9,6 +9,32 @@ from app.cli_trap_sender import main as cli_main
 from app.trap_sender import TrapSender
 
 
+@pytest.fixture(autouse=True)
+def reload_pysnmp_for_isolation() -> None:
+    """Reload pysnmp and trap_sender modules to ensure fresh ObjectType reference.
+    
+    This fixes test isolation issues where earlier tests (especially trap_receiver tests)
+    can corrupt the pysnmp ObjectType class reference, causing isinstance(obj, ObjectType)
+    to fail in trap_sender tests even though obj is a valid ObjectType instance.
+    """
+    import sys
+    import importlib
+    
+    # Reload pysnmp modules in order to get fresh import state
+    modules_to_reload = [
+        'pysnmp.smi.rfc1902',
+        'pysnmp.hlapi.v3arch.asyncio',
+        'app.trap_sender',
+    ]
+    
+    for mod_name in modules_to_reload:
+        try:
+            if mod_name in sys.modules:
+                importlib.reload(sys.modules[mod_name])
+        except Exception:
+            pass
+
+
 @pytest.fixture
 def trap_sender() -> TrapSender:
     return TrapSender(dest=('localhost', 162), community='public')

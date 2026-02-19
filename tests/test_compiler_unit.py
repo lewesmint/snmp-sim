@@ -13,10 +13,12 @@ class _FakePysmiCompiler:
         self.sources: list[Any] = []
         self.searchers: list[Any] = []
 
-    def add_sources(self, source: Any) -> None:
+    def addSources(self, source: Any) -> None:
+        """Mimic pysmi API (camelCase)"""
         self.sources.append(source)
 
-    def add_searchers(self, searcher: Any) -> None:
+    def addSearchers(self, searcher: Any) -> None:
+        """Mimic pysmi API (camelCase)"""
         self.searchers.append(searcher)
 
     def compile(self, _mib_filename: str) -> dict[str, str]:

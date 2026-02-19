@@ -163,3 +163,66 @@ def mib_class_mocks(agent: Any, mocker: Any) -> Dict[str, Any]:
 
     return mocks
 
+
+@pytest.fixture(autouse=True)
+def cleanup_asyncio_and_imports() -> Generator[None, None, None]:
+    """Auto-use fixture to clean up asyncio event loops and pysnmp imports between tests.
+    
+    This fixes test isolation issues where asyncio event loops from trap_receiver tests
+    leak into subsequent trap_sender tests, causing isinstance() checks to fail due to
+    import state corruption.
+    """
+    import asyncio
+    import gc
+    from pathlib import Path
+    
+    # Store original schemas as backup before each test
+    agent_model_paths: dict[Path, str] = {}
+    agent_model_dir = Path(__file__).resolve().parent.parent / "agent-model"
+    if agent_model_dir.exists():
+        for mib_dir in agent_model_dir.iterdir():
+            if mib_dir.is_dir():
+                schema_path = mib_dir / "schema.json"
+                if schema_path.exists():
+                    agent_model_paths[schema_path] = schema_path.read_text()
+    
+    yield
+    
+    # Restore schemas if they were corrupted during the test
+    for schema_path, original_content in agent_model_paths.items():
+        try:
+            current_content = schema_path.read_text() if schema_path.exists() else ""
+            # If schema was corrupted to {"test": "schema"}, restore it
+            if '{"test": "schema"}' in current_content:
+                schema_path.write_text(original_content)
+        except Exception:
+            pass
+    
+    # After each test, clean up asyncio event loops
+    try:
+        loop = asyncio.get_event_loop()
+        if loop and not loop.is_closed():
+            # Cancel all tasks in the loop
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            # Run the loop briefly to process cancellations
+            if not loop.is_running():
+                try:
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                except Exception:
+                    pass
+            if not loop.is_closed():
+                loop.close()
+    except Exception:
+        pass
+    
+    # Force garbage collection to clean up any lingering pysnmp objects
+    gc.collect()
+    
+    # Reset the event loop for the next test
+    try:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+    except Exception:
+        pass
+

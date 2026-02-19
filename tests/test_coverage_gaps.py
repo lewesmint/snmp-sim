@@ -205,8 +205,14 @@ def test_snmp_agent_register_mib_objects_missing_type_registry_file(caplog: pyte
     setattr(agent, "MibTableRow", mocker.Mock())
     setattr(agent, "MibTableColumn", mocker.Mock())
     
-    # Make the type registry file not exist (patch Path.exists used by the registrar)
-    mocker.patch('app.mib_registrar.Path.exists', return_value=False)
+    # Make the type registry file fail to open
+    original_open = open
+    def fake_open(path: str, *args: Any, **kwargs: Any) -> Any:
+        if "types.json" in str(path):
+            raise FileNotFoundError("types.json not found")
+        return original_open(path, *args, **kwargs)
+    
+    mocker.patch('builtins.open', side_effect=fake_open)
     with caplog.at_level(logging.ERROR):
         agent._register_mib_objects()
     
@@ -346,7 +352,8 @@ def test_generator_extract_mib_info_handles_nonetype_syntax_name(monkeypatch: py
     
     # When syntax.__name__ is "NoneType", it should use symbol class name instead
     # The actual code path on line 269-270 uses symbol.__class__.__name__
-    assert "testSym" in result
+    assert "testSym" in result["objects"]
+    assert result["objects"]["testSym"]["type"] is not None
 
 
 def test_generator_table_index_extraction_exception(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -354,9 +361,12 @@ def test_generator_table_index_extraction_exception(monkeypatch: pytest.MonkeyPa
     generator = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
     
     info = {
-        "testTable": {"type": "MibTable", "oid": [1, 2, 3], "rows": []},
-        "testEntry": {"type": "MibTableRow", "oid": [1, 2, 3, 1]},  # No indexes
-        "testCol": {"type": "Integer32", "oid": [1, 2, 3, 1, 1]},
+        "objects": {
+            "testTable": {"type": "MibTable", "oid": [1, 2, 3], "rows": []},
+            "testEntry": {"type": "MibTableRow", "oid": [1, 2, 3, 1]},  # No indexes
+            "testCol": {"type": "Integer32", "oid": [1, 2, 3, 1, 1]},
+        },
+        "traps": {}
     }
     
     # Make MibBuilder raise exception

@@ -12,10 +12,13 @@ def make_basic_behavior() -> Dict[str, Dict[str, Any]]:
             "MyTable": {
                 "type": "MibTable",
                 "oid": [1, 2],
-                "initial": {"1": {"col1": "x"}, "2": {"col1": "y"}},
+                "rows": [
+                    {"index": "1", "col1": "x"},
+                    {"index": "2", "col1": "y"},
+                ],
             },
-            "MyTableEntry": {"type": "MibTableRow", "columns": {"col1": {"oid": [1, 2, 3]}}},
-            "col1": {"oid": [1, 2, 3], "type": "Integer32"},
+            "MyTableEntry": {"type": "MibTableRow", "oid": [1, 2, 3], "indexes": ["index"], "columns": {"col1": {"oid": [1, 2, 3, 1]}}},
+            "col1": {"oid": [1, 2, 3, 1], "type": "Integer32"},
         }
     }
 

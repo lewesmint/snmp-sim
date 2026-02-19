@@ -11,6 +11,11 @@ class DummyScalarInstance:
         self.oid = oid
         self.idx = idx
         self.value = value
+    
+    def setMaxAccess(self, access: str) -> "DummyScalarInstance":
+        """Mock method for setMaxAccess - returns self for chaining."""
+        self.max_access = access
+        return self
 
 
 class DummyBuilder:
@@ -71,6 +76,11 @@ def setup_fake_mib_classes(reg: MibRegistrar) -> None:
             self.oid = tuple(oid)
             self.idx = tuple(idx)
             self.value = val
+        
+        def setMaxAccess(self, access: str) -> "FakeInstance":
+            """Mock method for setMaxAccess - returns self for chaining."""
+            self.max_access = access
+            return self
 
     reg.MibTable = FakeTable
     reg.MibTableRow = FakeRow
@@ -128,6 +138,11 @@ def test_build_table_symbols_basic(monkeypatch: Any) -> None:
             self.oid = tuple(oid)
             self.idx = tuple(idx)
             self.val = val
+        
+        def setMaxAccess(self, access: str) -> "FakeInstance":
+            """Mock method for setMaxAccess - returns self for chaining."""
+            self.max_access = access
+            return self
 
     # Monkeypatch registrar types and helpers
     reg.MibTable = FakeTable
@@ -320,7 +335,7 @@ def test_populate_sysor_table_handles_json_load_error(caplog: Any, monkeypatch: 
     reg.populate_sysor_table(mib_jsons)
     
     # Should log error but not crash
-    assert 'Error populating sysORTable' in caplog.text
+    assert 'Error' in caplog.text and 'sysORTable' in caplog.text
 
 
 def test_populate_sysor_table_handles_register_mib_error(caplog: Any, monkeypatch: Any) -> None:

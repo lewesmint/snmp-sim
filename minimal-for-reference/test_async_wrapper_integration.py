@@ -30,7 +30,8 @@ try:
         SnmpEngine,
     )
 except ImportError:
-    pytest.skip("PySNMP not installed", allow_module_level=True)
+    # pytest.skip("PySNMP not installed", allow_module_level=True)
+    pass
 
 
 # Test configuration
@@ -59,11 +60,11 @@ def check_snmp_agent_available() -> bool:
 
 
 # Skip all integration tests if SNMP agent is not available
-pytestmark = pytest.mark.skipif(
-    not check_snmp_agent_available(),
-    reason="SNMP agent not available on localhost:161. "
-    "Start an SNMP agent or use system snmpd.",
-)
+# pytestmark = pytest.mark.skipif(
+#     not check_snmp_agent_available(),
+#     reason="SNMP agent not available on localhost:161. "
+#     "Start an SNMP agent or use system snmpd.",
+# )
 
 
 class TestIntegrationGetOperations(unittest.TestCase):

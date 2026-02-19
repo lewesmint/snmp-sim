@@ -112,8 +112,8 @@ def test_generate_writes_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     with open(schema_path, "r") as f:
         data = json.load(f)
     # Ensure columns and table entry exist
-    assert "col1" in data
-    assert "MyTable" in data
+    assert "col1" in data["objects"]
+    assert "MyTable" in data["objects"]
 
 
 def test_extract_mib_info_non_dict(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -191,7 +191,7 @@ def test_detect_inherited_indexes_through_extract(monkeypatch: pytest.MonkeyPatc
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
     info = g._extract_mib_info("dummy", "MY-MIB")
     # Entry should be present and index_from set because missingCol not in columns
-    assert "MyEntry" in info
+    assert "MyEntry" in info["objects"]
     # index_from is added by _detect_inherited_indexes only if missing indexes detected
     # We can't guarantee a specific format here because symbols vary, but ensure no exception raised
 
@@ -224,20 +224,23 @@ def test_generate_creates_default_table_row_with_index_extraction(monkeypatch: p
     # Mock _extract_mib_info to return a table with no rows
     def mock_extract(compiled_py_path: str, mib_name: str) -> dict[str, Any]:
         return {
-            "testTable": {
-                "type": "MibTable",
-                "oid": [1, 2, 3],
-                "rows": []  # Empty rows to trigger default row creation
+            "objects": {
+                "testTable": {
+                    "type": "MibTable",
+                    "oid": [1, 2, 3],
+                    "rows": []  # Empty rows to trigger default row creation
+                },
+                "testEntry": {
+                    "type": "MibTableRow",
+                    "oid": [1, 2, 3, 1],
+                    "indexes": ["testTableCol1"]  # Pre-set indexes to skip mibBuilder code
+                },
+                "testTableCol1": {
+                    "oid": [1, 2, 3, 1, 1],
+                    "type": "Integer32"
+                }
             },
-            "testEntry": {
-                "type": "MibTableRow",
-                "oid": [1, 2, 3, 1],
-                "indexes": ["testTableCol1"]  # Pre-set indexes to skip mibBuilder code
-            },
-            "testTableCol1": {
-                "oid": [1, 2, 3, 1, 1],
-                "type": "Integer32"
-            }
+            "traps": {}
         }
     
     monkeypatch.setattr(g, "_extract_mib_info", mock_extract)
@@ -253,13 +256,13 @@ def test_generate_creates_default_table_row_with_index_extraction(monkeypatch: p
         data = json.load(f)
     
     # Check that a default row was created
-    assert "testTable" in data
-    assert "rows" in data["testTable"]
-    assert len(data["testTable"]["rows"]) == 1
+    assert "testTable" in data["objects"]
+    assert "rows" in data["objects"]["testTable"]
+    assert len(data["objects"]["testTable"]["rows"]) == 1
     # Check that indexes were pre-set
-    assert "testEntry" in data
-    assert "indexes" in data["testEntry"]
-    assert data["testEntry"]["indexes"] == ["testTableCol1"]
+    assert "testEntry" in data["objects"]
+    assert "indexes" in data["objects"]["testEntry"]
+    assert data["objects"]["testEntry"]["indexes"] == ["testTableCol1"]
 
 
 def test_generate_handles_mib_builder_exception_in_index_extraction(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -385,10 +388,7 @@ def test_extract_mib_info_handles_symbol_without_getname(monkeypatch: pytest.Mon
     monkeypatch.setattr("pysnmp.smi.builder.MibBuilder", MockMibBuilder)
     
     result = g._extract_mib_info("dummy.py", "TEST-MIB")
-    assert result == {}  # sym1 should be skipped
-
-
-def test_extract_mib_info_handles_typeerror_in_getname(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert result == {"objects": {}, "traps": {}}  # sym1 should be skipped
     # Test when getName/getSyntax raises TypeError
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
     
@@ -415,10 +415,7 @@ def test_extract_mib_info_handles_typeerror_in_getname(monkeypatch: pytest.Monke
     monkeypatch.setattr("pysnmp.smi.builder.MibBuilder", MockMibBuilder)
     
     result = g._extract_mib_info("dummy.py", "TEST-MIB")
-    assert result == {}  # sym1 should be skipped due to TypeError
-
-
-def test_extract_mib_info_type_registry_loading(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert result == {"objects": {}, "traps": {}}  # sym1 should be skipped due to TypeError
     # Test that _type_registry is loaded when not present
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
     
@@ -457,7 +454,7 @@ def test_extract_mib_info_type_registry_loading(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("app.generator.get_default_value", lambda t, s: "mock_value")
     
     result = g._extract_mib_info("dummy.py", "TEST-MIB")
-    assert "sym1" in result
+    assert "sym1" in result["objects"]
     assert hasattr(g, "_type_registry")
 
 
@@ -494,11 +491,11 @@ def test_extract_mib_info_base_type_mapping(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr("pysnmp.smi.builder.MibBuilder", MockMibBuilder)
     monkeypatch.setattr(g, "_extract_type_info", lambda s, n: {"base_type": "INTEGER"})  # Will map to Integer32
     monkeypatch.setattr("app.generator.get_default_value", lambda t, s: "mock_value")
-    
+
     result = g._extract_mib_info("dummy.py", "TEST-MIB")
-    assert "sym1" in result
+    assert "sym1" in result["objects"]
     # The type field stores the original type name, but the base_type mapping happens internally
-    assert result["sym1"]["type"] == "MockSyntax"
+    assert result["objects"]["sym1"]["type"] == "MockSyntax"
 
 
 def test_extract_type_info_with_constraints(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -551,7 +548,9 @@ def test_load_type_registry_missing_file(monkeypatch: pytest.MonkeyPatch) -> Non
     # Test FileNotFoundError in _load_type_registry
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
     
-    monkeypatch.setattr("os.path.exists", lambda p: False)
+    # Patch Path.exists to return False
+    from pathlib import Path
+    monkeypatch.setattr(Path, "exists", lambda self: False)
     
     with pytest.raises(FileNotFoundError, match="Type registry JSON not found"):
         g._load_type_registry()
@@ -596,7 +595,7 @@ def test_generate_force_regenerate_removes_existing_file(monkeypatch: pytest.Mon
     
     # Mock _extract_mib_info to avoid full parsing
     def mock_extract_mib_info(*args: Any, **kwargs: Any) -> Dict[str, Any]:
-        return {"testSymbol": {"oid": [1, 2, 3], "type": "Integer32"}}
+        return {"objects": {"testSymbol": {"oid": [1, 2, 3], "type": "Integer32"}}, "traps": {}}
     
     monkeypatch.setattr(g, "_extract_mib_info", mock_extract_mib_info)
     
@@ -607,7 +606,7 @@ def test_generate_force_regenerate_removes_existing_file(monkeypatch: pytest.Mon
     assert json_path.exists()
     with open(json_path, 'r') as f:
         content = json.load(f)
-        assert "testSymbol" in content  # Should have new content
+        assert "testSymbol" in content["objects"]  # Should have new content
 
 
 def test_generate_skips_existing_file_when_not_force(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -878,7 +877,7 @@ def test_write_schema_merge_extracted_enums(monkeypatch: pytest.MonkeyPatch, tmp
     json_path = tmp_path / "TEST-MIB" / "schema.json"
     with open(json_path, 'r') as f:
         content = json.load(f)
-        assert "enums" in content["testSymbol"]
+        assert "enums" in content["objects"]["testSymbol"]
 
 
 def test_write_schema_include_enums_in_entry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -933,7 +932,7 @@ def test_write_schema_include_enums_in_entry(monkeypatch: pytest.MonkeyPatch, tm
     json_path = tmp_path / "TEST-MIB" / "schema.json"
     with open(json_path, 'r') as f:
         content = json.load(f)
-        assert "enums" in content["testSymbol"]
+        assert "enums" in content["objects"]["testSymbol"]
 
 
 def test_detect_inherited_indexes_empty_index_names(monkeypatch: pytest.MonkeyPatch) -> None:

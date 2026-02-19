@@ -174,8 +174,6 @@ class ValueLinkManager:
 
     def load_links_from_schema(self, schema: Dict[str, Any]) -> None:
         """Load value links from schema JSON."""
-        if not isinstance(schema, dict):
-            return
 
         links_config = schema.get("links", [])
         if not links_config:
@@ -211,10 +209,6 @@ class ValueLinkManager:
             return
 
         for i, link_config in enumerate(link_configs):
-            if not isinstance(link_config, dict):
-                logger.warning(f"State link config #{i} is not a dict, skipping")
-                continue
-
             link_id, endpoints, scope, match, _, description, create_missing = self._parse_link_config(
                 link_config, None
             )

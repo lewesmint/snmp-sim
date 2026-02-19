@@ -2,7 +2,7 @@
   "schema_version": "1.0.1",
   "objects": {
     "coiAlarmActiveTable": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -22,7 +22,7 @@
       ]
     },
     "coiAlarmActiveEntry": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -33,27 +33,27 @@
       ]
     },
     "coiAlarmIndex": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1, 1],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1,1],
       "type": "Integer32",
       "access": "read-only"
     },
     "coiAlarmObjectIfIndex": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1, 2],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1,2],
       "type": "InterfaceIndexOrZero",
       "access": "read-only"
     },
     "coiAlarmObjectEntPhyIndex": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1, 3],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1,3],
       "type": "EntPhysicalIndexOrZero",
       "access": "read-only"
     },
     "coiAlarmObjectName": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1, 4],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1,4],
       "type": "DisplayString",
       "access": "read-only"
     },
     "coiAlarmObjectType": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1, 5],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1,5],
       "type": "CoiAlarmObjectTypeClass",
       "access": "read-only",
       "enums": {
@@ -128,17 +128,17 @@
       }
     },
     "coiAlarmType": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1, 6],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1,6],
       "type": "DisplayString",
       "access": "read-only"
     },
     "coiAlarmTimeStamp": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1, 7],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1,7],
       "type": "Counter64",
       "access": "read-only"
     },
     "coiAlarmSeverity": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1, 8],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1,8],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -151,7 +151,7 @@
       }
     },
     "coiAlarmStatus": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1, 9],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1,9],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -162,7 +162,7 @@
       }
     },
     "coiAlarmServiceAffecting": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1, 10],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1,10],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -172,14 +172,14 @@
       }
     },
     "coiAlarmDescription": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 1, 1, 1, 1, 11],
+      "oid": [1,3,6,1,4,1,9,9,869,1,1,1,1,11],
       "type": "DisplayString",
       "access": "read-only"
     }
   },
   "traps": {
     "coiAlarmStatusChange": {
-      "oid": [1, 3, 6, 1, 4, 1, 9, 9, 869, 0, 1],
+      "oid": [1,3,6,1,4,1,9,9,869,0,1],
       "objects": [
         {
           "mib": "CISCO-ALARM-MIB",

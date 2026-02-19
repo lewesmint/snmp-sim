@@ -158,8 +158,8 @@ def test_get_default_value_for_constrained_type(table_registrar: TableRegistrar)
 def test_register_tables_creates_table_structure(table_registrar: TableRegistrar, mocker: MockerFixture) -> None:
     """Test that register_tables processes tables correctly."""
     mib_json = {
-        'testTable': {'oid': [1, 3, 6, 1, 4, 1, 9999, 1, 1], 'access': 'not-accessible'},
-        'testEntry': {'oid': [1, 3, 6, 1, 4, 1, 9999, 1, 1, 1]},
+        'testTable': {'oid': [1, 3, 6, 1, 4, 1, 9999, 1, 1], 'access': 'not-accessible', 'type': 'MibTable'},
+        'testEntry': {'oid': [1, 3, 6, 1, 4, 1, 9999, 1, 1, 1], 'type': 'MibTableRow'},
         'testIndex': {'oid': [1, 3, 6, 1, 4, 1, 9999, 1, 1, 1, 1], 'type': 'Integer32', 'access': 'not-accessible'},
         'testValue': {'oid': [1, 3, 6, 1, 4, 1, 9999, 1, 1, 1, 2], 'type': 'OctetString', 'access': 'read-only'},
     }
@@ -427,8 +427,8 @@ def test_find_table_related_objects_with_non_dict_column_info(table_registrar: T
 def test_register_tables_logs_warning_on_exception(table_registrar: TableRegistrar, mocker: MockerFixture, caplog: pytest.LogCaptureFixture) -> None:
     """Test register_tables logs warning when register_single_table fails."""
     mib_json = {
-        'testTable': {'oid': [1, 2, 3], 'access': 'not-accessible'},
-        'testEntry': {'oid': [1, 2, 3, 1]},
+        'testTable': {'oid': [1, 2, 3], 'access': 'not-accessible', 'type': 'MibTable'},
+        'testEntry': {'oid': [1, 2, 3, 1], 'type': 'MibTableRow'},
         'testCol': {'oid': [1, 2, 3, 1, 1], 'type': 'Integer32'},
         'badCol': "not a dict",
     }
@@ -540,8 +540,8 @@ def test_get_default_value_for_size_range(table_registrar: TableRegistrar) -> No
 def test_register_tables_ignores_non_child_columns(table_registrar: TableRegistrar, mocker: MockerFixture) -> None:
     """Test register_tables skips columns that are not direct children of entry OID."""
     mib_json = {
-        'testTable': {'oid': [1, 2, 3], 'access': 'not-accessible'},
-        'testEntry': {'oid': [1, 2, 3, 1]},
+        'testTable': {'oid': [1, 2, 3], 'access': 'not-accessible', 'type': 'MibTable'},
+        'testEntry': {'oid': [1, 2, 3, 1], 'type': 'MibTableRow'},
         'goodCol': {'oid': [1, 2, 3, 1, 1], 'type': 'Integer32'},
         'badCol': {'oid': [1, 2, 4, 1, 1], 'type': 'Integer32'},
     }
