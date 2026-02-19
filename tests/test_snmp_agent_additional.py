@@ -228,11 +228,16 @@ def test_set_scalar_value_sets_value(monkeypatch: pytest.MonkeyPatch) -> None:
         def __init__(self) -> None:
             self.name: Optional[Tuple[int, ...]] = None
             self.syntax: Optional[Any] = None
+    class FakeSyntax:
+        def __init__(self, value: Any) -> None:
+            self.value = value
+        def clone(self, new_value: Any) -> Any:
+            return new_value
     
     # Mock mib_builder
     fake_scalar = MibScalarInstance()
     fake_scalar.name = (1, 3, 6, 1, 2, 1, 1, 1, 0)
-    fake_scalar.syntax = None
+    fake_scalar.syntax = FakeSyntax("initial")
     fake_symbols: dict[str, dict[str, Any]] = {'test_module': {'scalar1': fake_scalar}}
     fake_builder = SimpleNamespace(
         mibSymbols=fake_symbols,
@@ -431,3 +436,76 @@ def test_setup_signal_handlers_sets_up_handlers(monkeypatch: pytest.MonkeyPatch)
     assert signal.SIGINT in signals
     if hasattr(signal, "SIGHUP"):
         assert signal.SIGHUP in signals
+
+
+def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -> None:
+    schema_path = (Path(__file__).resolve().parent.parent / "agent-model" / "TEST-ENUM-MIB" / "schema.json")
+    schema = json.loads(schema_path.read_text())
+    snmp_schema_path = schema_path.parent.parent / "SNMPv2-MIB" / "schema.json"
+    snmp_schema = json.loads(snmp_schema_path.read_text())
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    agent.mib_builder = None
+    agent.mib_jsons = {
+        "TEST-ENUM-MIB": schema,
+        "SNMPv2-MIB": snmp_schema,
+    }
+    agent._build_augmented_index_map()
+    agent._save_mib_state = lambda: None
+
+    parent_oid = agent._oid_list_to_str(schema["objects"]["testEnumTable"]["oid"])
+    children = agent._augmented_parents.get(parent_oid, [])
+    assert len(children) >= 2
+    for child in children:
+        assert child.indexes == child.inherited_columns
+        assert child.indexes == ("testEnumIndex",)
+
+    sysor_parent_oid = agent._oid_list_to_str(snmp_schema["objects"]["sysORTable"]["oid"])
+    sysor_children = agent._augmented_parents.get(sysor_parent_oid, [])
+    assert len(sysor_children) == 2
+    for child in sysor_children:
+        assert child.indexes == child.inherited_columns
+        assert child.indexes == ("sysORIndex",)
+
+    index_values = {"testEnumIndex": 31415}
+    instance_oid = agent.add_table_instance(parent_oid, index_values)
+    assert instance_oid.endswith(".31415")
+    assert "31415" in agent.table_instances[parent_oid]
+
+    for child in children:
+        assert child.table_oid in agent.table_instances
+        assert "31415" in agent.table_instances[child.table_oid]
+        defaults = child.default_columns or {}
+        if defaults:
+            sample_col = next(iter(defaults))
+            assert agent.table_instances[child.table_oid]["31415"]["column_values"][sample_col] == defaults[sample_col]
+
+    agent.delete_table_instance(parent_oid, index_values)
+    assert "31415" not in agent.table_instances.get(parent_oid, {})
+    for child in children:
+        assert "31415" not in agent.table_instances.get(child.table_oid, {})
+
+    sysor_index_values = {"sysORIndex": 8675309}
+    sysor_instance_oid = agent.add_table_instance(
+        sysor_parent_oid,
+        sysor_index_values,
+        column_values={
+            "sysORID": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1],
+            "sysORDescr": "augmented sysor",
+            "sysORUpTime": 12345,
+        },
+    )
+    assert sysor_instance_oid.endswith(".8675309")
+    assert "8675309" in agent.table_instances[sysor_parent_oid]
+
+    for child in sysor_children:
+        assert child.table_oid in agent.table_instances
+        assert "8675309" in agent.table_instances[child.table_oid]
+        defaults = child.default_columns or {}
+        if defaults:
+            sample_col = next(iter(defaults))
+            assert agent.table_instances[child.table_oid]["8675309"]["column_values"][sample_col] == defaults[sample_col]
+
+    agent.delete_table_instance(sysor_parent_oid, sysor_index_values)
+    assert "8675309" not in agent.table_instances.get(sysor_parent_oid, {})
+    for child in sysor_children:
+        assert "8675309" not in agent.table_instances.get(child.table_oid, {})

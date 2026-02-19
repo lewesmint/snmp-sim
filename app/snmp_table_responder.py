@@ -33,7 +33,7 @@ class SNMPTableResponder:
         """
         self.behavior_jsons = behavior_jsons
         self.mib_builder = mib_builder
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = logging.getLogger(__name__)
 
         # Build a map of table OIDs to table info for fast lookup
         self.table_oid_map: Dict[Tuple[int, ...], Tuple[str, str, Dict[str, Any]]] = {}

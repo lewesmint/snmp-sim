@@ -2,6 +2,7 @@
 SNMPAgent: Main orchestrator for the SNMP agent (initial workflow).
 """
 
+from dataclasses import dataclass
 from typing import cast
 from app.app_logger import AppLogger
 from app.app_config import AppConfig
@@ -18,6 +19,15 @@ from pysnmp import debug as pysnmp_debug
 
 # Load type converter plugins
 import plugins.date_and_time  # noqa: F401 - registers the converter
+
+
+@dataclass
+class AugmentedTableChild:
+    table_oid: str
+    entry_name: str
+    indexes: tuple[str, ...]
+    inherited_columns: tuple[str, ...]
+    default_columns: dict[str, Any]
 
 
 class SNMPAgent:
@@ -59,6 +69,10 @@ class SNMPAgent:
         self._initial_values: dict[str, object] = {}
         # Set of dotted OIDs that are writable (read-write)
         self._writable_oids: set[str] = set()
+        # Augmented table metadata (parent table oid -> child table metadata)
+        self._augmented_parents: dict[str, list[AugmentedTableChild]] = {}
+        # Default column values for tables (used when auto-creating augmented rows)
+        self._table_defaults: dict[str, dict[str, Any]] = {}
 
         # Set up signal handlers for graceful shutdown
         self._setup_signal_handlers()
@@ -304,6 +318,9 @@ class SNMPAgent:
                     self.logger.warning(f"Schema not found for {mib} at {schema_path}")
 
         self.logger.info(f"Loaded {len(self.mib_jsons)} MIB schemas for SNMP serving.")
+
+        # Build relationships between tables that share indexes via AUGMENTS
+        self._build_augmented_index_map()
 
         # Setup SNMP engine and transport
         self._setup_snmpEngine(str(compiled_dir))
@@ -730,6 +747,8 @@ class SNMPAgent:
         
         # Extract tables
         self.table_instances = mib_state.get("tables", {})
+        self._normalize_loaded_table_instances()
+        self._fill_missing_table_defaults()
         
         # Extract deleted instances list
         self.deleted_instances = mib_state.get("deleted_instances", [])
@@ -908,6 +927,322 @@ class SNMPAgent:
 
         return False
 
+    def _normalize_loaded_table_instances(self) -> None:
+        """Normalize loaded table OIDs to canonical string form."""
+        normalized: dict[str, dict[str, Any]] = {}
+        for table_oid, instances in self.table_instances.items():
+            normalized_oid = self._normalize_oid_str(table_oid)
+            if not normalized_oid:
+                continue
+            normalized[normalized_oid] = instances
+        self.table_instances = normalized
+
+    def _fill_missing_table_defaults(self) -> None:
+        """Fill missing or "unset" values in table instances using schema defaults."""
+        if not self.mib_jsons or not self.table_instances:
+            return
+
+        updated = False
+
+        for schema in self.mib_jsons.values():
+            objects = schema.get("objects", schema) if isinstance(schema, dict) else {}
+            if not isinstance(objects, dict):
+                continue
+
+            for obj_name, obj_data in objects.items():
+                if not isinstance(obj_data, dict) or obj_data.get("type") != "MibTable":
+                    continue
+
+                table_oid_list = obj_data.get("oid", [])
+                if not isinstance(table_oid_list, list) or not table_oid_list:
+                    continue
+
+                table_oid = ".".join(str(x) for x in table_oid_list)
+                if table_oid not in self.table_instances:
+                    continue
+
+                entry_oid_list = list(table_oid_list) + [1]
+                entry_obj = None
+                for other_data in objects.values():
+                    if not isinstance(other_data, dict):
+                        continue
+                    if other_data.get("type") == "MibTableRow" and other_data.get("oid") == entry_oid_list:
+                        entry_obj = other_data
+                        break
+
+                if not entry_obj:
+                    continue
+
+                index_columns = entry_obj.get("indexes", [])
+                if not isinstance(index_columns, list):
+                    index_columns = []
+
+                rows = obj_data.get("rows", [])
+                if not isinstance(rows, list) or not rows:
+                    continue
+
+                default_row = rows[0] if isinstance(rows[0], dict) else {}
+                if not default_row:
+                    continue
+
+                for instance_data in self.table_instances.get(table_oid, {}).values():
+                    col_values = instance_data.get("column_values", {})
+                    if not isinstance(col_values, dict):
+                        continue
+
+                    for col_name, default_val in default_row.items():
+                        if col_name in index_columns:
+                            continue
+                        current_val = col_values.get(col_name)
+                        if current_val is None or (isinstance(current_val, str) and current_val.strip().lower() == "unset"):
+                            col_values[col_name] = default_val
+                            updated = True
+
+        if updated:
+            self._save_mib_state()
+
+    def _normalize_oid_str(self, oid: str) -> str:
+        """Normalize a dotted OID string (remove extra dots/spaces)."""
+        cleaned = oid.strip().strip(".")
+        if not cleaned:
+            return ""
+        parts = [part for part in cleaned.split(".") if part]
+        return ".".join(parts)
+
+    def _oid_list_to_str(self, oid_list: list[Any]) -> str:
+        """Convert a list-based OID to its dotted string representation."""
+        if not oid_list:
+            return ""
+        return ".".join(str(part) for part in oid_list if part is not None)
+
+    def _parse_index_from_entry(self, entry: Any) -> tuple[str, str] | None:
+        """Normalize different formats of index_from metadata."""
+        if isinstance(entry, dict):
+            mib = entry.get("mib")
+            column = entry.get("column")
+            if isinstance(mib, str) and isinstance(column, str):
+                return mib, column
+            return None
+        if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+            mib = entry[0]
+            column = entry[-1]
+            if isinstance(mib, str) and isinstance(column, str):
+                return mib, column
+        return None
+
+    def _find_entry_name_by_oid(self, objects: dict[str, Any], entry_oid: tuple[Any, ...]) -> Optional[str]:
+        """Look up a table entry name by its OID."""
+        for name, obj in objects.items():
+            if not isinstance(obj, dict):
+                continue
+            if obj.get("type") != "MibTableRow":
+                continue
+            oid = tuple(obj.get("oid", []))
+            if oid == entry_oid:
+                return name
+        return None
+
+    def _find_table_name_by_oid(self, objects: dict[str, Any], table_oid: tuple[Any, ...]) -> Optional[str]:
+        """Look up a table name by OID."""
+        for name, obj in objects.items():
+            if not isinstance(obj, dict):
+                continue
+            if obj.get("type") != "MibTable":
+                continue
+            oid = tuple(obj.get("oid", []))
+            if oid == table_oid:
+                return name
+        return None
+
+    def _find_parent_table_for_column(self, module_name: str, column_name: str) -> Optional[dict[str, str]]:
+        """Locate the parent table metadata for an inherited column reference."""
+        module_schema = self.mib_jsons.get(module_name)
+        if not module_schema:
+            return None
+        objects = module_schema.get("objects", module_schema) if isinstance(module_schema, dict) else {}
+        column_obj = objects.get(column_name)
+        if not isinstance(column_obj, dict):
+            return None
+        column_oid = column_obj.get("oid", [])
+        if not isinstance(column_oid, list) or len(column_oid) < 2:
+            return None
+
+        entry_oid = tuple(column_oid[:-1])
+        table_oid = tuple(entry_oid[:-1])
+        table_name = self._find_table_name_by_oid(objects, table_oid)
+        if not table_name:
+            return None
+        entry_name = self._find_entry_name_by_oid(objects, entry_oid)
+        return {
+            "table_oid": self._oid_list_to_str(list(table_oid)),
+            "table_name": table_name,
+            "entry_name": entry_name or "",
+        }
+
+    def _build_augmented_index_map(self) -> None:
+        """Build parent -> child mappings for tables that AUGMENT indexes."""
+        self._augmented_parents.clear()
+        seen_defaults: dict[str, dict[str, Any]] = {}
+
+        for module_schema in self.mib_jsons.values():
+            objects = module_schema.get("objects", module_schema) if isinstance(module_schema, dict) else {}
+            if not isinstance(objects, dict):
+                continue
+
+            # Cache default column values for each table
+            for name, table_obj in objects.items():
+                if not isinstance(table_obj, dict):
+                    continue
+                if table_obj.get("type") != "MibTable":
+                    continue
+                table_oid = self._oid_list_to_str(table_obj.get("oid", []))
+                rows = table_obj.get("rows", [])
+                if isinstance(rows, list) and rows:
+                    first_row = rows[0]
+                    if isinstance(first_row, dict):
+                        seen_defaults[table_oid] = dict(first_row)
+
+            for entry_name, entry_obj in objects.items():
+                if not isinstance(entry_obj, dict):
+                    continue
+                if entry_obj.get("type") != "MibTableRow":
+                    continue
+                index_from = entry_obj.get("index_from")
+                if not index_from:
+                    continue
+                parsed_inherited: list[str] = []
+                parent_oids: set[str] = set()
+                valid = True
+
+                for inherit in index_from:
+                    parsed = self._parse_index_from_entry(inherit)
+                    if parsed is None:
+                        valid = False
+                        break
+                    parent_mib, parent_column = parsed
+                    parent_info = self._find_parent_table_for_column(parent_mib, parent_column)
+                    if not parent_info:
+                        valid = False
+                        break
+                    parent_oids.add(parent_info["table_oid"])
+                    parsed_inherited.append(parent_column)
+
+                if not valid or len(parent_oids) != 1:
+                    continue
+
+                parent_oid = next(iter(parent_oids))
+                entry_oid = tuple(entry_obj.get("oid", []))
+                if len(entry_oid) < 1:
+                    continue
+                child_table_oid = self._oid_list_to_str(list(entry_oid[:-1]))
+                indexes = entry_obj.get("indexes", [])
+                if not isinstance(indexes, list):
+                    indexes = []
+
+                child_meta = AugmentedTableChild(
+                    table_oid=child_table_oid,
+                    entry_name=entry_name,
+                    indexes=tuple(indexes),
+                    inherited_columns=tuple(parsed_inherited),
+                    default_columns=dict(seen_defaults.get(child_table_oid, {})),
+                )
+                self._augmented_parents.setdefault(parent_oid, []).append(child_meta)
+
+        self._table_defaults = seen_defaults
+
+    def _propagate_augmented_tables(
+        self,
+        table_oid: str,
+        index_values: dict[str, Any],
+        index_str: str,
+        visited: set[str],
+    ) -> None:
+        """Create matching rows for tables that AUGMENT the given table."""
+        children = self._augmented_parents.get(table_oid, [])
+        if not children:
+            return
+
+        for child in children:
+            if child.table_oid in visited:
+                continue
+            if not child.table_oid:
+                continue
+            if child.indexes != child.inherited_columns:
+                continue
+            if child.table_oid in self.table_instances and index_str in self.table_instances[child.table_oid]:
+                continue
+
+            child_defaults = dict(child.default_columns) if child.default_columns else {}
+            next_visited = set(visited)
+            next_visited.add(child.table_oid)
+
+            try:
+                self.add_table_instance(
+                    child.table_oid,
+                    dict(index_values),
+                    column_values=child_defaults,
+                    propagate_augments=True,
+                    _augment_path=next_visited,
+                )
+                self.logger.debug(
+                    f"Auto-created augmented row {child.table_oid}.{index_str} from {table_oid}"
+                )
+            except Exception as exc:
+                self.logger.error(
+                    f"Failed to add augmented row for {child.table_oid}: {exc}",
+                    exc_info=True,
+                )
+
+    def _propagate_augmented_deletions(
+        self,
+        table_oid: str,
+        index_values: dict[str, Any],
+        index_str: str,
+        visited: set[str],
+    ) -> None:
+        """Delete matching rows for tables that AUGMENT the given table."""
+        children = self._augmented_parents.get(table_oid, [])
+        if not children:
+            return
+
+        for child in children:
+            if child.table_oid in visited:
+                continue
+            if not child.table_oid:
+                continue
+            if child.indexes != child.inherited_columns:
+                continue
+            if child.table_oid not in self.table_instances:
+                continue
+            if index_str not in self.table_instances[child.table_oid]:
+                continue
+
+            next_visited = set(visited)
+            next_visited.add(child.table_oid)
+
+            try:
+                self.delete_table_instance(
+                    child.table_oid,
+                    dict(index_values),
+                    propagate_augments=True,
+                    _augment_path=next_visited,
+                )
+                self.logger.debug(
+                    f"Auto-deleted augmented row {child.table_oid}.{index_str} from {table_oid}"
+                )
+            except Exception as exc:
+                self.logger.error(
+                    f"Failed to delete augmented row for {child.table_oid}: {exc}",
+                    exc_info=True,
+                )
+
+
+
+
+
+
+
+
     def _format_index_value(self, value: Any) -> str:
         """Normalize index values to a dotted string for comparison."""
         if isinstance(value, (list, tuple)):
@@ -1041,14 +1376,23 @@ class SNMPAgent:
                 self.logger.error(f"Error updating column {column_name}: {e}", exc_info=True)
 
 
-    def add_table_instance(self, table_oid: str, index_values: dict[str, Any], column_values: dict[str, Any] | None = None) -> str:
-        """Add a new table instance and persist it.
+    def add_table_instance(
+        self,
+        table_oid: str,
+        index_values: dict[str, Any],
+        column_values: dict[str, Any] | None = None,
+        propagate_augments: bool = True,
+        _augment_path: set[str] | None = None,
+    ) -> str:
+        """Add a new table instance and persist it, optionally propagating augment tables.
         
         Args:
             table_oid: The OID of the table (e.g., "1.3.6.1.4.1.99998.1.3.1")
             index_values: Dict mapping index column names to values
             column_values: Optional dict mapping column names to values
-            
+            propagate_augments: Whether to create matching rows for AUGMENTS tables
+            _augment_path: Internal set used to avoid cycles during propagation
+        
         Returns:
             The instance OID as a string
         """
@@ -1066,6 +1410,8 @@ class SNMPAgent:
                 serialized_column_values[col_name] = str(col_value)
             else:
                 serialized_column_values[col_name] = col_value
+
+        table_oid = self._normalize_oid_str(table_oid)
 
         # Create an instance key from index values
         index_str = self._build_index_str(index_values)
@@ -1090,6 +1436,17 @@ class SNMPAgent:
         self._save_mib_state()
         
         self.logger.info(f"Added table instance: {instance_oid}")
+
+        if propagate_augments:
+            visited = set(_augment_path) if _augment_path else set()
+            if table_oid not in visited:
+                visited.add(table_oid)
+                self._propagate_augmented_tables(
+                    table_oid,
+                    dict(index_values),
+                    index_str,
+                    visited,
+                )
         return instance_oid
 
     def _build_index_str(self, index_values: dict[str, Any]) -> str:
@@ -1124,18 +1481,15 @@ class SNMPAgent:
         # Regular index columns
         return ".".join(str(v) for v in index_values.values())
 
-    def delete_table_instance(self, table_oid: str, index_values: dict[str, Any]) -> bool:
-        """Mark a table instance as deleted (soft delete).
-        
-        Works for both dynamically-created instances and static MIB instances.
-        
-        Args:
-            table_oid: The OID of the table
-            index_values: Dict mapping index column names to values
-            
-        Returns:
-            True if instance was successfully marked as deleted
-        """
+    def delete_table_instance(
+        self,
+        table_oid: str,
+        index_values: dict[str, Any],
+        propagate_augments: bool = True,
+        _augment_path: set[str] | None = None,
+    ) -> bool:
+        """Mark a table instance as deleted and optionally cascade to AUGMENTS children."""
+        table_oid = self._normalize_oid_str(table_oid)
         index_str = self._build_index_str(index_values)
         instance_oid = f"{table_oid}.{index_str}"
         
@@ -1158,6 +1512,17 @@ class SNMPAgent:
                 f"Skipping deleted_instances for {instance_oid} (not in schema rows)"
             )
         
+        if propagate_augments:
+            visited = set(_augment_path) if _augment_path else set()
+            if table_oid not in visited:
+                visited.add(table_oid)
+                self._propagate_augmented_deletions(
+                    table_oid,
+                    dict(index_values),
+                    index_str,
+                    visited,
+                )
+
         return True
 
     def restore_table_instance(self, table_oid: str, index_values: dict[str, Any], column_values: dict[str, Any] | None = None) -> bool:

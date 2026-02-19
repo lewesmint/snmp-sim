@@ -186,6 +186,22 @@ class TableRegistrar:
             self.logger.error(f"No in-memory JSON found for MIB {mib}")
             return
 
+        # Check if this is an augmented table (has index_from in entry)
+        # Augmented tables should not have rows created here - they use parent table rows
+        entry = table_data["entry"]
+        if entry.get("index_from"):
+            self.logger.debug(
+                f"Skipping row creation for augmented table {table_name} - it uses index_from"
+            )
+            # Still need to ensure the table JSON exists, but don't add rows
+            table_json = mib_json.get(table_name)
+            if table_json is None:
+                table_json = {"rows": []}
+                mib_json[table_name] = table_json
+            if "rows" not in table_json:
+                table_json["rows"] = []
+            return
+
         table_json = mib_json.get(table_name)
         if table_json is None:
             table_json = {"rows": []}
@@ -205,7 +221,6 @@ class TableRegistrar:
             new_row[col_name] = value
 
         # Set index columns to 1 (or suitable value)
-        entry = table_data["entry"]
         index_names = entry.get("indexes", [])
         for idx_col in index_names:
             if idx_col in new_row:

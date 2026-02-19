@@ -123,10 +123,7 @@ class SNMPControllerGUI:
         self.tabview.add("Scripts")
         self._setup_scripts_tab()
 
-        # Tab 3: MIB Browser (always available - works independently)
-        self.tabview.add("MIB Browser")
-        self._setup_mib_browser_tab()
-
+        # Tab 3: MIB Browser will be added later (after dynamic tabs) to keep it on the right
         # OID Tree and Table View will be added dynamically when connected
         # Traps tab will also be added dynamically when connected
 
@@ -245,9 +242,18 @@ class SNMPControllerGUI:
         self.search_var = ctk.StringVar()
         search_entry = ctk.CTkEntry(toolbar, textvariable=self.search_var, width=250)
         search_entry.pack(side="left", padx=(0, 6))
-        search_entry.bind("<Return>", self._on_search)
-        search_btn = ctk.CTkButton(toolbar, text="Go", command=self._on_search, width=50)
-        search_btn.pack(side="left")
+        search_entry.bind("<Return>", self._on_search_first)
+        
+        # Search button (Go cycles through matches)
+        self.search_btn = ctk.CTkButton(toolbar, text="Go", command=self._on_search_first, width=50)
+        self.search_btn.pack(side="left", padx=(0, 6))
+        
+        # Initialize search state
+        self._search_matches: list[tuple[str, str]] = []  # List of (oid_str, display_name) tuples
+        self._search_current_index = 0  # Current match index
+        self._search_term = ""
+        self._current_table_oid: str | None = None  # Track which table we're currently viewing
+        self._search_setting_selection = False  # Flag to distinguish search vs manual selection
 
         # Selected item details (OID, value, type) - copyable, non-editable
         self.selected_info_var = ctk.StringVar(value="")
@@ -484,12 +490,41 @@ class SNMPControllerGUI:
         self.table_message_label.pack(pady=20)
         self.table_message_label.pack_forget()  # Hide initially
 
+    def _ensure_mib_browser_last(self) -> None:
+        """Ensure MIB Browser tab is always last (rightmost).
+        
+        Removes and re-adds it if it already exists, or adds it for the first time.
+        """
+        was_active = False
+        
+        # Check if MIB Browser exists and is currently active
+        if "MIB Browser" in self.tabview._tab_dict:
+            try:
+                was_active = (self.tabview.get() == "MIB Browser")
+            except Exception:
+                pass
+            # Remove it
+            self.tabview.delete("MIB Browser")
+        
+        # Add it back at the end
+        self.tabview.add("MIB Browser")
+        self._setup_mib_browser_tab()
+        
+        # Restore focus if it was active
+        if was_active:
+            try:
+                self.tabview.set("MIB Browser")
+            except Exception:
+                pass
+    
     def enable_table_tab(self) -> None:
         """Enable the 'Table View' tab dynamically."""
         if "Table View" not in self.tabview._tab_dict:
             # Insert after OID Tree if it exists, otherwise after Configuration
             self.tabview.add("Table View")
             self._setup_table_tab()
+            # Reposition MIB Browser to end
+            self._ensure_mib_browser_last()
     
     def enable_oid_tree_tab(self) -> None:
         """Enable the 'OID Tree' tab after connecting."""
@@ -499,6 +534,8 @@ class SNMPControllerGUI:
             self._setup_oid_tab()
             # Populate the tree with data
             self._populate_oid_tree()
+            # Reposition MIB Browser to end
+            self._ensure_mib_browser_last()
     
     def enable_traps_tab(self) -> None:
         """Enable the 'Traps' tab after connecting."""
@@ -506,6 +543,8 @@ class SNMPControllerGUI:
             # Add Traps tab
             self.tabview.add("Traps")
             self._setup_traps_tab()
+            # Reposition MIB Browser to end
+            self._ensure_mib_browser_last()
             
             # Reposition Scripts tab to come after Traps
             if "Scripts" in self.tabview._tab_dict:
@@ -513,11 +552,12 @@ class SNMPControllerGUI:
                 self.tabview.delete("Scripts")
                 self.tabview.add("Scripts")
                 self._setup_scripts_tab()
+                # Reposition MIB Browser again
+                self._ensure_mib_browser_last()
     
     def enable_mib_browser_tab(self) -> None:
-        """Enable the 'MIB Browser' tab after connecting (deprecated - now always enabled)."""
-        # MIB Browser is now created at startup, so this method is a no-op
-        pass
+        """Enable the 'MIB Browser' tab after connecting."""
+        self._ensure_mib_browser_last()
     
     def _setup_config_tab(self) -> None:
         """Setup the configuration tab."""
@@ -747,25 +787,18 @@ class SNMPControllerGUI:
             width=250,
             state="disabled"
         )
-        self.trap_dropdown.pack(side="left", padx=(0, 10))
+        self.trap_dropdown.pack(fill="x", anchor="w", pady=(0, 6))
 
-        # Index selector (initially hidden)
-        index_label = ctk.CTkLabel(select_frame, text="Index:", font=("", 10))
-        self.index_label = index_label
-        
+        # Index selectors (initially hidden, created dynamically per trap)
         self.trap_index_var = ctk.StringVar(value="1")
-        self.trap_index_combo = ctk.CTkComboBox(
-            select_frame,
-            variable=self.trap_index_var,
-            values=["1"],
-            width=60,
-            font=("", 10),
-            state="readonly"
-        )
-        # Add trace to update override labels when index changes
-        self.trap_index_var.trace_add("write", lambda *args: self._update_override_labels())
-        self.index_label.pack_forget()  # Hide initially
-        self.trap_index_combo.pack_forget()  # Hide initially
+        self.trap_index_vars: dict[str, ctk.StringVar] = {}
+        self.trap_index_widgets: list[ctk.CTkBaseClass] = []
+        self._trap_index_columns: list[str] = []
+        self._trap_index_columns_meta: dict[str, Any] = {}
+        self._trap_index_parent_table_oid: str | None = None
+
+        self.trap_index_frame = ctk.CTkFrame(select_frame, fg_color="transparent")
+        self.trap_index_frame.pack_forget()
 
         # Trap info
         info_label = ctk.CTkLabel(left_frame, text="Trap Details", font=("", 12, "bold"))
@@ -808,15 +841,23 @@ class SNMPControllerGUI:
         overrides_label = ctk.CTkLabel(right_frame, text="OID Overrides for Selected Trap", font=("", 12, "bold"))
         overrides_label.pack(pady=(10, 5), padx=10, anchor="w")
 
+        # Column widths for the overrides table
+        self.trap_table_col_widths = {
+            "oid": 260,
+            "current": 140,
+            "checkbox": 30,
+            "override": 180,
+        }
+
         # Table header
         header_frame = ctk.CTkFrame(right_frame, fg_color="transparent")
         header_frame.pack(fill="x", padx=10, pady=(0, 5))
 
         # Configure grid columns to match row layout
-        header_frame.grid_columnconfigure(0, weight=2, minsize=250)  # OID name
-        header_frame.grid_columnconfigure(1, weight=1, minsize=100)  # Current value
-        header_frame.grid_columnconfigure(2, weight=0, minsize=30)   # Checkbox
-        header_frame.grid_columnconfigure(3, weight=1, minsize=150)  # Override value
+        header_frame.grid_columnconfigure(0, weight=0, minsize=self.trap_table_col_widths["oid"])
+        header_frame.grid_columnconfigure(1, weight=0, minsize=self.trap_table_col_widths["current"])
+        header_frame.grid_columnconfigure(2, weight=0, minsize=self.trap_table_col_widths["checkbox"])
+        header_frame.grid_columnconfigure(3, weight=0, minsize=self.trap_table_col_widths["override"])
 
         ctk.CTkLabel(header_frame, text="OID", font=("", 10, "bold"), anchor="w").grid(row=0, column=0, padx=(5, 5), sticky="ew")
         ctk.CTkLabel(header_frame, text="Current Value", font=("", 10, "bold"), anchor="w").grid(row=0, column=1, padx=(0, 5), sticky="ew")
@@ -829,18 +870,6 @@ class SNMPControllerGUI:
 
         self.oid_table_frame = table_frame
 
-        # Controls below table
-        controls_frame = ctk.CTkFrame(right_frame, fg_color="transparent")
-        controls_frame.pack(fill="x", padx=10, pady=(0, 10))
-
-        self.save_overrides_btn = ctk.CTkButton(
-            controls_frame, 
-            text="Save", 
-            command=self._save_trap_config,
-            width=120
-        )
-        self.save_overrides_btn.pack(side="left")
-
         # Bind trap selection change
         def on_trap_select(*args: Any) -> None:
             self._update_trap_info()
@@ -848,6 +877,9 @@ class SNMPControllerGUI:
         
         # Store trap metadata
         self.traps_metadata: Dict[str, Dict[str, Any]] = {}
+        self._loading_trap_overrides = False
+        self._last_trap_name: str | None = None
+        self._last_trap_index: str | None = None
 
         # Load trap destinations from app config via API
         self._load_trap_destinations()
@@ -885,11 +917,18 @@ class SNMPControllerGUI:
         row_frame = ctk.CTkFrame(self.oid_table_frame)
         row_frame.pack(fill="x", pady=2)
 
+        # Fixed widths keep checkbox alignment stable across rows
+        col_widths = getattr(self, "trap_table_col_widths", {})
+        oid_col_width = col_widths.get("oid", 260)
+        current_col_width = col_widths.get("current", 140)
+        checkbox_col_width = col_widths.get("checkbox", 30)
+        override_col_width = col_widths.get("override", 180)
+
         # Configure grid columns with proper weights
-        row_frame.grid_columnconfigure(0, weight=2, minsize=250)  # OID name - flexible, min 250px
-        row_frame.grid_columnconfigure(1, weight=1, minsize=100)  # Current value - flexible, min 100px
-        row_frame.grid_columnconfigure(2, weight=0, minsize=30)   # Checkbox - fixed
-        row_frame.grid_columnconfigure(3, weight=1, minsize=150)  # Override value - flexible, min 150px
+        row_frame.grid_columnconfigure(0, weight=0, minsize=oid_col_width)
+        row_frame.grid_columnconfigure(1, weight=0, minsize=current_col_width)
+        row_frame.grid_columnconfigure(2, weight=0, minsize=checkbox_col_width)
+        row_frame.grid_columnconfigure(3, weight=0, minsize=override_col_width)
 
         # Check if this is a table OID (ends with .N where N is a digit)
         is_table_oid = False
@@ -904,25 +943,74 @@ class SNMPControllerGUI:
                 index_part = "." + parts[1]
 
         # Check if this is an index varbind (e.g., ifIndex)
-        is_index = self._is_index_varbind(oid_name)
+        plain_name = base_oid_name.split("::", 1)[1] if "::" in base_oid_name else base_oid_name
+        is_index = self._is_index_varbind(oid_name) or plain_name in self._trap_index_columns
 
         # Check if this is sysUpTime (special case - always real-time)
         is_sysuptime = self._is_sysuptime_varbind(oid_name)
 
-        # OID name label (display the full name including .index) - no fixed width, let grid handle it
-        oid_label = ctk.CTkLabel(row_frame, text=oid_name, anchor="w", font=("", 10))
+        # Check if this OID has enums
+        metadata = self._get_oid_metadata_by_name(base_oid_name)
+        enums = metadata.get("enums") or {}
+        has_enums = bool(enums)
+
+        # OID name label (display without MIB prefix or extraneous detail)
+        # Input: "TEST-ENUM-MIB::endPointName.192.168.1.1.1" -> "endPointName.192.168.1.1.1"
+        # But show only the core name: "endPointName.192.168.1.1.1" (keep the instance suffixes)
+        raw_display = oid_name.split("::", 1)[1] if "::" in oid_name else oid_name
+        # The raw_display already has no MIB prefix; use as-is for trap varbinds
+        display_name = raw_display
+        oid_label = ctk.CTkLabel(
+            row_frame,
+            text=display_name,
+            anchor="w",
+            font=("", 10),
+            width=oid_col_width,
+        )
         oid_label.grid(row=0, column=0, padx=(5, 5), sticky="ew")
 
-        # Current value label (updated by _refresh_current_values) - no fixed width, let grid handle it
-        current_label = ctk.CTkLabel(row_frame, text=current_value if current_value else "Loading...", anchor="w", font=("", 10))
+        # Current value label (show enums as "value (name)")
+        current_label = ctk.CTkLabel(
+            row_frame,
+            text=current_value if current_value else "Loading...",
+            anchor="w",
+            font=("", 10),
+            width=current_col_width,
+        )
         current_label.grid(row=0, column=1, padx=(0, 5), sticky="ew")
 
         # Force override checkbox (hidden for index varbinds and sysUpTime)
         use_override_var = ctk.BooleanVar(value=False)
-        override_check = ctk.CTkCheckBox(row_frame, text="", variable=use_override_var, width=20)
+        override_value_var = ctk.StringVar(value="")
+        override_check = ctk.CTkCheckBox(
+            row_frame,
+            text="",
+            variable=use_override_var,
+            width=checkbox_col_width,
+        )
 
-        # Override value entry (hidden for index varbinds and sysUpTime, disabled by default for others)
-        override_entry = ctk.CTkEntry(row_frame, width=150, font=("", 10))
+        # Override value widget (entry or enum dropdown)
+        override_entry: Any
+        if has_enums and not is_index and not is_sysuptime:
+            enum_values = [f"{val} ({name})" for name, val in sorted(enums.items(), key=lambda x: x[1])]
+            override_entry = ctk.CTkComboBox(
+                row_frame,
+                variable=override_value_var,
+                values=enum_values,
+                width=override_col_width,
+                font=("", 10),
+                state="disabled",
+            )
+        else:
+            override_entry = ctk.CTkEntry(
+                row_frame,
+                textvariable=override_value_var,
+                width=override_col_width,
+                font=("", 10),
+            )
+
+        def schedule_save_event(*args: Any) -> None:
+            self._schedule_trap_override_save()
 
         if is_sysuptime:
             # Special handling for sysUpTime - show it as real-time
@@ -948,10 +1036,10 @@ class SNMPControllerGUI:
                 widget.bind("<Button-1>", on_sysuptime_single_click)
                 widget.bind("<Double-Button-1>", on_sysuptime_double_click)
         elif is_index:
-            # Hide checkbox and entry for index varbinds
-            # Just show a label indicating it's an index
-            index_label = ctk.CTkLabel(row_frame, text="(Index)", width=170, anchor="w", font=("", 10), text_color="gray")
-            index_label.grid(row=0, column=2, columnspan=2, padx=(0, 5), sticky="w")
+            # Hide checkbox/entry/current value for index varbinds
+            current_label.configure(text="")
+            spacer = ctk.CTkLabel(row_frame, text="", width=checkbox_col_width + override_col_width)
+            spacer.grid(row=0, column=2, columnspan=2, padx=(0, 5), sticky="ew")
         else:
             # Show checkbox and entry for non-index varbinds
             override_check.grid(row=0, column=2, padx=(0, 5))
@@ -962,11 +1050,24 @@ class SNMPControllerGUI:
             # Enable/disable entry based on checkbox state
             def on_checkbox_toggle() -> None:
                 if use_override_var.get():
-                    override_entry.configure(state="normal")
+                    if not override_value_var.get():
+                        current_text = current_label.cget("text") if current_label else ""
+                        override_value_var.set(current_text)
+                    override_entry.configure(state="readonly" if has_enums else "normal")
                 else:
                     override_entry.configure(state="disabled")
+                schedule_save_event()
 
             use_override_var.trace_add("write", lambda *args: on_checkbox_toggle())
+
+            # Auto-save when override values change
+            override_value_var.trace_add("write", schedule_save_event)
+            if has_enums:
+                override_entry.bind("<<ComboboxSelected>>", schedule_save_event)
+                override_entry.bind("<FocusOut>", schedule_save_event)
+            else:
+                override_entry.bind("<KeyRelease>", schedule_save_event)
+                override_entry.bind("<FocusOut>", schedule_save_event)
 
         return {
             "frame": row_frame,
@@ -975,12 +1076,16 @@ class SNMPControllerGUI:
             "use_override_var": use_override_var,
             "override_check": override_check,
             "override_entry": override_entry,
+            "override_var": override_value_var,
             "oid_name": oid_name,
+            "has_enums": has_enums,
             "is_table_oid": is_table_oid,
             "base_oid_name": base_oid_name,
             "index_part": index_part,
             "is_index": is_index,
-            "is_sysuptime": is_sysuptime
+            "is_sysuptime": is_sysuptime,
+            "is_enum": has_enums,
+            "enums": enums,
         }
 
     def _update_override_labels(self) -> None:
@@ -993,8 +1098,8 @@ class SNMPControllerGUI:
         if not trap_data:
             return
         
-        # Get current trap index
-        current_index = self.trap_index_var.get()
+        # Get current trap index (supports multi-part indices)
+        current_index = self._get_selected_trap_index()
         
         # Update labels for each row in the overrides table
         for row in self.oid_rows:
@@ -1002,14 +1107,54 @@ class SNMPControllerGUI:
             
             # Check if this is a table OID that should have index updated
             if row["is_table_oid"]:
+                # Strip MIB prefix from base_oid_name for display
+                display_base = base_oid_name.split("::", 1)[1] if "::" in base_oid_name else base_oid_name
                 # Update the index part with dot notation and rebuild the display name
-                new_display_name = f"{base_oid_name}.{current_index}"
+                new_display_name = f"{display_base}.{current_index}"
                 row["oid_label"].configure(text=new_display_name)
-                # Update the stored oid_name
-                row["oid_name"] = new_display_name
+                # Update the stored oid_name with full name for API calls
+                row["oid_name"] = base_oid_name + f".{current_index}"
+
+    def _on_trap_index_change(self) -> None:
+        """Handle trap index changes by updating labels and refreshing values/overrides."""
+        trap_name = self.trap_var.get()
+        if not trap_name or trap_name == "No traps available":
+            return
+
+        current_index = self._get_selected_trap_index()
+        if self._last_trap_index and self._last_trap_index != current_index:
+            self._save_all_overrides_silent(trap_name_override=trap_name)
+
+        self._update_override_labels()
+        self._load_trap_overrides(trap_name)
+        self._refresh_current_values()
+        self._last_trap_index = current_index
+
+    def _schedule_trap_override_save(self) -> None:
+        """Debounce trap override saves for immediate persistence."""
+        if not self.connected:
+            return
+        if getattr(self, "_loading_trap_overrides", False):
+            return
+
+        job = getattr(self, "_trap_override_save_job", None)
+        if job is not None:
+            try:
+                self.root.after_cancel(job)
+            except Exception:
+                pass
+
+        self._trap_override_save_job = self.root.after(400, self._save_all_overrides_silent)
 
     def _clear_oid_table(self) -> None:
         """Clear all rows from the OID overrides table."""
+        job = getattr(self, "_trap_override_save_job", None)
+        if job is not None:
+            try:
+                self.root.after_cancel(job)
+            except Exception:
+                pass
+            self._trap_override_save_job = None
         for row in self.oid_rows:
             row["frame"].destroy()
         self.oid_rows.clear()
@@ -1020,18 +1165,35 @@ class SNMPControllerGUI:
         
         # Build OID list with index appended
         oid_list = []
-        current_index = self.trap_index_var.get()
+        current_index = self._get_selected_trap_index()
+        index_column_set = {col.lower() for col in self._trap_index_columns}
         for obj in objects:
             obj_mib = obj.get("mib", "")
             obj_name = obj.get("name", "")
             if obj_mib and obj_name:
-                # For table-based traps, append the index with dot notation (not brackets)
-                if trap_name.lower() in ["linkdown", "linkup"]:
+                if self._trap_index_columns:
+                    if obj_name.lower() in index_column_set or self._is_index_varbind(f"{obj_mib}::{obj_name}"):
+                        continue
+                # For traps with index columns, append the index with dot notation
+                if self._trap_index_columns and current_index:
                     oid_list.append(f"{obj_mib}::{obj_name}.{current_index}")
                 else:
                     oid_list.append(f"{obj_mib}::{obj_name}")
         
         print(f"DEBUG _update_available_oids: trap_name={trap_name}, objects count={len(objects)}, oid_list={oid_list}")
+
+        # Adjust OID column width to fit the widest entry
+        try:
+            font = tkfont.Font(family="Helvetica", size=10)
+            max_width = self.trap_table_col_widths.get("oid", 260)
+            for oid_name in oid_list:
+                display_name = oid_name.split("::", 1)[1] if "::" in oid_name else oid_name
+                measured = font.measure(display_name) + 20
+                if measured > max_width:
+                    max_width = measured
+            self.trap_table_col_widths["oid"] = max_width
+        except Exception:
+            pass
         
         # Clear existing table
         self._clear_oid_table()
@@ -1050,6 +1212,7 @@ class SNMPControllerGUI:
 
     def _load_trap_overrides(self, trap_name: str) -> None:
         """Load stored overrides for the specified trap and update table."""
+        self._loading_trap_overrides = True
         try:
             response = requests.get(f"{self.api_url}/trap-overrides/{trap_name}", timeout=5)
             if response.status_code == 200:
@@ -1064,13 +1227,40 @@ class SNMPControllerGUI:
 
                     oid_name = row["oid_name"]
                     if oid_name in self.current_trap_overrides:
-                        row["use_override_var"].set(True)
-                        # Entry will be enabled by the trace callback
-                        row["override_entry"].delete(0, "end")
-                        row["override_entry"].insert(0, self.current_trap_overrides[oid_name])
+                        saved_entry = self.current_trap_overrides[oid_name]
+                        if isinstance(saved_entry, dict):
+                            enabled = bool(saved_entry.get("enabled"))
+                            override_val = str(saved_entry.get("value", ""))
+                        else:
+                            enabled = True
+                            override_val = str(saved_entry)
+
+                        row["use_override_var"].set(enabled)
+                        if row.get("is_enum"):
+                            display_val = self._format_enum_display(override_val, row.get("enums", {}))
+                            if row.get("override_var") is not None:
+                                row["override_var"].set(display_val)
+                            else:
+                                row["override_entry"].set(display_val)
+                        else:
+                            # Entry will be enabled by the trace callback
+                            if row.get("override_var") is not None:
+                                row["override_var"].set(override_val)
+                            else:
+                                row["override_entry"].delete(0, "end")
+                                row["override_entry"].insert(0, override_val)
                     else:
                         row["use_override_var"].set(False)
-                        row["override_entry"].delete(0, "end")
+                        if row.get("is_enum"):
+                            if row.get("override_var") is not None:
+                                row["override_var"].set("")
+                            else:
+                                row["override_entry"].set("")
+                        else:
+                            if row.get("override_var") is not None:
+                                row["override_var"].set("")
+                            else:
+                                row["override_entry"].delete(0, "end")
             else:
                 self.current_trap_overrides = {}
                 # Clear all checkboxes and entries
@@ -1079,7 +1269,10 @@ class SNMPControllerGUI:
                     if row.get("is_sysuptime", False) or row.get("is_index", False):
                         continue
                     row["use_override_var"].set(False)
-                    row["override_entry"].delete(0, "end")
+                    if row.get("is_enum"):
+                        row["override_entry"].set("")
+                    else:
+                        row["override_entry"].delete(0, "end")
         except Exception as e:
             self._log(f"Failed to load trap overrides: {e}", "WARNING")
             self.current_trap_overrides = {}
@@ -1089,16 +1282,29 @@ class SNMPControllerGUI:
                 if row.get("is_sysuptime", False) or row.get("is_index", False):
                     continue
                 row["use_override_var"].set(False)
-                row["override_entry"].delete(0, "end")
+                if row.get("is_enum"):
+                    row["override_entry"].set("")
+                else:
+                    row["override_entry"].delete(0, "end")
+        finally:
+            self._loading_trap_overrides = False
 
     def _refresh_current_values(self) -> None:
         """Refresh the current values displayed in the OID table."""
         if not self.connected:
             return
-            
+        
         for row in self.oid_rows:
-            oid_name = row["oid_name"]
+            oid_name = row.get("oid_name")
+            if not oid_name:
+                continue
+            
             try:
+                if row.get("is_index", False):
+                    if row.get("current_label") is not None:
+                        row["current_label"].configure(text="")
+                    continue
+                
                 # Resolve OID to actual dotted notation
                 actual_oid = self._resolve_table_oid(oid_name, row)
                 if actual_oid:
@@ -1106,13 +1312,20 @@ class SNMPControllerGUI:
                     if response.status_code == 200:
                         data = response.json()
                         current_value = str(data.get("value", "N/A"))
-                        row["current_label"].configure(text=current_value)
+                        if row.get("is_enum"):
+                            display_value = self._format_enum_display(current_value, row.get("enums", {}))
+                            row["current_label"].configure(text=display_value)
+                        else:
+                            row["current_label"].configure(text=current_value)
                     else:
-                        row["current_label"].configure(text="Error")
+                        if row.get("current_label") is not None:
+                            row["current_label"].configure(text="")
                 else:
-                    row["current_label"].configure(text="N/A")
+                    if row.get("current_label") is not None:
+                        row["current_label"].configure(text="")
             except Exception as e:
-                row["current_label"].configure(text="Error")
+                if row.get("current_label") is not None:
+                    row["current_label"].configure(text="")
                 self._log(f"Failed to get current value for {oid_name}: {e}", "WARNING")
 
     def _refresh_sysuptime_value(self, oid_name: str, label_widget: Any) -> None:
@@ -1143,7 +1356,7 @@ class SNMPControllerGUI:
             "host": self.host_var.get(),
             "port": self.port_var.get(),
             "selected_trap": self.trap_var.get(),
-            "trap_index": self.trap_index_var.get(),
+            "trap_index": self._get_selected_trap_index(),
             "trap_overrides": self.current_trap_overrides
         }
         try:
@@ -1160,28 +1373,59 @@ class SNMPControllerGUI:
         # Also save overrides for current trap
         self._save_all_overrides_silent()
 
-    def _save_all_overrides_silent(self) -> None:
+    def _save_all_overrides_silent(self, trap_name_override: str | None = None) -> None:
         """Save all overrides from the table to the API without showing messages."""
-        trap_name = self.trap_var.get()
+        trap_name = trap_name_override or self.trap_var.get()
         if not trap_name or trap_name == "No traps available":
             return
         
-        # Collect overrides from table
-        overrides = {}
+        # Collect overrides from table (current index)
+        overrides: dict[str, dict[str, Any]] = {}
+        current_oid_names: set[str] = set()
         for row in self.oid_rows:
-            if row["use_override_var"].get():
-                oid_name = row["oid_name"]
-                override_value = row["override_entry"].get().strip()
-                if override_value:
-                    overrides[oid_name] = override_value
-        
+            oid_name = row["oid_name"]
+            current_oid_names.add(oid_name)
+            enabled = bool(row["use_override_var"].get())
+            raw_value = ""
+            if row.get("override_var") is not None:
+                raw_value = row["override_var"].get().strip()
+            else:
+                raw_value = row["override_entry"].get().strip()
+
+            if row.get("is_enum"):
+                override_value = self._extract_enum_value(raw_value, row.get("enums", {}))
+            else:
+                override_value = raw_value
+
+            if override_value or enabled:
+                overrides[oid_name] = {
+                    "value": override_value,
+                    "enabled": enabled,
+                }
+
+        # Merge with existing overrides so other indices are preserved
+        existing_overrides: dict[str, Any] = dict(self.current_trap_overrides or {})
+        removed_any = False
+        for oid_name in list(existing_overrides.keys()):
+            if oid_name in current_oid_names:
+                existing_overrides.pop(oid_name, None)
+                removed_any = True
+
+        merged_overrides = {**existing_overrides, **overrides}
+        if not merged_overrides and not removed_any:
+            # Nothing to save and no changes detected.
+            return
+
         # Save to API
         try:
-            response = requests.post(f"{self.api_url}/trap-overrides/{trap_name}", 
-                                   json=overrides, timeout=5)
+            response = requests.post(
+                f"{self.api_url}/trap-overrides/{trap_name}",
+                json=merged_overrides,
+                timeout=5,
+            )
             if response.status_code == 200:
-                self.current_trap_overrides = overrides
-                self._log(f"Saved {len(overrides)} overrides for trap: {trap_name}")
+                self.current_trap_overrides = merged_overrides
+                self._log(f"Saved {len(merged_overrides)} overrides for trap: {trap_name}")
         except Exception as e:
             self._log(f"Failed to save overrides: {e}", "ERROR")
 
@@ -1375,6 +1619,10 @@ class SNMPControllerGUI:
             self.trap_info_text.delete("1.0", "end")
             self.trap_info_text.configure(state="disabled")
             return
+
+        previous_trap = getattr(self, "_last_trap_name", None)
+        if previous_trap and previous_trap != trap_name:
+            self._save_all_overrides_silent(trap_name_override=previous_trap)
         
         trap_data = self.traps_metadata.get(trap_name)
         if not trap_data:
@@ -1410,25 +1658,17 @@ class SNMPControllerGUI:
         self.trap_info_text.insert("1.0", "\n".join(info_lines))
         self.trap_info_text.configure(state="disabled")
         
-        # Check if trap contains Index-type varbinds and show/hide index selector
-        has_index_objects = self._trap_has_index_objects(trap_data)
-        if has_index_objects:
-            self.index_label.pack(side="left", padx=(10, 2))
-            self.trap_index_combo.pack(side="left", padx=(0, 10))
-            # Populate with available indices
-            indices = self._get_trap_indices(trap_data)
-            self.trap_index_combo.configure(values=indices)
-            if indices and self.trap_index_var.get() not in indices:
-                self.trap_index_var.set(indices[0])
-        else:
-            self.index_label.pack_forget()
-            self.trap_index_combo.pack_forget()
+        # Configure index selectors for this trap
+        self._setup_trap_index_selectors(trap_name)
         
         # Update available OIDs for this trap
         self._update_available_oids(trap_name, trap_data)
         
         # Update override labels with current index
         self._update_override_labels()
+
+        self._last_trap_name = trap_name
+        self._last_trap_index = self._get_selected_trap_index()
     
     def _trap_has_index_objects(self, trap_data: Dict[str, Any]) -> bool:
         """Check if the trap contains any Index-type varbinds that require instance values."""
@@ -1463,29 +1703,167 @@ class SNMPControllerGUI:
     def _get_interface_indices(self) -> List[str]:
         """Get available interface indices."""
         try:
-            # Try to get ifNumber first to know how many interfaces
-            resp = requests.get(f"{self.api_url}/value", params={"oid": "1.3.6.1.2.1.2.1.0"}, timeout=2)
+            # Prefer the actual ifTable instances for accurate indices
+            schema_resp = requests.get(
+                f"{self.api_url}/table-schema",
+                params={"oid": "1.3.6.1.2.1.2.2"},
+                timeout=3,
+            )
+            if schema_resp.status_code == 200:
+                schema = schema_resp.json()
+                instances = [str(inst) for inst in schema.get("instances", [])]
+                if instances:
+                    # Sort numerically where possible
+                    def _sort_key(val: str) -> tuple[int, int | str]:
+                        return (0, int(val)) if val.isdigit() else (1, val)
+
+                    return sorted(instances, key=_sort_key)
+        except Exception:
+            pass
+
+        try:
+            # Fallback: use ifNumber to build a range
+            resp = requests.get(
+                f"{self.api_url}/value",
+                params={"oid": "1.3.6.1.2.1.2.1.0"},
+                timeout=2,
+            )
             if resp.status_code == 200:
                 data = resp.json()
                 if_number = int(data.get("value", 1))
-                # Return indices from 1 to ifNumber
                 return [str(i) for i in range(1, if_number + 1)]
         except Exception:
             pass
-        
-        # Fallback: try to discover by testing ifIndex values
+
+        # Final fallback: probe a few ifIndex values
         indices = []
-        for i in range(1, 11):  # Try first 10
+        for i in range(1, 11):
             try:
-                resp = requests.get(f"{self.api_url}/value", params={"oid": f"1.3.6.1.2.1.2.2.1.1.{i}"}, timeout=1)
+                resp = requests.get(
+                    f"{self.api_url}/value",
+                    params={"oid": f"1.3.6.1.2.1.2.2.1.1.{i}"},
+                    timeout=1,
+                )
                 if resp.status_code == 200:
                     indices.append(str(i))
                 else:
                     break
             except Exception:
                 break
-        
+
         return indices if indices else ["1"]
+
+    def _clear_trap_index_selectors(self) -> None:
+        """Remove dynamic index selectors from the trap UI."""
+        for widget in self.trap_index_widgets:
+            try:
+                widget.destroy()
+            except Exception:
+                pass
+        self.trap_index_widgets.clear()
+        self.trap_index_vars.clear()
+        self._trap_index_columns = []
+        self._trap_index_columns_meta = {}
+        self._trap_index_parent_table_oid = None
+        self.trap_index_frame.pack_forget()
+
+    def _get_selected_trap_index(self) -> str:
+        """Build the current index string from dynamic selectors."""
+        if not self._trap_index_columns:
+            return self.trap_index_var.get()
+
+        index_values: Dict[str, str] = {}
+        for col_name in self._trap_index_columns:
+            var = self.trap_index_vars.get(col_name)
+            if var is not None:
+                index_values[col_name] = var.get()
+
+        return self._build_instance_from_index_values(
+            index_values,
+            self._trap_index_columns,
+            self._trap_index_columns_meta,
+        )
+
+    def _setup_trap_index_selectors(self, trap_name: str) -> None:
+        """Create index dropdowns for traps with index varbinds."""
+        self._clear_trap_index_selectors()
+
+        try:
+            response = requests.get(f"{self.api_url}/trap-varbinds/{trap_name}", timeout=5)
+            if response.status_code != 200:
+                return
+            data = response.json()
+        except Exception:
+            return
+
+        index_columns = data.get("index_columns", [])
+        columns_meta = data.get("columns_meta", {})
+        parent_table_oid = data.get("parent_table_oid")
+        instances = data.get("instances", [])
+
+        if not index_columns:
+            return
+
+        if not instances and parent_table_oid:
+            try:
+                table_oid = ".".join(str(x) for x in parent_table_oid)
+                schema_resp = requests.get(
+                    f"{self.api_url}/table-schema",
+                    params={"oid": table_oid},
+                    timeout=3,
+                )
+                if schema_resp.status_code == 200:
+                    schema = schema_resp.json()
+                    instances = schema.get("instances", [])
+            except Exception:
+                pass
+
+        self._trap_index_columns = list(index_columns)
+        self._trap_index_columns_meta = columns_meta
+        self._trap_index_parent_table_oid = ".".join(str(x) for x in parent_table_oid) if parent_table_oid else None
+
+        # Build value lists for each index column
+        values_by_column: Dict[str, list[str]] = {col: [] for col in index_columns}
+        for inst in instances:
+            inst_str = str(inst)
+            index_values = self._extract_index_values(inst_str, index_columns, columns_meta)
+            for col in index_columns:
+                val = index_values.get(col, "")
+                if val and val not in values_by_column[col]:
+                    values_by_column[col].append(val)
+
+        for col in index_columns:
+            values_by_column[col].sort()
+
+        # Create selectors
+        for col_name in index_columns:
+            row_frame = ctk.CTkFrame(self.trap_index_frame, fg_color="transparent")
+            row_frame.pack(fill="x", pady=(0, 4), anchor="w")
+            self.trap_index_widgets.append(row_frame)
+
+            label = ctk.CTkLabel(row_frame, text=f"{col_name}:", font=("", 10))
+            label.pack(side="left", padx=(0, 6))
+            self.trap_index_widgets.append(label)
+
+            var = ctk.StringVar(value="")
+            values = values_by_column.get(col_name, [])
+            if values:
+                var.set(values[0])
+
+            combo = ctk.CTkComboBox(
+                row_frame,
+                variable=var,
+                values=values if values else [""],
+                width=160,
+                font=("", 10),
+                state="readonly",
+            )
+            combo.pack(side="left")
+            self.trap_index_widgets.append(combo)
+            self.trap_index_vars[col_name] = var
+            var.trace_add("write", lambda *args: self._on_trap_index_change())
+
+        self.trap_index_frame.pack(fill="x", pady=(0, 5), anchor="w")
     
     def _resolve_table_oid(self, oid_str: str, row: Dict[str, Any] | None = None) -> str | None:
         """Resolve a table OID with .index suffix to an actual OID with instance number."""
@@ -1541,6 +1919,49 @@ class SNMPControllerGUI:
                         return None
 
         return None
+
+    def _get_oid_metadata_by_name(self, oid_name: str) -> Dict[str, Any]:
+        """Get OID metadata by MIB::name string."""
+        if "::" not in oid_name:
+            return {}
+
+        for oid, metadata in self.oid_metadata.items():
+            metadata_name = metadata.get("name", "")
+            mib_name = metadata.get("mib", "")
+            if mib_name and metadata_name:
+                if f"{mib_name}::{metadata_name}" == oid_name:
+                    return metadata
+
+        return {}
+
+    def _format_enum_display(self, value: str, enums: Dict[str, int]) -> str:
+        """Format a raw value with its enum name when possible."""
+        if value in ("", "N/A", "unset"):
+            return value
+        try:
+            int_value = int(value)
+        except (ValueError, TypeError):
+            return value
+
+        for enum_name, enum_value in enums.items():
+            if enum_value == int_value:
+                return f"{value} ({enum_name})"
+
+        return value
+
+    def _extract_enum_value(self, display_value: str, enums: Dict[str, int]) -> str:
+        """Extract a raw enum value from a display string."""
+        if " (" in display_value and display_value.endswith(")"):
+            return display_value.split(" (")[0]
+
+        if display_value.isdigit():
+            return display_value
+
+        for enum_name, enum_value in enums.items():
+            if enum_name == display_value:
+                return str(enum_value)
+
+        return display_value
 
     def _start_trap_receiver(self) -> None:
         """Start the trap receiver."""
@@ -1988,6 +2409,13 @@ class SNMPControllerGUI:
 
     def _on_tree_select(self, event: Any) -> None:
         """Handler called when tree selection changes; populates Table View if table or table entry selected."""
+        # If this selection wasn't from search, reset search state
+        if not self._search_setting_selection:
+            self._search_matches.clear()
+            self._search_current_index = 0
+            self._search_term = ""
+        # Note: flag is reset by search code after this handler completes
+        
         selected_items = self.oid_tree.selection()
         print(f"\n[DEBUG] _on_tree_select called, selected_items: {selected_items}")
         if not selected_items:
@@ -2215,6 +2643,10 @@ class SNMPControllerGUI:
             region = self.oid_tree.identify_region(event.x, event.y)
             if region == "separator":
                 self._oid_tree_user_resized = True
+                return
+            item = self.oid_tree.identify_row(event.y)
+            if item:
+                self._ensure_oid_name_width(item)
         except Exception:
             return
 
@@ -3081,18 +3513,32 @@ class SNMPControllerGUI:
             messagebox.showerror("Error", f"Failed to get schema: {e}")
             return
 
-        # Find index columns
+        # Find index columns - use actual column names from schema
         index_columns = []
         for col_name in schema.get("index_columns", []):
             if col_name in schema.get("columns", {}):
                 col_info = schema["columns"][col_name]
                 index_columns.append((col_name, col_info))
-            elif col_name.startswith("__index"):
-                # Handle virtual index columns (__index__, __index_2__, etc.)
-                index_columns.append((col_name, {"default": "1" if col_name == "__index__" else "", "type": "String"}))
 
+        # Check if this is an augmented table
+        index_from = schema.get("index_from", [])
+        if index_from:
+            # This is an augmented table - cannot add instances directly
+            parent_info = index_from[0] if index_from else {}
+            parent_mib = parent_info.get("mib", "Unknown MIB")
+            parent_col = parent_info.get("column", "Unknown")
+            messagebox.showerror(
+                "Cannot Add to Augmented Table",
+                f"This table (indexed by {parent_col}) is an augmented table that inherits instances from {parent_mib}.\n\n"
+                f"You cannot add instances directly to this table. Instead, add instances to the parent table in {parent_mib}, "
+                f"and the new instances will automatically appear here."
+            )
+            return
+
+        # Fallback if no index columns found (shouldn't happen with proper schema)
         if not index_columns:
-            index_columns = [("__index__", {"default": "1", "type": "String"})]
+            messagebox.showerror("Error", "Table has no index columns in schema")
+            return
 
         # Get non-key column values from the last row
         instances = schema.get("instances", [])
@@ -3106,8 +3552,8 @@ class SNMPControllerGUI:
 
             # Fetch values for all non-index columns from the last row
             for col_name, col_info in columns_meta.items():
-                # Skip index columns (both explicit and virtual __index__ columns)
-                if col_name in index_column_names or col_name.startswith("__index"):
+                # Skip index columns
+                if col_name in index_column_names:
                     continue
                     
                 # This is a non-key column, get its value from the last row
@@ -3127,8 +3573,8 @@ class SNMPControllerGUI:
         else:
             # No existing instances, default all non-index columns to "unset"
             for col_name, col_info in columns_meta.items():
-                # Skip index columns (both explicit and virtual __index__ columns)
-                if col_name not in index_column_names and not col_name.startswith("__index"):
+                # Skip index columns
+                if col_name not in index_column_names:
                     column_defaults[col_name] = "unset"
 
         # Create dialog for index values
@@ -3182,11 +3628,16 @@ class SNMPControllerGUI:
             index_field_widgets.clear()
             entries.clear()
             
-            # Create entry fields for each index part
+            # Create entry fields for each index column
             for i in range(num_index_parts):
-                col_name = "__index__" if i == 0 else f"__index_{i + 1}__"
+                if i < len(index_columns):
+                    col_name, col_info = index_columns[i]
+                else:
+                    # Shouldn't happen if num_index_parts matches index_columns
+                    col_name = f"index{i}"
+                    col_info = {}
                 
-                # Label
+                # Label with actual column name
                 label = ctk.CTkLabel(input_frame, text=f"{col_name}:")
                 label.grid(row=i, column=0, sticky="w", pady=5, padx=10)
                 
@@ -3196,6 +3647,7 @@ class SNMPControllerGUI:
                 entry.insert(0, default_val)
                 entry.grid(row=i, column=1, sticky="ew", pady=5, padx=(0, 10))
                 
+                # Store entry using actual column name
                 entries[col_name] = entry
                 index_field_widgets.append([label, entry])
             
@@ -3238,17 +3690,17 @@ class SNMPControllerGUI:
             dialog.destroy()
 
         def on_add() -> None:
-            # Collect index values
+            # Collect index values using actual column names
             index_values = {}
             index_parts_ordered = []  # Keep track of order for building instance_str
-            for i in range(num_index_parts):
-                col_name = "__index__" if i == 0 else f"__index_{i + 1}__"
+            for i, (col_name, col_info) in enumerate(index_columns[:num_index_parts]):
                 if col_name not in entries:
                     continue
                 val = entries[col_name].get().strip()
                 if not val:
                     messagebox.showerror("Error", f"{col_name} cannot be empty")
                     return
+                # Store using actual column name
                 index_values[col_name] = val
                 index_parts_ordered.append(val)
 
@@ -3431,15 +3883,6 @@ class SNMPControllerGUI:
                 messagebox.showwarning("No Selection", "Please select an instance to remove.")
                 return
             
-            # Confirm deletion
-            if len(selected_rows) == 1:
-                msg = "Are you sure you want to delete this instance?"
-            else:
-                msg = f"Are you sure you want to delete {len(selected_rows)} instances?"
-            
-            if not messagebox.askyesno("Confirm Deletion", msg):
-                return
-            
             # Get table OID from current table item
             if not hasattr(self, "_current_table_item") or self._current_table_item is None:
                 messagebox.showerror("Error", "No table selected")
@@ -3453,6 +3896,37 @@ class SNMPControllerGUI:
             
             if not table_oid:
                 messagebox.showerror("Error", "Table OID not found")
+                return
+            
+            # Check if this is an augmented table
+            try:
+                resp = requests.get(f"{self.api_url}/table-schema", params={"oid": table_oid}, timeout=5)
+                if resp.status_code == 200:
+                    schema = resp.json()
+                    index_from = schema.get("index_from", [])
+                    if index_from:
+                        # This is an augmented table - cannot remove instances directly
+                        parent_info = index_from[0] if index_from else {}
+                        parent_mib = parent_info.get("mib", "Unknown MIB")
+                        parent_col = parent_info.get("column", "Unknown")
+                        messagebox.showerror(
+                            "Cannot Remove from Augmented Table",
+                            f"This table (indexed by {parent_col}) is an augmented table that inherits instances from {parent_mib}.\n\n"
+                            f"You cannot remove instances from this table. Instead, remove instances from the parent table in {parent_mib}, "
+                            f"and the instances will automatically be removed from here."
+                        )
+                        return
+            except Exception as e:
+                self._log(f"Error checking if table is augmented: {e}", "WARNING")
+                # Continue anyway - if we can't verify, let the user try
+            
+            # Confirm deletion
+            if len(selected_rows) == 1:
+                msg = "Are you sure you want to delete this instance?"
+            else:
+                msg = f"Are you sure you want to delete {len(selected_rows)} instances?"
+            
+            if not messagebox.askyesno("Confirm Deletion", msg):
                 return
             
             # Delete each selected instance
@@ -3691,13 +4165,93 @@ class SNMPControllerGUI:
         """Toggle the entry field state based on unlock checkbox."""
         entry.configure(state="normal" if unlocked else "disabled")
 
+    def _decompose_table_oid(self, oid_str: str) -> tuple[str, str, str] | None:
+        """Decompose a table OID (1.3.6.1.2.1.2.2.1.7.3) into (table_oid, column_oid, instance).
+        
+        For ifTable column OIDs:
+        - Instance OID: 1.3.6.1.2.1.2.2.1.7.3 (full column instance)
+        - Column OID: 1.3.6.1.2.1.2.2.1.7 (column without instance)
+        - Table OID: 1.3.6.1.2.1.2.2 (table without entry and column)
+        - Instance: 3
+        
+        Returns (table_oid, column_name, instance) or None if not a table column.
+        """
+        try:
+            parts = oid_str.split('.')
+            # Find which schema has this OID as a table entry
+            for table_name, table_data in self.table_schemas.items():
+                table_oid = '.'.join(str(x) for x in table_data.get("oid", []))
+                entry_oid = '.'.join(str(x) for x in table_data.get("entry_oid", []))
+                
+                # Check if this OID starts with the entry OID
+                if oid_str.startswith(entry_oid + '.'):
+                    # This is a table column instance OID
+                    # Extract column index and instance index from the end
+                    entry_parts = entry_oid.split('.')
+                    num_indices = len(table_data.get("index_columns", []))
+                    
+                    # Column index is the next part after entry
+                    if len(parts) > len(entry_parts) + num_indices:
+                        column_index = int(parts[len(entry_parts)])
+                        # Find the column name by matching the OID
+                        for col_name, col_data in table_data.get("columns", {}).items():
+                            col_oid = '.'.join(str(x) for x in col_data.get("oid", []))
+                            col_oid_parts = col_oid.split('.')
+                            if len(col_oid_parts) > len(entry_parts):
+                                if int(col_oid_parts[len(entry_parts)]) == column_index:
+                                    # Extract instance (remaining parts)
+                                    instance = '.'.join(parts[len(entry_parts) + 1:])
+                                    return (table_oid, col_name, instance)
+        except Exception as e:
+            self._log(f"Error decomposing table OID {oid_str}: {e}", "DEBUG")
+        
+        return None
+
     def _set_oid_value(self, oid: str, new_value: str, item: str) -> None:
-        """Set the value for an OID via the API."""
+        """Set the value for an OID via the API.
+        
+        Handles both scalar OIDs and table column OIDs by routing to appropriate endpoint.
+        """
         try:
             self._log(f"Setting value for OID {oid} to: {new_value}")
+            
+            # First try as a scalar OID
             resp = requests.post(f"{self.api_url}/value",
                                json={"oid": oid, "value": new_value},
                                timeout=5)
+            
+            # If 404, try as a table column OID
+            if resp.status_code == 404:
+                decomposed = self._decompose_table_oid(oid)
+                if decomposed:
+                    table_oid, column_name, instance = decomposed
+                    # Convert instance string to index dict
+                    # For simple single-index tables, instance is just the index value
+                    # For multi-index tables, instance is dot-separated values
+                    schema = self.table_schemas.get(None)  # Find matching schema
+                    index_cols = []
+                    for schema_name, schema_data in self.table_schemas.items():
+                        if schema_data.get("oid") and '.'.join(str(x) for x in schema_data["oid"]) == table_oid:
+                            index_cols = schema_data.get("index_columns", [])
+                            break
+                    
+                    # Build index_values dict
+                    index_values = {}
+                    instance_parts = instance.split('.')
+                    for i, col_name in enumerate(index_cols):
+                        if i < len(instance_parts):
+                            index_values[col_name] = instance_parts[i]
+                    
+                    # Call table-row endpoint
+                    self._log(f"Trying table-row endpoint: table_oid={table_oid}, index_values={index_values}, column={column_name}")
+                    resp = requests.post(f"{self.api_url}/table-row",
+                                       json={
+                                           "table_oid": table_oid,
+                                           "index_values": index_values,
+                                           "column_values": {column_name: new_value}
+                                       },
+                                       timeout=5)
+            
             resp.raise_for_status()
             result = resp.json()
 
@@ -3751,53 +4305,214 @@ class SNMPControllerGUI:
 
         return result
 
-    def _on_search(self, event: Any = None) -> None:
-        """Handle search in the OID tree."""
+    def _on_search_first(self, event: Any = None) -> None:
+        """Start a new search or continue if search term changed."""
         search_term = self.search_var.get().strip()
         if not search_term:
+            messagebox.showwarning("Search", "Please enter a search term")
             return
 
-        # First, search in already loaded items
-        for oid, item_id in self.oid_to_item.items():
-            if search_term in oid or search_term.lower() in self.oid_tree.item(item_id, "text").lower():
-                # Expand path to make it visible
-                self._expand_path_to_item(item_id)
-                self.oid_tree.see(item_id)
-                self.oid_tree.selection_set(item_id)
-                return
-
-        # If not found, search in metadata by name
-        for oid_str, metadata in self.oid_metadata.items():
+        if search_term == self._search_term and self._search_matches:
+            self._search_current_index = (self._search_current_index + 1) % len(self._search_matches)
+            self._show_search_match(self._search_current_index)
+            return
+        
+        # Depth-first traversal of tree structure, including metadata for unloaded nodes
+        matches: list[tuple[str, str]] = []
+        seen_oids: set[str] = set()
+        
+        def dfs_search(item: str) -> None:
+            """Recursively search tree in depth-first order, including metadata."""
+            # Get OID from values column
+            item_values = self.oid_tree.item(item, "values")
+            base_oid = item_values[0] if item_values else ""
+            
+            # For entry nodes, construct full OID from table + instance
+            # Entry nodes store (table_oid, instance, ...) in values
+            item_tags = self.oid_tree.item(item, "tags")
+            is_entry = "table-entry" in item_tags
+            oid = base_oid
+            if is_entry and len(item_values) >= 2:
+                table_oid = item_values[0]
+                instance = item_values[1]
+                if table_oid and instance:
+                    oid = f"{table_oid}.{instance}"
+            
+            # Get display name
+            item_text = self.oid_tree.item(item, "text")
+            
+            # Check if this node matches
+            if oid and oid not in seen_oids:
+                if (search_term.lower() in item_text.lower() or
+                    search_term in oid or
+                    search_term.lower() in oid.lower()):
+                    matches.append((oid, item_text))
+                    seen_oids.add(oid)
+            
+            # Recursively search visible children in tree FIRST (before metadata)
+            # This ensures proper depth-first order
+            for child_item in self.oid_tree.get_children(item):
+                dfs_search(child_item)
+            
+            # Then check metadata for unloaded children (only for non-entry nodes)
+            # Entry nodes shouldn't search metadata because their children are loaded
+            if oid and not is_entry:
+                for oid_str, metadata in self.oid_metadata.items():
+                    if oid_str not in seen_oids and oid_str.startswith(oid + "."):
+                        # This is a potential child
+                        name = metadata.get("name", "")
+                        mib = metadata.get("mib", "")
+                        obj_type = metadata.get("type", "")
+                        display_name = name if name else oid_str
+                        
+                        # Skip table entries - they're not actual tree nodes
+                        # Only tables, instances, and columns are tree nodes
+                        if "SEQUENCE" in obj_type and "Entry" in name:
+                            continue
+                        
+                        if (search_term.lower() in name.lower() or
+                            search_term.lower() in mib.lower() or
+                            search_term in oid_str or
+                            search_term.lower() in oid_str.lower()):
+                            matches.append((oid_str, display_name))
+                            seen_oids.add(oid_str)
+        
+        # Start search from root
+        root_items = self.oid_tree.get_children("")
+        for root_item in root_items:
+            dfs_search(root_item)
+        
+        if not matches:
+            messagebox.showinfo("Search", f"No matches found for '{search_term}'")
+            self._search_matches.clear()
+            self._search_term = ""
+            return
+        
+        # Store matches and show first one
+        self._search_matches = matches
+        self._search_current_index = 0
+        self._search_term = search_term
+        
+        # Show the first match
+        self._show_search_match(0)
+        
+        self._log(f"Found {len(matches)} match(es) for '{search_term}'")
+    
+    def _on_search_next(self) -> None:
+        """Show the next search match."""
+        if not self._search_matches:
+            return
+        
+        # Move to next match (with wrapping)
+        self._search_current_index = (self._search_current_index + 1) % len(self._search_matches)
+        self._show_search_match(self._search_current_index)
+    
+    def _show_search_match(self, index: int) -> None:
+        """Display the search match at the given index. Loads missing hierarchy if needed."""
+        if index >= len(self._search_matches):
+            return
+        
+        oid_str, display_name = self._search_matches[index]
+        match_num = index + 1
+        total_matches = len(self._search_matches)
+        
+        # Check if this is a table entry (SEQUENCE type with "Entry" in name)
+        # Entries aren't tree nodes, so navigate to parent table instead
+        if oid_str in self.oid_metadata:
+            metadata = self.oid_metadata[oid_str]
+            obj_type = metadata.get("type", "")
             name = metadata.get("name", "")
-            mib = metadata.get("mib", "")
-            full_name = f"{mib}::{name}" if mib else name
-
-            if (search_term.lower() in name.lower() or
-                search_term.lower() in full_name.lower() or
-                search_term in oid_str):
-                # Found it, check if it's in the tree
-                if oid_str in self.oid_to_item:
-                    item_id = self.oid_to_item[oid_str]
-                    # Expand path to make it visible
+            if "SEQUENCE" in obj_type and "Entry" in name:
+                # This is an entry - navigate to parent table instead
+                oid_parts = oid_str.split('.')
+                if len(oid_parts) > 0:
+                    parent_table_oid = ".".join(oid_parts[:-1])
+                    oid_str = parent_table_oid  # Update OID to parent table
+                    display_name = display_name.replace("Entry", "Table")
+                    self._log(f"Match {match_num}/{total_matches}: Entry detected, navigating to parent table {parent_table_oid}")
+        
+        # If already in tree, just select it (works for any node: OID, table, entry, or column)
+        if oid_str in self.oid_to_item:
+            item_id = self.oid_to_item[oid_str]
+            self._expand_path_to_item(item_id)
+            self.oid_tree.see(item_id)
+            self._search_setting_selection = True  # Mark that we're setting selection from search
+            self.oid_tree.selection_set(item_id)
+            self._ensure_oid_name_width(item_id)
+            self._log(f"Match {match_num}/{total_matches}: {display_name} ({oid_str})")
+            # Reset flag after tree has processed the selection
+            self.root.after(10, lambda: setattr(self, '_search_setting_selection', False))
+            return
+        
+        # Not yet in tree - need to load the hierarchy. Find deepest loaded ancestor.
+        oid_parts = oid_str.split('.')
+        deepest_parent_oid = None
+        for depth in range(len(oid_parts), 0, -1):
+            parent_oid = ".".join(oid_parts[:depth])
+            if parent_oid in self.oid_to_item:
+                deepest_parent_oid = parent_oid
+                break
+        
+        if deepest_parent_oid is None:
+            self._log(f"Match {match_num}/{total_matches} (root not found): {display_name} ({oid_str})")
+            return
+        
+        # Expand the parent and load children
+        parent_item = self.oid_to_item[deepest_parent_oid]
+        parent_tags = self.oid_tree.item(parent_item, 'tags')
+        is_table_parent = 'table' in parent_tags
+        
+        # Show loading message for tables since they take longer
+        if is_table_parent:
+            self._log(f"Loading table {deepest_parent_oid}...", "INFO")
+        
+        self.oid_tree.item(parent_item, open=True)
+        self.oid_tree.update_idletasks()
+        
+        # Now load children by calling the node open handler
+        event_mock = type('Event', (), {'widget': self.oid_tree})()
+        self._on_node_open(event_mock)
+        
+        # Wait for children to load, then try to select target
+        # Tables need longer wait times due to HTTP requests
+        max_retries = 20 if is_table_parent else 10
+        base_wait = 200 if is_table_parent else 100
+        long_wait = 500 if is_table_parent else 300
+        
+        def attempt_select(retry_count: int = 0) -> None:
+            # Check both oid_to_item AND if item exists in tree widget
+            if oid_str in self.oid_to_item:
+                item_id = self.oid_to_item[oid_str]
+                try:
+                    # Verify item actually exists in tree
+                    self.oid_tree.item(item_id)
+                    # Item exists, select it
                     self._expand_path_to_item(item_id)
                     self.oid_tree.see(item_id)
+                    self._search_setting_selection = True  # Mark that we're setting selection from search
                     self.oid_tree.selection_set(item_id)
+                    self._ensure_oid_name_width(item_id)
+                    self._log(f"Match {match_num}/{total_matches}: {display_name} ({oid_str})")
+                    # Reset flag after tree has processed the selection
+                    self.root.after(10, lambda: setattr(self, '_search_setting_selection', False))
                     return
-
-        # Fallback: search in oids_data
-        for name, oid_tuple in self.oids_data.items():
-            oid_str = ".".join(str(x) for x in oid_tuple)
-            if search_term in oid_str or search_term.lower() in name.lower():
-                # Found it, check if it's in the tree
-                if oid_str in self.oid_to_item:
-                    item_id = self.oid_to_item[oid_str]
-                    # Expand path to make it visible
-                    self._expand_path_to_item(item_id)
-                    self.oid_tree.see(item_id)
-                    self.oid_tree.selection_set(item_id)
-                    return
-
-        messagebox.showinfo("Search", f"No match found for '{search_term}'")
+                except tk.TclError:
+                    # Item in dict but not in tree widget yet
+                    pass
+            
+            # Show progress for tables (every 5 retries)
+            if is_table_parent and retry_count > 0 and retry_count % 5 == 0:
+                self._log(f"Still loading table... ({retry_count}/{max_retries})", "DEBUG")
+            
+            # Retry with exponential backoff
+            if retry_count < max_retries:
+                wait_time = base_wait if retry_count < 3 else long_wait
+                self.root.after(wait_time, lambda: attempt_select(retry_count + 1))
+            else:
+                self._search_setting_selection = False  # Reset flag on failure
+                self._log(f"Match {match_num}/{total_matches} (could not load): {display_name} ({oid_str})")
+        
+        self.root.after(base_wait, attempt_select)
 
     def _expand_path_to_oid(self, target_oid: Tuple[int, ...]) -> None:
         """Expand the tree path to make the given OID visible."""
@@ -3902,6 +4617,9 @@ class SNMPControllerGUI:
                     values=(table_oid, inst, "", "Entry", "N/A", self.oid_metadata.get(table_oid, {}).get("mib") or "N/A"),
                     tags=("table-entry",),
                 )
+                # Track entry in oid_to_item with the entry OID (table.instance)
+                entry_oid = f"{table_oid}.{inst}"
+                self.oid_to_item[entry_oid] = entry_item
                 
                 # Extract index values for this instance
                 index_values = self._extract_index_values(inst, index_columns, columns_meta)
@@ -3938,7 +4656,7 @@ class SNMPControllerGUI:
                     img_ref = cast(Any, img) if img is not None else ""
                     
                     tags = ("evenrow", "table-column", "table-index") if is_index else ("evenrow", "table-column")
-                    self.oid_tree.insert(
+                    col_item = self.oid_tree.insert(
                         entry_item,
                         "end",
                         text=name,
@@ -3946,6 +4664,12 @@ class SNMPControllerGUI:
                         values=(col_oid, inst, value_here, type_str, access_str, mib_val),
                         tags=tags,
                     )
+                    # Track column in oid_to_item with the full column OID (table.column.instance)
+                    self.oid_to_item[full_col_oid] = col_item
+                    # Also store base column OID for search purposes
+                    # (search finds base OIDs without instances in metadata)
+                    if col_oid not in self.oid_to_item:
+                        self.oid_to_item[col_oid] = col_item
             
             self._log(f"Pre-populated {len(instances)} instances for table {table_oid}", "DEBUG")
             # Ensure tree column is wide enough for new items
@@ -4124,6 +4848,9 @@ class SNMPControllerGUI:
                     values=(entry_oid, inst, "", "Entry", "N/A", mib_val),
                     tags=("table-entry",),
                 )
+                # Track entry in oid_to_item with the entry OID (table.instance)
+                entry_full_oid = f"{entry_oid}.{inst}"
+                self.oid_to_item[entry_full_oid] = entry_item
                 added_count += 1
 
                 # Add columns under the entry
@@ -4162,7 +4889,7 @@ class SNMPControllerGUI:
                         img = self.oid_icon_images.get(icon_key)
                     mib_val = self.oid_metadata.get(col_oid, {}).get("mib") or "N/A"
                     img_ref = cast(Any, img) if img is not None else ""
-                    self.oid_tree.insert(
+                    col_item = self.oid_tree.insert(
                         entry_item,
                         "end",
                         text=display_text,
@@ -4170,6 +4897,12 @@ class SNMPControllerGUI:
                         values=(col_oid, inst, display_value, type_str, access_str, mib_val),
                         tags=("evenrow", "table-column", "table-index") if is_index else ("evenrow", "table-column"),
                     )
+                    # Track column in oid_to_item with the full column OID (table.column.instance)
+                    self.oid_to_item[full_col_oid] = col_item
+                    # Also store base column OID for search purposes
+                    # (search finds base OIDs without instances in metadata)
+                    if col_oid not in self.oid_to_item:
+                        self.oid_to_item[col_oid] = col_item
 
             self._log(f"Successfully added {added_count} instances to OID tree", "INFO")
             # Expand the table node to show the new instances
@@ -4323,8 +5056,20 @@ class SNMPControllerGUI:
 
             self._log(f"Adding instance {instance} to OID tree table {table_oid}", "INFO")
 
-            # Just refresh the whole table - it's simpler and handles sorting
+            # Refresh the parent table
             self.executor.submit(self._discover_table_instances, table_item, table_oid)
+            
+            # Also refresh any augmented tables that depend on this parent table
+            def refresh_augmented_tables() -> None:
+                """Find and refresh all augmented tables that depend on this parent."""
+                try:
+                    # Search the entire tree for tables that have index_from pointing to this parent
+                    self._refresh_augmented_tables_for_parent(table_oid)
+                except Exception as e:
+                    self._log(f"Error refreshing augmented tables: {e}", "WARNING")
+            
+            # Submit with a small delay to allow the parent table to refresh first
+            self.root.after(500, lambda: self.executor.submit(refresh_augmented_tables))
 
         except Exception as e:
             self._log(f"Error adding instance to OID tree: {e}", "ERROR")
@@ -4386,6 +5131,66 @@ class SNMPControllerGUI:
             self._log(f"Error refreshing OID tree table: {e}", "ERROR")
             import traceback
             traceback.print_exc()
+
+    def _refresh_augmented_tables_for_parent(self, parent_table_oid: str) -> None:
+        """Find and refresh all augmented tables that depend on a parent table.
+        
+        When a parent table (e.g., ifTable) gets a new instance, any augmented
+        tables that inherit from it (e.g., ifXTable, ifTestTable) should also
+        be refreshed to show the new instance.
+        
+        Args:
+            parent_table_oid: The OID of the parent table (e.g., "1.3.6.1.2.1.2.2")
+        """
+        try:
+            self._log(f"Looking for augmented tables that depend on parent {parent_table_oid}", "INFO")
+            
+            # Find all tables in the OID tree
+            def search_for_augmented_tables(item: str) -> None:
+                """Recursively search the tree for augmented table nodes."""
+                try:
+                    # Check if this is a table node
+                    item_oid = self.oid_tree.set(item, "oid")
+                    item_tags = self.oid_tree.item(item, "tags")
+                    
+                    if "table" in item_tags and item_oid and item_oid != parent_table_oid:
+                        # This is a table - check if it's augmented from the parent
+                        try:
+                            resp = requests.get(
+                                f"{self.api_url}/table-schema",
+                                params={"oid": item_oid},
+                                timeout=5
+                            )
+                            if resp.status_code == 200:
+                                schema = resp.json()
+                                index_from = schema.get("index_from", [])
+                                
+                                # Check if index_from references the parent table
+                                if index_from:
+                                    # index_from is a list of dicts with 'column' info
+                                    # We need to check if this augmented table would
+                                    # inherit indexes from the parent
+                                    # For now, we'll just refresh any table that has index_from
+                                    # since it means it's augmented
+                                    self._log(f"Found augmented table {item_oid} (index_from={index_from})", "DEBUG")
+                                    # Refresh this augmented table
+                                    self.executor.submit(self._discover_table_instances, item, item_oid)
+                        except Exception as e:
+                            self._log(f"Error checking table schema for {item_oid}: {e}", "DEBUG")
+                    
+                    # Recurse into children
+                    for child in self.oid_tree.get_children(item):
+                        search_for_augmented_tables(child)
+                        
+                except Exception as e:
+                    self._log(f"Error searching for augmented tables: {e}", "DEBUG")
+            
+            # Start search from tree root
+            for root_item in self.oid_tree.get_children():
+                search_for_augmented_tables(root_item)
+                
+        except Exception as e:
+            self._log(f"Error in _refresh_augmented_tables_for_parent: {e}", "ERROR")
 
     def _on_tab_change(self) -> None:
         """Handle tab changes to restore OID tree focus when returning from Table View."""

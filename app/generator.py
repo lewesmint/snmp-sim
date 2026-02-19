@@ -106,7 +106,8 @@ class BehaviourGenerator:
                                     entry_info = other_data
                                     entry_name = other_name
                                     break
-                        # If entry_info exists and has an OID, try to extract index columns from compiled MIB
+                        
+                        # Extract index columns for ALL table entries (including augmented ones)
                         # If not already present, add 'indexes' field to entry_info
                         if entry_info and "indexes" not in entry_info:
                             # Try to find index columns from the compiled MIB symbols
@@ -143,7 +144,10 @@ class BehaviourGenerator:
                                 logger.warning(
                                     f"Could not extract index columns for {entry_name}: {e}"
                                 )
+                        
                         # Find columns: direct children of entry OID
+                        # Note: Even augmented tables (with index_from) need default rows
+                        # for their non-index columns
                         entry_oid = tuple(entry_info.get("oid", []))
                         columns = []
                         for col_name, col_info in info.items():
@@ -566,6 +570,10 @@ class BehaviourGenerator:
         # Handle special SNMP types
         if col_type == "IpAddress":
             return "192.168.1.1"  # Default IP address
+        if col_type == "InterfaceIndexOrZero":
+            return 0
+        if col_type == "InterfaceIndex":
+            return 1
         elif col_type in ("Unsigned32", "Integer32", "Integer", "Gauge32"):
             # For port numbers and similar, use a more realistic default
             # Check if this might be a port based on constraints

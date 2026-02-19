@@ -2,18 +2,7 @@
   "schema_version": "1.0.1",
   "objects": {
     "testColour": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 1, 1],
       "type": "Integer32",
       "access": "read-only",
       "initial": 1,
@@ -26,18 +15,7 @@
       }
     },
     "testPriority": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 1, 2],
       "type": "Integer32",
       "access": "read-only",
       "initial": 10,
@@ -50,17 +28,7 @@
       }
     },
     "testEnumTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -72,18 +40,7 @@
       ]
     },
     "testEnumEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        2,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -91,36 +48,12 @@
       ]
     },
     "testEnumIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        2,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1, 1],
       "type": "Unsigned32",
       "access": "not-accessible"
     },
     "testRowColour": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        2,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1, 2],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -131,19 +64,7 @@
       }
     },
     "testRowPriority": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        2,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1, 3],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -154,17 +75,7 @@
       }
     },
     "endPointTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 3],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -177,18 +88,7 @@
       ]
     },
     "endPointEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        3,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 3, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -197,85 +97,27 @@
       ]
     },
     "endPointIpAddress": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        3,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 3, 1, 1],
       "type": "IpAddress",
       "access": "not-accessible"
     },
     "endPointPort": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        3,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 3, 1, 2],
       "type": "Unsigned32",
       "access": "not-accessible"
     },
     "endPointName": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        3,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 3, 1, 3],
       "type": "DisplayString",
       "access": "read-write"
     },
     "endPointNotes": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        3,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 3, 1, 4],
       "type": "DisplayString",
       "access": "read-write"
     },
     "testNoIndexTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 4],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -287,18 +129,7 @@
       ]
     },
     "testNoIndexEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        4,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 4, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -306,53 +137,19 @@
       ]
     },
     "testNoIndexValueA": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        4,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 4, 1, 1],
       "type": "Integer32",
       "access": "read-only"
     },
     "testNoIndexValueB": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        1,
-        4,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 4, 1, 2],
       "type": "Integer32",
       "access": "read-only"
     }
   },
   "traps": {
     "endPointStatusChange": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        4,
-        1,
-        99998,
-        0,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 0, 1],
       "objects": [
         {
           "mib": "TEST-ENUM-MIB",
