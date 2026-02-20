@@ -131,7 +131,7 @@ class TrapSender:
             notif = notif.add_var_binds(*coerced)
 
         async def _send_with(target_engine: Any) -> tuple[Any, Any, Any, Any]:
-            return await send_notification(
+            result = await send_notification(
                 target_engine,
                 CommunityData(self.community),
                 await UdpTransportTarget.create(self.dest),
@@ -139,6 +139,7 @@ class TrapSender:
                 trap_type,
                 notif,
             )
+            return cast(tuple[Any, Any, Any, Any], result)
 
         try:
             error_indication, error_status, error_index, _ = await _send_with(engine)

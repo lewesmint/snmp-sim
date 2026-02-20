@@ -55,7 +55,7 @@ def test_compiled_mibs_have_base_type_info() -> None:
     This replaces the old resolve_syntax_name functionality - now we examine
     the compiled MIB code structure and class hierarchies to determine base types.
     """
-    compiled_mibs = Path(__file__).parent.parent / "compiled-mibs"
+    compiled_mibs = Path(__file__).parent.parent.parent / "compiled-mibs"
     
     if not compiled_mibs.exists():
         # pytest.skip("No compiled-mibs directory available")

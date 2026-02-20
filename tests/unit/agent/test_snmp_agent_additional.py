@@ -246,7 +246,8 @@ def test_set_scalar_value_sets_value(monkeypatch: pytest.MonkeyPatch) -> None:
     agent.mib_builder = fake_builder
 
     agent.set_scalar_value((1, 3, 6, 1, 2, 1, 1, 1, 0), 'new_value')
-    assert fake_scalar.syntax == 'new_value'
+    # Type ignore needed because syntax can be either FakeSyntax or the assigned string
+    assert fake_scalar.syntax == 'new_value'  # type: ignore[comparison-overlap]
 
 
 def test_set_scalar_value_raises_when_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -426,7 +427,7 @@ def test_setup_signal_handlers_sets_up_handlers(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -> None:
-    schema_path = (Path(__file__).resolve().parent.parent / "agent-model" / "TEST-ENUM-MIB" / "schema.json")
+    schema_path = (Path(__file__).resolve().parent.parent.parent.parent / "agent-model" / "TEST-ENUM-MIB" / "schema.json")
     schema = json.loads(schema_path.read_text())
     snmp_schema_path = schema_path.parent.parent / "SNMPv2-MIB" / "schema.json"
     snmp_schema = json.loads(snmp_schema_path.read_text())
@@ -437,7 +438,7 @@ def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -
         "SNMPv2-MIB": snmp_schema,
     }
     agent._build_augmented_index_map()
-    agent._save_mib_state = lambda: None
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: None)
 
     parent_oid = agent._oid_list_to_str(schema["objects"]["testEnumTable"]["oid"])
     children = agent._augmented_parents.get(parent_oid, [])

@@ -392,7 +392,7 @@ def test_extract_mib_info_handles_symbol_without_getname(monkeypatch: pytest.Mon
     # Test when getName/getSyntax raises TypeError
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
     
-    class MockSymbol:
+    class MockSymbol2:
         def getName(self) -> None:
             raise TypeError("bad name")
         
@@ -402,9 +402,9 @@ def test_extract_mib_info_handles_symbol_without_getname(monkeypatch: pytest.Mon
         def getMaxAccess(self) -> str:
             return "read-only"
     
-    class MockMibBuilder:
+    class MockMibBuilder2:
         def __init__(self) -> None:
-            self.mibSymbols = {"TEST-MIB": {"sym1": MockSymbol()}}
+            self.mibSymbols = {"TEST-MIB": {"sym1": MockSymbol2()}}
         
         def add_mib_sources(self, *args: Any) -> None:
             pass
@@ -412,7 +412,7 @@ def test_extract_mib_info_handles_symbol_without_getname(monkeypatch: pytest.Mon
         def load_modules(self, *args: Any) -> None:
             pass
     
-    monkeypatch.setattr("pysnmp.smi.builder.MibBuilder", MockMibBuilder)
+    monkeypatch.setattr("pysnmp.smi.builder.MibBuilder", MockMibBuilder2)
     
     result = g._extract_mib_info("dummy.py", "TEST-MIB")
     assert result == {"objects": {}, "traps": {}}  # sym1 should be skipped due to TypeError
@@ -426,22 +426,22 @@ def test_extract_mib_info_handles_symbol_without_getname(monkeypatch: pytest.Mon
     mock_registry = {"Integer32": {"base_type": "Integer32"}}
     monkeypatch.setattr(g, "_load_type_registry", lambda: mock_registry)
     
-    class MockSyntax:
+    class MockSyntax3:
         pass
     
-    class MockSymbol:
+    class MockSymbol3:
         def getName(self) -> tuple[int, ...]:
             return (1, 2, 3)
         
-        def getSyntax(self) -> MockSyntax:
-            return MockSyntax()
+        def getSyntax(self) -> MockSyntax3:
+            return MockSyntax3()
         
         def getMaxAccess(self) -> str:
             return "read-only"
     
-    class MockMibBuilder:
+    class MockMibBuilder3:
         def __init__(self) -> None:
-            self.mibSymbols = {"TEST-MIB": {"sym1": MockSymbol()}}
+            self.mibSymbols = {"TEST-MIB": {"sym1": MockSymbol3()}}
         
         def add_mib_sources(self, *args: Any) -> None:
             pass
@@ -449,7 +449,7 @@ def test_extract_mib_info_handles_symbol_without_getname(monkeypatch: pytest.Mon
         def load_modules(self, *args: Any) -> None:
             pass
     
-    monkeypatch.setattr("pysnmp.smi.builder.MibBuilder", MockMibBuilder)
+    monkeypatch.setattr("pysnmp.smi.builder.MibBuilder", MockMibBuilder3)
     monkeypatch.setattr(g, "_extract_type_info", lambda s, n: {"base_type": "Integer32"})
     monkeypatch.setattr("app.generator.get_default_value", lambda t, s: "mock_value")
     

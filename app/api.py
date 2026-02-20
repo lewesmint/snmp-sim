@@ -1174,12 +1174,8 @@ def _save_trap_overrides_to_data(overrides: dict[str, dict[str, Any]]) -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
     overrides_path = data_dir / "trap_overrides.json"
     try:
-        import json
-
         pruned_overrides: dict[str, dict[str, Any]] = {}
         for name, data in overrides.items():
-            if not isinstance(data, dict):
-                continue
             cleaned: dict[str, Any] = {}
             for oid_name, entry in data.items():
                 if isinstance(entry, dict):
@@ -1729,25 +1725,25 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
 
             # Merge defaults for missing or "unset" columns
             default_row = _get_default_row(request.table_oid)
-            merged_values: dict[str, Any] = {}
+            merged_values_simple: dict[str, Any] = {}
             incoming_values = request.column_values or {}
             for col_name, col_meta in columns.items():
                 if col_name in parsed_index_values:
                     continue
                 if col_name in incoming_values and not _should_use_default(incoming_values[col_name]):
-                    merged_values[col_name] = incoming_values[col_name]
+                    merged_values_simple[col_name] = incoming_values[col_name]
                     continue
                 if col_name in default_row:
-                    merged_values[col_name] = default_row[col_name]
+                    merged_values_simple[col_name] = default_row[col_name]
                     continue
                 default_val = col_meta.get("default", "")
                 if default_val != "":
-                    merged_values[col_name] = default_val
+                    merged_values_simple[col_name] = default_val
             
             instance_oid = snmp_agent.add_table_instance(
                 table_oid=request.table_oid,
                 index_values=parsed_index_values,
-                column_values=merged_values,
+                column_values=merged_values_simple,
             )
             logger.info(f"Successfully created table instance: {instance_oid}")
             return {
@@ -1755,7 +1751,7 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
                 "table_oid": request.table_oid,
                 "instance_index": index_str,
                 "instance_oid": instance_oid,
-                "columns_created": [str(col) for col in merged_values.keys()] if merged_values else []
+                "columns_created": [str(col) for col in merged_values_simple.keys()] if merged_values_simple else []
             }
 
         # Helper function to convert index value based on column type
