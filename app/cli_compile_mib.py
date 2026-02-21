@@ -25,9 +25,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         description="Compile a MIB .txt file to Python using the app compiler.",
     )
     parser.add_argument("mib_file_path", help="Path to the MIB .txt file")
-    parser.add_argument(
-        "output_dir", nargs="?", default="compiled-mibs", help="Output directory"
-    )
+    parser.add_argument("output_dir", nargs="?", default="compiled-mibs", help="Output directory")
 
     args = parser.parse_args(list(argv) if argv is not None else None)
 

@@ -80,8 +80,7 @@ def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
         if (
             "PhysAddress" in symbol_name
             or "MacAddress" in symbol_name
-            or symbol_name
-            in ("ifPhysAddress", "ipNetMediaPhysAddress", "atPhysAddress")
+            or symbol_name in ("ifPhysAddress", "ipNetMediaPhysAddress", "atPhysAddress")
         ):
             return [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         return "unset"

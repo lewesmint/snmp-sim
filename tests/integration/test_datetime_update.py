@@ -7,9 +7,7 @@ from datetime import datetime
 def test_date_and_time() -> None:
     now = datetime.utcnow()
     year_bytes = now.year.to_bytes(2, byteorder="big")
-    octets = year_bytes + bytes(
-        [now.month, now.day, now.hour, now.minute, now.second, 0]
-    )
+    octets = year_bytes + bytes([now.month, now.day, now.hour, now.minute, now.second, 0])
     # Add UTC timezone: '+' (0x2B) for UTC+0:0
     octets += bytes([0x2B, 0, 0])
 
@@ -29,7 +27,9 @@ def test_date_and_time() -> None:
     tz_min = octets[10]
 
     sign = "+" if sign_byte == 0x2B else "-"
-    formatted = f"{year}-{month}-{day},{hour}:{minute}:{second}.{deciseconds}{sign}{tz_hour}:{tz_min}"
+    formatted = (
+        f"{year}-{month}-{day},{hour}:{minute}:{second}.{deciseconds}{sign}{tz_hour}:{tz_min}"
+    )
     print(f"Formatted: {formatted}")
     print("Expected:  2026-2-5,19:xx:xx.0+0:0")
 

@@ -21,9 +21,7 @@ class TypeRegistry:
 
     def build(self, progress_callback: Optional[Callable[[str], None]] = None) -> None:
         """Build the canonical type registry from compiled-mibs using TypeRecorder."""
-        recorder = TypeRecorder(
-            self.compiled_mibs_dir, progress_callback=progress_callback
-        )
+        recorder = TypeRecorder(self.compiled_mibs_dir, progress_callback=progress_callback)
         recorder.build()
         self._registry = recorder.registry
 
@@ -38,9 +36,7 @@ class TypeRegistry:
     def export_to_json(self, path: str = "data/types.json") -> None:
         """Export the type registry to a JSON file in the data folder by default."""
         if self._registry is None:
-            raise RuntimeError(
-                "Type registry has not been built yet. Call build() first."
-            )
+            raise RuntimeError("Type registry has not been built yet. Call build() first.")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             json.dump(self._registry, f, indent=2)

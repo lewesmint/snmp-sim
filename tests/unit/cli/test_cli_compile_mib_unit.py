@@ -17,9 +17,7 @@ class TestPrintResults:
         assert "TEST-MIB: compiled" in captured.out
         assert "OTHER-MIB: untouched" in captured.out
 
-    def test_print_results_with_failure(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_print_results_with_failure(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Should print results including failures"""
         results = {"TEST-MIB": "failed"}
         _print_results(results)
@@ -65,9 +63,7 @@ class TestMain:
         captured = capsys.readouterr()
         assert "not found" in captured.err
 
-    def test_main_no_app_config(
-        self, capsys: pytest.CaptureFixture[str], mocker: Any
-    ) -> None:
+    def test_main_no_app_config(self, capsys: pytest.CaptureFixture[str], mocker: Any) -> None:
         """Should handle missing app_config gracefully"""
         mocker.patch("os.path.exists", return_value=True)
         mocker.patch("app.cli_compile_mib.AppConfig", side_effect=FileNotFoundError)
@@ -81,9 +77,7 @@ class TestMain:
         assert result == 0
         mock_compiler_class.assert_called_once_with("output", None)
 
-    def test_main_compilation_error(
-        self, capsys: pytest.CaptureFixture[str], mocker: Any
-    ) -> None:
+    def test_main_compilation_error(self, capsys: pytest.CaptureFixture[str], mocker: Any) -> None:
         """Should handle compilation errors"""
         mocker.patch("os.path.exists", return_value=True)
         mock_config_class = mocker.patch("app.cli_compile_mib.AppConfig")
@@ -121,9 +115,7 @@ class TestMain:
         result = main(["test.txt", "output"])
         assert result == 0
 
-    def test_main_with_failures(
-        self, capsys: pytest.CaptureFixture[str], mocker: Any
-    ) -> None:
+    def test_main_with_failures(self, capsys: pytest.CaptureFixture[str], mocker: Any) -> None:
         """Should return 1 when compilation has failures"""
         mocker.patch("os.path.exists", return_value=True)
         mock_config_class = mocker.patch("app.cli_compile_mib.AppConfig")

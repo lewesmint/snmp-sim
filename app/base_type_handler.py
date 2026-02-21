@@ -29,9 +29,7 @@ class BaseTypeHandler:
         "OBJECT IDENTIFIER": "object_identifier",
     }
 
-    def __init__(
-        self, type_registry: TypeRegistry, logger: Optional[logging.Logger] = None
-    ):
+    def __init__(self, type_registry: TypeRegistry, logger: Optional[logging.Logger] = None):
         """
         Initialize the BaseTypeHandler.
 
@@ -110,14 +108,10 @@ class BaseTypeHandler:
             return self.resolve_to_base_type(base_type)
 
         # Default fallback
-        self.logger.warning(
-            f"Could not resolve base type for '{type_name}', defaulting to INTEGER"
-        )
+        self.logger.warning(f"Could not resolve base type for '{type_name}', defaulting to INTEGER")
         return "INTEGER"
 
-    def get_default_value(
-        self, type_name: str, context: Optional[TypeInfo] = None
-    ) -> Any:
+    def get_default_value(self, type_name: str, context: Optional[TypeInfo] = None) -> Any:
         """
         Get a sensible default value for a type.
 
@@ -219,9 +213,7 @@ class BaseTypeHandler:
         self.logger.warning(f"Unexpected base type '{base_type}' for '{type_name}'")
         return 0
 
-    def create_pysnmp_value(
-        self, type_name: str, value: Any, mib_builder: Any = None
-    ) -> Any:
+    def create_pysnmp_value(self, type_name: str, value: Any, mib_builder: Any = None) -> Any:
         """
         Create a PySNMP value object for the given type and value.
 
@@ -244,9 +236,7 @@ class BaseTypeHandler:
             try:
                 return type_class(value)
             except Exception as e:
-                self.logger.warning(
-                    f"Failed to create {type_name} with value {value}: {e}"
-                )
+                self.logger.warning(f"Failed to create {type_name} with value {value}: {e}")
                 return value
 
         # Fallback: create based on base type

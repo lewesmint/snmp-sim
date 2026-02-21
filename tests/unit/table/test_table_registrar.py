@@ -257,9 +257,7 @@ def test_register_single_table_missing_mib_json(
         "prefix": "test",
     }
     with caplog.at_level(logging.ERROR):
-        table_registrar.register_single_table(
-            "TEST-MIB", "testTable", table_data, {}, {}
-        )
+        table_registrar.register_single_table("TEST-MIB", "testTable", table_data, {}, {})
     assert "No in-memory JSON found" in caplog.text
 
 
@@ -352,9 +350,7 @@ def test_register_row_instances_empty_columns(
         "columns": {},
     }
     with caplog.at_level(logging.WARNING):
-        table_registrar._register_row_instances(
-            "TEST", "testTable", table_data, {}, [], {}
-        )
+        table_registrar._register_row_instances("TEST", "testTable", table_data, {}, [], {})
     assert "No row instances registered" in caplog.text
 
 
@@ -392,15 +388,11 @@ def test_get_default_value_for_size_constraints(
     type_info: Dict[str, Any] = {
         "constraints": [{"type": "ValueSizeConstraint", "min": 4, "max": 4}]
     }
-    value = table_registrar._get_default_value_for_type(
-        col_info, "IpAddress", type_info, ""
-    )
+    value = table_registrar._get_default_value_for_type(col_info, "IpAddress", type_info, "")
     assert value == "0.0.0.0"
 
     type_info_2: Dict[str, Any] = {"size": {"type": "set", "allowed": [4]}}
-    value = table_registrar._get_default_value_for_type(
-        col_info, "IpAddress", type_info_2, ""
-    )
+    value = table_registrar._get_default_value_for_type(col_info, "IpAddress", type_info_2, "")
     assert value == "0.0.0.0"
 
 
@@ -542,9 +534,7 @@ def test_register_tables_logs_warning_on_exception(
         "badCol": "not a dict",
     }
     mib_jsons = {"TEST-MIB": mib_json.copy()}
-    mocker.patch.object(
-        table_registrar, "register_single_table", side_effect=RuntimeError("boom")
-    )
+    mocker.patch.object(table_registrar, "register_single_table", side_effect=RuntimeError("boom"))
 
     with caplog.at_level(logging.WARNING):
         table_registrar.register_tables("TEST-MIB", mib_json, {}, mib_jsons)
@@ -617,9 +607,7 @@ def test_register_row_instances_skips_unresolved_type(
 
     mocker.patch.object(table_registrar, "_resolve_snmp_type", return_value=None)
 
-    table_registrar._register_row_instances(
-        "TEST", "testTable", table_data, {}, col_names, new_row
-    )
+    table_registrar._register_row_instances("TEST", "testTable", table_data, {}, col_names, new_row)
 
     table_registrar.mib_scalar_instance.assert_not_called()
 
@@ -644,9 +632,7 @@ def test_get_default_value_for_value_size_constraint_non_ip(
     col_info: Dict[str, Any] = {}
     type_info = {"constraints": [{"type": "ValueSizeConstraint", "min": 1, "max": 10}]}
 
-    value = table_registrar._get_default_value_for_type(
-        col_info, "OctetString", type_info, ""
-    )
+    value = table_registrar._get_default_value_for_type(col_info, "OctetString", type_info, "")
     assert value == "Unset"
 
 
@@ -655,9 +641,7 @@ def test_get_default_value_for_size_set_non_ip(table_registrar: TableRegistrar) 
     col_info: Dict[str, Any] = {}
     type_info = {"size": {"type": "set", "allowed": [8]}}
 
-    value = table_registrar._get_default_value_for_type(
-        col_info, "OctetString", type_info, ""
-    )
+    value = table_registrar._get_default_value_for_type(col_info, "OctetString", type_info, "")
     assert value == "Unset"
 
 
@@ -666,9 +650,7 @@ def test_get_default_value_for_size_range(table_registrar: TableRegistrar) -> No
     col_info: Dict[str, Any] = {}
     type_info = {"size": {"type": "range", "min": 1, "max": 255}}
 
-    value = table_registrar._get_default_value_for_type(
-        col_info, "OctetString", type_info, ""
-    )
+    value = table_registrar._get_default_value_for_type(col_info, "OctetString", type_info, "")
     assert value == "Unset"
 
 
@@ -709,9 +691,7 @@ def test_register_row_instances_handles_outer_exception(
     col_names = ["missing"]
 
     with caplog.at_level(logging.ERROR):
-        table_registrar._register_row_instances(
-            "TEST", "testTable", table_data, {}, col_names, {}
-        )
+        table_registrar._register_row_instances("TEST", "testTable", table_data, {}, col_names, {})
 
     assert "Error registering row instances" in caplog.text
 
@@ -734,9 +714,7 @@ def test_get_default_value_for_value_range_without_base_type(
     col_info: Dict[str, Any] = {}
     type_info = {"constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 10}]}
 
-    value = table_registrar._get_default_value_for_type(
-        col_info, "RangeType", type_info, ""
-    )
+    value = table_registrar._get_default_value_for_type(col_info, "RangeType", type_info, "")
     assert value == 0
 
 
@@ -760,9 +738,7 @@ def test_get_default_value_unknown_constraint_type(
     col_info: Dict[str, Any] = {}
     type_info = {"constraints": [{"type": "OtherConstraint"}]}
 
-    value = table_registrar._get_default_value_for_type(
-        col_info, "CustomType", type_info, ""
-    )
+    value = table_registrar._get_default_value_for_type(col_info, "CustomType", type_info, "")
     assert value == 0
 
 
@@ -771,9 +747,7 @@ def test_get_default_value_size_not_dict(table_registrar: TableRegistrar) -> Non
     col_info: Dict[str, Any] = {}
     type_info = {"size": "not-a-dict"}
 
-    value = table_registrar._get_default_value_for_type(
-        col_info, "CustomType", type_info, ""
-    )
+    value = table_registrar._get_default_value_for_type(col_info, "CustomType", type_info, "")
     assert value == 0
 
 
@@ -782,7 +756,5 @@ def test_get_default_value_size_unknown_type(table_registrar: TableRegistrar) ->
     col_info: Dict[str, Any] = {}
     type_info = {"size": {"type": "unknown"}}
 
-    value = table_registrar._get_default_value_for_type(
-        col_info, "CustomType", type_info, ""
-    )
+    value = table_registrar._get_default_value_for_type(col_info, "CustomType", type_info, "")
     assert value == 0

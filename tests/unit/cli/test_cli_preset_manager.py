@@ -27,9 +27,7 @@ def test_list_presets_returns_sorted_names(tmp_path: Path) -> None:
     assert list_presets(preset_base) == ["alpha", "zeta"]
 
 
-def test_save_preset_missing_schema_dir(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_save_preset_missing_schema_dir(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     code = save_preset(tmp_path / "agent-model", tmp_path / "presets", "test")
     out = capsys.readouterr()
     assert code == 1
@@ -51,9 +49,7 @@ def test_save_preset_creates_copy_and_metadata(
     assert code == 0
     preset_dir = preset_base / "baseline"
     assert (preset_dir / "A-MIB" / "schema.json").exists()
-    metadata = json.loads(
-        (preset_dir / "preset_metadata.json").read_text(encoding="utf-8")
-    )
+    metadata = json.loads((preset_dir / "preset_metadata.json").read_text(encoding="utf-8"))
     assert metadata["name"] == "baseline"
     assert "created" in metadata
     assert "saved" in out.out
@@ -95,9 +91,7 @@ def test_load_preset_missing_and_success_paths(
     preset_base = tmp_path / "presets"
     backup_base = tmp_path / "backups"
 
-    code_missing = load_preset(
-        schema_dir, preset_base, "missing", backup_base, no_backup=False
-    )
+    code_missing = load_preset(schema_dir, preset_base, "missing", backup_base, no_backup=False)
     out_missing = capsys.readouterr()
     assert code_missing == 1
     assert "not found" in out_missing.err
@@ -105,9 +99,7 @@ def test_load_preset_missing_and_success_paths(
     preset_dir = preset_base / "good"
     preset_dir.mkdir(parents=True)
     (preset_dir / "schema.json").write_text('{"ok":true}', encoding="utf-8")
-    (preset_dir / "preset_metadata.json").write_text(
-        '{"name":"good"}', encoding="utf-8"
-    )
+    (preset_dir / "preset_metadata.json").write_text('{"name":"good"}', encoding="utf-8")
 
     schema_dir.mkdir(parents=True)
     (schema_dir / "current.json").write_text('{"old":true}', encoding="utf-8")

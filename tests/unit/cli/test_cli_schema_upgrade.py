@@ -55,12 +55,8 @@ def test_main_updates_only_changed_files(
 
     p1 = mib1 / "schema.json"
     p2 = mib2 / "schema.json"
-    p1.write_text(
-        json.dumps({"schema_version": "1.0.0", "objects": {}}), encoding="utf-8"
-    )
-    p2.write_text(
-        json.dumps({"schema_version": "1.0.1", "objects": {}}), encoding="utf-8"
-    )
+    p1.write_text(json.dumps({"schema_version": "1.0.0", "objects": {}}), encoding="utf-8")
+    p2.write_text(json.dumps({"schema_version": "1.0.1", "objects": {}}), encoding="utf-8")
 
     code = main(["--schema-dir", str(schema_dir), "--set-version", "1.0.1"])
     out = capsys.readouterr()
@@ -82,12 +78,8 @@ def test_main_skips_non_dict_json_and_handles_bad_json(
     array_mib.mkdir(parents=True)
     bad.mkdir(parents=True)
 
-    (good / "schema.json").write_text(
-        json.dumps({"schema_version": "0.9.0"}), encoding="utf-8"
-    )
-    (array_mib / "schema.json").write_text(
-        json.dumps(["not", "a", "dict"]), encoding="utf-8"
-    )
+    (good / "schema.json").write_text(json.dumps({"schema_version": "0.9.0"}), encoding="utf-8")
+    (array_mib / "schema.json").write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
     (bad / "schema.json").write_text("{bad json", encoding="utf-8")
 
     code = main(["--schema-dir", str(schema_dir), "--set-version", "2.0.0"])
@@ -97,6 +89,5 @@ def test_main_skips_non_dict_json_and_handles_bad_json(
     assert "Failed to update" in out.out
     assert "Updated 1 schema file(s) to version 2.0.0." in out.out
     assert (
-        json.loads((good / "schema.json").read_text(encoding="utf-8"))["schema_version"]
-        == "2.0.0"
+        json.loads((good / "schema.json").read_text(encoding="utf-8"))["schema_version"] == "2.0.0"
     )

@@ -9,7 +9,6 @@ by OLD_APP/syntax_resolver.py. Now it's distributed across:
 - data/types.json: Canonical type registry with base_type field
 """
 
-import pytest
 from pathlib import Path
 from app.type_registry import TypeRegistry
 
@@ -38,11 +37,7 @@ def test_type_registry_has_base_types() -> None:
     registry_dict = registry.registry
     for tc_type, expected_base in tc_type_mappings.items():
         # Find entries with this base type
-        matching = [
-            k
-            for k, v in registry_dict.items()
-            if v.get("name") == tc_type or k == tc_type
-        ]
+        matching = [k for k, v in registry_dict.items() if v.get("name") == tc_type or k == tc_type]
 
         if matching:
             entry = registry_dict[matching[0]]
@@ -130,9 +125,7 @@ def test_type_info_extraction_from_registry() -> None:
         assert entry.get("base_type") == "OctetString", (
             "DisplayString should have OctetString as base_type"
         )
-        assert entry.get("display_hint") == "255a", (
-            "DisplayString should have display_hint"
-        )
+        assert entry.get("display_hint") == "255a", "DisplayString should have display_hint"
 
     # Verify basic types exist
     assert "OctetString" in types_dict, "OctetString should be in registry"

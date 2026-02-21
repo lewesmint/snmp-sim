@@ -151,9 +151,7 @@ class TrapSender:
             )
             self.snmp_engine = SnmpEngine()
             self._configure_mib_sources(self.snmp_engine)
-            error_indication, error_status, error_index, _ = await _send_with(
-                self.snmp_engine
-            )
+            error_indication, error_status, error_index, _ = await _send_with(self.snmp_engine)
 
         if error_indication:
             self.logger.error("Notification send error: %s", error_indication)

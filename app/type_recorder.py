@@ -139,8 +139,7 @@ class TypeRecorder:
         required = [
             p
             for p in sig.parameters.values()
-            if p.default is p.empty
-            and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+            if p.default is p.empty and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
         ]
         if required:
             return None
@@ -249,18 +248,14 @@ class TypeRecorder:
         for m in cls._SIZE_RE.finditer(subtype_repr):
             c_min = int(m.group(1))
             c_max = int(m.group(2))
-            constraints.append(
-                {"type": "ValueSizeConstraint", "min": c_min, "max": c_max}
-            )
+            constraints.append({"type": "ValueSizeConstraint", "min": c_min, "max": c_max})
             size_ranges.append((c_min, c_max))
             if c_min == c_max:
                 exact_sizes.append(c_min)
         for m in cls._RANGE_RE.finditer(subtype_repr):
             c_min = int(m.group(1))
             c_max = int(m.group(2))
-            constraints.append(
-                {"type": "ValueRangeConstraint", "min": c_min, "max": c_max}
-            )
+            constraints.append({"type": "ValueRangeConstraint", "min": c_min, "max": c_max})
         for m in cls._SINGLE_RE.finditer(subtype_repr):
             raw = m.group(1)
             vals = [int(x.strip()) for x in raw.split(",") if x.strip()]
@@ -343,9 +338,7 @@ class TypeRecorder:
 
         if size_type == "set":
             allowed = size.get("allowed")
-            if not isinstance(allowed, list) or not all(
-                isinstance(x, int) for x in allowed
-            ):
+            if not isinstance(allowed, list) or not all(isinstance(x, int) for x in allowed):
                 return constraints
 
             allowed_set = set(cast(List[int], allowed))
@@ -755,9 +748,7 @@ class TypeRecorder:
                     tc_constraints_repr: Optional[str] = None
                     if subtype_spec is not None:
                         subtype_repr = repr(subtype_spec)
-                        tc_size, tc_constraints = self.parse_constraints_from_repr(
-                            subtype_repr
-                        )
+                        tc_size, tc_constraints = self.parse_constraints_from_repr(subtype_repr)
                         # Set constraints_repr if there are actual constraints
                         if tc_constraints or tc_size:
                             tc_constraints_repr = subtype_repr
@@ -779,10 +770,7 @@ class TypeRecorder:
                         # Update the defined_in field if not already set
                         types[sym_name]["defined_in"] = mib_name
                         # Also update base_type if not set
-                        if (
-                            types[sym_name]["base_type"] is None
-                            and base_type_name is not None
-                        ):
+                        if types[sym_name]["base_type"] is None and base_type_name is not None:
                             types[sym_name]["base_type"] = base_type_name
                     continue
 
@@ -840,16 +828,12 @@ class TypeRecorder:
                         # syntax itself does not provide them.
                         display = self.extract_display_hint(syntax)
 
-                        size, constraints, constraints_repr = self.extract_constraints(
-                            syntax
-                        )
+                        size, constraints, constraints_repr = self.extract_constraints(syntax)
 
                         # If the syntax itself has no constraints, but the base
                         # object (from getSyntax()) does, inherit those.
                         if base_obj is not syntax:
-                            size2, constraints2, repr2 = self.extract_constraints(
-                                base_obj
-                            )
+                            size2, constraints2, repr2 = self.extract_constraints(base_obj)
                             if not constraints and constraints2:
                                 size, constraints, constraints_repr = (
                                     size2,
@@ -864,13 +848,9 @@ class TypeRecorder:
                     else:
                         display = self.extract_display_hint(syntax)
 
-                        size, constraints, constraints_repr = self.extract_constraints(
-                            syntax
-                        )
+                        size, constraints, constraints_repr = self.extract_constraints(syntax)
                         if base_obj is not syntax:
-                            size2, constraints2, repr2 = self.extract_constraints(
-                                base_obj
-                            )
+                            size2, constraints2, repr2 = self.extract_constraints(base_obj)
                             if not constraints and constraints2:
                                 size, constraints, constraints_repr = (
                                     size2,
@@ -882,14 +862,12 @@ class TypeRecorder:
                         if enums is None and base_obj is not syntax:
                             enums = self.extract_enums_list(base_obj)
 
-                    size, constraints, constraints_repr = (
-                        self._canonicalise_constraints(
-                            size=size,
-                            constraints=constraints,
-                            enums=enums,
-                            constraints_repr=constraints_repr,
-                            drop_repr=(base_type_out is not None),
-                        )
+                    size, constraints, constraints_repr = self._canonicalise_constraints(
+                        size=size,
+                        constraints=constraints,
+                        enums=enums,
+                        constraints_repr=constraints_repr,
+                        drop_repr=(base_type_out is not None),
                     )
 
                 if base_type_out is not None and constraints:
@@ -941,10 +919,7 @@ class TypeRecorder:
                     if entry["enums"] is None and enums is not None:
                         entry["enums"] = enums
 
-                    if (
-                        entry["constraints_repr"] is None
-                        and constraints_repr is not None
-                    ):
+                    if entry["constraints_repr"] is None and constraints_repr is not None:
                         entry["constraints_repr"] = constraints_repr
                     if not entry["constraints"] and constraints:
                         entry["constraints"] = constraints
@@ -956,9 +931,7 @@ class TypeRecorder:
     @property
     def registry(self) -> Dict[str, TypeEntry]:
         if self._registry is None:
-            raise RuntimeError(
-                "TypeRecorder: build() must be called before accessing registry."
-            )
+            raise RuntimeError("TypeRecorder: build() must be called before accessing registry.")
         return self._registry
 
     def export_to_json(self, path: str = "types.json") -> None:

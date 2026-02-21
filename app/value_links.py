@@ -159,9 +159,7 @@ class ValueLinkManager:
             for entry in link_config.get("endpoints", []):
                 if not isinstance(entry, dict):
                     continue
-                endpoints.append(
-                    ValueLinkEndpoint(entry.get("table_oid"), entry.get("column", ""))
-                )
+                endpoints.append(ValueLinkEndpoint(entry.get("table_oid"), entry.get("column", "")))
         else:
             columns = link_config.get("columns", [])
             table_oid = None
@@ -263,11 +261,7 @@ class ValueLinkManager:
             for endpoint in link.endpoints:
                 if endpoint.column_name != column_name:
                     continue
-                if (
-                    link.scope == "per-instance"
-                    and table_oid
-                    and endpoint.table_oid != table_oid
-                ):
+                if link.scope == "per-instance" and table_oid and endpoint.table_oid != table_oid:
                     continue
                 source_matches = True
                 break
@@ -276,10 +270,7 @@ class ValueLinkManager:
                 continue
 
             for endpoint in link.endpoints:
-                if (
-                    endpoint.column_name == column_name
-                    and endpoint.table_oid == table_oid
-                ):
+                if endpoint.column_name == column_name and endpoint.table_oid == table_oid:
                     continue
                 key = (endpoint.table_oid, endpoint.column_name)
                 if key in seen:

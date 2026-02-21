@@ -33,40 +33,30 @@ def test_init_with_custom_params() -> None:
 
 def test_coerce_varbind_object_type(trap_sender: TrapSender) -> None:
     """Test _coerce_varbind with an ObjectType instance."""
-    obj_type = ObjectType(
-        ObjectIdentity("SNMPv2-MIB", "sysDescr", 0), rfc1902.OctetString("test")
-    )
+    obj_type = ObjectType(ObjectIdentity("SNMPv2-MIB", "sysDescr", 0), rfc1902.OctetString("test"))
     result = trap_sender._coerce_varbind(obj_type)
     assert result is obj_type
 
 
 def test_coerce_varbind_scalar_tuple(trap_sender: TrapSender) -> None:
     """Test _coerce_varbind with scalar tuple (mib, symbol, value)."""
-    result = trap_sender._coerce_varbind(
-        ("SNMPv2-MIB", "sysDescr", rfc1902.OctetString("test"))
-    )
+    result = trap_sender._coerce_varbind(("SNMPv2-MIB", "sysDescr", rfc1902.OctetString("test")))
     assert isinstance(result, ObjectType)
 
 
 def test_coerce_varbind_indexed_tuple(trap_sender: TrapSender) -> None:
     """Test _coerce_varbind with indexed tuple (mib, symbol, value, index)."""
-    result = trap_sender._coerce_varbind(
-        ("IF-MIB", "ifOperStatus", rfc1902.Integer32(1), 2)
-    )
+    result = trap_sender._coerce_varbind(("IF-MIB", "ifOperStatus", rfc1902.Integer32(1), 2))
     assert isinstance(result, ObjectType)
 
 
 def test_coerce_varbind_invalid_type(trap_sender: TrapSender) -> None:
     """Test _coerce_varbind with invalid type."""
-    with pytest.raises(
-        TypeError, match="extra_varbinds entries must be ObjectType or tuple"
-    ):
+    with pytest.raises(TypeError, match="extra_varbinds entries must be ObjectType or tuple"):
         trap_sender._coerce_varbind("invalid")  # pyright: ignore[reportArgumentType]
 
 
-def test_send_mib_notification_sync(
-    trap_sender: TrapSender, mocker: MockerFixture
-) -> None:
+def test_send_mib_notification_sync(trap_sender: TrapSender, mocker: MockerFixture) -> None:
     """Test synchronous send_mib_notification."""
     mock_async = mocker.patch.object(
         trap_sender, "send_mib_notification_async", new_callable=mocker.AsyncMock
@@ -85,13 +75,9 @@ def test_send_mib_notification_sync(
             loop.close()
 
     mocker.patch("asyncio.run", side_effect=mock_run)
-    mocker.patch(
-        "asyncio.get_running_loop", side_effect=RuntimeError("No running loop")
-    )
+    mocker.patch("asyncio.get_running_loop", side_effect=RuntimeError("No running loop"))
 
-    trap_sender.send_mib_notification(
-        mib="SNMPv2-MIB", notification="coldStart", trap_type="trap"
-    )
+    trap_sender.send_mib_notification(mib="SNMPv2-MIB", notification="coldStart", trap_type="trap")
 
     mock_async.assert_called_once_with(
         mib="SNMPv2-MIB",
@@ -175,9 +161,7 @@ def test_cli_missing_required_args(capsys: pytest.CaptureFixture[str]) -> None:
     assert "required" in output.err.lower()
 
 
-def test_cli_sends_notification(
-    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_sends_notification(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
     """Test CLI sends notification using new NotificationType API."""
     mock_sender = mocker.MagicMock()
     mocker.patch("app.cli_trap_sender.TrapSender", return_value=mock_sender)

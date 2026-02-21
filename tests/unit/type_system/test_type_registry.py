@@ -67,9 +67,7 @@ def test_type_registry_fields() -> None:
     # Check each entry has required fields
     for oid, entry in registry.registry.items():
         assert isinstance(oid, str), f"OID key should be string, got {type(oid)}"
-        assert isinstance(entry, dict), (
-            f"Entry for {oid} should be dict, got {type(entry)}"
-        )
+        assert isinstance(entry, dict), f"Entry for {oid} should be dict, got {type(entry)}"
 
         # Entries should have name and syntax at minimum
         if "name" in entry:
@@ -78,14 +76,10 @@ def test_type_registry_fields() -> None:
             assert isinstance(entry["syntax"], str), "Syntax should be string"
 
 
-def test_agent_loads_type_registry(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_agent_loads_type_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that type registry files can be created and loaded."""
     # Create a test types file
-    test_types = {
-        "1.2.3.4.5": {"name": "foo", "syntax": "OctetString", "description": "desc"}
-    }
+    test_types = {"1.2.3.4.5": {"name": "foo", "syntax": "OctetString", "description": "desc"}}
     test_types_path = tmp_path / "types.json"
     with open(test_types_path, "w") as f:
         json.dump(test_types, f)
@@ -131,9 +125,7 @@ def test_build_type_registry(tmp_path: Path, mocker: Any) -> None:
     assert result == {"test": {"name": "test_type"}}
 
 
-def test_build_type_registry_with_progress_callback(
-    tmp_path: Path, mocker: Any
-) -> None:
+def test_build_type_registry_with_progress_callback(tmp_path: Path, mocker: Any) -> None:
     """Test build_type_registry with a progress callback."""
     compiled_dir = tmp_path / "compiled-mibs"
     compiled_dir.mkdir()

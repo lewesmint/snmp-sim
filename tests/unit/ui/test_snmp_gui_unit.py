@@ -140,9 +140,7 @@ def test_index_encode_decode_helpers_with_ipaddress() -> None:
     decoded = gui._extract_index_values("192.168.1.2.7", index_columns, columns_meta)
     assert decoded == {"addr": "192.168.1.2", "idx": "7"}
 
-    encoded = gui._build_instance_from_index_values(
-        decoded, index_columns, columns_meta
-    )
+    encoded = gui._build_instance_from_index_values(decoded, index_columns, columns_meta)
     assert encoded == "192.168.1.2.7"
 
 
@@ -254,9 +252,7 @@ def test_trap_index_helpers_and_interface_indices(monkeypatch: Any) -> None:
         def json(self) -> dict[str, Any]:
             return self._payload
 
-    def fake_get(
-        url: str, params: dict[str, Any] | None = None, timeout: int = 0
-    ) -> _Resp:
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int = 0) -> _Resp:
         if url.endswith("/table-schema"):
             return _Resp(200, {"instances": ["3", "1", "2"]})
         return _Resp(500, {})
@@ -281,9 +277,7 @@ def test_interface_indices_fallback_to_ifnumber(monkeypatch: Any) -> None:
         def json(self) -> dict[str, Any]:
             return self._payload
 
-    def fake_get(
-        url: str, params: dict[str, Any] | None = None, timeout: int = 0
-    ) -> _Resp:
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int = 0) -> _Resp:
         if url.endswith("/table-schema"):
             return _Resp(404, {})
         if url.endswith("/value"):
@@ -306,9 +300,7 @@ def test_interface_indices_probe_fallback(monkeypatch: Any) -> None:
         def json(self) -> dict[str, Any]:
             return {}
 
-    def fake_get(
-        url: str, params: dict[str, Any] | None = None, timeout: int = 0
-    ) -> _Resp:
+    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int = 0) -> _Resp:
         if url.endswith("/table-schema"):
             return _Resp(500)
         if url.endswith("/value") and "1.3.6.1.2.1.2.1.0" in url:

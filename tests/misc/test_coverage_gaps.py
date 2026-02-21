@@ -182,9 +182,7 @@ def test_resolve_snmp_type_final_fallback_returns_none(
     mock_registrar.mib_builder.import_symbols.side_effect = Exception("Import failed")
 
     # Test with unknown type that even rfc1902 doesn't have
-    result = mock_registrar._resolve_snmp_type(
-        "CompletelyFakeTypeDoesNotExist", "col", "table"
-    )
+    result = mock_registrar._resolve_snmp_type("CompletelyFakeTypeDoesNotExist", "col", "table")
 
     # Should return None
     assert result is None
@@ -257,9 +255,7 @@ def test_snmp_agent_register_mib_objects_missing_type_registry_file(
 # ============================================================================
 
 
-def test_type_recorder_build_handles_symbol_with_no_getsyntax(
-    tmp_path: Path, mocker: Any
-) -> None:
+def test_type_recorder_build_handles_symbol_with_no_getsyntax(tmp_path: Path, mocker: Any) -> None:
     """Test build() skips symbols without getSyntax (lines 593-595)"""
     recorder = TypeRecorder(tmp_path)
 
@@ -286,9 +282,7 @@ def test_type_recorder_build_handles_symbol_with_no_getsyntax(
     assert recorder._registry is not None
 
 
-def test_type_recorder_build_getsyntax_raises_exception(
-    tmp_path: Path, mocker: Any
-) -> None:
+def test_type_recorder_build_getsyntax_raises_exception(tmp_path: Path, mocker: Any) -> None:
     """Test build() handles getSyntax() exceptions (lines 601-603)"""
     recorder = TypeRecorder(tmp_path)
 
@@ -315,9 +309,7 @@ def test_type_recorder_build_getsyntax_raises_exception(
     assert recorder._registry is not None
 
 
-def test_type_recorder_build_getsyntax_returns_none(
-    tmp_path: Path, mocker: Any
-) -> None:
+def test_type_recorder_build_getsyntax_returns_none(tmp_path: Path, mocker: Any) -> None:
     """Test build() handles getSyntax() returning None (line 607)"""
     recorder = TypeRecorder(tmp_path)
 
@@ -387,9 +379,7 @@ def test_generator_extract_mib_info_handles_nonetype_syntax_name(
     monkeypatch.setattr("app.generator.builder.MibBuilder", lambda: FakeBuilder())
     monkeypatch.setattr("app.generator.builder.DirMibSource", lambda _path: "src")
     monkeypatch.setattr(generator, "_load_type_registry", lambda: {})
-    monkeypatch.setattr(
-        generator, "_get_default_value_from_type_info", lambda _t, _s: None
-    )
+    monkeypatch.setattr(generator, "_get_default_value_from_type_info", lambda _t, _s: None)
     monkeypatch.setattr(generator, "_get_dynamic_function", lambda _n: None)
 
     result = generator._extract_mib_info(str(tmp_path / "TEST-MIB.py"), "TEST-MIB")
@@ -432,9 +422,7 @@ def test_generator_table_index_extraction_exception(
         "_load_type_registry",
         lambda: {"Integer32": {"base_type": "Integer32"}},
     )
-    monkeypatch.setattr(
-        generator, "_get_default_value_from_type_info", lambda _t, _s: 0
-    )
+    monkeypatch.setattr(generator, "_get_default_value_from_type_info", lambda _t, _s: 0)
 
     with caplog.at_level(logging.WARNING):
         generator.generate(str(tmp_path / "TEST-MIB.py"), force_regenerate=True)

@@ -16,9 +16,7 @@ logger = AppLogger.get(__name__)
 class MibCompilationError(Exception):
     """Raised when MIB compilation fails."""
 
-    def __init__(
-        self, message: str, missing_dependencies: List[str] | None = None
-    ) -> None:
+    def __init__(self, message: str, missing_dependencies: List[str] | None = None) -> None:
         super().__init__(message)
         self.missing_dependencies = missing_dependencies or []
 
@@ -74,11 +72,7 @@ class MibCompiler:
             if self.app_config is not None
             else None
         )
-        if (
-            isinstance(system_mib_dir, str)
-            and system_mib_dir
-            and os.path.exists(system_mib_dir)
-        ):
+        if isinstance(system_mib_dir, str) and system_mib_dir and os.path.exists(system_mib_dir):
             compiler.addSources(FileReader(system_mib_dir))
 
         # Add searchers for already compiled MIBs
@@ -89,8 +83,7 @@ class MibCompiler:
 
         # Store results for caller to access
         self.last_compile_results = {
-            str(cast(Any, mib)): str(cast(Any, status))
-            for mib, status in results.items()
+            str(cast(Any, mib)): str(cast(Any, status)) for mib, status in results.items()
         }
 
         # Collect all missing dependencies
@@ -131,13 +124,9 @@ class MibCompiler:
             error_msg += f"{'=' * 70}\n"
             error_msg += f"Missing MIB dependencies: {', '.join(missing_deps)}\n\n"
             error_msg += "To resolve this:\n"
-            error_msg += (
-                f"  1. Download the missing MIB files ({', '.join(missing_deps)})\n"
-            )
+            error_msg += f"  1. Download the missing MIB files ({', '.join(missing_deps)})\n"
             error_msg += "  2. Place them in data/mibs/ or a subdirectory\n"
-            error_msg += (
-                f"  3. Add them to agent_config.yaml before {actual_mib_name}\n"
-            )
+            error_msg += f"  3. Add them to agent_config.yaml before {actual_mib_name}\n"
             error_msg += f"{'=' * 70}\n"
             raise MibCompilationError(error_msg, missing_dependencies=missing_deps)
 

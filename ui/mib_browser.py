@@ -2,31 +2,36 @@
 
 This module can be run independently or embedded in other applications.
 """
-# pylint: disable=broad-exception-caught,attribute-defined-outside-init
+# pylint: disable=broad-exception-caught,attribute-defined-outside-init,too-many-lines,too-many-instance-attributes,too-many-arguments,too-many-positional-arguments,too-many-locals,too-many-statements,too-many-nested-blocks,too-many-branches,no-else-return
 
 from __future__ import annotations
 
+import argparse
 import asyncio
-import customtkinter as ctk
+import re
+import shutil
 import tkinter as tk
-from tkinter import messagebox, ttk
-from typing import Optional, Dict, Any
+from datetime import datetime
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
+from typing import Any, Dict, Optional
 
+import customtkinter as ctk
 from pysnmp.hlapi.v3arch.asyncio import (
-    SnmpEngine,
     CommunityData,
-    UdpTransportTarget,
     ContextData,
-    ObjectType,
     ObjectIdentity,
+    ObjectType,
+    SnmpEngine,
+    UdpTransportTarget,
     get_cmd,
     next_cmd,
     set_cmd,
     walk_cmd,
 )
+from pysnmp.proto.error import StatusInformation
 from pysnmp.proto.rfc1902 import OctetString
 from pysnmp.smi import builder, view
-from pathlib import Path
 
 from ui.common import Logger, format_snmp_value
 
@@ -65,12 +70,8 @@ class MIBBrowserWindow:
         self.mib_builder = builder.MibBuilder()
         self.mib_view = view.MibViewController(self.mib_builder)
         self.loaded_mibs: list[str] = []
-        self.mib_dependencies: dict[
-            str, list[str]
-        ] = {}  # mib_name -> list of required imports
-        self.unsatisfied_mibs: dict[
-            str, list[str]
-        ] = {}  # mib_name -> list of missing dependencies
+        self.mib_dependencies: dict[str, list[str]] = {}  # mib_name -> list of required imports
+        self.unsatisfied_mibs: dict[str, list[str]] = {}  # mib_name -> list of missing dependencies
         self.cached_mib_checkbuttons: dict[str, ctk.BooleanVar] = {}
 
         # Load MIBs from standard locations and compiled-mibs directory
@@ -81,9 +82,7 @@ class MIBBrowserWindow:
         self._load_icons()
 
         # Track agent results separately
-        self.agent_results: Dict[
-            str, Dict[str, Any]
-        ] = {}  # host:port -> {operations, etc.}
+        self.agent_results: Dict[str, Dict[str, Any]] = {}  # host:port -> {operations, etc.}
         self.agent_tree_items: Dict[str, str] = {}  # host:port -> tree_item_id
 
         # Create window
@@ -111,9 +110,7 @@ class MIBBrowserWindow:
         # Add compiled-mibs directory if it exists
         compiled_mibs = Path("compiled-mibs")
         if compiled_mibs.exists():
-            self.mib_builder.addMibSources(
-                builder.DirMibSource(str(compiled_mibs.absolute()))
-            )
+            self.mib_builder.addMibSources(builder.DirMibSource(str(compiled_mibs.absolute())))
             self.logger.log(f"Added MIB source: {compiled_mibs.absolute()}", "DEBUG")
 
         # Add system MIB directories
@@ -193,9 +190,7 @@ class MIBBrowserWindow:
         status_frame.pack(fill="x", padx=10, pady=(0, 10))
 
         self.status_var = ctk.StringVar(value="Ready")
-        status_label = ctk.CTkLabel(
-            status_frame, textvariable=self.status_var, anchor="w"
-        )
+        status_label = ctk.CTkLabel(status_frame, textvariable=self.status_var, anchor="w")
         status_label.pack(fill="x", padx=10, pady=(0, 5))
 
     def _setup_browser_tab(self) -> None:
@@ -211,9 +206,7 @@ class MIBBrowserWindow:
         host_label.grid(row=0, column=0, padx=(5, 10), pady=5, sticky="w")
 
         self.host_var = ctk.StringVar(value=self.default_host)
-        self.host_entry = ctk.CTkEntry(
-            conn_frame, textvariable=self.host_var, width=150
-        )
+        self.host_entry = ctk.CTkEntry(conn_frame, textvariable=self.host_var, width=150)
         self.host_entry.grid(row=0, column=1, padx=5, pady=5)
 
         # Port
@@ -229,9 +222,7 @@ class MIBBrowserWindow:
         comm_label.grid(row=0, column=4, padx=(15, 10), pady=5, sticky="w")
 
         self.community_var = ctk.StringVar(value=self.default_community)
-        self.community_entry = ctk.CTkEntry(
-            conn_frame, textvariable=self.community_var, width=100
-        )
+        self.community_entry = ctk.CTkEntry(conn_frame, textvariable=self.community_var, width=100)
         self.community_entry.grid(row=0, column=5, padx=5, pady=5)
 
         # OID and Value input panel
@@ -243,9 +234,7 @@ class MIBBrowserWindow:
         oid_label.grid(row=0, column=0, padx=(5, 10), pady=5, sticky="w")
 
         self.oid_var = ctk.StringVar(value="1.3.6.1.2.1.1")
-        self.oid_entry = ctk.CTkEntry(
-            control_panel, textvariable=self.oid_var, width=400
-        )
+        self.oid_entry = ctk.CTkEntry(control_panel, textvariable=self.oid_var, width=400)
         self.oid_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
         # Value input (for SET operations)
@@ -253,9 +242,7 @@ class MIBBrowserWindow:
         value_label.grid(row=1, column=0, padx=(5, 10), pady=5, sticky="w")
 
         self.value_var = ctk.StringVar()
-        self.value_entry = ctk.CTkEntry(
-            control_panel, textvariable=self.value_var, width=400
-        )
+        self.value_entry = ctk.CTkEntry(control_panel, textvariable=self.value_var, width=400)
         self.value_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
 
         control_panel.columnconfigure(1, weight=1)
@@ -264,9 +251,7 @@ class MIBBrowserWindow:
         buttons_frame = ctk.CTkFrame(browser_tab)
         buttons_frame.pack(fill="x", padx=10, pady=(0, 10))
 
-        get_btn = ctk.CTkButton(
-            buttons_frame, text="GET", command=self._snmp_get, width=100
-        )
+        get_btn = ctk.CTkButton(buttons_frame, text="GET", command=self._snmp_get, width=100)
         get_btn.pack(side="left", padx=5)
 
         getnext_btn = ctk.CTkButton(
@@ -274,14 +259,10 @@ class MIBBrowserWindow:
         )
         getnext_btn.pack(side="left", padx=5)
 
-        walk_btn = ctk.CTkButton(
-            buttons_frame, text="WALK", command=self._snmp_walk, width=100
-        )
+        walk_btn = ctk.CTkButton(buttons_frame, text="WALK", command=self._snmp_walk, width=100)
         walk_btn.pack(side="left", padx=5)
 
-        set_btn = ctk.CTkButton(
-            buttons_frame, text="SET", command=self._snmp_set, width=100
-        )
+        set_btn = ctk.CTkButton(buttons_frame, text="SET", command=self._snmp_set, width=100)
         set_btn.pack(side="left", padx=5)
 
         clear_btn = ctk.CTkButton(
@@ -380,7 +361,10 @@ class MIBBrowserWindow:
         # Instructions
         instructions = ctk.CTkLabel(
             mib_tab,
-            text="Browse for original MIB source files (.mib, .txt, .my, .asn, .asn1) to cache and load them for name resolution.",
+            text=(
+                "Browse for original MIB source files (.mib, .txt, .my, .asn, "
+                ".asn1) to cache and load them for name resolution."
+            ),
             font=("", 12),
         )
         instructions.pack(padx=10, pady=10)
@@ -433,9 +417,7 @@ class MIBBrowserWindow:
         list_frame = ctk.CTkFrame(mib_tab)
         list_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        list_label = ctk.CTkLabel(
-            list_frame, text="Cached MIB Files:", font=("", 12, "bold")
-        )
+        list_label = ctk.CTkLabel(list_frame, text="Cached MIB Files:", font=("", 12, "bold"))
         list_label.pack(anchor="w", padx=5, pady=5)
 
         # Scrollable listbox for cached MIBs
@@ -488,17 +470,12 @@ class MIBBrowserWindow:
                     for part in import_block.split("FROM"):
                         if part.strip():
                             mib_name = part.strip().split()[0]
-                            if (
-                                mib_name
-                                and mib_name.replace("-", "").replace("_", "").isalnum()
-                            ):
+                            if mib_name and mib_name.replace("-", "").replace("_", "").isalnum():
                                 if mib_name not in imports:
                                     imports.append(mib_name)
 
         except Exception as e:
-            self.logger.log(
-                f"Error extracting imports from {mib_file_path.name}: {e}", "WARNING"
-            )
+            self.logger.log(f"Error extracting imports from {mib_file_path.name}: {e}", "WARNING")
 
         return imports
 
@@ -599,9 +576,7 @@ class MIBBrowserWindow:
             for imp in imports:
                 _recurse(imp)
 
-            if (
-                name not in resolved and name != mib_name
-            ):  # Don't add the main MIB itself
+            if name not in resolved and name != mib_name:  # Don't add the main MIB itself
                 resolved.append(name)
 
         _recurse(mib_name)
@@ -630,7 +605,9 @@ class MIBBrowserWindow:
                 if missing_deps:
                     # Mark as having unsatisfied dependencies
                     self.unsatisfied_mibs[mib_name] = missing_deps
-                    error_msg = f"Cannot load {mib_name}: missing dependencies: {', '.join(missing_deps)}"
+                    error_msg = (
+                        f"Cannot load {mib_name}: missing dependencies: {', '.join(missing_deps)}"
+                    )
                     failed.append(mib_name)
                     self.logger.log(error_msg, "WARNING")
                 else:
@@ -644,15 +621,16 @@ class MIBBrowserWindow:
                             self.logger.log(f"Loaded dependency: {dep}", "DEBUG")
                         except Exception as e:
                             failed_deps.append(dep)
-                            self.logger.log(
-                                f"Failed to load dependency {dep}: {e}", "ERROR"
-                            )
+                            self.logger.log(f"Failed to load dependency {dep}: {e}", "ERROR")
 
                     # Check if all dependencies loaded successfully
                     if failed_deps:
                         # Mark main MIB as having unsatisfied dependencies
                         self.unsatisfied_mibs[mib_name] = failed_deps
-                        error_msg = f"Cannot load {mib_name}: {len(failed_deps)} dependencies failed to load: {', '.join(failed_deps)}"
+                        error_msg = (
+                            f"Cannot load {mib_name}: {len(failed_deps)} dependencies "
+                            f"failed to load: {', '.join(failed_deps)}"
+                        )
                         failed.append(mib_name)
                         self.logger.log(error_msg, "ERROR")
                     else:
@@ -676,9 +654,7 @@ class MIBBrowserWindow:
                             # Main MIB failed to load
                             self.unsatisfied_mibs[mib_name] = [f"Failed to load: {e}"]
                             failed.append(mib_name)
-                            self.logger.log(
-                                f"Failed to load main MIB {mib_name}: {e}", "ERROR"
-                            )
+                            self.logger.log(f"Failed to load main MIB {mib_name}: {e}", "ERROR")
             except Exception as e:
                 failed.append(mib_name)
                 self.logger.log(f"Failed to load MIB {mib_name}: {e}", "WARNING")
@@ -736,13 +712,9 @@ class MIBBrowserWindow:
                                 if hasattr(symbol_obj, "getMaxAccess"):
                                     metadata["access"] = str(symbol_obj.getMaxAccess())
                                 if hasattr(symbol_obj, "getSyntax"):
-                                    metadata["type"] = type(
-                                        symbol_obj.getSyntax()
-                                    ).__name__
+                                    metadata["type"] = type(symbol_obj.getSyntax()).__name__
                                 if hasattr(symbol_obj, "getDescription"):
-                                    metadata["description"] = str(
-                                        symbol_obj.getDescription()
-                                    )
+                                    metadata["description"] = str(symbol_obj.getDescription())
 
                                 return metadata
                 except Exception:
@@ -872,14 +844,13 @@ class MIBBrowserWindow:
         # Check for common MIB resolution errors
         if "MibNotFoundError" in error_str or "compilation error" in error_str:
             # Extract the object name if possible
-            import re
-
             match = re.search(r"'(\w+)'|\"(\w+)\"", error_str)
             obj_name = match.group(1) or match.group(2) if match else "object"
 
             return (
                 f"Cannot resolve '{obj_name}' - MIB not loaded.\n\n"
-                f"Currently loaded MIBs: {', '.join(self.loaded_mibs) if self.loaded_mibs else 'None'}\n\n"
+                f"Currently loaded MIBs: "
+                f"{', '.join(self.loaded_mibs) if self.loaded_mibs else 'None'}\n\n"
                 f"To fix:\n"
                 f"  1. Load the MIB containing '{obj_name}' (e.g., SNMPv2-MIB)\n"
                 f"  2. Use numerical OID instead (e.g., 1.3.6.1.2.1.1.1.0)\n"
@@ -932,14 +903,14 @@ class MIBBrowserWindow:
                 f"Cannot resolve '{oid_input}' - no MIBs loaded.\n\n"
                 f"Load a MIB first (e.g., SNMPv2-MIB) or use numerical OID."
             )
-        else:
-            raise ValueError(
-                f"Cannot resolve '{oid_input}' in loaded MIBs: {', '.join(self.loaded_mibs)}\n\n"
-                f"Try:\n"
-                f"  • Load the MIB containing this object\n"
-                f"  • Use full format: MIB::objectName\n"
-                f"  • Use numerical OID instead"
-            )
+
+        raise ValueError(
+            f"Cannot resolve '{oid_input}' in loaded MIBs: {', '.join(self.loaded_mibs)}\n\n"
+            f"Try:\n"
+            f"  • Load the MIB containing this object\n"
+            f"  • Use full format: MIB::objectName\n"
+            f"  • Use numerical OID instead"
+        )
 
     def _clear_results(self) -> None:
         """Clear the results tree."""
@@ -953,9 +924,7 @@ class MIBBrowserWindow:
     def _show_loaded_mibs(self) -> None:
         """Show list of loaded MIBs."""
         if not self.loaded_mibs:
-            messagebox.showinfo(
-                "Loaded MIBs", "No MIBs currently loaded", parent=self.window
-            )
+            messagebox.showinfo("Loaded MIBs", "No MIBs currently loaded", parent=self.window)
         else:
             mib_list = "\n".join(f"• {mib}" for mib in sorted(self.loaded_mibs))
             messagebox.showinfo(
@@ -966,9 +935,6 @@ class MIBBrowserWindow:
 
     def _browse_mib_files(self) -> None:
         """Browse for MIB files and copy them to cache directory."""
-        from tkinter import filedialog
-        import shutil
-
         filetypes = [
             ("MIB Files", "*.mib *.txt *.my *.asn *.asn1"),
             ("MIB Text Files", "*.mib"),
@@ -1079,9 +1045,7 @@ class MIBBrowserWindow:
 
             # Dependency details frame
             if resolved_deps or missing_deps:
-                deps_frame = ctk.CTkFrame(
-                    self.mib_listbox_frame, fg_color="transparent"
-                )
+                deps_frame = ctk.CTkFrame(self.mib_listbox_frame, fg_color="transparent")
                 deps_frame.pack(anchor="w", fill="x", padx=20, pady=(0, 6))
 
                 # Status line
@@ -1169,9 +1133,7 @@ class MIBBrowserWindow:
     def _load_selected_mib(self) -> None:
         """Load selected MIBs from cache with dependency resolution."""
         selected_files = [
-            Path(file_path)
-            for file_path, var in self.cached_mib_checkbuttons.items()
-            if var.get()
+            Path(file_path) for file_path, var in self.cached_mib_checkbuttons.items() if var.get()
         ]
 
         if not selected_files:
@@ -1233,9 +1195,7 @@ class MIBBrowserWindow:
     def _show_mib_dependencies(self) -> None:
         """Show dependency information for selected MIBs."""
         selected_files = [
-            Path(file_path)
-            for file_path, var in self.cached_mib_checkbuttons.items()
-            if var.get()
+            Path(file_path) for file_path, var in self.cached_mib_checkbuttons.items() if var.get()
         ]
 
         if not selected_files:
@@ -1289,9 +1249,7 @@ class MIBBrowserWindow:
 
         # Show report
         if all_satisfied:
-            messagebox.showinfo(
-                "Dependency Check - All Satisfied", report, parent=self.window
-            )
+            messagebox.showinfo("Dependency Check - All Satisfied", report, parent=self.window)
         else:
             messagebox.showerror(
                 "Dependency Check - Unsatisfied Dependencies",
@@ -1302,9 +1260,7 @@ class MIBBrowserWindow:
     def _remove_cached_mib(self) -> None:
         """Remove selected MIBs from cache."""
         selected_files = [
-            file_path
-            for file_path, var in self.cached_mib_checkbuttons.items()
-            if var.get()
+            file_path for file_path, var in self.cached_mib_checkbuttons.items() if var.get()
         ]
 
         if not selected_files:
@@ -1361,7 +1317,6 @@ class MIBBrowserWindow:
     def _on_node_open(self, event: Any) -> None:
         """Handle node open events (for future lazy loading if needed)."""
         _ = event
-        return
 
     def _expand_all(self) -> None:
         """Expand all nodes in the tree."""
@@ -1392,18 +1347,14 @@ class MIBBrowserWindow:
         if agent_key not in self.agent_tree_items:
             # Create new agent node
             agent_label = f"🖥️ {agent_key}"
-            item = self.results_tree.insert(
-                "", "end", text=agent_label, values=("", "", "")
-            )
+            item = self.results_tree.insert("", "end", text=agent_label, values=("", "", ""))
             self.results_tree.item(item, open=True)
             self.agent_tree_items[agent_key] = item
             self.agent_results[agent_key] = {"operations": {}, "last_updated": ""}
 
         return self.agent_tree_items[agent_key]
 
-    def _get_or_create_operation_node(
-        self, agent_item: str, operation: str, oid: str
-    ) -> str:
+    def _get_or_create_operation_node(self, agent_item: str, operation: str, oid: str) -> str:
         """Get or create the tree node for an operation under an agent."""
         agent_key = None
         for key, item in self.agent_tree_items.items():
@@ -1420,19 +1371,13 @@ class MIBBrowserWindow:
         for child in op_children:
             if self.results_tree.item(child, "text").startswith(f"→ {operation}"):
                 if op_key not in self.agent_results[agent_key]["operations"]:
-                    self.agent_results[agent_key]["operations"][op_key] = {
-                        "results": []
-                    }
+                    self.agent_results[agent_key]["operations"][op_key] = {"results": []}
                 return child
 
         # Create new operation node
-        from datetime import datetime
-
         timestamp = datetime.now().strftime("%H:%M:%S")
         op_label = f"→ {operation} {oid} [{timestamp}]"
-        op_item = self.results_tree.insert(
-            agent_item, "end", text=op_label, values=("", "", "")
-        )
+        op_item = self.results_tree.insert(agent_item, "end", text=op_label, values=("", "", ""))
         self.results_tree.item(op_item, open=True)
         self.agent_results[agent_key]["operations"][op_key] = {"results": []}
         self.agent_results[agent_key]["last_updated"] = timestamp
@@ -1461,8 +1406,6 @@ class MIBBrowserWindow:
         try:
 
             async def async_get() -> tuple[Any, ...]:
-                from pysnmp.proto.error import StatusInformation
-
                 try:
                     return await get_cmd(  # type: ignore[no-any-return]
                         SnmpEngine(),
@@ -1476,25 +1419,19 @@ class MIBBrowserWindow:
                     error_indication = e.get("errorIndication", str(e))
                     return (error_indication, None, None, [])
 
-            errorIndication, errorStatus, errorIndex, varBinds = asyncio.run(
-                async_get()
-            )
-            _ = errorIndex  # Unused but part of SNMP response tuple
+            error_indication, error_status, error_index, var_binds = asyncio.run(async_get())
+            _ = error_index  # Unused but part of SNMP response tuple
 
-            if errorIndication:
-                self.status_var.set(f"Error: {errorIndication}")
-                self.logger.log(f"MIB Browser GET error: {errorIndication}", "ERROR")
-                messagebox.showerror(
-                    "SNMP GET Error", str(errorIndication), parent=self.window
-                )
+            if error_indication:
+                self.status_var.set(f"Error: {error_indication}")
+                self.logger.log(f"MIB Browser GET error: {error_indication}", "ERROR")
+                messagebox.showerror("SNMP GET Error", str(error_indication), parent=self.window)
                 return
-            elif errorStatus:
-                self.status_var.set(f"Error: {errorStatus.prettyPrint()}")
-                self.logger.log(
-                    f"MIB Browser GET error: {errorStatus.prettyPrint()}", "ERROR"
-                )
+            if error_status:
+                self.status_var.set(f"Error: {error_status.prettyPrint()}")
+                self.logger.log(f"MIB Browser GET error: {error_status.prettyPrint()}", "ERROR")
                 messagebox.showerror(
-                    "SNMP GET Error", errorStatus.prettyPrint(), parent=self.window
+                    "SNMP GET Error", error_status.prettyPrint(), parent=self.window
                 )
                 return
 
@@ -1505,10 +1442,10 @@ class MIBBrowserWindow:
             op_item = self._get_or_create_operation_node(agent_item, "GET", display_oid)
 
             # Add results
-            for varBind in varBinds:
-                oid_str = str(varBind[0])
-                value = format_snmp_value(varBind[1])
-                type_str = type(varBind[1]).__name__
+            for var_bind in var_binds:
+                oid_str = str(var_bind[0])
+                value = format_snmp_value(var_bind[1])
+                type_str = type(var_bind[1]).__name__
                 name = self._get_name_from_oid(oid_str)
                 icon = self._get_icon_for_oid(oid_str)
 
@@ -1520,14 +1457,12 @@ class MIBBrowserWindow:
                     values=(oid_str, type_str, value),
                 )
 
-            self.status_var.set(f"GET completed: {len(varBinds)} result(s)")
-            self.logger.log(
-                f"MIB Browser: GET {display_oid} returned {len(varBinds)} result(s)"
-            )
+            self.status_var.set(f"GET completed: {len(var_binds)} result(s)")
+            self.logger.log(f"MIB Browser: GET {display_oid} returned {len(var_binds)} result(s)")
 
         except Exception as e:
             error_msg = self._format_mib_error(e)
-            self.status_var.set(f"Error: {error_msg.split(chr(10))[0]}")
+            self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
             self.logger.log(f"MIB Browser GET error: {e}", "ERROR")
             messagebox.showerror("SNMP GET Error", error_msg, parent=self.window)
 
@@ -1554,8 +1489,6 @@ class MIBBrowserWindow:
 
             async def async_next() -> tuple[Any, ...]:
                 # next_cmd returns a coroutine that yields ONE result
-                from pysnmp.proto.error import StatusInformation
-
                 target = await UdpTransportTarget.create((host, port))
 
                 try:
@@ -1571,27 +1504,21 @@ class MIBBrowserWindow:
                     error_indication = e.get("errorIndication", str(e))
                     return (error_indication, None, None, [])
 
-            errorIndication, errorStatus, errorIndex, varBinds = asyncio.run(
-                async_next()
-            )
-            _ = errorIndex  # Unused but part of SNMP response tuple
+            error_indication, error_status, error_index, var_binds = asyncio.run(async_next())
+            _ = error_index  # Unused but part of SNMP response tuple
 
-            if errorIndication:
-                self.status_var.set(f"Error: {errorIndication}")
-                self.logger.log(
-                    f"MIB Browser GETNEXT error: {errorIndication}", "ERROR"
-                )
+            if error_indication:
+                self.status_var.set(f"Error: {error_indication}")
+                self.logger.log(f"MIB Browser GETNEXT error: {error_indication}", "ERROR")
                 messagebox.showerror(
-                    "SNMP GETNEXT Error", str(errorIndication), parent=self.window
+                    "SNMP GETNEXT Error", str(error_indication), parent=self.window
                 )
                 return
-            elif errorStatus:
-                self.status_var.set(f"Error: {errorStatus.prettyPrint()}")
-                self.logger.log(
-                    f"MIB Browser GETNEXT error: {errorStatus.prettyPrint()}", "ERROR"
-                )
+            if error_status:
+                self.status_var.set(f"Error: {error_status.prettyPrint()}")
+                self.logger.log(f"MIB Browser GETNEXT error: {error_status.prettyPrint()}", "ERROR")
                 messagebox.showerror(
-                    "SNMP GETNEXT Error", errorStatus.prettyPrint(), parent=self.window
+                    "SNMP GETNEXT Error", error_status.prettyPrint(), parent=self.window
                 )
                 return
 
@@ -1599,15 +1526,13 @@ class MIBBrowserWindow:
             agent_item = self._get_or_create_agent_node(host, port)
 
             # Get or create operation node
-            op_item = self._get_or_create_operation_node(
-                agent_item, "GETNEXT", display_oid
-            )
+            op_item = self._get_or_create_operation_node(agent_item, "GETNEXT", display_oid)
 
             # Add results
-            for varBind in varBinds:
-                oid_str = str(varBind[0])
-                value = format_snmp_value(varBind[1])
-                type_str = type(varBind[1]).__name__
+            for var_bind in var_binds:
+                oid_str = str(var_bind[0])
+                value = format_snmp_value(var_bind[1])
+                type_str = type(var_bind[1]).__name__
                 name = self._get_name_from_oid(oid_str)
                 icon = self._get_icon_for_oid(oid_str)
 
@@ -1620,21 +1545,19 @@ class MIBBrowserWindow:
                 )
 
             # Update OID field with returned OID for easy iteration
-            if varBinds:
-                next_oid = str(varBinds[0][0])
+            if var_binds:
+                next_oid = str(var_binds[0][0])
                 self.oid_var.set(next_oid)
-                self.logger.log(
-                    f"Updated OID field to {next_oid} for next iteration", "DEBUG"
-                )
+                self.logger.log(f"Updated OID field to {next_oid} for next iteration", "DEBUG")
 
-            self.status_var.set(f"GETNEXT completed: {len(varBinds)} result(s)")
+            self.status_var.set(f"GETNEXT completed: {len(var_binds)} result(s)")
             self.logger.log(
-                f"MIB Browser: GETNEXT {display_oid} returned {len(varBinds)} result(s)"
+                f"MIB Browser: GETNEXT {display_oid} returned {len(var_binds)} result(s)"
             )
 
         except Exception as e:
             error_msg = self._format_mib_error(e)
-            self.status_var.set(f"Error: {error_msg.split(chr(10))[0]}")
+            self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
             self.logger.log(f"MIB Browser GETNEXT error: {e}", "ERROR")
             messagebox.showerror("SNMP GETNEXT Error", error_msg, parent=self.window)
 
@@ -1660,8 +1583,6 @@ class MIBBrowserWindow:
         try:
 
             async def async_walk() -> list[tuple[Any, ...]]:
-                from pysnmp.proto.error import StatusInformation
-
                 walk_results = []
                 target = await UdpTransportTarget.create((host, port))
 
@@ -1674,14 +1595,9 @@ class MIBBrowserWindow:
                         ContextData(),
                         ObjectType(obj_identity),
                     )
-                    async for (
-                        errorIndication,
-                        errorStatus,
-                        errorIndex,
-                        varBinds,
-                    ) in iterator:
+                    async for error_indication, error_status, error_index, var_binds in iterator:
                         walk_results.append(
-                            (errorIndication, errorStatus, errorIndex, varBinds)
+                            (error_indication, error_status, error_index, var_binds)
                         )
                 except StatusInformation as e:
                     # Handle any serialization errors
@@ -1696,35 +1612,29 @@ class MIBBrowserWindow:
             agent_item = self._get_or_create_agent_node(host, port)
 
             # Get or create operation node
-            op_item = self._get_or_create_operation_node(
-                agent_item, "WALK", display_oid
-            )
+            op_item = self._get_or_create_operation_node(agent_item, "WALK", display_oid)
 
             result_count = 0
-            for errorIndication, errorStatus, errorIndex, varBinds in walk_results:
-                _ = errorIndex  # Unused but part of SNMP response tuple
-                if errorIndication:
-                    self.status_var.set(f"Error: {errorIndication}")
-                    self.logger.log(
-                        f"MIB Browser WALK error: {errorIndication}", "ERROR"
-                    )
+            for error_indication, error_status, error_index, var_binds in walk_results:
+                _ = error_index  # Unused but part of SNMP response tuple
+                if error_indication:
+                    self.status_var.set(f"Error: {error_indication}")
+                    self.logger.log(f"MIB Browser WALK error: {error_indication}", "ERROR")
                     messagebox.showerror(
-                        "SNMP WALK Error", str(errorIndication), parent=self.window
+                        "SNMP WALK Error", str(error_indication), parent=self.window
                     )
                     return
-                elif errorStatus:
-                    self.status_var.set(f"Error: {errorStatus}")
-                    self.logger.log(f"MIB Browser WALK error: {errorStatus}", "ERROR")
-                    messagebox.showerror(
-                        "SNMP WALK Error", str(errorStatus), parent=self.window
-                    )
+                if error_status:
+                    self.status_var.set(f"Error: {error_status}")
+                    self.logger.log(f"MIB Browser WALK error: {error_status}", "ERROR")
+                    messagebox.showerror("SNMP WALK Error", str(error_status), parent=self.window)
                     return
 
                 # Process results
-                for varBind in varBinds:
-                    oid_str = str(varBind[0])
-                    value = format_snmp_value(varBind[1])
-                    type_str = type(varBind[1]).__name__
+                for var_bind in var_binds:
+                    oid_str = str(var_bind[0])
+                    value = format_snmp_value(var_bind[1])
+                    type_str = type(var_bind[1]).__name__
                     name = self._get_name_from_oid(oid_str)
                     icon = self._get_icon_for_oid(oid_str)
 
@@ -1738,13 +1648,11 @@ class MIBBrowserWindow:
                     result_count += 1
 
             self.status_var.set(f"WALK completed: {result_count} result(s)")
-            self.logger.log(
-                f"MIB Browser: WALK {display_oid} returned {result_count} result(s)"
-            )
+            self.logger.log(f"MIB Browser: WALK {display_oid} returned {result_count} result(s)")
 
         except Exception as e:
             error_msg = self._format_mib_error(e)
-            self.status_var.set(f"Error: {error_msg.split(chr(10))[0]}")
+            self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
             self.logger.log(f"MIB Browser WALK error: {e}", "ERROR")
             messagebox.showerror("SNMP WALK Error", error_msg, parent=self.window)
 
@@ -1757,9 +1665,7 @@ class MIBBrowserWindow:
             messagebox.showwarning("No OID", "Please enter an OID", parent=self.window)
             return
         if not value:
-            messagebox.showwarning(
-                "No Value", "Please enter a value to set", parent=self.window
-            )
+            messagebox.showwarning("No Value", "Please enter a value to set", parent=self.window)
             return
 
         # Create ObjectIdentity from OID input
@@ -1778,8 +1684,6 @@ class MIBBrowserWindow:
             # SNMP SET - using OctetString by default
             # In a production tool, you'd want type selection UI
             async def async_set() -> tuple[Any, ...]:
-                from pysnmp.proto.error import StatusInformation
-
                 try:
                     return await set_cmd(  # type: ignore[no-any-return]
                         SnmpEngine(),
@@ -1793,25 +1697,19 @@ class MIBBrowserWindow:
                     error_indication = e.get("errorIndication", str(e))
                     return (error_indication, None, None, [])
 
-            errorIndication, errorStatus, errorIndex, _varBinds = asyncio.run(
-                async_set()
-            )
-            _ = errorIndex  # Unused but part of SNMP response tuple
+            error_indication, error_status, error_index, _var_binds = asyncio.run(async_set())
+            _ = error_index  # Unused but part of SNMP response tuple
 
-            if errorIndication:
-                self.status_var.set(f"Error: {errorIndication}")
-                self.logger.log(f"MIB Browser SET error: {errorIndication}", "ERROR")
-                messagebox.showerror(
-                    "SNMP SET Error", str(errorIndication), parent=self.window
-                )
+            if error_indication:
+                self.status_var.set(f"Error: {error_indication}")
+                self.logger.log(f"MIB Browser SET error: {error_indication}", "ERROR")
+                messagebox.showerror("SNMP SET Error", str(error_indication), parent=self.window)
                 return
-            elif errorStatus:
-                self.status_var.set(f"Error: {errorStatus.prettyPrint()}")
-                self.logger.log(
-                    f"MIB Browser SET error: {errorStatus.prettyPrint()}", "ERROR"
-                )
+            if error_status:
+                self.status_var.set(f"Error: {error_status.prettyPrint()}")
+                self.logger.log(f"MIB Browser SET error: {error_status.prettyPrint()}", "ERROR")
                 messagebox.showerror(
-                    "SNMP SET Error", errorStatus.prettyPrint(), parent=self.window
+                    "SNMP SET Error", error_status.prettyPrint(), parent=self.window
                 )
                 return
 
@@ -1837,7 +1735,7 @@ class MIBBrowserWindow:
 
         except Exception as e:
             error_msg = self._format_mib_error(e)
-            self.status_var.set(f"Error: {error_msg.split(chr(10))[0]}")
+            self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
             self.logger.log(f"MIB Browser SET error: {e}", "ERROR")
             messagebox.showerror("SNMP SET Error", error_msg, parent=self.window)
 
@@ -1855,11 +1753,7 @@ class MIBBrowserWindow:
             base_metadata = self._get_oid_metadata_from_mib(base_oid)
             if base_metadata.get("name"):
                 instance = ".".join(parts[i:])
-                return (
-                    f"{base_metadata['name']}.{instance}"
-                    if instance
-                    else base_metadata["name"]
-                )
+                return f"{base_metadata['name']}.{instance}" if instance else base_metadata["name"]
 
         # Fallback to OID string if no MIB info
         return oid_str
@@ -1904,8 +1798,6 @@ class MIBBrowserWindow:
 
 def main() -> None:
     """Run standalone MIB Browser."""
-    import argparse
-
     parser = argparse.ArgumentParser(description="SNMP MIB Browser")
     parser.add_argument("--host", default="127.0.0.1", help="SNMP agent host")
     parser.add_argument("--port", type=int, default=161, help="SNMP port")

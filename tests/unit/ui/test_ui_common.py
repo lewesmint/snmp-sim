@@ -68,9 +68,7 @@ def test_logger_set_log_widget_resets_tags() -> None:
     assert logger._tags_configured is False
 
 
-def test_save_gui_log_creates_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_save_gui_log_creates_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     widget = FakeTextWidget()
     widget.insert("end", "line1\n", "INFO")
@@ -121,10 +119,7 @@ def test_safe_call_success_and_error_logging(
 
     assert safe_call(lambda: 5, default=0, logger=logger) == 5
     assert (
-        safe_call(
-            lambda: (_ for _ in ()).throw(RuntimeError("x")), default=9, logger=logger
-        )
-        == 9
+        safe_call(lambda: (_ for _ in ()).throw(RuntimeError("x")), default=9, logger=logger) == 9
     )
     out = capsys.readouterr().out
     assert "ERROR: Error in <lambda>: x" in out

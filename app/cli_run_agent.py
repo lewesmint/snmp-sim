@@ -57,9 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Error: No schemas could be loaded", file=sys.stderr)
         return 1
 
-    print(
-        f"Model built with {len(model)} MIBs. Starting SNMP agent on {args.host}:{args.port}..."
-    )
+    print(f"Model built with {len(model)} MIBs. Starting SNMP agent on {args.host}:{args.port}...")
 
     try:
         agent = SNMPAgent(

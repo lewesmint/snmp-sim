@@ -134,9 +134,7 @@ def mib_schema_dir(tmp_path: Path, sample_mib_schema: JsonDict) -> Path:
     schema_dir.mkdir()
 
     # Preserve older style TEST-MIB.json for compatibility
-    mib_schema = {
-        "TEST-MIB": {"sysDescr": {"oid": [1, 3, 6, 1], "type": "OctetString"}}
-    }
+    mib_schema = {"TEST-MIB": {"sysDescr": {"oid": [1, 3, 6, 1], "type": "OctetString"}}}
     schema_file = schema_dir / "TEST-MIB.json"
     schema_file.write_text(json.dumps(mib_schema))
 
@@ -222,9 +220,7 @@ def cleanup_asyncio_and_imports() -> Generator[None, None, None]:
             # Run the loop briefly to process cancellations
             if not loop.is_running():
                 try:
-                    loop.run_until_complete(
-                        asyncio.gather(*pending, return_exceptions=True)
-                    )
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                 except Exception:
                     pass
             if not loop.is_closed():

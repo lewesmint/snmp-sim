@@ -7,9 +7,7 @@ from typing import Dict, Any, cast
 from app import cli_load_model as clm
 
 
-def test_load_all_schemas_missing_dir(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_load_all_schemas_missing_dir(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     fake_dir = tmp_path / "nope"
     model = clm.load_all_schemas(str(fake_dir))
     captured = capsys.readouterr()
@@ -17,9 +15,7 @@ def test_load_all_schemas_missing_dir(
     assert "Schema directory not found" in captured.err
 
 
-def test_load_all_schemas_invalid_json(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_load_all_schemas_invalid_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     base = tmp_path / "schemas"
     mib_dir = base / "BAD"
     mib_dir.mkdir(parents=True)
@@ -50,9 +46,7 @@ def test_main_no_schemas(monkeypatch: pytest.MonkeyPatch) -> None:
     assert rc == 1
 
 
-def test_main_success_writes_output(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_main_success_writes_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     model: Dict[str, Dict[str, Any]] = {"M1": {"a": {}}}
     monkeypatch.setattr(clm, "load_all_schemas", lambda d: model)
     out_file = tmp_path / "out.json"
@@ -64,9 +58,7 @@ def test_main_success_writes_output(
     assert data == model
 
 
-def test_main_output_write_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_main_output_write_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     model: Dict[str, Dict[str, Any]] = {"M1": {"a": {}}}
     monkeypatch.setattr(clm, "load_all_schemas", lambda d: model)
     out_dir = tmp_path
@@ -86,9 +78,7 @@ def test_load_all_schemas_skips_empty_and_non_schema_entries(tmp_path: Path) -> 
     no_schema.mkdir()
     (base / "README.txt").write_text("not a dir", encoding="utf-8")
 
-    (good / "schema.json").write_text(
-        json.dumps({"obj": {"type": "MibScalar"}}), encoding="utf-8"
-    )
+    (good / "schema.json").write_text(json.dumps({"obj": {"type": "MibScalar"}}), encoding="utf-8")
     (empty / "schema.json").write_text(json.dumps({}), encoding="utf-8")
 
     model = clm.load_all_schemas(str(base))
@@ -147,9 +137,7 @@ def test_print_model_summary_handles_both_schema_shapes(
     assert "BAD: 0 objects, 0 tables" in out
 
 
-def test_main_success_without_output(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_main_success_without_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     model: Dict[str, Dict[str, Any]] = {"M1": {"objects": {"x": {"type": "MibScalar"}}}}
     monkeypatch.setattr(clm, "load_all_schemas", lambda d: model)
 

@@ -122,9 +122,7 @@ def delete_preset(preset_base: Path, preset_name: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """Main entry point for preset management."""
-    parser = argparse.ArgumentParser(
-        description="Manage agent-model presets (scenarios)"
-    )
+    parser = argparse.ArgumentParser(description="Manage agent-model presets (scenarios)")
     parser.add_argument(
         "action",
         choices=["list", "save", "load", "delete"],
@@ -174,17 +172,13 @@ def main(argv: list[str] | None = None) -> int:
 
     # Other actions require preset_name
     if not args.preset_name:
-        print(
-            f"Error: preset_name required for action '{args.action}'", file=sys.stderr
-        )
+        print(f"Error: preset_name required for action '{args.action}'", file=sys.stderr)
         return 1
 
     if args.action == "save":
         return save_preset(schema_dir, preset_base, args.preset_name)
     elif args.action == "load":
-        return load_preset(
-            schema_dir, preset_base, args.preset_name, backup_base, args.no_backup
-        )
+        return load_preset(schema_dir, preset_base, args.preset_name, backup_base, args.no_backup)
     elif args.action == "delete":
         return delete_preset(preset_base, args.preset_name)
 

@@ -168,9 +168,7 @@ def test_app_logger_configures_handlers(tmp_path: Path) -> None:
             root.removeHandler(handler)
         AppLogger(config)
         root.info("test log")
-        assert any(
-            isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers
-        )
+        assert any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers)
         assert any(isinstance(h, logging.StreamHandler) for h in root.handlers)
         assert any(isinstance(h.formatter, ColoredFormatter) for h in root.handlers)
     finally:
@@ -192,9 +190,7 @@ def test_app_logger_no_console(tmp_path: Path) -> None:
         for handler in list(root.handlers):
             root.removeHandler(handler)
         AppLogger(config)
-        assert any(
-            isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers
-        )
+        assert any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers)
         assert not any(isinstance(h.formatter, ColoredFormatter) for h in root.handlers)
     finally:
         for handler in list(root.handlers):
@@ -341,9 +337,7 @@ def test_log_no_rotation_appends_to_existing(tmp_path: Path) -> None:
     log_path = log_dir / log_file
 
     # Create an existing log file
-    existing_content = (
-        "2026-02-07 10:30:45.123 INFO test.module [MainThread] Existing message\n"
-    )
+    existing_content = "2026-02-07 10:30:45.123 INFO test.module [MainThread] Existing message\n"
     log_path.write_text(existing_content)
 
     root = logging.getLogger()

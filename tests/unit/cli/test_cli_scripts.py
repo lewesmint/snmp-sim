@@ -61,9 +61,7 @@ def test_cli_mib_to_json_main(tmp_path: Path, mocker: Any) -> None:
 def test_cli_mib_to_json_no_args(mocker: Any) -> None:
     """Test cli_mib_to_json with no arguments"""
     mocker.patch("sys.argv", ["cli_mib_to_json.py"])
-    mocker.patch(
-        "app.cli_mib_to_json.AppConfig", side_effect=FileNotFoundError("No config")
-    )
+    mocker.patch("app.cli_mib_to_json.AppConfig", side_effect=FileNotFoundError("No config"))
     from app.cli_mib_to_json import main
 
     result = main()
@@ -161,9 +159,7 @@ def test_cli_compile_mib_has_failures(tmp_path: Path, mocker: Any) -> None:
     assert result == 1
 
 
-def test_cli_compile_mib_compilation_error_no_results(
-    tmp_path: Path, mocker: Any
-) -> None:
+def test_cli_compile_mib_compilation_error_no_results(tmp_path: Path, mocker: Any) -> None:
     """Test cli_compile_mib when MibCompilationError with no results"""
     mib_file = tmp_path / "BAD-MIB.txt"
     mib_file.write_text("BAD MIB")

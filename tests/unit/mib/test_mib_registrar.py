@@ -62,9 +62,7 @@ class TestMibRegistrarTypeRegistryLoading:
         mib_jsons: dict[str, dict[str, object]] = {}
 
         # This should not raise an error even with empty mib_jsons
-        registrar.register_all_mibs(
-            mib_jsons, type_registry_path=str(type_registry_file)
-        )
+        registrar.register_all_mibs(mib_jsons, type_registry_path=str(type_registry_file))
 
     def test_populate_sysor_table_loads_type_registry(
         self, mock_logger: Any, type_registry_file: Path, mocker: Any
@@ -84,22 +82,16 @@ class TestMibRegistrarTypeRegistryLoading:
         )
 
         # Create minimal mib_jsons with SNMPv2-MIB
-        mib_jsons: dict[str, dict[str, object]] = {
-            "SNMPv2-MIB": {"sysORTable": {"rows": []}}
-        }
+        mib_jsons: dict[str, dict[str, object]] = {"SNMPv2-MIB": {"sysORTable": {"rows": []}}}
 
         # This should load type registry and populate sysORTable
-        registrar.populate_sysor_table(
-            mib_jsons, type_registry_path=str(type_registry_file)
-        )
+        registrar.populate_sysor_table(mib_jsons, type_registry_path=str(type_registry_file))
 
 
 class TestMibRegistrarErrorHandling:
     """Test error handling in MibRegistrar."""
 
-    def test_register_all_mibs_with_none_builder(
-        self, mock_logger: Any, mocker: Any
-    ) -> None:
+    def test_register_all_mibs_with_none_builder(self, mock_logger: Any, mocker: Any) -> None:
         """Test register_all_mibs when mib_builder is None."""
         from app.mib_registrar import MibRegistrar
 
@@ -139,9 +131,7 @@ class TestMibRegistrarErrorHandling:
         mib_jsons: dict[str, dict[str, object]] = {}
 
         # Should handle gracefully
-        registrar.populate_sysor_table(
-            mib_jsons, type_registry_path=str(type_registry_file)
-        )
+        registrar.populate_sysor_table(mib_jsons, type_registry_path=str(type_registry_file))
 
 
 class TestMibMetadataIntegration:

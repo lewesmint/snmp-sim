@@ -45,9 +45,7 @@ class ColoredFormatter(logging.Formatter):
 
         # Add color to the levelname
         if record.levelname in self.COLORS:
-            record.levelname = (
-                f"{self.COLORS[record.levelname]}{record.levelname}{self.RESET}"
-            )
+            record.levelname = f"{self.COLORS[record.levelname]}{record.levelname}{self.RESET}"
 
         # Format the record
         result = super().format(record)
@@ -100,9 +98,7 @@ def _archive_log_file(log_path: Path) -> None:
         with open(log_path, "r", encoding="utf-8") as f:
             first_line = f.readline().strip()
             # Match timestamp format: YYYY-MM-DD HH:MM:SS.mmm
-            match = re.match(
-                r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\.\d{3}", first_line
-            )
+            match = re.match(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\.\d{3}", first_line)
             if match:
                 timestamp_str = match.group(1)
     except Exception:
@@ -215,13 +211,7 @@ class AppLogger:
         for handler in list(root.handlers):
             root.removeHandler(handler)
 
-        fmt = (
-            "%(asctime)s.%(msecs)03d "
-            "%(levelname)s "
-            "%(name)s "
-            "[%(threadName)s] "
-            "%(message)s"
-        )
+        fmt = "%(asctime)s.%(msecs)03d %(levelname)s %(name)s [%(threadName)s] %(message)s"
         formatter = logging.Formatter(fmt=fmt, datefmt="%Y-%m-%d %H:%M:%S")
 
         file_handler = FlushingRotatingFileHandler(

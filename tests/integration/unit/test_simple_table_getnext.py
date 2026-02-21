@@ -113,9 +113,7 @@ def test_simple_2x2_table_with_getnext(
     }
 
     # Register the table (should NOT export to pysnmp, just track in JSON)
-    registrar.register_single_table(
-        "TEST-MIB", "testTable", table_data, type_registry, mib_jsons
-    )
+    registrar.register_single_table("TEST-MIB", "testTable", table_data, type_registry, mib_jsons)
 
     # Now try to access table OIDs via MIB view
     # We'll try to look up OIDs in the MIB to see if they're accessible
@@ -129,27 +127,21 @@ def test_simple_2x2_table_with_getnext(
     try:
         # Test getting the table entry
         modName, symName, indices = mib_view.getNodeName((table_oid,))
-        logger.info(
-            f"Table OID lookup: modName={modName}, symName={symName}, indices={indices}"
-        )
+        logger.info(f"Table OID lookup: modName={modName}, symName={symName}, indices={indices}")
     except Exception as e:
         logger.info(f"Cannot lookup table OID (expected): {e}")
 
     try:
         # Test getting the entry
         modName, symName, indices = mib_view.getNodeName((entry_oid,))
-        logger.info(
-            f"Entry OID lookup: modName={modName}, symName={symName}, indices={indices}"
-        )
+        logger.info(f"Entry OID lookup: modName={modName}, symName={symName}, indices={indices}")
     except Exception as e:
         logger.info(f"Cannot lookup entry OID (expected): {e}")
 
     try:
         # Test getting a column
         modName, symName, indices = mib_view.getNodeName((col1_oid,))
-        logger.info(
-            f"Column OID lookup: modName={modName}, symName={symName}, indices={indices}"
-        )
+        logger.info(f"Column OID lookup: modName={modName}, symName={symName}, indices={indices}")
     except Exception as e:
         logger.info(f"Cannot lookup column OID (expected): {e}")
 
@@ -157,9 +149,7 @@ def test_simple_2x2_table_with_getnext(
     assert True, "Table registration completed without error"
 
 
-def test_table_oid_hierarchy(
-    mib_builder: builder.MibBuilder, logger: logging.Logger
-) -> None:
+def test_table_oid_hierarchy(mib_builder: builder.MibBuilder, logger: logging.Logger) -> None:
     """
     Test OID hierarchy for a simple table.
 
@@ -270,12 +260,8 @@ def test_table_without_export_responds_to_mib_lookup(
             f"getNextMibNode from table: modName={modName}, symName={symName}, indices={indices}"
         )
     except Exception as e:
-        logger.info(
-            f"getNextMibNode from table failed (expected): {type(e).__name__}: {e}"
-        )
+        logger.info(f"getNextMibNode from table failed (expected): {type(e).__name__}: {e}")
 
     # This test documents the expected behavior when table export is disabled
     # The MIB view won't know about our custom table OIDs
-    assert True, (
-        "Test completed - documents expected behavior when tables aren't exported"
-    )
+    assert True, "Test completed - documents expected behavior when tables aren't exported"

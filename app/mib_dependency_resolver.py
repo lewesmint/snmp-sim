@@ -124,9 +124,7 @@ class MibDependencyResolver:
         self._dependency_cache[mib_name] = dependencies
         return dependencies.copy()
 
-    def get_all_dependencies(
-        self, mib_name: str, visited: Optional[Set[str]] = None
-    ) -> Set[str]:
+    def get_all_dependencies(self, mib_name: str, visited: Optional[Set[str]] = None) -> Set[str]:
         """Get all dependencies of a MIB (direct and transitive).
 
         Args:
@@ -296,8 +294,6 @@ class MibDependencyResolver:
         return {
             "mermaid_code": diagram,
             "configured_mibs": dependency_info.get("configured_mibs", []),
-            "transitive_dependencies": dependency_info.get(
-                "transitive_dependencies", []
-            ),
+            "transitive_dependencies": dependency_info.get("transitive_dependencies", []),
             "summary": dependency_info.get("summary", {}),
         }

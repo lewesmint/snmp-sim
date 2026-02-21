@@ -96,9 +96,7 @@ class TestTypeRegistryLoading:
 class TestTypeRegistryUsage:
     """Test how type registry is used in the codebase."""
 
-    def test_get_type_info(
-        self, sample_type_registry: Dict[str, Dict[str, Any]]
-    ) -> None:
+    def test_get_type_info(self, sample_type_registry: Dict[str, Dict[str, Any]]) -> None:
         """Test retrieving type info from registry."""
         type_name = "Integer32"
         type_info = sample_type_registry.get(type_name, {})
@@ -106,9 +104,7 @@ class TestTypeRegistryUsage:
         assert type_info is not None
         assert type_info["base_type"] == "INTEGER"
 
-    def test_get_base_type(
-        self, sample_type_registry: Dict[str, Dict[str, Any]]
-    ) -> None:
+    def test_get_base_type(self, sample_type_registry: Dict[str, Dict[str, Any]]) -> None:
         """Test getting base type from type info."""
         type_name = "DisplayString"
         type_info = sample_type_registry.get(type_name, {})
@@ -116,9 +112,7 @@ class TestTypeRegistryUsage:
 
         assert base_type == "OCTET STRING"
 
-    def test_missing_type_fallback(
-        self, sample_type_registry: Dict[str, Dict[str, Any]]
-    ) -> None:
+    def test_missing_type_fallback(self, sample_type_registry: Dict[str, Dict[str, Any]]) -> None:
         """Test fallback when type is not in registry."""
         type_name = "NonexistentType"
         type_info = sample_type_registry.get(type_name, {})
@@ -129,9 +123,7 @@ class TestTypeRegistryUsage:
         base_type = type_info.get("base_type")
         assert base_type is None
 
-    def test_type_with_constraints(
-        self, sample_type_registry: Dict[str, Dict[str, Any]]
-    ) -> None:
+    def test_type_with_constraints(self, sample_type_registry: Dict[str, Dict[str, Any]]) -> None:
         """Test accessing type constraints."""
         type_info = sample_type_registry["Integer32"]
         constraints = type_info.get("constraints")
@@ -140,9 +132,7 @@ class TestTypeRegistryUsage:
         assert isinstance(constraints, list)
         assert len(constraints) > 0
 
-    def test_type_with_enums(
-        self, sample_type_registry: Dict[str, Dict[str, Any]]
-    ) -> None:
+    def test_type_with_enums(self, sample_type_registry: Dict[str, Dict[str, Any]]) -> None:
         """Test accessing type enumerations."""
         # Add a type with enums for testing
         sample_type_registry["TestEnum"] = {

@@ -30,9 +30,7 @@ def mib_builder() -> builder.MibBuilder:
     return builder.MibBuilder()
 
 
-def test_table_registration_disabled_in_pysnmp(
-    logger: logging.Logger, mocker: Any
-) -> None:
+def test_table_registration_disabled_in_pysnmp(logger: logging.Logger, mocker: Any) -> None:
     """
     Verify that table symbols are NOT exported to pysnmp.
 

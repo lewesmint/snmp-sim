@@ -28,9 +28,7 @@ class TestDefaultValuePluginRegistry:
         assert "test_plugin" in registry.list_plugins()
         assert len(registry.list_plugins()) == 1
 
-    def test_register_duplicate_plugin_replaces(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_register_duplicate_plugin_replaces(self, caplog: pytest.LogCaptureFixture) -> None:
         """Test that registering a plugin with the same name replaces the old one."""
         registry = DefaultValuePluginRegistry()
 
@@ -163,8 +161,7 @@ class TestGlobalFunctions:
             # Restore original plugins
             registry._plugins = original_plugins
             registry._plugin_names = {
-                name: plugin
-                for name, plugin in zip(registry.list_plugins(), original_plugins)
+                name: plugin for name, plugin in zip(registry.list_plugins(), original_plugins)
             }
 
     def test_get_registry_returns_global_instance(self) -> None:

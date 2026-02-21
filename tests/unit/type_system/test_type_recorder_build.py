@@ -94,9 +94,7 @@ def test_build_with_textual_convention_and_scalar(
     )
 
     # Also ensure get_snmpv2_smi_types returns at least the seeded name
-    monkeypatch.setattr(
-        TypeRecorder, "get_snmpv2_smi_types", lambda self: {"Integer32"}
-    )
+    monkeypatch.setattr(TypeRecorder, "get_snmpv2_smi_types", lambda self: {"Integer32"})
 
     tr = TypeRecorder(tmp_path)
     tr.build()

@@ -56,9 +56,7 @@ class SNMPControllerGUI:
         ] = {}  # Store OIDs for rebuilding (name -> OID tuple)
         self.oid_values: Dict[str, str] = {}  # oid_str -> value
         self.oid_metadata: Dict[str, Dict[str, Any]] = {}  # oid_str -> metadata
-        self.table_instances_data: Dict[
-            str, Dict[str, Any]
-        ] = {}  # Pre-loaded table instances data
+        self.table_instances_data: Dict[str, Dict[str, Any]] = {}  # Pre-loaded table instances data
         self.table_schemas: Dict[str, Dict[str, Any]] = {}
         self.oid_to_item: Dict[str, str] = {}  # oid_str -> tree item id
         self._pending_oid_focus: Dict[str, Optional[str]] | None = None
@@ -240,9 +238,7 @@ class SNMPControllerGUI:
         toolbar = ctk.CTkFrame(oid_frame)
         toolbar.pack(fill="x", padx=6, pady=(4, 6))
 
-        expand_btn = ctk.CTkButton(
-            toolbar, text="Expand All", command=self._expand_all, width=100
-        )
+        expand_btn = ctk.CTkButton(toolbar, text="Expand All", command=self._expand_all, width=100)
         collapse_btn = ctk.CTkButton(
             toolbar, text="Collapse All", command=self._collapse_all, width=100
         )
@@ -258,23 +254,15 @@ class SNMPControllerGUI:
         search_entry.bind("<Return>", self._on_search_first)
 
         # Search button (Go cycles through matches)
-        self.search_btn = ctk.CTkButton(
-            toolbar, text="Go", command=self._on_search_first, width=50
-        )
+        self.search_btn = ctk.CTkButton(toolbar, text="Go", command=self._on_search_first, width=50)
         self.search_btn.pack(side="left", padx=(0, 6))
 
         # Initialize search state
-        self._search_matches: list[
-            tuple[str, str]
-        ] = []  # List of (oid_str, display_name) tuples
+        self._search_matches: list[tuple[str, str]] = []  # List of (oid_str, display_name) tuples
         self._search_current_index = 0  # Current match index
         self._search_term = ""
-        self._current_table_oid: str | None = (
-            None  # Track which table we're currently viewing
-        )
-        self._search_setting_selection = (
-            False  # Flag to distinguish search vs manual selection
-        )
+        self._current_table_oid: str | None = None  # Track which table we're currently viewing
+        self._search_setting_selection = False  # Flag to distinguish search vs manual selection
 
         # Selected item details (OID, value, type) - copyable, non-editable
         self.selected_info_var = ctk.StringVar(value="")
@@ -303,9 +291,7 @@ class SNMPControllerGUI:
         # Configure Treeview style for better column distinction
         style = ttk.Style()
         # style.theme_use("default")
-        style.theme_use(
-            "clam"
-        )  # optional: helps rowheight be respected on some platforms
+        style.theme_use("clam")  # optional: helps rowheight be respected on some platforms
         self.tree_font_size = 22
         self.tree_row_height = 40
         style.configure(
@@ -313,9 +299,7 @@ class SNMPControllerGUI:
             font=("Helvetica", self.tree_font_size),
             rowheight=self.tree_row_height,
         )
-        style.configure(
-            "Treeview.Heading", font=("Helvetica", self.tree_font_size + 1, "bold")
-        )
+        style.configure("Treeview.Heading", font=("Helvetica", self.tree_font_size + 1, "bold"))
 
         # Configure colors based on appearance mode
 
@@ -364,16 +348,10 @@ class SNMPControllerGUI:
         # Configure columns with borders for better separation
         self.oid_tree.column("#0", width=250, minwidth=150, stretch=False)
         self.oid_tree.column("oid", width=200, minwidth=150, stretch=False, anchor="w")
-        self.oid_tree.column(
-            "instance", width=160, minwidth=120, stretch=False, anchor="w"
-        )
-        self.oid_tree.column(
-            "value", width=200, minwidth=100, stretch=False, anchor="w"
-        )
+        self.oid_tree.column("instance", width=160, minwidth=120, stretch=False, anchor="w")
+        self.oid_tree.column("value", width=200, minwidth=100, stretch=False, anchor="w")
         self.oid_tree.column("type", width=120, minwidth=80, stretch=False, anchor="w")
-        self.oid_tree.column(
-            "access", width=100, minwidth=80, stretch=False, anchor="w"
-        )
+        self.oid_tree.column("access", width=100, minwidth=80, stretch=False, anchor="w")
         self.oid_tree.column("mib", width=120, minwidth=80, stretch=False, anchor="w")
 
         # Track manual column resizes to avoid auto-expanding the tree column
@@ -384,15 +362,9 @@ class SNMPControllerGUI:
         self.oid_tree.tag_configure("evenrow", background=bg_color)
 
         # Scrollbars
-        v_scroll = ttk.Scrollbar(
-            tree_frame, orient="vertical", command=self.oid_tree.yview
-        )
-        h_scroll = ttk.Scrollbar(
-            tree_frame, orient="horizontal", command=self.oid_tree.xview
-        )
-        self.oid_tree.configure(
-            yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set
-        )
+        v_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.oid_tree.yview)
+        h_scroll = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.oid_tree.xview)
+        self.oid_tree.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
 
         self.oid_tree.grid(row=0, column=0, sticky="nsew", padx=(5, 0), pady=5)
         v_scroll.grid(row=0, column=1, sticky="ns", pady=5)
@@ -498,9 +470,7 @@ class SNMPControllerGUI:
             table_frame, columns=("index",), show="headings", style="OID.Treeview"
         )
         self.table_tree.heading("index", text="Index")
-        self.table_tree.column(
-            "index", width=100, minwidth=50, stretch=False, anchor="w"
-        )
+        self.table_tree.column("index", width=100, minwidth=50, stretch=False, anchor="w")
 
         # Bind selection change
         self.table_tree.bind("<<TreeviewSelect>>", self._on_table_row_select)
@@ -512,15 +482,9 @@ class SNMPControllerGUI:
         self.table_tree.bind("<Configure>", self._on_table_configure)
 
         # Scrollbars
-        v_scroll = ttk.Scrollbar(
-            table_frame, orient="vertical", command=self.table_tree.yview
-        )
-        h_scroll = ttk.Scrollbar(
-            table_frame, orient="horizontal", command=self.table_tree.xview
-        )
-        self.table_tree.configure(
-            yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set
-        )
+        v_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.table_tree.yview)
+        h_scroll = ttk.Scrollbar(table_frame, orient="horizontal", command=self.table_tree.xview)
+        self.table_tree.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
 
         self.table_tree.pack(fill="both", expand=True, padx=10, pady=10)
         v_scroll.pack(side="right", fill="y")
@@ -529,9 +493,7 @@ class SNMPControllerGUI:
 
         # Edit overlay for in-place cell editing - using tk.Frame for proper overlay
         # Create as child of root so place() uses absolute coordinates
-        self.edit_overlay_frame = tk.Frame(
-            self.root, bg="white", relief="solid", borderwidth=1
-        )
+        self.edit_overlay_frame = tk.Frame(self.root, bg="white", relief="solid", borderwidth=1)
         # Font size is tree_font_size - 1
         # Use ttk.Entry for text editing (will swap to Combobox for enums)
         self.edit_overlay_entry = ttk.Entry(
@@ -551,14 +513,10 @@ class SNMPControllerGUI:
         self.editing_column: str | None = None
         self.editing_oid: str | None = None
         self._saving_cell: bool = False  # Flag to prevent re-entrant saves
-        self._combo_just_selected: bool = (
-            False  # Flag to prevent double-save from FocusOut
-        )
+        self._combo_just_selected: bool = False  # Flag to prevent double-save from FocusOut
 
         # Store current table context for cell editing
-        self._current_table_columns: list[
-            tuple[str, str, int]
-        ] = []  # (name, col_oid, col_num)
+        self._current_table_columns: list[tuple[str, str, int]] = []  # (name, col_oid, col_num)
         self._current_index_columns: list[str] = []
         self._current_columns_meta: dict[str, Any] = {}
         self._current_table_item: str | None = None
@@ -580,15 +538,11 @@ class SNMPControllerGUI:
         toolbar = ctk.CTkFrame(links_frame)
         toolbar.pack(fill="x", padx=10, pady=(10, 6))
 
-        refresh_btn = ctk.CTkButton(
-            toolbar, text="Refresh", command=self._refresh_links, width=100
-        )
+        refresh_btn = ctk.CTkButton(toolbar, text="Refresh", command=self._refresh_links, width=100)
         add_btn = ctk.CTkButton(
             toolbar, text="Add", command=lambda: self._open_link_dialog(None), width=80
         )
-        edit_btn = ctk.CTkButton(
-            toolbar, text="Edit", command=self._edit_selected_link, width=80
-        )
+        edit_btn = ctk.CTkButton(toolbar, text="Edit", command=self._edit_selected_link, width=80)
         delete_btn = ctk.CTkButton(
             toolbar, text="Delete", command=self._delete_selected_link, width=80
         )
@@ -611,22 +565,12 @@ class SNMPControllerGUI:
         self.links_tree.heading("source", text="Source")
 
         self.links_tree.column("id", width=180, minwidth=140, stretch=False, anchor="w")
-        self.links_tree.column(
-            "scope", width=120, minwidth=100, stretch=False, anchor="w"
-        )
-        self.links_tree.column(
-            "match", width=140, minwidth=120, stretch=False, anchor="w"
-        )
-        self.links_tree.column(
-            "endpoints", width=520, minwidth=200, stretch=True, anchor="w"
-        )
-        self.links_tree.column(
-            "source", width=100, minwidth=80, stretch=False, anchor="w"
-        )
+        self.links_tree.column("scope", width=120, minwidth=100, stretch=False, anchor="w")
+        self.links_tree.column("match", width=140, minwidth=120, stretch=False, anchor="w")
+        self.links_tree.column("endpoints", width=520, minwidth=200, stretch=True, anchor="w")
+        self.links_tree.column("source", width=100, minwidth=80, stretch=False, anchor="w")
 
-        v_scroll = ttk.Scrollbar(
-            links_frame, orient="vertical", command=self.links_tree.yview
-        )
+        v_scroll = ttk.Scrollbar(links_frame, orient="vertical", command=self.links_tree.yview)
         self.links_tree.configure(yscrollcommand=v_scroll.set)
 
         self.links_tree.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -659,9 +603,7 @@ class SNMPControllerGUI:
                 self.links_tree.delete(item)
 
             for link in self.links_data:
-                endpoints_display = self._format_link_endpoints(
-                    link.get("endpoints", [])
-                )
+                endpoints_display = self._format_link_endpoints(link.get("endpoints", []))
                 self.links_tree.insert(
                     "",
                     "end",
@@ -719,9 +661,7 @@ class SNMPControllerGUI:
                 continue
             if ":" in raw:
                 table_oid, column = raw.split(":", 1)
-                endpoints.append(
-                    {"table_oid": table_oid.strip(), "column": column.strip()}
-                )
+                endpoints.append({"table_oid": table_oid.strip(), "column": column.strip()})
                 continue
             parts = raw.split()
             if len(parts) == 1:
@@ -751,26 +691,18 @@ class SNMPControllerGUI:
         scope_var = ctk.StringVar(
             value="per-instance" if link is None else link.get("scope", "per-instance")
         )
-        scope_menu = ctk.CTkOptionMenu(
-            frame, values=["per-instance", "global"], variable=scope_var
-        )
+        scope_menu = ctk.CTkOptionMenu(frame, values=["per-instance", "global"], variable=scope_var)
         scope_menu.grid(row=1, column=1, sticky="w", pady=6)
 
         ctk.CTkLabel(frame, text="Match:").grid(row=2, column=0, sticky="w", pady=6)
         match_var = ctk.StringVar(
             value="shared-index" if link is None else link.get("match", "shared-index")
         )
-        match_menu = ctk.CTkOptionMenu(
-            frame, values=["shared-index"], variable=match_var
-        )
+        match_menu = ctk.CTkOptionMenu(frame, values=["shared-index"], variable=match_var)
         match_menu.grid(row=2, column=1, sticky="w", pady=6)
 
-        ctk.CTkLabel(frame, text="Description:").grid(
-            row=3, column=0, sticky="w", pady=6
-        )
-        desc_var = ctk.StringVar(
-            value="" if link is None else link.get("description", "")
-        )
+        ctk.CTkLabel(frame, text="Description:").grid(row=3, column=0, sticky="w", pady=6)
+        desc_var = ctk.StringVar(value="" if link is None else link.get("description", ""))
         desc_entry = ctk.CTkEntry(frame, textvariable=desc_var)
         desc_entry.grid(row=3, column=1, sticky="ew", pady=6)
 
@@ -799,9 +731,7 @@ class SNMPControllerGUI:
         selected_tree.pack(side="left", fill="both", expand=True)
         selected_scroll.pack(side="right", fill="y")
 
-        ctk.CTkLabel(frame, text="Available:").grid(
-            row=5, column=0, sticky="nw", pady=6
-        )
+        ctk.CTkLabel(frame, text="Available:").grid(row=5, column=0, sticky="nw", pady=6)
 
         available_frame = ctk.CTkFrame(frame)
         available_frame.grid(row=5, column=1, sticky="nsew", pady=6)
@@ -852,9 +782,7 @@ class SNMPControllerGUI:
                     )
                 elif scope == "global" and parent_type == "MibTable":
                     # Show scalars for global
-                    available_tree.insert(
-                        "", "end", values=(name, oid_str), tags=(oid_str, "")
-                    )
+                    available_tree.insert("", "end", values=(name, oid_str), tags=(oid_str, ""))
 
         def _refresh_selected_tree() -> None:
             """Refresh selected endpoints tree."""
@@ -1087,12 +1015,8 @@ class SNMPControllerGUI:
         conn_frame = ctk.CTkFrame(config_frame)
         conn_frame.pack(fill="x", padx=10, pady=10)
 
-        conn_label = ctk.CTkLabel(
-            conn_frame, text="Connection Settings", font=("", 14, "bold")
-        )
-        conn_label.grid(
-            row=0, column=0, columnspan=2, pady=(10, 15), sticky="w", padx=10
-        )
+        conn_label = ctk.CTkLabel(conn_frame, text="Connection Settings", font=("", 14, "bold"))
+        conn_label.grid(row=0, column=0, columnspan=2, pady=(10, 15), sticky="w", padx=10)
 
         # Host
         ctk.CTkLabel(conn_frame, text="Host:").grid(
@@ -1134,9 +1058,7 @@ class SNMPControllerGUI:
         mibs_label.pack(pady=(10, 5), padx=10, anchor="w")
 
         # Create a text widget to show summary and dependencies
-        self.mibs_text = ctk.CTkTextbox(
-            mibs_outer_frame, height=100, font=("Courier", 10)
-        )
+        self.mibs_text = ctk.CTkTextbox(mibs_outer_frame, height=100, font=("Courier", 10))
         self.mibs_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         self.mibs_text.configure(state="disabled")
 
@@ -1148,9 +1070,7 @@ class SNMPControllerGUI:
         scripts_frame = self.tabview.tab("Scripts")
 
         # Scripts content
-        scripts_label = ctk.CTkLabel(
-            scripts_frame, text="Scripts", font=("", 16, "bold")
-        )
+        scripts_label = ctk.CTkLabel(scripts_frame, text="Scripts", font=("", 16, "bold"))
         scripts_label.pack(pady=20)
 
         scripts_text = ctk.CTkLabel(scripts_frame, text="TBD", font=("", 12))
@@ -1173,9 +1093,7 @@ class SNMPControllerGUI:
         dest_frame = ctk.CTkFrame(self.traps_scrollable)
         dest_frame.pack(fill="x", pady=(0, 10))
 
-        dest_label = ctk.CTkLabel(
-            dest_frame, text="Trap Destinations", font=("", 14, "bold")
-        )
+        dest_label = ctk.CTkLabel(dest_frame, text="Trap Destinations", font=("", 14, "bold"))
         dest_label.pack(pady=(10, 5), padx=10, anchor="w")
 
         # Compact destination controls
@@ -1184,21 +1102,15 @@ class SNMPControllerGUI:
 
         ctk.CTkLabel(dest_controls, text="Host:").grid(row=0, column=0, padx=(0, 5))
         self.dest_host_var = ctk.StringVar(value="localhost")
-        host_entry = ctk.CTkEntry(
-            dest_controls, textvariable=self.dest_host_var, width=120
-        )
+        host_entry = ctk.CTkEntry(dest_controls, textvariable=self.dest_host_var, width=120)
         host_entry.grid(row=0, column=1, padx=(0, 10))
 
         ctk.CTkLabel(dest_controls, text="Port:").grid(row=0, column=2, padx=(0, 5))
         self.dest_port_var = ctk.StringVar(value="162")
-        port_entry = ctk.CTkEntry(
-            dest_controls, textvariable=self.dest_port_var, width=60
-        )
+        port_entry = ctk.CTkEntry(dest_controls, textvariable=self.dest_port_var, width=60)
         port_entry.grid(row=0, column=3, padx=(0, 10))
 
-        add_btn = ctk.CTkButton(
-            dest_controls, text="Add", command=self._add_destination, width=60
-        )
+        add_btn = ctk.CTkButton(dest_controls, text="Add", command=self._add_destination, width=60)
         add_btn.grid(row=0, column=4, padx=(0, 5))
 
         remove_btn = ctk.CTkButton(
@@ -1226,9 +1138,7 @@ class SNMPControllerGUI:
         # Create a custom style for destinations with smaller row height
         dest_bg_color = "#2b2b2b" if ctk.get_appearance_mode() == "Dark" else "#ffffff"
         dest_fg_color = "#ffffff" if ctk.get_appearance_mode() == "Dark" else "#000000"
-        dest_selected_bg = (
-            "#1f538d" if ctk.get_appearance_mode() == "Dark" else "#0078d7"
-        )
+        dest_selected_bg = "#1f538d" if ctk.get_appearance_mode() == "Dark" else "#0078d7"
 
         dest_style = ttk.Style()
         dest_style.configure(
@@ -1277,9 +1187,7 @@ class SNMPControllerGUI:
         receiver_frame = ctk.CTkFrame(self.traps_scrollable)
         receiver_frame.pack(fill="x", pady=(0, 10))
 
-        receiver_label = ctk.CTkLabel(
-            receiver_frame, text="Trap Receiver", font=("", 14, "bold")
-        )
+        receiver_label = ctk.CTkLabel(receiver_frame, text="Trap Receiver", font=("", 14, "bold"))
         receiver_label.pack(pady=(10, 5), padx=10, anchor="w")
 
         # Receiver controls
@@ -1287,13 +1195,9 @@ class SNMPControllerGUI:
         receiver_controls.pack(fill="x", padx=10, pady=(0, 10))
 
         # Port configuration
-        ctk.CTkLabel(receiver_controls, text="Listen Port:").grid(
-            row=0, column=0, padx=(0, 5)
-        )
+        ctk.CTkLabel(receiver_controls, text="Listen Port:").grid(row=0, column=0, padx=(0, 5))
         self.receiver_port_var = ctk.StringVar(value="16662")
-        port_entry = ctk.CTkEntry(
-            receiver_controls, textvariable=self.receiver_port_var, width=80
-        )
+        port_entry = ctk.CTkEntry(receiver_controls, textvariable=self.receiver_port_var, width=80)
         port_entry.grid(row=0, column=1, padx=(0, 10))
 
         # Start/Stop buttons
@@ -1335,9 +1239,7 @@ class SNMPControllerGUI:
         left_frame.pack(side="left", fill="both", expand=True, padx=(0, 5))
 
         # Trap selection
-        select_label = ctk.CTkLabel(
-            left_frame, text="Select Trap", font=("", 12, "bold")
-        )
+        select_label = ctk.CTkLabel(left_frame, text="Select Trap", font=("", 12, "bold"))
         select_label.pack(pady=(10, 5), padx=10, anchor="w")
 
         select_frame = ctk.CTkFrame(left_frame, fg_color="transparent")
@@ -1365,14 +1267,10 @@ class SNMPControllerGUI:
         self.trap_index_frame.pack_forget()
 
         # Trap info
-        info_label = ctk.CTkLabel(
-            left_frame, text="Trap Details", font=("", 12, "bold")
-        )
+        info_label = ctk.CTkLabel(left_frame, text="Trap Details", font=("", 12, "bold"))
         info_label.pack(pady=(10, 5), padx=10, anchor="w")
 
-        self.trap_info_text = ctk.CTkTextbox(
-            left_frame, height=150, font=("Courier", 12)
-        )
+        self.trap_info_text = ctk.CTkTextbox(left_frame, height=150, font=("Courier", 12))
         self.trap_info_text.pack(fill="x", padx=10, pady=(0, 10))
         self.trap_info_text.configure(state="disabled")
 
@@ -1424,9 +1322,7 @@ class SNMPControllerGUI:
         header_frame.pack(fill="x", padx=10, pady=(0, 5))
 
         # Configure grid columns to match row layout
-        header_frame.grid_columnconfigure(
-            0, weight=0, minsize=self.trap_table_col_widths["oid"]
-        )
+        header_frame.grid_columnconfigure(0, weight=0, minsize=self.trap_table_col_widths["oid"])
         header_frame.grid_columnconfigure(
             1, weight=0, minsize=self.trap_table_col_widths["current"]
         )
@@ -1440,15 +1336,15 @@ class SNMPControllerGUI:
         ctk.CTkLabel(header_frame, text="OID", font=("", 10, "bold"), anchor="w").grid(
             row=0, column=0, padx=(5, 5), sticky="ew"
         )
-        ctk.CTkLabel(
-            header_frame, text="Current Value", font=("", 10, "bold"), anchor="w"
-        ).grid(row=0, column=1, padx=(0, 5), sticky="ew")
+        ctk.CTkLabel(header_frame, text="Current Value", font=("", 10, "bold"), anchor="w").grid(
+            row=0, column=1, padx=(0, 5), sticky="ew"
+        )
         ctk.CTkLabel(
             header_frame, text="Force Override", font=("", 10, "bold"), anchor="center"
         ).grid(row=0, column=2, padx=(0, 5))
-        ctk.CTkLabel(
-            header_frame, text="Override Value", font=("", 10, "bold"), anchor="w"
-        ).grid(row=0, column=3, padx=(0, 5), sticky="ew")
+        ctk.CTkLabel(header_frame, text="Override Value", font=("", 10, "bold"), anchor="w").grid(
+            row=0, column=3, padx=(0, 5), sticky="ew"
+        )
 
         # Scrollable table for OID overrides
         table_frame = ctk.CTkScrollableFrame(right_frame, height=200)
@@ -1499,9 +1395,7 @@ class SNMPControllerGUI:
                 return obj_name == "sysUpTime"
         return False
 
-    def _create_oid_table_row(
-        self, oid_name: str, current_value: str = ""
-    ) -> Dict[str, Any]:
+    def _create_oid_table_row(self, oid_name: str, current_value: str = "") -> Dict[str, Any]:
         """Create a row in the OID overrides table."""
         row_frame = ctk.CTkFrame(self.oid_table_frame)
         row_frame.pack(fill="x", pady=2)
@@ -1532,12 +1426,8 @@ class SNMPControllerGUI:
                 index_part = "." + parts[1]
 
         # Check if this is an index varbind (e.g., ifIndex)
-        plain_name = (
-            base_oid_name.split("::", 1)[1] if "::" in base_oid_name else base_oid_name
-        )
-        is_index = (
-            self._is_index_varbind(oid_name) or plain_name in self._trap_index_columns
-        )
+        plain_name = base_oid_name.split("::", 1)[1] if "::" in base_oid_name else base_oid_name
+        is_index = self._is_index_varbind(oid_name) or plain_name in self._trap_index_columns
 
         # Check if this is sysUpTime (special case - always real-time)
         is_sysuptime = self._is_sysuptime_varbind(oid_name)
@@ -1586,8 +1476,7 @@ class SNMPControllerGUI:
         override_entry: Any
         if has_enums and not is_index and not is_sysuptime:
             enum_values = [
-                f"{val} ({name})"
-                for name, val in sorted(enums.items(), key=lambda x: x[1])
+                f"{val} ({name})" for name, val in sorted(enums.items(), key=lambda x: x[1])
             ]
             override_entry = ctk.CTkComboBox(
                 row_frame,
@@ -1641,9 +1530,7 @@ class SNMPControllerGUI:
         elif is_index:
             # Hide checkbox/entry/current value for index varbinds
             current_label.configure(text="")
-            spacer = ctk.CTkLabel(
-                row_frame, text="", width=checkbox_col_width + override_col_width
-            )
+            spacer = ctk.CTkLabel(row_frame, text="", width=checkbox_col_width + override_col_width)
             spacer.grid(row=0, column=2, columnspan=2, padx=(0, 5), sticky="ew")
         else:
             # Show checkbox and entry for non-index varbinds
@@ -1656,13 +1543,9 @@ class SNMPControllerGUI:
             def on_checkbox_toggle() -> None:
                 if use_override_var.get():
                     if not override_value_var.get():
-                        current_text = (
-                            current_label.cget("text") if current_label else ""
-                        )
+                        current_text = current_label.cget("text") if current_label else ""
                         override_value_var.set(current_text)
-                    override_entry.configure(
-                        state="readonly" if has_enums else "normal"
-                    )
+                    override_entry.configure(state="readonly" if has_enums else "normal")
                 else:
                     override_entry.configure(state="disabled")
                 schedule_save_event()
@@ -1718,9 +1601,7 @@ class SNMPControllerGUI:
             if row["is_table_oid"]:
                 # Strip MIB prefix from base_oid_name for display
                 display_base = (
-                    base_oid_name.split("::", 1)[1]
-                    if "::" in base_oid_name
-                    else base_oid_name
+                    base_oid_name.split("::", 1)[1] if "::" in base_oid_name else base_oid_name
                 )
                 # Update the index part with dot notation and rebuild the display name
                 new_display_name = f"{display_base}.{current_index}"
@@ -1757,9 +1638,7 @@ class SNMPControllerGUI:
             except Exception:
                 pass
 
-        self._trap_override_save_job = self.root.after(
-            400, self._save_all_overrides_silent
-        )
+        self._trap_override_save_job = self.root.after(400, self._save_all_overrides_silent)
 
     def _clear_oid_table(self) -> None:
         """Clear all rows from the OID overrides table."""
@@ -1806,9 +1685,7 @@ class SNMPControllerGUI:
             font = tkfont.Font(family="Helvetica", size=10)
             max_width = self.trap_table_col_widths.get("oid", 260)
             for oid_name in oid_list:
-                display_name = (
-                    oid_name.split("::", 1)[1] if "::" in oid_name else oid_name
-                )
+                display_name = oid_name.split("::", 1)[1] if "::" in oid_name else oid_name
                 measured = font.measure(display_name) + 20
                 if measured > max_width:
                     max_width = measured
@@ -1835,9 +1712,7 @@ class SNMPControllerGUI:
         """Load stored overrides for the specified trap and update table."""
         self._loading_trap_overrides = True
         try:
-            response = requests.get(
-                f"{self.api_url}/trap-overrides/{trap_name}", timeout=5
-            )
+            response = requests.get(f"{self.api_url}/trap-overrides/{trap_name}", timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 self.current_trap_overrides = data.get("overrides", {})
@@ -1933,9 +1808,7 @@ class SNMPControllerGUI:
                 # Resolve OID to actual dotted notation
                 actual_oid = self._resolve_table_oid(oid_name, row)
                 if actual_oid:
-                    response = requests.get(
-                        f"{self.api_url}/value?oid={actual_oid}", timeout=5
-                    )
+                    response = requests.get(f"{self.api_url}/value?oid={actual_oid}", timeout=5)
                     if response.status_code == 200:
                         data = response.json()
                         current_value = str(data.get("value", "N/A"))
@@ -1964,9 +1837,7 @@ class SNMPControllerGUI:
 
         try:
             # sysUpTime OID: 1.3.6.1.2.1.1.3.0
-            response = requests.get(
-                f"{self.api_url}/value?oid=1.3.6.1.2.1.1.3.0", timeout=5
-            )
+            response = requests.get(f"{self.api_url}/value?oid=1.3.6.1.2.1.1.3.0", timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 current_value = str(data.get("value", "N/A"))
@@ -2024,9 +1895,7 @@ class SNMPControllerGUI:
                 raw_value = row["override_entry"].get().strip()
 
             if row.get("is_enum"):
-                override_value = self._extract_enum_value(
-                    raw_value, row.get("enums", {})
-                )
+                override_value = self._extract_enum_value(raw_value, row.get("enums", {}))
             else:
                 override_value = raw_value
 
@@ -2058,9 +1927,7 @@ class SNMPControllerGUI:
             )
             if response.status_code == 200:
                 self.current_trap_overrides = merged_overrides
-                self._log(
-                    f"Saved {len(merged_overrides)} overrides for trap: {trap_name}"
-                )
+                self._log(f"Saved {len(merged_overrides)} overrides for trap: {trap_name}")
         except Exception as e:
             self._log(f"Failed to save overrides: {e}", "ERROR")
 
@@ -2074,13 +1941,9 @@ class SNMPControllerGUI:
                 # Convert to tuple format
                 self.trap_destinations = [(d["host"], d["port"]) for d in destinations]
                 self._update_dest_display()
-                self._log(
-                    f"Loaded {len(self.trap_destinations)} trap destination(s) from config"
-                )
+                self._log(f"Loaded {len(self.trap_destinations)} trap destination(s) from config")
             else:
-                self._log(
-                    f"Failed to load trap destinations: {response.text}", "WARNING"
-                )
+                self._log(f"Failed to load trap destinations: {response.text}", "WARNING")
                 # Fallback to default
                 self.trap_destinations = [("localhost", 162)]
         except Exception as e:
@@ -2122,9 +1985,7 @@ class SNMPControllerGUI:
                 self._load_trap_destinations()
                 self._log(f"Added trap destination: {host}:{port}")
             else:
-                messagebox.showerror(
-                    "Error", f"Failed to add destination: {response.text}"
-                )
+                messagebox.showerror("Error", f"Failed to add destination: {response.text}")
         except ValueError:
             messagebox.showerror("Error", "Invalid port number")
         except Exception as e:
@@ -2134,9 +1995,7 @@ class SNMPControllerGUI:
         """Remove the selected destinations via API."""
         selected_items = self.dest_tree.selection()
         if not selected_items:
-            messagebox.showwarning(
-                "No Selection", "Please select destinations to remove."
-            )
+            messagebox.showwarning("No Selection", "Please select destinations to remove.")
             return
 
         # Get the values of selected items
@@ -2164,9 +2023,7 @@ class SNMPControllerGUI:
                 if response.status_code == 200:
                     removed_hosts.append(f"{host}:{port}")
                 else:
-                    self._log(
-                        f"Failed to remove {host}:{port}: {response.text}", "WARNING"
-                    )
+                    self._log(f"Failed to remove {host}:{port}: {response.text}", "WARNING")
             except Exception as e:
                 self._log(f"Failed to remove {host}:{port}: {e}", "ERROR")
 
@@ -2201,9 +2058,7 @@ class SNMPControllerGUI:
 
         # Clear from API
         try:
-            response = requests.delete(
-                f"{self.api_url}/trap-overrides/{trap_name}", timeout=5
-            )
+            response = requests.delete(f"{self.api_url}/trap-overrides/{trap_name}", timeout=5)
             if response.status_code == 200:
                 # Clear table checkboxes and entries
                 for row in self.oid_rows:
@@ -2214,18 +2069,14 @@ class SNMPControllerGUI:
                     row["override_entry"].delete(0, "end")
                 self._log(f"Cleared all overrides for trap: {trap_name}")
             else:
-                messagebox.showerror(
-                    "Error", f"Failed to clear overrides: {response.text}"
-                )
+                messagebox.showerror("Error", f"Failed to clear overrides: {response.text}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to clear overrides: {e}")
 
     def _load_traps(self) -> None:
         """Load available traps from the REST API."""
         if not self.connected:
-            messagebox.showinfo(
-                "Not Connected", "Please connect to the SNMP agent first."
-            )
+            messagebox.showinfo("Not Connected", "Please connect to the SNMP agent first.")
             return
 
         try:
@@ -2236,9 +2087,7 @@ class SNMPControllerGUI:
             traps = data.get("traps", {})
             if not traps:
                 messagebox.showinfo("No Traps", "No traps found in the loaded MIBs.")
-                self.trap_dropdown.configure(
-                    values=["No traps available"], state="disabled"
-                )
+                self.trap_dropdown.configure(values=["No traps available"], state="disabled")
                 self.send_trap_btn.configure(state="disabled")
                 self.send_test_trap_btn.configure(state="disabled")
                 return
@@ -2441,9 +2290,7 @@ class SNMPControllerGUI:
         self._clear_trap_index_selectors()
 
         try:
-            response = requests.get(
-                f"{self.api_url}/trap-varbinds/{trap_name}", timeout=5
-            )
+            response = requests.get(f"{self.api_url}/trap-varbinds/{trap_name}", timeout=5)
             if response.status_code != 200:
                 return
             data = response.json()
@@ -2482,9 +2329,7 @@ class SNMPControllerGUI:
         values_by_column: Dict[str, list[str]] = {col: [] for col in index_columns}
         for inst in instances:
             inst_str = str(inst)
-            index_values = self._extract_index_values(
-                inst_str, index_columns, columns_meta
-            )
+            index_values = self._extract_index_values(inst_str, index_columns, columns_meta)
             for col in index_columns:
                 val = index_values.get(col, "")
                 if val and val not in values_by_column[col]:
@@ -2523,9 +2368,7 @@ class SNMPControllerGUI:
 
         self.trap_index_frame.pack(fill="x", pady=(0, 5), anchor="w")
 
-    def _resolve_table_oid(
-        self, oid_str: str, _row: Dict[str, Any] | None = None
-    ) -> str | None:
+    def _resolve_table_oid(self, oid_str: str, _row: Dict[str, Any] | None = None) -> str | None:
         """Resolve a table OID with .index suffix to an actual OID with instance number."""
         # Handle dot notation (e.g., "IF-MIB::ifAdminStatus.1")
         if "." in oid_str and oid_str[-1].isdigit():
@@ -2632,9 +2475,7 @@ class SNMPControllerGUI:
             port = int(self.receiver_port_var.get())
             payload = {"port": port, "community": "public"}
 
-            response = requests.post(
-                f"{self.api_url}/trap-receiver/start", json=payload, timeout=5
-            )
+            response = requests.post(f"{self.api_url}/trap-receiver/start", json=payload, timeout=5)
             response.raise_for_status()
             result = response.json()
 
@@ -2705,12 +2546,8 @@ class SNMPControllerGUI:
         info_frame = ctk.CTkFrame(header_frame)
         info_frame.pack(fill="x")
 
-        ctk.CTkLabel(info_frame, text=f"Trap: {trap_name}", font=("", 13)).pack(
-            anchor="w", pady=2
-        )
-        ctk.CTkLabel(info_frame, text=f"OID: {trap_oid}", font=("", 13)).pack(
-            anchor="w", pady=2
-        )
+        ctk.CTkLabel(info_frame, text=f"Trap: {trap_name}", font=("", 13)).pack(anchor="w", pady=2)
+        ctk.CTkLabel(info_frame, text=f"OID: {trap_oid}", font=("", 13)).pack(anchor="w", pady=2)
         ctk.CTkLabel(info_frame, text=f"Received at: {timestamp}", font=("", 13)).pack(
             anchor="w", pady=2
         )
@@ -2754,23 +2591,13 @@ class SNMPControllerGUI:
             varbinds_tree.insert("", "end", values=(vb_oid, vb_value, vb_type))
 
         # Close button
-        close_btn = ctk.CTkButton(
-            dialog, text="Close", command=dialog.destroy, width=100
-        )
+        close_btn = ctk.CTkButton(dialog, text="Close", command=dialog.destroy, width=100)
         close_btn.pack(pady=(0, 20))
 
         # Center the dialog on the parent window
         dialog.update_idletasks()
-        x = (
-            self.root.winfo_x()
-            + (self.root.winfo_width() // 2)
-            - (dialog.winfo_width() // 2)
-        )
-        y = (
-            self.root.winfo_y()
-            + (self.root.winfo_height() // 2)
-            - (dialog.winfo_height() // 2)
-        )
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (dialog.winfo_width() // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (dialog.winfo_height() // 2)
         dialog.geometry(f"+{x}+{y}")
 
     def _expand_all(self) -> None:
@@ -2821,9 +2648,7 @@ class SNMPControllerGUI:
 
         if self.oids_data:
             # Build hierarchical tree
-            root = self.oid_tree.insert(
-                "", "end", text="MIB Tree", values=("", "", "", "", "", "")
-            )
+            root = self.oid_tree.insert("", "end", text="MIB Tree", values=("", "", "", "", "", ""))
             self.oid_tree.item(root, open=True)  # Expand root by default
             self._build_tree_from_oids(root, self.oids_data)
             # Fetch values for top-level leaves
@@ -2833,16 +2658,12 @@ class SNMPControllerGUI:
             if system_oid in self.oid_to_item:
                 self._expand_path_to_item(self.oid_to_item[system_oid])
                 # Fetch values for system scalars
-                self.executor.submit(
-                    self._fetch_values_for_node, self.oid_to_item[system_oid]
-                )
+                self.executor.submit(self._fetch_values_for_node, self.oid_to_item[system_oid])
             # Ensure tree column width accommodates visible items
             self._ensure_tree_column_width()
         # If not connected or no data, leave empty
 
-    def _build_tree_from_oids(
-        self, parent: str, oids: Dict[str, Tuple[int, ...]]
-    ) -> None:
+    def _build_tree_from_oids(self, parent: str, oids: Dict[str, Tuple[int, ...]]) -> None:
         """Recursively build the tree from OID dict."""
         # Filter out scalar instance OIDs (those ending with .0)
         # We'll show them as instance "0" in the parent OID row instead
@@ -2862,9 +2683,7 @@ class SNMPControllerGUI:
 
         # Add base OIDs for scalars
         for base_oid, instance_name in scalar_instances.items():
-            base_name = (
-                instance_name[:-4] if instance_name.endswith("Inst") else instance_name
-            )
+            base_name = instance_name[:-4] if instance_name.endswith("Inst") else instance_name
             filtered_oids[base_name] = base_oid
 
         # Create a tree structure
@@ -2909,9 +2728,7 @@ class SNMPControllerGUI:
         Returns the updated row count for alternating row colors.
         """
         # Sort keys without comparing ints to strings (avoid TypeError)
-        for key, value in sorted(
-            tree.items(), key=lambda kv: (isinstance(kv[0], str), str(kv[0]))
-        ):
+        for key, value in sorted(tree.items(), key=lambda kv: (isinstance(kv[0], str), str(kv[0]))):
             if key == "__name__" or key == "__has_instance__":
                 continue
             # Ensure key is an int before extending current_oid so typing stays as tuple[int, ...]
@@ -2922,9 +2739,7 @@ class SNMPControllerGUI:
             oid_str = ".".join(str(x) for x in new_oid)
 
             # Determine if this node is a leaf (only a name) or a folder (has children)
-            child_keys = [
-                k for k in value.keys() if k not in ("__name__", "__has_instance__")
-            ]
+            child_keys = [k for k in value.keys() if k not in ("__name__", "__has_instance__")]
             is_leaf = len(child_keys) == 0
 
             # Prefer stored name for leaves, otherwise try name on this node
@@ -2940,54 +2755,34 @@ class SNMPControllerGUI:
 
                 if has_instance:
                     # Scalar - use base OID for access info
-                    access = str(
-                        self.oid_metadata.get(oid_str, {}).get("access", "")
-                    ).lower()
+                    access = str(self.oid_metadata.get(oid_str, {}).get("access", "")).lower()
                     if "write" in access:
                         icon_key = "edit"
-                    elif (
-                        "read" in access
-                        or "not-accessible" in access
-                        or "none" in access
-                    ):
+                    elif "read" in access or "not-accessible" in access or "none" in access:
                         icon_key = "lock"
                     else:
                         icon_key = "chart"
                     instance_str = "0"
                     instance_oid_str = oid_str + ".0"
                     val = self.oid_values.get(instance_oid_str, "")
-                    type_val = (
-                        self.oid_metadata.get(oid_str, {}).get("type") or "Unknown"
-                    )
+                    type_val = self.oid_metadata.get(oid_str, {}).get("type") or "Unknown"
                     access_val = (
                         self.oid_metadata.get(oid_str, {}).get("access") or "N/A"
                     )  # Use base OID
-                    mib_val = (
-                        self.oid_metadata.get(oid_str, {}).get("mib") or "N/A"
-                    )  # Use base OID
+                    mib_val = self.oid_metadata.get(oid_str, {}).get("mib") or "N/A"  # Use base OID
                 else:
                     # Regular leaf
-                    access = str(
-                        self.oid_metadata.get(oid_str, {}).get("access", "")
-                    ).lower()
+                    access = str(self.oid_metadata.get(oid_str, {}).get("access", "")).lower()
                     if "write" in access:
                         icon_key = "edit"
-                    elif (
-                        "read" in access
-                        or "not-accessible" in access
-                        or "none" in access
-                    ):
+                    elif "read" in access or "not-accessible" in access or "none" in access:
                         icon_key = "lock"
                     else:
                         icon_key = "doc"
                     instance_str = ""
                     val = self.oid_values.get(oid_str, "")
-                    type_val = (
-                        self.oid_metadata.get(oid_str, {}).get("type") or "Unknown"
-                    )
-                    access_val = (
-                        self.oid_metadata.get(oid_str, {}).get("access") or "N/A"
-                    )
+                    type_val = self.oid_metadata.get(oid_str, {}).get("type") or "Unknown"
+                    access_val = self.oid_metadata.get(oid_str, {}).get("access") or "N/A"
                     mib_val = self.oid_metadata.get(oid_str, {}).get("mib") or "N/A"
 
                 display_text = stored_name if stored_name else str(key)
@@ -3047,9 +2842,7 @@ class SNMPControllerGUI:
                     icon_key = "table"
                     display_text = stored_name if stored_name else str(key)
 
-                    type_val = (
-                        self.oid_metadata.get(oid_str, {}).get("type") or "branch"
-                    )
+                    type_val = self.oid_metadata.get(oid_str, {}).get("type") or "branch"
                     access_val = self.oid_metadata.get(oid_str, {}).get("access") or ""
                     mib_val = self.oid_metadata.get(oid_str, {}).get("mib") or "N/A"
                     img = None
@@ -3090,12 +2883,8 @@ class SNMPControllerGUI:
                     icon_key = "folder"
                     display_text = stored_name if stored_name else str(key)
 
-                    type_val = (
-                        self.oid_metadata.get(oid_str, {}).get("type") or "branch"
-                    )
-                    access_val = (
-                        self.oid_metadata.get(oid_str, {}).get("access") or "N/A"
-                    )
+                    type_val = self.oid_metadata.get(oid_str, {}).get("type") or "branch"
+                    access_val = self.oid_metadata.get(oid_str, {}).get("access") or "N/A"
                     mib_val = self.oid_metadata.get(oid_str, {}).get("mib") or "N/A"
                     img = None
                     if getattr(self, "oid_icon_images", None):
@@ -3416,15 +3205,11 @@ class SNMPControllerGUI:
             )
             print(f"  font size: {size}, text_width: {text_width}px")
             print(f"  padding: {padding}px")
-            print(
-                f"  desired_width: {indentation} + {text_width} + {padding} = {desired_width}px"
-            )
+            print(f"  desired_width: {indentation} + {text_width} + {padding} = {desired_width}px")
             print(f"  current_width: {current_width}px")
 
             if desired_width > current_width:
-                print(
-                    f"  ACTION: Expanding column from {current_width} to {desired_width}"
-                )
+                print(f"  ACTION: Expanding column from {current_width} to {desired_width}")
                 self.oid_tree.column("#0", width=desired_width)
             else:
                 print(
@@ -3457,9 +3242,7 @@ class SNMPControllerGUI:
             self.tree_font_size = size
             self.tree_row_height = max(24, size + 8)
             style = ttk.Style()
-            style.configure(
-                "Treeview", font=("Helvetica", size), rowheight=self.tree_row_height
-            )
+            style.configure("Treeview", font=("Helvetica", size), rowheight=self.tree_row_height)
             style.configure("Treeview.Heading", font=("Helvetica", size + 1, "bold"))
             # Update edit overlay fonts as well
             self.edit_overlay_combo.configure(font=("Helvetica", max(8, size - 1)))
@@ -3468,9 +3251,7 @@ class SNMPControllerGUI:
         except Exception:
             pass
 
-    def _format_selected_info(
-        self, full_oid: str, type_str: str, value_str: str
-    ) -> str:
+    def _format_selected_info(self, full_oid: str, type_str: str, value_str: str) -> str:
         """Format selected item display to match snmpget-like output with enum names."""
         if not full_oid.startswith("."):
             full_oid = "." + full_oid
@@ -3478,9 +3259,7 @@ class SNMPControllerGUI:
         # Try to get enum name if this is an enum type
         enum_display = ""
         base_oid = (
-            full_oid.split(".0")[0]
-            if full_oid.endswith(".0")
-            else full_oid.rsplit(".", 1)[0]
+            full_oid.split(".0")[0] if full_oid.endswith(".0") else full_oid.rsplit(".", 1)[0]
         )
         metadata = self.oid_metadata.get(base_oid, {})
         enums = metadata.get("enums")
@@ -3613,9 +3392,7 @@ class SNMPControllerGUI:
         # Show edit overlay
         self._show_edit_overlay(event, item, column, current_value)
 
-    def _show_edit_overlay(
-        self, event: Any, item: str, column: str, current_value: str
-    ) -> None:
+    def _show_edit_overlay(self, event: Any, item: str, column: str, current_value: str) -> None:
         """Show edit overlay at the clicked cell location."""
         # Hide any existing overlay first
         self._hide_edit_overlay()
@@ -3663,8 +3440,7 @@ class SNMPControllerGUI:
                 if enums:
                     # Build list of "value (name)" strings, sorted by value
                     enum_values = [
-                        f"{val} ({name})"
-                        for name, val in sorted(enums.items(), key=lambda x: x[1])
+                        f"{val} ({name})" for name, val in sorted(enums.items(), key=lambda x: x[1])
                     ]
 
         # Use Entry for non-enum fields, Combobox for enums
@@ -3676,9 +3452,7 @@ class SNMPControllerGUI:
             self.edit_overlay_combo.config(values=enum_values, state="readonly")
             # Find and select the matching value
             for enum_val in enum_values:
-                if enum_val.startswith(
-                    current_value.split()[0]
-                ):  # Match the integer part
+                if enum_val.startswith(current_value.split()[0]):  # Match the integer part
                     self.edit_overlay_combo.set(enum_val)
                     break
 
@@ -3690,15 +3464,11 @@ class SNMPControllerGUI:
 
             # Bind keys for save/cancel
             self.edit_overlay_combo.bind("<Return>", lambda e: self._save_cell_edit())
-            self.edit_overlay_combo.bind(
-                "<Escape>", lambda e: self._hide_edit_overlay()
-            )
+            self.edit_overlay_combo.bind("<Escape>", lambda e: self._hide_edit_overlay())
             self.edit_overlay_combo.bind(
                 "<<ComboboxSelected>>", lambda e: self._on_combo_selected()
             )
-            self.edit_overlay_combo.bind(
-                "<FocusOut>", lambda e: self._on_edit_focus_out()
-            )
+            self.edit_overlay_combo.bind("<FocusOut>", lambda e: self._on_edit_focus_out())
 
             self.edit_overlay_combo.focus()
         else:
@@ -3717,12 +3487,8 @@ class SNMPControllerGUI:
 
             # Bind keys for save/cancel
             self.edit_overlay_entry.bind("<Return>", lambda e: self._save_cell_edit())
-            self.edit_overlay_entry.bind(
-                "<Escape>", lambda e: self._hide_edit_overlay()
-            )
-            self.edit_overlay_entry.bind(
-                "<FocusOut>", lambda e: self._on_edit_focus_out()
-            )
+            self.edit_overlay_entry.bind("<Escape>", lambda e: self._hide_edit_overlay())
+            self.edit_overlay_entry.bind("<FocusOut>", lambda e: self._on_edit_focus_out())
 
             self.edit_overlay_entry.focus()
 
@@ -3849,9 +3615,7 @@ class SNMPControllerGUI:
             columns = self._current_table_columns  # (name, col_oid, col_num)
             # col_num is the treeview column number (0=index, 1=first data col, etc)
             # We need to map this to the columns array (0-indexed)
-            data_col_index = (
-                col_num - 1
-            )  # Subtract 1 because col 0 is the index display
+            data_col_index = col_num - 1  # Subtract 1 because col 0 is the index display
 
             if data_col_index < 0 or data_col_index >= len(columns):
                 self._log(
@@ -3905,9 +3669,7 @@ class SNMPControllerGUI:
 
                 try:
                     # Delete old instance
-                    self._log(
-                        "DEBUG: Calling DELETE /table-row for index update", "DEBUG"
-                    )
+                    self._log("DEBUG: Calling DELETE /table-row for index update", "DEBUG")
                     del_resp = requests.delete(
                         f"{self.api_url}/table-row",
                         json={
@@ -3917,9 +3679,7 @@ class SNMPControllerGUI:
                         },
                         timeout=5,
                     )
-                    self._log(
-                        f"DEBUG: DELETE response: {del_resp.status_code}", "DEBUG"
-                    )
+                    self._log(f"DEBUG: DELETE response: {del_resp.status_code}", "DEBUG")
 
                     if del_resp.status_code != 200:
                         messagebox.showerror(
@@ -3928,21 +3688,14 @@ class SNMPControllerGUI:
                         return
 
                     # Immediately remove old instance from OID tree
-                    old_instance_str = ".".join(
-                        str(old_index_values[k]) for k in index_columns
-                    )
-                    if (
-                        hasattr(self, "_current_table_item")
-                        and self._current_table_item
-                    ):
+                    old_instance_str = ".".join(str(old_index_values[k]) for k in index_columns)
+                    if hasattr(self, "_current_table_item") and self._current_table_item:
                         self._remove_instance_from_oid_tree(
                             self._current_table_item, old_instance_str
                         )
 
                     # Create new instance with new index values
-                    self._log(
-                        "DEBUG: Calling POST /table-row for index update", "DEBUG"
-                    )
+                    self._log("DEBUG: Calling POST /table-row for index update", "DEBUG")
                     create_resp = requests.post(
                         f"{self.api_url}/table-row",
                         json={
@@ -3958,25 +3711,16 @@ class SNMPControllerGUI:
                             f"Updated index {col_name} from {old_index_values[col_name]} to {new_value}"
                         )
                         # Refresh the entire table view
-                        if (
-                            hasattr(self, "_current_table_item")
-                            and self._current_table_item
-                        ):
+                        if hasattr(self, "_current_table_item") and self._current_table_item:
                             new_instance = ".".join(
                                 str(new_index_values.get(idx_name, ""))
                                 for idx_name in index_columns
                             )
-                            self._populate_table_view(
-                                self._current_table_item, new_instance
-                            )
+                            self._populate_table_view(self._current_table_item, new_instance)
                             # Immediately add new instance to OID tree (will handle sorting)
-                            self._add_instance_to_oid_tree(
-                                self._current_table_item, new_instance
-                            )
+                            self._add_instance_to_oid_tree(self._current_table_item, new_instance)
                             if table_oid:
-                                self._set_pending_oid_focus(
-                                    table_oid, new_instance, col_oid
-                                )
+                                self._set_pending_oid_focus(table_oid, new_instance, col_oid)
                     else:
                         messagebox.showerror(
                             "Error",
@@ -4003,9 +3747,7 @@ class SNMPControllerGUI:
                             column_values[c_name] = new_value
                         else:
                             # Get current value from the table display
-                            col_index = (
-                                i + 1
-                            )  # +1 because column 0 is the index display
+                            col_index = i + 1  # +1 because column 0 is the index display
                             if col_index < len(item_values):
                                 val = str(item_values[col_index])
                                 # Strip enum format "value (name)" if present
@@ -4058,9 +3800,7 @@ class SNMPControllerGUI:
                         updated_values[col_num] = display_value
                         self.table_tree.item(editing_item, values=updated_values)
                         self._log("DEBUG: Cell display updated in treeview", "DEBUG")
-                        self._log(
-                            f"Updated {col_name} (OID {full_oid}) to: {new_value}"
-                        )
+                        self._log(f"Updated {col_name} (OID {full_oid}) to: {new_value}")
                         # Also update the oid_values cache
                         self.oid_values[full_oid] = new_value
                         self._log("DEBUG: Cache updated, cell save complete", "DEBUG")
@@ -4068,9 +3808,7 @@ class SNMPControllerGUI:
                         # Refresh the OID tree to show the updated value
                         self._refresh_oid_tree_value(full_oid, display_value)
                         if table_oid:
-                            self._set_pending_oid_focus(
-                                table_oid, str(instance_index), col_oid
-                            )
+                            self._set_pending_oid_focus(table_oid, str(instance_index), col_oid)
 
                         # If this was a new instance, also refresh the entire table to show the new row
                         if (
@@ -4084,9 +3822,7 @@ class SNMPControllerGUI:
                             )
                             self._refresh_oid_tree_table(self._current_table_item)
                     else:
-                        error_msg = (
-                            f"Failed to update value: {resp.status_code} - {resp.text}"
-                        )
+                        error_msg = f"Failed to update value: {resp.status_code} - {resp.text}"
                         self._log(error_msg, "ERROR")
                         messagebox.showerror("Error", error_msg)
                 except Exception as e:
@@ -4113,9 +3849,7 @@ class SNMPControllerGUI:
             self.root.after(150, self._hide_edit_overlay)
             self._log("DEBUG: finally block complete, hide deferred 150ms", "DEBUG")
 
-    def _populate_table_view(
-        self, table_item: str, selected_instance: str | None = None
-    ) -> None:
+    def _populate_table_view(self, table_item: str, selected_instance: str | None = None) -> None:
         """Populate the table view with data from the selected table."""
         oid_str = self.oid_tree.set(table_item, "oid")
         if not oid_str:
@@ -4161,10 +3895,7 @@ class SNMPControllerGUI:
         # Get columns
         columns = []
         for name, oid_t in self.oids_data.items():
-            if (
-                oid_t[: len(entry_tuple)] == entry_tuple
-                and len(oid_t) == len(entry_tuple) + 1
-            ):
+            if oid_t[: len(entry_tuple)] == entry_tuple and len(oid_t) == len(entry_tuple) + 1:
                 col_num = oid_t[-1]
                 col_oid = ".".join(str(x) for x in oid_t)
                 columns.append((name, col_oid, col_num))
@@ -4180,9 +3911,7 @@ class SNMPControllerGUI:
         index_columns: list[str] = []
         schema: Dict[str, Any] = {}  # Initialize to empty dict
         try:
-            resp = requests.get(
-                f"{self.api_url}/table-schema", params={"oid": oid_str}, timeout=5
-            )
+            resp = requests.get(f"{self.api_url}/table-schema", params={"oid": oid_str}, timeout=5)
             if resp.status_code == 200:
                 schema = resp.json()
                 instances = schema.get("instances", [])
@@ -4195,14 +3924,10 @@ class SNMPControllerGUI:
                     "DEBUG",
                 )
             else:
-                self._log(
-                    "Failed to get table schema, using fallback discovery", "WARNING"
-                )
+                self._log("Failed to get table schema, using fallback discovery", "WARNING")
                 instances = self._discover_instances_fallback(columns[0][1])
         except Exception as e:
-            self._log(
-                f"Error loading table schema: {e}, using fallback discovery", "WARNING"
-            )
+            self._log(f"Error loading table schema: {e}, using fallback discovery", "WARNING")
             instances = self._discover_instances_fallback(columns[0][1])
 
         def _instance_sort_key(inst: Any) -> list[tuple[int, Any]]:
@@ -4242,18 +3967,12 @@ class SNMPControllerGUI:
                 # Give index column slightly more space, distribute rest evenly
                 index_width = max(120, int(available_width * 0.15))
                 remaining_width = available_width - index_width
-                col_width = (
-                    max(100, int(remaining_width / len(col_names)))
-                    if col_names
-                    else 150
-                )
+                col_width = max(100, int(remaining_width / len(col_names))) if col_names else 150
             except Exception:
                 index_width = 120
                 col_width = 150
 
-        self.table_tree.column(
-            "index", width=index_width, minwidth=50, stretch=False, anchor="w"
-        )
+        self.table_tree.column("index", width=index_width, minwidth=50, stretch=False, anchor="w")
 
         index_column_set = {name.lower() for name in index_columns}
         for i, col_name in enumerate(col_names):
@@ -4268,9 +3987,7 @@ class SNMPControllerGUI:
                 width = col_width
             # Make last column stretch to fill remaining space
             is_last = i == len(col_names) - 1
-            self.table_tree.column(
-                col_name, width=width, minwidth=100, stretch=is_last, anchor="w"
-            )
+            self.table_tree.column(col_name, width=width, minwidth=100, stretch=is_last, anchor="w")
 
         # Store columns for later use in cell editing
         self._current_table_columns = columns
@@ -4286,9 +4003,7 @@ class SNMPControllerGUI:
         for inst in instances:
             values = [inst]
             inst_str = str(inst)
-            index_values = self._extract_index_values(
-                inst_str, index_columns, columns_meta
-            )
+            index_values = self._extract_index_values(inst_str, index_columns, columns_meta)
             for name, col_oid, col_num in columns:
                 if name.lower() in index_column_set:
                     val = index_values.get(name, inst_str)
@@ -4343,9 +4058,7 @@ class SNMPControllerGUI:
 
         # Enable "Add Index Column" button only for no-index tables
         is_no_index_table = (
-            all(col.startswith("__index") for col in index_columns)
-            if index_columns
-            else True
+            all(col.startswith("__index") for col in index_columns) if index_columns else True
         )
         if is_no_index_table:
             self.add_index_col_btn.configure(state="normal")
@@ -4406,17 +4119,13 @@ class SNMPControllerGUI:
                 parent = self.oid_tree.parent(item)
                 if parent and "table-entry" in self.oid_tree.item(parent, "tags"):
                     table_parent = self.oid_tree.parent(parent)
-                    if table_parent and "table" in self.oid_tree.item(
-                        table_parent, "tags"
-                    ):
+                    if table_parent and "table" in self.oid_tree.item(table_parent, "tags"):
                         table_item = table_parent
                         break
         if not table_item:
             table_item = getattr(self, "_current_table_item", None)
         if not table_item:
-            messagebox.showwarning(
-                "No Table Selected", "Select a table or table entry first."
-            )
+            messagebox.showwarning("No Table Selected", "Select a table or table entry first.")
             return
 
         table_oid = self.oid_tree.set(table_item, "oid")
@@ -4489,9 +4198,7 @@ class SNMPControllerGUI:
                     )
                     if resp.status_code == 200:
                         value_data = resp.json()
-                        column_defaults[col_name] = str(
-                            value_data.get("value", "unset")
-                        )
+                        column_defaults[col_name] = str(value_data.get("value", "unset"))
                     else:
                         column_defaults[col_name] = "unset"
                 except Exception as e:
@@ -4581,14 +4288,10 @@ class SNMPControllerGUI:
             # Add +/- buttons row
             button_row = num_index_parts
 
-            add_btn = ctk.CTkButton(
-                input_frame, text="+", width=40, command=add_index_part
-            )
+            add_btn = ctk.CTkButton(input_frame, text="+", width=40, command=add_index_part)
             add_btn.grid(row=button_row, column=0, pady=5, padx=10, sticky="w")
 
-            remove_btn = ctk.CTkButton(
-                input_frame, text="-", width=40, command=remove_index_part
-            )
+            remove_btn = ctk.CTkButton(input_frame, text="-", width=40, command=remove_index_part)
             remove_btn.grid(row=button_row, column=1, pady=5, padx=(0, 10), sticky="w")
             if num_index_parts <= 1:
                 remove_btn.configure(state="disabled")
@@ -4642,9 +4345,7 @@ class SNMPControllerGUI:
                     "index_values": index_values,
                     "column_values": column_defaults,  # Copy non-key values from last row
                 }
-                resp = requests.post(
-                    f"{self.api_url}/table-row", json=payload, timeout=5
-                )
+                resp = requests.post(f"{self.api_url}/table-row", json=payload, timeout=5)
                 if resp.status_code == 200:
                     result = resp.json()
                     messagebox.showinfo(
@@ -4658,9 +4359,7 @@ class SNMPControllerGUI:
                     self._add_instance_to_oid_tree(table_item, instance_str)
                     dialog.destroy()
                 else:
-                    messagebox.showerror(
-                        "Error", f"Failed to add instance: {resp.text}"
-                    )
+                    messagebox.showerror("Error", f"Failed to add instance: {resp.text}")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to add instance: {e}")
 
@@ -4778,9 +4477,7 @@ class SNMPControllerGUI:
                             )
                             if resp.status_code == 200:
                                 value_data = resp.json()
-                                column_values[col_name] = str(
-                                    value_data.get("value", "")
-                                )
+                                column_values[col_name] = str(value_data.get("value", ""))
                         except Exception:
                             pass
 
@@ -4789,22 +4486,16 @@ class SNMPControllerGUI:
                         "table_oid": table_oid,
                         "index_values": current_index_values,
                     }
-                    resp = requests.delete(
-                        f"{self.api_url}/table-row", json=del_payload, timeout=5
-                    )
+                    resp = requests.delete(f"{self.api_url}/table-row", json=del_payload, timeout=5)
                     if resp.status_code != 200:
-                        self._log(
-                            f"Failed to delete instance {inst}: {resp.text}", "WARNING"
-                        )
+                        self._log(f"Failed to delete instance {inst}: {resp.text}", "WARNING")
                         fail_count += 1
                         continue
 
                     # Create new instance with extra index part
                     new_index_values = current_index_values.copy()
                     new_col_name = (
-                        f"__index_{current_parts + 1}__"
-                        if current_parts > 0
-                        else "__index_2__"
+                        f"__index_{current_parts + 1}__" if current_parts > 0 else "__index_2__"
                     )
                     new_index_values[new_col_name] = default_val
 
@@ -4831,9 +4522,7 @@ class SNMPControllerGUI:
 
             # Show result
             if fail_count == 0:
-                messagebox.showinfo(
-                    "Success", f"Added index column to {success_count} instances"
-                )
+                messagebox.showinfo("Success", f"Added index column to {success_count} instances")
             else:
                 messagebox.showwarning(
                     "Partial Success",
@@ -4861,16 +4550,11 @@ class SNMPControllerGUI:
         try:
             selected_rows = self.table_tree.selection()
             if not selected_rows:
-                messagebox.showwarning(
-                    "No Selection", "Please select an instance to remove."
-                )
+                messagebox.showwarning("No Selection", "Please select an instance to remove.")
                 return
 
             # Get table OID from current table item
-            if (
-                not hasattr(self, "_current_table_item")
-                or self._current_table_item is None
-            ):
+            if not hasattr(self, "_current_table_item") or self._current_table_item is None:
                 messagebox.showerror("Error", "No table selected")
                 return
 
@@ -4942,9 +4626,7 @@ class SNMPControllerGUI:
 
                     # Call DELETE /table-row endpoint
                     payload = {"table_oid": table_oid, "index_values": index_values}
-                    resp = requests.delete(
-                        f"{self.api_url}/table-row", json=payload, timeout=5
-                    )
+                    resp = requests.delete(f"{self.api_url}/table-row", json=payload, timeout=5)
 
                     if resp.status_code == 200:
                         deleted_count += 1
@@ -4980,19 +4662,13 @@ class SNMPControllerGUI:
             messagebox.showerror("Error", f"Error removing instance: {e}")
             self._log(f"Error in _remove_instance: {e}", "ERROR")
 
-    def _show_edit_dialog(
-        self, oid: str, current_value: str, item: str, is_writable: bool
-    ) -> None:
+    def _show_edit_dialog(self, oid: str, current_value: str, item: str, is_writable: bool) -> None:
         """Show a dialog to edit the value of an OID."""
         # DEBUG: Print what we're getting
-        print(
-            f"DEBUG: _show_edit_dialog called with oid={oid}, is_writable={is_writable}"
-        )
+        print(f"DEBUG: _show_edit_dialog called with oid={oid}, is_writable={is_writable}")
 
         # Strip instance suffix for metadata lookup
-        base_oid = (
-            oid.split(".")[:-1] if "." in oid and oid.split(".")[-1].isdigit() else oid
-        )
+        base_oid = oid.split(".")[:-1] if "." in oid and oid.split(".")[-1].isdigit() else oid
         base_oid_str = ".".join(base_oid) if isinstance(base_oid, list) else base_oid
 
         # Get the type information from metadata
@@ -5000,9 +4676,7 @@ class SNMPControllerGUI:
         value_type = metadata.get("type", "Unknown")
         access = metadata.get("access", "read-only").lower()
 
-        print(
-            f"DEBUG: Looking up metadata for base_oid={base_oid_str}, found metadata={metadata}"
-        )
+        print(f"DEBUG: Looking up metadata for base_oid={base_oid_str}, found metadata={metadata}")
 
         # Check if this is an index/key column
         type_from_tree = self.oid_tree.set(item, "type")
@@ -5053,9 +4727,7 @@ class SNMPControllerGUI:
         current_label.pack(anchor="w", pady=(0, 15))
 
         # New value section
-        value_label = ctk.CTkLabel(
-            main_frame, text="New value:", font=ctk.CTkFont(weight="bold")
-        )
+        value_label = ctk.CTkLabel(main_frame, text="New value:", font=ctk.CTkFont(weight="bold"))
         value_label.pack(anchor="w")
 
         # Check if this OID has enum metadata
@@ -5066,8 +4738,7 @@ class SNMPControllerGUI:
         if enums:
             # Create dropdown with enum values in "value (name)" format
             enum_values = [
-                f"{val} ({name})"
-                for name, val in sorted(enums.items(), key=lambda x: x[1])
+                f"{val} ({name})" for name, val in sorted(enums.items(), key=lambda x: x[1])
             ]
             value_widget = ctk.CTkComboBox(
                 main_frame,
@@ -5078,9 +4749,7 @@ class SNMPControllerGUI:
             )
             # Find and set the current value
             for enum_val in enum_values:
-                if enum_val.startswith(
-                    current_value.split()[0]
-                ):  # Match the integer part
+                if enum_val.startswith(current_value.split()[0]):  # Match the integer part
                     value_var.set(enum_val)
                     break
         else:
@@ -5169,9 +4838,7 @@ class SNMPControllerGUI:
         button_container = ctk.CTkFrame(bottom_frame, fg_color="transparent")
         button_container.pack(side="right")
 
-        cancel_button = ctk.CTkButton(
-            button_container, text="Cancel", command=on_cancel, width=80
-        )
+        cancel_button = ctk.CTkButton(button_container, text="Cancel", command=on_cancel, width=80)
         cancel_button.pack(side="right", padx=(10, 0))
 
         ok_button = ctk.CTkButton(
@@ -5266,8 +4933,7 @@ class SNMPControllerGUI:
                     for schema_name, schema_data in self.table_schemas.items():
                         if (
                             schema_data.get("oid")
-                            and ".".join(str(x) for x in schema_data["oid"])
-                            == table_oid
+                            and ".".join(str(x) for x in schema_data["oid"]) == table_oid
                         ):
                             index_cols = schema_data.get("index_columns", [])
                             break
@@ -5334,9 +5000,7 @@ class SNMPControllerGUI:
     def _is_oid_writable(self, oid: str) -> bool:
         """Check if an OID is writable based on metadata."""
         # Strip instance suffix (e.g., .0) for metadata lookup
-        base_oid = (
-            oid.split(".")[:-1] if "." in oid and oid.split(".")[-1].isdigit() else oid
-        )
+        base_oid = oid.split(".")[:-1] if "." in oid and oid.split(".")[-1].isdigit() else oid
         base_oid_str = ".".join(base_oid) if isinstance(base_oid, list) else base_oid
 
         metadata = self.oid_metadata.get(base_oid_str, {})
@@ -5456,9 +5120,7 @@ class SNMPControllerGUI:
             return
 
         # Move to next match (with wrapping)
-        self._search_current_index = (self._search_current_index + 1) % len(
-            self._search_matches
-        )
+        self._search_current_index = (self._search_current_index + 1) % len(self._search_matches)
         self._show_search_match(self._search_current_index)
 
     def _show_search_match(self, index: int) -> None:
@@ -5475,16 +5137,12 @@ class SNMPControllerGUI:
             item_id = self.oid_to_item[oid_str]
             self._expand_path_to_item(item_id)
             self.oid_tree.see(item_id)
-            self._search_setting_selection = (
-                True  # Mark that we're setting selection from search
-            )
+            self._search_setting_selection = True  # Mark that we're setting selection from search
             self.oid_tree.selection_set(item_id)
             self._ensure_oid_name_width(item_id)
             self._log(f"Match {match_num}/{total_matches}: {display_name} ({oid_str})")
             # Reset flag after tree has processed the selection
-            self.root.after(
-                10, lambda: setattr(self, "_search_setting_selection", False)
-            )
+            self.root.after(10, lambda: setattr(self, "_search_setting_selection", False))
             return
 
         # Not yet in tree - need to load the hierarchy. Find deepest loaded ancestor.
@@ -5539,13 +5197,9 @@ class SNMPControllerGUI:
                     )
                     self.oid_tree.selection_set(item_id)
                     self._ensure_oid_name_width(item_id)
-                    self._log(
-                        f"Match {match_num}/{total_matches}: {display_name} ({oid_str})"
-                    )
+                    self._log(f"Match {match_num}/{total_matches}: {display_name} ({oid_str})")
                     # Reset flag after tree has processed the selection
-                    self.root.after(
-                        10, lambda: setattr(self, "_search_setting_selection", False)
-                    )
+                    self.root.after(10, lambda: setattr(self, "_search_setting_selection", False))
                     return
                 except tk.TclError:
                     # Item in dict but not in tree widget yet
@@ -5553,9 +5207,7 @@ class SNMPControllerGUI:
 
             # Show progress for tables (every 5 retries)
             if is_table_parent and retry_count > 0 and retry_count % 5 == 0:
-                self._log(
-                    f"Still loading table... ({retry_count}/{max_retries})", "DEBUG"
-                )
+                self._log(f"Still loading table... ({retry_count}/{max_retries})", "DEBUG")
 
             # Retry with exponential backoff
             if retry_count < max_retries:
@@ -5605,18 +5257,12 @@ class SNMPControllerGUI:
             # If this is a table node with placeholder, trigger table discovery
             if "table" in self.oid_tree.item(node, "tags"):
                 children = self.oid_tree.get_children(node)
-                if children and "placeholder" in self.oid_tree.item(
-                    children[0], "tags"
-                ):
+                if children and "placeholder" in self.oid_tree.item(children[0], "tags"):
                     oid_str = self.oid_tree.set(node, "oid")
                     if oid_str:
-                        self.executor.submit(
-                            self._discover_table_instances, node, oid_str
-                        )
+                        self.executor.submit(self._discover_table_instances, node, oid_str)
 
-    def _populate_table_instances_immediate(
-        self, table_item: str, table_oid: str
-    ) -> None:
+    def _populate_table_instances_immediate(self, table_item: str, table_oid: str) -> None:
         """Pre-populate table instances from bulk-loaded data."""
         try:
             if table_oid not in self.table_instances_data:
@@ -5631,9 +5277,7 @@ class SNMPControllerGUI:
             entry_name = table_data.get("entry_name", "Entry")
             index_columns = table_data.get("index_columns", [])
 
-            self._log(
-                f"Pre-populating table {table_oid}: {len(instances)} instances", "DEBUG"
-            )
+            self._log(f"Pre-populating table {table_oid}: {len(instances)} instances", "DEBUG")
 
             if not instances:
                 self._log(f"No instances to pre-populate for {table_oid}", "DEBUG")
@@ -5646,10 +5290,7 @@ class SNMPControllerGUI:
             # Get columns for this table
             columns = []
             for name, oid_t in self.oids_data.items():
-                if (
-                    oid_t[: len(entry_tuple)] == entry_tuple
-                    and len(oid_t) == len(entry_tuple) + 1
-                ):
+                if oid_t[: len(entry_tuple)] == entry_tuple and len(oid_t) == len(entry_tuple) + 1:
                     col_num = oid_t[-1]
                     col_oid = ".".join(str(x) for x in oid_t)
                     columns.append((name, col_oid, col_num))
@@ -5698,9 +5339,7 @@ class SNMPControllerGUI:
                 self.oid_to_item[entry_oid] = entry_item
 
                 # Extract index values for this instance
-                index_values = self._extract_index_values(
-                    inst, index_columns, columns_meta
-                )
+                index_values = self._extract_index_values(inst, index_columns, columns_meta)
 
                 # Add columns under the entry
                 for name, col_oid, col_num in columns:
@@ -5713,26 +5352,16 @@ class SNMPControllerGUI:
                     else:
                         value_here = self.oid_values.get(full_col_oid, "unset")
 
-                    access = str(
-                        self.oid_metadata.get(col_oid, {}).get("access", "")
-                    ).lower()
-                    type_str = (
-                        self.oid_metadata.get(col_oid, {}).get("type") or "Unknown"
-                    )
-                    access_str = (
-                        self.oid_metadata.get(col_oid, {}).get("access") or "N/A"
-                    )
+                    access = str(self.oid_metadata.get(col_oid, {}).get("access", "")).lower()
+                    type_str = self.oid_metadata.get(col_oid, {}).get("type") or "Unknown"
+                    access_str = self.oid_metadata.get(col_oid, {}).get("access") or "N/A"
 
                     # Determine icon
                     if is_index:
                         icon_key = "key"
                     elif "write" in access:
                         icon_key = "edit"
-                    elif (
-                        "read" in access
-                        or "not-accessible" in access
-                        or "none" in access
-                    ):
+                    elif "read" in access or "not-accessible" in access or "none" in access:
                         icon_key = "lock"
                     else:
                         icon_key = "chart"
@@ -5802,10 +5431,7 @@ class SNMPControllerGUI:
         # Find the first column OID
         first_col_oid = None
         for name, oid_t in self.oids_data.items():
-            if (
-                oid_t[: len(entry_tuple)] == entry_tuple
-                and len(oid_t) == len(entry_tuple) + 1
-            ):
+            if oid_t[: len(entry_tuple)] == entry_tuple and len(oid_t) == len(entry_tuple) + 1:
                 first_col_oid = ".".join(str(x) for x in oid_t)
                 break
         if not first_col_oid:
@@ -5836,9 +5462,7 @@ class SNMPControllerGUI:
 
         if not instances:
             index = 1
-            max_attempts = (
-                20  # Limit the number of attempts to prevent infinite loading
-            )
+            max_attempts = 20  # Limit the number of attempts to prevent infinite loading
             while len(instances) < max_attempts:
                 try:
                     resp = requests.get(
@@ -5867,10 +5491,7 @@ class SNMPControllerGUI:
         # Get columns
         columns = []
         for name, oid_t in self.oids_data.items():
-            if (
-                oid_t[: len(entry_tuple)] == entry_tuple
-                and len(oid_t) == len(entry_tuple) + 1
-            ):
+            if oid_t[: len(entry_tuple)] == entry_tuple and len(oid_t) == len(entry_tuple) + 1:
                 col_num = oid_t[-1]
                 col_oid = ".".join(str(x) for x in oid_t)
                 columns.append((name, col_oid, col_num))
@@ -5940,9 +5561,7 @@ class SNMPControllerGUI:
                             # Mark as attempted to avoid repeated failures
                             value_here = "unset"
                             self.oid_values[full_col_oid] = value_here
-                grouped[inst].append(
-                    (name, col_oid, full_col_oid, value_here, is_index)
-                )
+                grouped[inst].append((name, col_oid, full_col_oid, value_here, is_index))
 
         # Update UI
         def update_ui() -> None:
@@ -5980,24 +5599,14 @@ class SNMPControllerGUI:
 
                 # Add columns under the entry
                 for name, col_oid, full_col_oid, value_here, is_index in cols:
-                    access = str(
-                        self.oid_metadata.get(col_oid, {}).get("access", "")
-                    ).lower()
-                    type_str = (
-                        self.oid_metadata.get(col_oid, {}).get("type") or "Unknown"
-                    )
-                    access_str = (
-                        self.oid_metadata.get(col_oid, {}).get("access") or "N/A"
-                    )
+                    access = str(self.oid_metadata.get(col_oid, {}).get("access", "")).lower()
+                    type_str = self.oid_metadata.get(col_oid, {}).get("type") or "Unknown"
+                    access_str = self.oid_metadata.get(col_oid, {}).get("access") or "N/A"
                     if name.lower() in index_column_set:
                         icon_key = "key"
                     elif "write" in access:
                         icon_key = "edit"
-                    elif (
-                        "read" in access
-                        or "not-accessible" in access
-                        or "none" in access
-                    ):
+                    elif "read" in access or "not-accessible" in access or "none" in access:
                         icon_key = "lock"
                     else:
                         icon_key = "chart"
@@ -6096,9 +5705,7 @@ class SNMPControllerGUI:
 
                 # Only fetch if not already loaded (for backwards compatibility with lazy loading)
                 try:
-                    self._log(
-                        f"Fetching value for OID {fetch_oid} (instance={instance_str})"
-                    )
+                    self._log(f"Fetching value for OID {fetch_oid} (instance={instance_str})")
                     resp = requests.get(
                         f"{self.api_url}/value", params={"oid": fetch_oid}, timeout=3
                     )
@@ -6133,9 +5740,7 @@ class SNMPControllerGUI:
                 except Exception as e:
                     # Mark as attempted to avoid repeated failures
                     self.oid_values[fetch_oid] = ""
-                    self._log(
-                        f"Failed to fetch value for OID {fetch_oid}: {e}", "WARNING"
-                    )
+                    self._log(f"Failed to fetch value for OID {fetch_oid}: {e}", "WARNING")
             else:
                 # Non-leaf: optionally prefetch its leaf children; skip to avoid deep recursion
                 continue
@@ -6208,9 +5813,7 @@ class SNMPControllerGUI:
                 self._log("Cannot add instance: no table OID found", "WARNING")
                 return
 
-            self._log(
-                f"Adding instance {instance} to OID tree table {table_oid}", "INFO"
-            )
+            self._log(f"Adding instance {instance} to OID tree table {table_oid}", "INFO")
 
             # Refresh the parent table
             self.executor.submit(self._discover_table_instances, table_item, table_oid)
@@ -6243,9 +5846,7 @@ class SNMPControllerGUI:
                 self._log("Cannot remove instance: no table OID found", "WARNING")
                 return
 
-            self._log(
-                f"Removing instance {instance} from OID tree table {table_oid}", "INFO"
-            )
+            self._log(f"Removing instance {instance} from OID tree table {table_oid}", "INFO")
 
             # Find and delete the entry node for this instance
             def delete_entry() -> None:
@@ -6318,11 +5919,7 @@ class SNMPControllerGUI:
                     item_oid = self.oid_tree.set(item, "oid")
                     item_tags = self.oid_tree.item(item, "tags")
 
-                    if (
-                        "table" in item_tags
-                        and item_oid
-                        and item_oid != parent_table_oid
-                    ):
+                    if "table" in item_tags and item_oid and item_oid != parent_table_oid:
                         # This is a table - check if it's augmented from the parent
                         try:
                             resp = requests.get(
@@ -6418,17 +6015,13 @@ class SNMPControllerGUI:
             if entry_item:
                 target_item = entry_item
                 if column_oid:
-                    column_item = self._find_table_column_item(
-                        entry_item, column_oid, instance
-                    )
+                    column_item = self._find_table_column_item(entry_item, column_oid, instance)
                     if column_item:
                         target_item = column_item
             else:
                 if self._pending_oid_focus_retries < 5:
                     self._pending_oid_focus_retries += 1
-                    self.executor.submit(
-                        self._discover_table_instances, table_item, table_oid
-                    )
+                    self.executor.submit(self._discover_table_instances, table_item, table_oid)
                     self.root.after(200, self._apply_pending_oid_focus)
                     return
 
@@ -6479,9 +6072,7 @@ class SNMPControllerGUI:
 
             # Test connection by fetching MIBs with dependencies
             try:
-                response = requests.get(
-                    f"{self.api_url}/mibs-with-dependencies", timeout=5
-                )
+                response = requests.get(f"{self.api_url}/mibs-with-dependencies", timeout=5)
                 response.raise_for_status()
                 mibs_dep_data = response.json()
             except Exception:
@@ -6551,8 +6142,7 @@ class SNMPControllerGUI:
                 tree_data = response.json()
                 self.table_instances_data = tree_data.get("tables", {})
                 total_instances = sum(
-                    len(t.get("instances", []))
-                    for t in self.table_instances_data.values()
+                    len(t.get("instances", [])) for t in self.table_instances_data.values()
                 )
                 self._log(
                     f"Loaded {len(self.table_instances_data)} tables with {total_instances} total instances"
@@ -6653,9 +6243,7 @@ class SNMPControllerGUI:
             else:
                 display_text += "  (none)\n"
 
-            display_text += (
-                f"\nTransitive Dependencies ({summary.get('transitive_count', 0)}):\n"
-            )
+            display_text += f"\nTransitive Dependencies ({summary.get('transitive_count', 0)}):\n"
             if transitive_deps:
                 display_text += f"  {', '.join(transitive_deps)}\n"
             else:
@@ -6675,7 +6263,9 @@ class SNMPControllerGUI:
                 transitive = mib_info.get("transitive_deps", [])
 
                 display_text += f"\n{mib_name} (configured)\n"
-                display_text += f"  Direct imports: {', '.join(direct_deps) if direct_deps else '(none)'}\n"
+                display_text += (
+                    f"  Direct imports: {', '.join(direct_deps) if direct_deps else '(none)'}\n"
+                )
                 if transitive:
                     display_text += f"  Transitive: {', '.join(transitive)}\n"
                 self.mibs_data[mib_name] = mib_info
@@ -6789,17 +6379,13 @@ class SNMPControllerGUI:
                     continue
 
                 update_payload = {"oid": actual_oid, "value": value}
-                response = requests.post(
-                    f"{self.api_url}/value", json=update_payload, timeout=5
-                )
+                response = requests.post(f"{self.api_url}/value", json=update_payload, timeout=5)
 
                 if response.status_code == 200:
                     applied += 1
                     self._log(f"Set OID {oid_str} = {value}")
                 else:
-                    self._log(
-                        f"Failed to set OID {oid_str}: {response.text}", "WARNING"
-                    )
+                    self._log(f"Failed to set OID {oid_str}: {response.text}", "WARNING")
 
             except Exception as exc:
                 self._log(f"Error setting OID {oid_str}: {exc}", "WARNING")
@@ -6850,9 +6436,7 @@ class SNMPControllerGUI:
         error: Exception,
     ) -> None:
         timestamp = datetime.now().strftime("%H:%M:%S")
-        log_msg = (
-            f"[{timestamp}] Failed to {dest_host}:{dest_port}: {trap_name} - {error}"
-        )
+        log_msg = f"[{timestamp}] Failed to {dest_host}:{dest_port}: {trap_name} - {error}"
         self.log_text.insert("end", "\n" + log_msg + "\n")
         self.log_text.see("end")
 
@@ -6884,7 +6468,9 @@ class SNMPControllerGUI:
             trap_oid = result.get("trap_oid", "")
             oid_str = _oid_list_to_str(trap_oid)
 
-            log_msg = f"[{timestamp}] Sent test trap to localhost:{port}: {trap_name} (OID: {oid_str})"
+            log_msg = (
+                f"[{timestamp}] Sent test trap to localhost:{port}: {trap_name} (OID: {oid_str})"
+            )
             self.log_text.insert("end", "\n" + log_msg + "\n")
             self.log_text.see("end")
 
@@ -6907,7 +6493,9 @@ class SNMPControllerGUI:
                         recv_oid = received_trap.get("trap_oid_str", "unknown")
                         varbinds = received_trap.get("varbinds", [])
 
-                        recv_log_msg = f"[{recv_timestamp}] Received trap: {trap_name} (OID: {recv_oid})"
+                        recv_log_msg = (
+                            f"[{recv_timestamp}] Received trap: {trap_name} (OID: {recv_oid})"
+                        )
                         self.log_text.insert("end", "\n" + recv_log_msg + "\n")
 
                         for vb in varbinds:
@@ -6916,9 +6504,7 @@ class SNMPControllerGUI:
                             self.log_text.insert("end", f"  - {vb_oid} = {vb_value}\n")
 
                         self.log_text.see("end")
-                        self._show_trap_notification(
-                            trap_name, recv_oid, recv_timestamp, varbinds
-                        )
+                        self._show_trap_notification(trap_name, recv_oid, recv_timestamp, varbinds)
                     else:
                         messagebox.showwarning(
                             "Trap Sent",
@@ -6945,9 +6531,7 @@ class SNMPControllerGUI:
             return
 
         if not self.trap_destinations:
-            messagebox.showerror(
-                "No Destinations", "Please add at least one trap destination."
-            )
+            messagebox.showerror("No Destinations", "Please add at least one trap destination.")
             return
 
         try:
@@ -7083,8 +6667,7 @@ class SNMPControllerGUI:
         try:
             response = messagebox.askyesno(
                 "Reset State",
-                "This will clear mib_state.json (tables, scalars, deleted instances).\n\n"
-                "Continue?",
+                "This will clear mib_state.json (tables, scalars, deleted instances).\n\nContinue?",
             )
             if not response:
                 return
@@ -7133,9 +6716,7 @@ class SNMPControllerGUI:
 
             self._log(f"✓ Preset '{preset_name}' saved successfully")
 
-            messagebox.showinfo(
-                "Success", f"Preset '{preset_name}' saved successfully!"
-            )
+            messagebox.showinfo("Success", f"Preset '{preset_name}' saved successfully!")
 
         except requests.exceptions.RequestException as e:
             error_msg = f"Failed to save preset: {e}"
@@ -7167,9 +6748,9 @@ class SNMPControllerGUI:
             dialog.transient(self.root)
             dialog.grab_set()
 
-            ctk.CTkLabel(
-                dialog, text="Select a preset to load:", font=("", 14, "bold")
-            ).pack(pady=10)
+            ctk.CTkLabel(dialog, text="Select a preset to load:", font=("", 14, "bold")).pack(
+                pady=10
+            )
 
             # Listbox for presets
             listbox_frame = ctk.CTkFrame(dialog)
@@ -7300,9 +6881,7 @@ def main() -> None:
                     saved = resp.json()
                     _app._log("Configuration loaded from server")
                     _app.connected = True
-                    _app.status_var.set(
-                        f"Connected: {_app.host_var.get()}:{_app.port_var.get()}"
-                    )
+                    _app.status_var.set(f"Connected: {_app.host_var.get()}:{_app.port_var.get()}")
             except requests.exceptions.RequestException:
                 _app._log("Server not available, trying local config files")
 

@@ -31,9 +31,7 @@ def _patch_compiler(monkeypatch: pytest.MonkeyPatch, results: dict[str, str]) ->
 
     monkeypatch.setattr("app.compiler.PysmiMibCompiler", fake_compiler)
     monkeypatch.setattr("app.compiler.FileReader", lambda _path: f"reader:{_path}")
-    monkeypatch.setattr(
-        "app.compiler.PyFileSearcher", lambda _path: f"searcher:{_path}"
-    )
+    monkeypatch.setattr("app.compiler.PyFileSearcher", lambda _path: f"searcher:{_path}")
     monkeypatch.setattr("app.compiler.PyFileWriter", lambda _path: f"writer:{_path}")
     monkeypatch.setattr("app.compiler.parserFactory", lambda: lambda: "parser")
     monkeypatch.setattr("app.compiler.PySnmpCodeGen", lambda: "codegen")
@@ -60,9 +58,7 @@ def test_compiler_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert output == str(compiled_path)
 
 
-def test_compiler_missing_dependencies(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_compiler_missing_dependencies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     results = {"TEST-MIB": "MISSING dependency"}
     _patch_compiler(monkeypatch, results)
 
@@ -99,9 +95,7 @@ def test_compiler_no_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert "No MIB module found" in str(excinfo.value)
 
 
-def test_compiler_output_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_compiler_output_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     results = {"TEST-MIB": "compiled"}
     _patch_compiler(monkeypatch, results)
 

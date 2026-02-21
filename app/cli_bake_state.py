@@ -95,10 +95,7 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                     continue
                 # Find the table object and entry by OID
                 for obj_name, obj_data in objects.items():
-                    if (
-                        isinstance(obj_data, dict)
-                        and obj_data.get("type") == "MibTable"
-                    ):
+                    if isinstance(obj_data, dict) and obj_data.get("type") == "MibTable":
                         obj_oid_str = ".".join(str(x) for x in obj_data["oid"])
                         if obj_oid_str == table_oid:
                             # Find the entry object by OID structure (table_oid + [1])
@@ -109,10 +106,7 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                                     isinstance(other_data, dict)
                                     and other_data.get("type") == "MibTableRow"
                                 ):
-                                    if (
-                                        list(other_data.get("oid", []))
-                                        == expected_entry_oid
-                                    ):
+                                    if list(other_data.get("oid", [])) == expected_entry_oid:
                                         entry_obj = other_data
                                         break
                             index_columns = entry_obj.get("indexes", [])
@@ -154,9 +148,7 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                                     if col_type == "IpAddress":
                                         # IpAddress uses 4 octets
                                         if pos + 4 <= len(parts):
-                                            row[col_name] = ".".join(
-                                                parts[pos : pos + 4]
-                                            )
+                                            row[col_name] = ".".join(parts[pos : pos + 4])
                                             pos += 4
                                         else:
                                             # Fallback: use remaining parts
@@ -170,9 +162,7 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                                                 row[col_name] = int(parts[pos])
                                             except (ValueError, IndexError):
                                                 row[col_name] = (
-                                                    parts[pos]
-                                                    if pos < len(parts)
-                                                    else ""
+                                                    parts[pos] if pos < len(parts) else ""
                                                 )
                                             pos += 1
 

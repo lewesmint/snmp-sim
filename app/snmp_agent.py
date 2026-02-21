@@ -84,9 +84,7 @@ class SNMPAgent:
 
         def signal_handler(signum: int, frame: Any) -> None:
             sig_name = signal.Signals(signum).name
-            self.logger.info(
-                f"Received signal {sig_name} ({signum}), terminating immediately..."
-            )
+            self.logger.info(f"Received signal {sig_name} ({signum}), terminating immediately...")
             # Force immediate exit - don't wait for event loop
             os._exit(0)
 
@@ -221,9 +219,7 @@ class SNMPAgent:
                     compiled_mib_paths.append(py_path)
                     self.logger.info(f"Compiled {mib_name} to {py_path}")
                 except Exception as e:
-                    self.logger.error(
-                        f"Failed to compile {mib_name}: {e}", exc_info=True
-                    )
+                    self.logger.error(f"Failed to compile {mib_name}: {e}", exc_info=True)
                     continue
             else:
                 compiled_mib_paths.append(str(compiled_file))
@@ -254,9 +250,7 @@ class SNMPAgent:
         if not is_valid:
             self.logger.error(f"Type registry validation failed: {errors}")
             return
-        self.logger.info(
-            f"Type registry validation passed. {type_count} types validated."
-        )
+        self.logger.info(f"Type registry validation passed. {type_count} types validated.")
 
         if self.preloaded_model:
             self.mib_jsons = self.preloaded_model
@@ -302,9 +296,7 @@ class SNMPAgent:
                         )
 
                     # Pass the MIB name explicitly and force_regenerate flag
-                    generator.generate(
-                        py_path, mib_name=mib_name, force_regenerate=force_regen
-                    )
+                    generator.generate(py_path, mib_name=mib_name, force_regenerate=force_regen)
                     if force_regen:
                         self.logger.info(f"Schema JSON generated for {mib_name}")
                 except Exception as e:
@@ -368,9 +360,7 @@ class SNMPAgent:
                 self.logger.error(f"SNMP event loop error: {e}", exc_info=True)
                 self._shutdown()
         else:
-            self.logger.error(
-                "snmpEngine is not initialized. SNMP agent will not start."
-            )
+            self.logger.error("snmpEngine is not initialized. SNMP agent will not start.")
 
     def _setup_snmpEngine(self, compiled_dir: str) -> None:
         from pysnmp.entity import engine
@@ -396,13 +386,9 @@ class SNMPAgent:
         compiled_modules = [p.stem for p in compiled_path.glob("*.py")]
         if compiled_modules:
             self.mib_builder.load_modules(*compiled_modules)
-            self.logger.info(
-                "Loaded compiled MIB modules: %s", ", ".join(sorted(compiled_modules))
-            )
+            self.logger.info("Loaded compiled MIB modules: %s", ", ".join(sorted(compiled_modules)))
         else:
-            self.logger.warning(
-                "No compiled MIB modules found to load from %s", compiled_dir
-            )
+            self.logger.warning("No compiled MIB modules found to load from %s", compiled_dir)
 
         # Import MIB classes from SNMPv2-SMI
         (
@@ -600,9 +586,7 @@ class SNMPAgent:
             raise RuntimeError("MIB builder not initialized")
 
         # Import MibScalarInstance for type checking
-        MibScalarInstance = self.mib_builder.import_symbols(
-            "SNMPv2-SMI", "MibScalarInstance"
-        )[0]
+        MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
 
         # Search through all MIB modules and symbols
         for module_name, symbols in self.mib_builder.mibSymbols.items():
@@ -626,9 +610,7 @@ class SNMPAgent:
             raise RuntimeError("MIB builder not initialized")
 
         # Import MibScalarInstance for type checking
-        MibScalarInstance = self.mib_builder.import_symbols(
-            "SNMPv2-SMI", "MibScalarInstance"
-        )[0]
+        MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
 
         # Search through all MIB modules and symbols
         for module_name, symbols in self.mib_builder.mibSymbols.items():
@@ -711,9 +693,7 @@ class SNMPAgent:
 
         return oid_map
 
-    def _lookup_symbol_for_dotted(
-        self, dotted: str
-    ) -> tuple[Optional[str], Optional[str]]:
+    def _lookup_symbol_for_dotted(self, dotted: str) -> tuple[Optional[str], Optional[str]]:
         """Return (module_name, symbol_name) for a dotted OID string if known.
 
         This helps produce human-friendly log messages (e.g. SNMPv2-MIB:sysContact).
@@ -753,9 +733,7 @@ class SNMPAgent:
                     mib_state = json.load(f)
                 self.logger.info(f"Loaded MIB state from {path}")
             except Exception as e:
-                self.logger.error(
-                    f"Failed to load MIB state from {path}: {e}", exc_info=True
-                )
+                self.logger.error(f"Failed to load MIB state from {path}: {e}", exc_info=True)
         else:
             # Try to migrate legacy files (overrides.json and table_instances.json)
             try:
@@ -901,9 +879,7 @@ class SNMPAgent:
                 parts.append(str(raw_val) if raw_val is not None else "")
         return ".".join(p for p in parts if p != "")
 
-    def _instance_defined_in_schema(
-        self, table_oid: str, index_values: dict[str, Any]
-    ) -> bool:
+    def _instance_defined_in_schema(self, table_oid: str, index_values: dict[str, Any]) -> bool:
         """Return True if a table instance exists in schema rows."""
         if not self.mib_jsons:
             return False
@@ -958,9 +934,7 @@ class SNMPAgent:
                     for col_name in index_columns:
                         row_val = row.get(col_name)
                         row_val_str = self._format_index_value(row_val)
-                        idx_val_str = self._format_index_value(
-                            index_values.get(col_name)
-                        )
+                        idx_val_str = self._format_index_value(index_values.get(col_name))
                         if row_val_str != idx_val_str:
                             matches = False
                             break
@@ -1040,8 +1014,7 @@ class SNMPAgent:
                             continue
                         current_val = col_values.get(col_name)
                         if current_val is None or (
-                            isinstance(current_val, str)
-                            and current_val.strip().lower() == "unset"
+                            isinstance(current_val, str) and current_val.strip().lower() == "unset"
                         ):
                             col_values[col_name] = default_val
                             updated = True
@@ -1114,9 +1087,7 @@ class SNMPAgent:
         if not module_schema:
             return None
         objects = (
-            module_schema.get("objects", module_schema)
-            if isinstance(module_schema, dict)
-            else {}
+            module_schema.get("objects", module_schema) if isinstance(module_schema, dict) else {}
         )
         column_obj = objects.get(column_name)
         if not isinstance(column_obj, dict):
@@ -1168,10 +1139,7 @@ class SNMPAgent:
 
                 entry_name = f"{name}Entry"
                 entry_obj = objects.get(entry_name)
-                if not (
-                    isinstance(entry_obj, dict)
-                    and entry_obj.get("type") == "MibTableRow"
-                ):
+                if not (isinstance(entry_obj, dict) and entry_obj.get("type") == "MibTableRow"):
                     candidates: list[tuple[str, dict[str, Any]]] = []
                     for cand_name, cand_obj in objects.items():
                         if not isinstance(cand_obj, dict):
@@ -1182,18 +1150,14 @@ class SNMPAgent:
                         if (
                             isinstance(cand_oid, list)
                             and len(cand_oid) > len(table_oid_tuple)
-                            and tuple(cand_oid[: len(table_oid_tuple)])
-                            == table_oid_tuple
+                            and tuple(cand_oid[: len(table_oid_tuple)]) == table_oid_tuple
                         ):
                             candidates.append((cand_name, cand_obj))
                     if candidates:
                         candidates.sort(key=lambda item: len(item[1].get("oid", [])))
                         entry_name, entry_obj = candidates[0]
 
-                if (
-                    isinstance(entry_obj, dict)
-                    and entry_obj.get("type") == "MibTableRow"
-                ):
+                if isinstance(entry_obj, dict) and entry_obj.get("type") == "MibTableRow":
                     indexes = entry_obj.get("indexes", [])
                     if isinstance(indexes, list):
                         table_entries[table_oid] = (
@@ -1219,9 +1183,7 @@ class SNMPAgent:
                         valid = False
                         break
                     parent_mib, parent_column = parsed
-                    parent_info = self._find_parent_table_for_column(
-                        parent_mib, parent_column
-                    )
+                    parent_info = self._find_parent_table_for_column(parent_mib, parent_column)
                     if not parent_info:
                         valid = False
                         break
@@ -1256,9 +1218,7 @@ class SNMPAgent:
                 continue
 
             defaults = dict(seen_defaults.get(table_oid, {}))
-            non_index_cols = [
-                name for name in defaults.keys() if name not in indexes_tuple
-            ]
+            non_index_cols = [name for name in defaults.keys() if name not in indexes_tuple]
             synthetic_children = 2 if non_index_cols else 1
 
             for _ in range(synthetic_children):
@@ -1299,9 +1259,7 @@ class SNMPAgent:
             ):
                 continue
 
-            child_defaults = (
-                dict(child.default_columns) if child.default_columns else {}
-            )
+            child_defaults = dict(child.default_columns) if child.default_columns else {}
             next_visited = set(visited)
             next_visited.add(child.table_oid)
 
@@ -1375,12 +1333,8 @@ class SNMPAgent:
 
     def _migrate_legacy_state_files(self) -> None:
         """Migrate legacy overrides.json and table_instances.json to unified format."""
-        legacy_overrides = (
-            Path(__file__).resolve().parent.parent / "data" / "overrides.json"
-        )
-        legacy_tables = (
-            Path(__file__).resolve().parent.parent / "data" / "table_instances.json"
-        )
+        legacy_overrides = Path(__file__).resolve().parent.parent / "data" / "overrides.json"
+        legacy_tables = Path(__file__).resolve().parent.parent / "data" / "table_instances.json"
 
         mib_state: dict[str, Any] = {
             "scalars": {},
@@ -1452,9 +1406,9 @@ class SNMPAgent:
 
         # Import MibScalarInstance for type checking
         try:
-            MibScalarInstance = self.mib_builder.import_symbols(
-                "SNMPv2-SMI", "MibScalarInstance"
-            )[0]
+            MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
+                0
+            ]
         except Exception as e:
             self.logger.error(f"Failed to import MibScalarInstance: {e}")
             return
@@ -1482,9 +1436,7 @@ class SNMPAgent:
 
             # Check if we should propagate this update to linked columns
             if not link_manager.should_propagate(column_name, instance_key):
-                self.logger.debug(
-                    f"Skipping propagation for {column_name} (already updating)"
-                )
+                self.logger.debug(f"Skipping propagation for {column_name} (already updating)")
                 continue
 
             try:
@@ -1512,9 +1464,9 @@ class SNMPAgent:
                     table_oid in self.table_instances
                     and instance_str in self.table_instances[table_oid]
                 ):
-                    self.table_instances[table_oid][instance_str].setdefault(
-                        "column_values", {}
-                    )[column_name] = value
+                    self.table_instances[table_oid][instance_str].setdefault("column_values", {})[
+                        column_name
+                    ] = value
                     stored = True
 
                 # Search through MIB symbols to find the column by name
@@ -1551,9 +1503,7 @@ class SNMPAgent:
                                 # Clone the existing syntax object to preserve type constraints
                                 new_syntax = symbol_obj.syntax.clone(value)
                                 symbol_obj.syntax = new_syntax
-                                self.logger.debug(
-                                    f"Updated MibScalarInstance {cell_oid} = {value}"
-                                )
+                                self.logger.debug(f"Updated MibScalarInstance {cell_oid} = {value}")
                                 updated = True
                             except Exception as e:
                                 self.logger.error(
@@ -1564,13 +1514,9 @@ class SNMPAgent:
 
                 # If update succeeded or we stored in table_instances, propagate to linked columns
                 if updated or stored:
-                    linked_targets = link_manager.get_linked_targets(
-                        column_name, table_oid
-                    )
+                    linked_targets = link_manager.get_linked_targets(column_name, table_oid)
                     if linked_targets:
-                        targets_display = [
-                            f"{t.table_oid}:{t.column_name}" for t in linked_targets
-                        ]
+                        targets_display = [f"{t.table_oid}:{t.column_name}" for t in linked_targets]
                         self.logger.info(
                             f"Propagating value from {column_name} to linked columns: {targets_display}"
                         )
@@ -1585,9 +1531,7 @@ class SNMPAgent:
                             )
 
             except Exception as e:
-                self.logger.error(
-                    f"Error updating column {column_name}: {e}", exc_info=True
-                )
+                self.logger.error(f"Error updating column {column_name}: {e}", exc_info=True)
             finally:
                 # Always clear the update marker
                 link_manager.end_update(column_name, instance_key)
@@ -1637,9 +1581,7 @@ class SNMPAgent:
         if table_oid not in self.table_instances:
             self.table_instances[table_oid] = {}
 
-        self.table_instances[table_oid][index_str] = {
-            "column_values": serialized_column_values
-        }
+        self.table_instances[table_oid][index_str] = {"column_values": serialized_column_values}
 
         # Remove from deleted list if it was previously deleted
         if instance_oid in self.deleted_instances:
@@ -1710,10 +1652,7 @@ class SNMPAgent:
         instance_oid = f"{table_oid}.{index_str}"
 
         # Remove from active dynamic instances if it exists
-        if (
-            table_oid in self.table_instances
-            and index_str in self.table_instances[table_oid]
-        ):
+        if table_oid in self.table_instances and index_str in self.table_instances[table_oid]:
             del self.table_instances[table_oid][index_str]
 
             # Cleanup empty table entry
@@ -1727,9 +1666,7 @@ class SNMPAgent:
                 self._save_mib_state()
                 self.logger.info(f"Deleted table instance: {instance_oid}")
         else:
-            self.logger.info(
-                f"Skipping deleted_instances for {instance_oid} (not in schema rows)"
-            )
+            self.logger.info(f"Skipping deleted_instances for {instance_oid} (not in schema rows)")
 
         if propagate_augments:
             visited = set(_augment_path) if _augment_path else set()
@@ -1798,9 +1735,9 @@ class SNMPAgent:
         if self.mib_builder is None:
             return
         try:
-            MibScalarInstance = self.mib_builder.import_symbols(
-                "SNMPv2-SMI", "MibScalarInstance"
-            )[0]
+            MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
+                0
+            ]
         except Exception:
             return
 
@@ -1813,9 +1750,7 @@ class SNMPAgent:
                         and symbol_obj.name
                     ):
                         dotted = ".".join(str(x) for x in symbol_obj.name)
-                        self._initial_values[dotted] = self._serialize_value(
-                            symbol_obj.syntax
-                        )
+                        self._initial_values[dotted] = self._serialize_value(symbol_obj.syntax)
                         # detect writable scalars by consulting loaded mib_jsons when possible
                         try:
                             added = False
@@ -1826,15 +1761,9 @@ class SNMPAgent:
                             base_name = symbol_name
                             if base_name.endswith("Inst"):
                                 base_name = base_name[:-4]
-                            if (
-                                isinstance(module_json, dict)
-                                and base_name in module_json
-                            ):
+                            if isinstance(module_json, dict) and base_name in module_json:
                                 access_field = module_json[base_name].get("access")
-                                if (
-                                    access_field
-                                    and access_field.lower() == "read-write"
-                                ):
+                                if access_field and access_field.lower() == "read-write":
                                     self._writable_oids.add(dotted)
                                     added = True
                                     self.logger.debug(
@@ -1847,9 +1776,7 @@ class SNMPAgent:
                                     access = symbol_obj.getMaxAccess()
                                 elif hasattr(symbol_obj, "maxAccess"):
                                     access = getattr(symbol_obj, "maxAccess")
-                                if access and str(access).lower().startswith(
-                                    "readwrite"
-                                ):
+                                if access and str(access).lower().startswith("readwrite"):
                                     self._writable_oids.add(dotted)
                         except Exception:
                             pass
@@ -1865,9 +1792,9 @@ class SNMPAgent:
         if self.mib_builder is None:
             return
         try:
-            MibScalarInstance = self.mib_builder.import_symbols(
-                "SNMPv2-SMI", "MibScalarInstance"
-            )[0]
+            MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
+                0
+            ]
         except Exception:
             return
 
@@ -1928,12 +1855,8 @@ class SNMPAgent:
             try:
                 self._save_mib_state()
             except Exception:
-                self.logger.exception(
-                    "Failed to save MIB state after pruning invalid entries"
-                )
-            self.logger.info(
-                f"Removed {len(removed_invalid)} invalid overrides: {removed_invalid}"
-            )
+                self.logger.exception("Failed to save MIB state after pruning invalid entries")
+            self.logger.info(f"Removed {len(removed_invalid)} invalid overrides: {removed_invalid}")
 
     def _apply_table_instances(self) -> None:
         """Apply loaded table instances to the in-memory MIB table cell instances."""
@@ -1948,12 +1871,8 @@ class SNMPAgent:
             for instance_str, instance_data in instances.items():
                 column_values = instance_data.get("column_values", {})
                 if column_values:
-                    self._update_table_cell_values(
-                        table_oid, instance_str, column_values
-                    )
-                    self.logger.debug(
-                        f"Applied table instance {table_oid}.{instance_str}"
-                    )
+                    self._update_table_cell_values(table_oid, instance_str, column_values)
+                    self.logger.debug(f"Applied table instance {table_oid}.{instance_str}")
 
 
 if __name__ == "__main__":  # pragma: no cover

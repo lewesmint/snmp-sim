@@ -69,9 +69,7 @@ class MibRegistrar:
         from pathlib import Path
 
         if type_registry_path is None:
-            type_registry_path = str(
-                Path(__file__).resolve().parent.parent / "data" / "types.json"
-            )
+            type_registry_path = str(Path(__file__).resolve().parent.parent / "data" / "types.json")
 
         try:
             with open(type_registry_path, "r") as f:
@@ -131,9 +129,7 @@ class MibRegistrar:
                     container.get("sysORTable"), dict
                 ):
                     container["sysORTable"] = {"rows": []}
-                    self.logger.info(
-                        "Created missing sysORTable entry in SNMPv2-MIB schema"
-                    )
+                    self.logger.info("Created missing sysORTable entry in SNMPv2-MIB schema")
 
                 container["sysORTable"]["rows"] = sysor_rows
                 self.logger.info(f"Updated sysORTable with {len(sysor_rows)} rows")
@@ -187,15 +183,11 @@ class MibRegistrar:
 
                     with snmp2_schema_file.open("w", encoding="utf-8") as f:
                         json.dump(existing_schema, f, indent=2)
-                    self.logger.info(
-                        f"Persisted updated sysORTable schema to {snmp2_schema_file}"
-                    )
+                    self.logger.info(f"Persisted updated sysORTable schema to {snmp2_schema_file}")
                 except Exception as e:
                     self.logger.warning(f"Could not persist schema to disk: {e}")
 
-                self.logger.info(
-                    "sysORTable successfully populated with MIB implementations"
-                )
+                self.logger.info("sysORTable successfully populated with MIB implementations")
         except Exception as e:
             self.logger.error(f"Error populating sysORTable: {e}", exc_info=True)
 
@@ -221,9 +213,7 @@ class MibRegistrar:
             export_symbols = self._build_mib_symbols(mib, objects_json, type_registry)
             if export_symbols:
                 if mib == "SNMPv2-MIB":
-                    sysor_symbols = sorted(
-                        k for k in export_symbols if k.startswith("sysOR")
-                    )
+                    sysor_symbols = sorted(k for k in export_symbols if k.startswith("sysOR"))
                     if sysor_symbols:
                         self.logger.info(
                             "SNMPv2-MIB sysOR symbols before filter: %s",
@@ -238,9 +228,7 @@ class MibRegistrar:
                     skipped = len(export_symbols) - len(filtered_symbols)
                     self.logger.debug(f"Skipped {skipped} duplicate symbols for {mib}")
                 if mib == "SNMPv2-MIB":
-                    sysor_filtered = sorted(
-                        k for k in filtered_symbols if k.startswith("sysOR")
-                    )
+                    sysor_filtered = sorted(k for k in filtered_symbols if k.startswith("sysOR"))
                     self.logger.info(
                         "SNMPv2-MIB sysOR symbols after filter: %s",
                         ", ".join(sysor_filtered) if sysor_filtered else "<none>",
@@ -248,9 +236,7 @@ class MibRegistrar:
 
                 if filtered_symbols:
                     self.mib_builder.export_symbols(mib, **filtered_symbols)
-                    self.logger.info(
-                        f"Registered {len(filtered_symbols)} objects for {mib}"
-                    )
+                    self.logger.info(f"Registered {len(filtered_symbols)} objects for {mib}")
                 else:
                     self.logger.warning(
                         f"All symbols for {mib} are already exported, skipping registration"
@@ -308,9 +294,7 @@ class MibRegistrar:
                 "OctetString",
                 "DateAndTime",  # TEXTUAL-CONVENTION with type encoder
             }
-            snmp_type_name = (
-                type_name if type_name in preferred_snmp_types else base_type_raw
-            )
+            snmp_type_name = type_name if type_name in preferred_snmp_types else base_type_raw
             base_type = snmp_type_name
 
             # Special handling for sysUpTime
@@ -353,9 +337,7 @@ class MibRegistrar:
                     raise ImportError(f"Could not resolve type '{snmp_type_name}'")
 
                 # Create scalar instance
-                scalar_inst = self.MibScalarInstance(
-                    oid_value, (0,), pysnmp_type(value)
-                )
+                scalar_inst = self.MibScalarInstance(oid_value, (0,), pysnmp_type(value))
 
                 # Set max access based on schema access field
                 access_map = {
@@ -391,9 +373,7 @@ class MibRegistrar:
                             return original_read_get(*args, **kwargs)
                         return inst.syntax
 
-                    scalar_inst.readGet = types.MethodType(
-                        _sysuptime_read_get, scalar_inst
-                    )
+                    scalar_inst.readGet = types.MethodType(_sysuptime_read_get, scalar_inst)
 
                 export_symbols[f"{name}Inst"] = scalar_inst
                 # Attach a small write-commit wrapper so network-originated SNMP SETs
@@ -521,9 +501,7 @@ class MibRegistrar:
                             pass
 
                     # Bind wrapper as method on the instance
-                    scalar_inst.writeCommit = types.MethodType(
-                        _write_commit_wrapper, scalar_inst
-                    )
+                    scalar_inst.writeCommit = types.MethodType(_write_commit_wrapper, scalar_inst)
 
                     # Also override writeTest to accept any value
                     def _write_test_wrapper(
@@ -545,9 +523,7 @@ class MibRegistrar:
                         _logger.debug(f"writeTest called for {varBind}")
                         return None
 
-                    scalar_inst.writeTest = types.MethodType(
-                        _write_test_wrapper, scalar_inst
-                    )
+                    scalar_inst.writeTest = types.MethodType(_write_test_wrapper, scalar_inst)
                 except Exception:
                     # Don't fail registration if hooking logging fails
                     pass
@@ -570,9 +546,7 @@ class MibRegistrar:
                 continue
 
             try:
-                table_symbols = self._build_table_symbols(
-                    mib, name, info, mib_json, type_registry
-                )
+                table_symbols = self._build_table_symbols(mib, name, info, mib_json, type_registry)
                 export_symbols.update(table_symbols)
             except Exception as e:
                 self.logger.error(f"Error building table {name}: {e}", exc_info=True)
@@ -580,9 +554,7 @@ class MibRegistrar:
 
         return export_symbols
 
-    def _expand_index_value_to_oid_components(
-        self, value: Any, index_type: str
-    ) -> tuple[int, ...]:
+    def _expand_index_value_to_oid_components(self, value: Any, index_type: str) -> tuple[int, ...]:
         """Expand an index value into OID components based on its type.
 
         For complex types like IpAddress, this expands them into multiple integers.
@@ -725,11 +697,7 @@ class MibRegistrar:
                 "OctetString",
                 "DateAndTime",  # TEXTUAL-CONVENTION with type encoder
             }
-            base_type = (
-                col_type_name
-                if col_type_name in preferred_snmp_types
-                else base_type_raw
-            )
+            base_type = col_type_name if col_type_name in preferred_snmp_types else base_type_raw
 
             try:
                 pysnmp_type = self._get_pysnmp_type(base_type)
@@ -745,9 +713,7 @@ class MibRegistrar:
                     "accessible-for-notify": "notify",
                 }
                 col_access = access_map.get(col_access_raw, col_access_raw)
-                col_obj = self.MibTableColumn(col_oid, pysnmp_type()).setMaxAccess(
-                    col_access
-                )
+                col_obj = self.MibTableColumn(col_oid, pysnmp_type()).setMaxAccess(col_access)
                 col_is_writable = col_access in ("readwrite", "readcreate")
                 symbols[col_name] = col_obj
                 # Store writable flag alongside oid and *declared* type so it's available when creating instances
@@ -786,13 +752,9 @@ class MibRegistrar:
                     _, idx_type, _ = columns_by_name[idx_name]
 
                 # Log what we're expanding for diagnostics
-                self.logger.info(
-                    f"Expanding index: {idx_name} value={idx_value} type={idx_type}"
-                )
+                self.logger.info(f"Expanding index: {idx_name} value={idx_value} type={idx_type}")
                 # Expand the value into OID components
-                components = self._expand_index_value_to_oid_components(
-                    idx_value, idx_type
-                )
+                components = self._expand_index_value_to_oid_components(idx_value, idx_type)
                 self.logger.info(f"Expanded components for {idx_name}: {components}")
                 index_components.extend(components)
 
@@ -838,9 +800,7 @@ class MibRegistrar:
                     if pysnmp_type is None:
                         continue
 
-                    inst = self.MibScalarInstance(
-                        col_oid, index_tuple, pysnmp_type(value)
-                    )
+                    inst = self.MibScalarInstance(col_oid, index_tuple, pysnmp_type(value))
 
                     inst_name = f"{col_name}Inst_{'_'.join(map(str, index_tuple))}"
                     symbols[inst_name] = inst
@@ -851,9 +811,7 @@ class MibRegistrar:
                             inst_name_tuple = tuple(inst.name)
                         except Exception:
                             inst_name_tuple = tuple(col_oid + index_tuple)
-                        self.logger.info(
-                            f"Registered instance {inst_name} -> {inst_name_tuple}"
-                        )
+                        self.logger.info(f"Registered instance {inst_name} -> {inst_name_tuple}")
                     except Exception:
                         pass
 
@@ -905,9 +863,7 @@ class MibRegistrar:
                                             if hasattr(val, "asOctets"):
                                                 octs = val.asOctets()
                                                 text = (
-                                                    octs.decode(
-                                                        "utf-8", errors="replace"
-                                                    )
+                                                    octs.decode("utf-8", errors="replace")
                                                     if octs
                                                     else "<empty-octets>"
                                                 )
@@ -915,9 +871,7 @@ class MibRegistrar:
                                                 text = str(val.asNumbers())
                                             elif isinstance(val, (bytes, bytearray)):
                                                 text = (
-                                                    val.decode(
-                                                        "utf-8", errors="replace"
-                                                    )
+                                                    val.decode("utf-8", errors="replace")
                                                     or "<empty-bytes>"
                                                 )
                                             else:
@@ -964,9 +918,7 @@ class MibRegistrar:
 
                                 final_dotted = _dotted
                                 if vb_oid_tuple:
-                                    final_dotted = ".".join(
-                                        str(x) for x in vb_oid_tuple
-                                    )
+                                    final_dotted = ".".join(str(x) for x in vb_oid_tuple)
 
                                 _logger.info(
                                     "SNMP SET applied to %s (%s): old=%s new=%s",
@@ -1080,9 +1032,7 @@ class MibRegistrar:
                 if isinstance(encoded_value, str):
                     # Convert string with \x escape sequences to bytes
                     decoded = (
-                        encoded_value.encode("utf-8")
-                        .decode("unicode_escape")
-                        .encode("latin1")
+                        encoded_value.encode("utf-8").decode("unicode_escape").encode("latin1")
                     )
                     return decoded
                 else:

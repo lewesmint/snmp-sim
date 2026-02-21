@@ -127,9 +127,7 @@ def test_main_no_args(capsys: pytest.CaptureFixture[str]) -> None:
     assert "Usage:" in result.stdout
 
 
-def test_main_with_valid_file(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_main_with_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     # Create a valid registry file
     registry = {
         "MyType": {

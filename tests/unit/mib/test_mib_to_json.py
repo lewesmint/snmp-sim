@@ -9,9 +9,7 @@ from pytest_mock import MockerFixture
 from app.cli_mib_to_json import check_imported_mibs, main
 
 
-def test_cli_success_prints_path(
-    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_success_prints_path(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI should generate behaviour JSON and print the path."""
     mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
 
@@ -50,9 +48,7 @@ def test_cli_checks_imports_when_txt_path_provided(
     mock_generator.generate.return_value = "agent-model/TEST-MIB/schema.json"
     mocker.patch("app.cli_mib_to_json.BehaviourGenerator", return_value=mock_generator)
 
-    exit_code = main(
-        ["compiled-mibs/TEST-MIB.py", "TEST-MIB", "data/mibs/TEST-MIB.txt"]
-    )
+    exit_code = main(["compiled-mibs/TEST-MIB.py", "TEST-MIB", "data/mibs/TEST-MIB.txt"])
     output = capsys.readouterr()
 
     assert exit_code == 0
@@ -60,9 +56,7 @@ def test_cli_checks_imports_when_txt_path_provided(
     assert "Schema JSON written to agent-model/TEST-MIB/schema.json" in output.out
 
 
-def test_cli_no_plugins_flag(
-    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_no_plugins_flag(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI should disable plugin loading when --no-plugins is used."""
     mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
 
@@ -84,9 +78,7 @@ def test_check_imported_mibs_warns_missing_compiled(
     mibs_dir = tmp_path / "mibs"
     mibs_dir.mkdir(parents=True, exist_ok=True)
     mib_txt = mibs_dir / "TEST-MIB.txt"
-    mib_txt.write_text(
-        "IMPORTS\n    someType FROM SNMPv2-SMI\n    otherType FROM IF-MIB;\n"
-    )
+    mib_txt.write_text("IMPORTS\n    someType FROM SNMPv2-SMI\n    otherType FROM IF-MIB;\n")
 
     compiled_dir = str(tmp_path / "compiled-mibs")
     os.makedirs(compiled_dir, exist_ok=True)
@@ -108,9 +100,7 @@ def test_check_imported_mibs_missing_txt_path(
     assert "WARNING: MIB source file" in output.out
 
 
-def test_cli_output_dir_flag(
-    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_output_dir_flag(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI should pass output dir to BehaviourGenerator."""
     mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
 
@@ -118,18 +108,14 @@ def test_cli_output_dir_flag(
     mock_generator.generate.return_value = "custom-out/TEST-MIB/schema.json"
     mocker.patch("app.cli_mib_to_json.BehaviourGenerator", return_value=mock_generator)
 
-    exit_code = main(
-        ["compiled-mibs/TEST-MIB.py", "TEST-MIB", "--output-dir", "custom-out"]
-    )
+    exit_code = main(["compiled-mibs/TEST-MIB.py", "TEST-MIB", "--output-dir", "custom-out"])
     output = capsys.readouterr()
 
     assert exit_code == 0
     assert "Schema JSON written to custom-out/TEST-MIB/schema.json" in output.out
 
 
-def test_cli_mib_name_optional(
-    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_mib_name_optional(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI should allow mib_name to be omitted."""
     mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
 
@@ -217,9 +203,7 @@ def test_check_imported_mibs_ignores_already_compiled_dependency(
     mibs_dir = tmp_path / "mibs"
     mibs_dir.mkdir(parents=True, exist_ok=True)
     mib_txt = mibs_dir / "TEST-MIB.txt"
-    mib_txt.write_text(
-        "IMPORTS\n    ifEntry FROM IF-MIB\n    sysObjectID FROM SNMPv2-SMI;\n"
-    )
+    mib_txt.write_text("IMPORTS\n    ifEntry FROM IF-MIB\n    sysObjectID FROM SNMPv2-SMI;\n")
 
     compiled_dir = tmp_path / "compiled-mibs"
     compiled_dir.mkdir(parents=True, exist_ok=True)

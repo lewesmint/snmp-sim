@@ -114,9 +114,7 @@ class TestTCTableCompilation:
             content = f.read()
 
         # Check for TextualConvention class definitions
-        assert "TextualConvention" in content, (
-            "Compiled MIB should contain TextualConvention"
-        )
+        assert "TextualConvention" in content, "Compiled MIB should contain TextualConvention"
         assert "StatusType" in content, "StatusType TC should be in compiled MIB"
         assert "PriorityLevel" in content, "PriorityLevel TC should be in compiled MIB"
         assert "DeviceName" in content, "DeviceName TC should be in compiled MIB"
@@ -154,9 +152,7 @@ class TestTCTableCompilation:
         # But we should see references to the TC types in the MIB structure
         assert "DeviceName" in content, "DeviceName TC should be referenced in columns"
         assert "StatusType" in content, "StatusType TC should be referenced in columns"
-        assert "PriorityLevel" in content, (
-            "PriorityLevel TC should be referenced in columns"
-        )
+        assert "PriorityLevel" in content, "PriorityLevel TC should be referenced in columns"
 
 
 class TestTCTypeRecognition:
@@ -174,23 +170,13 @@ class TestTCTypeRecognition:
             content = f.read()
 
         # Verify TC classes with inheritance
-        assert "class StatusType" in content, (
-            "StatusType TC should be defined as a class"
-        )
-        assert "class PriorityLevel" in content, (
-            "PriorityLevel TC should be defined as a class"
-        )
-        assert "class DeviceName" in content, (
-            "DeviceName TC should be defined as a class"
-        )
-        assert "class PercentageType" in content, (
-            "PercentageType TC should be defined as a class"
-        )
+        assert "class StatusType" in content, "StatusType TC should be defined as a class"
+        assert "class PriorityLevel" in content, "PriorityLevel TC should be defined as a class"
+        assert "class DeviceName" in content, "DeviceName TC should be defined as a class"
+        assert "class PercentageType" in content, "PercentageType TC should be defined as a class"
 
         # Verify TextualConvention in the inheritance chain
-        assert "TextualConvention" in content, (
-            "TextualConvention should appear in TC definitions"
-        )
+        assert "TextualConvention" in content, "TextualConvention should appear in TC definitions"
 
     def test_compiled_tc_types_have_base_types(
         self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
@@ -218,9 +204,7 @@ class TestTCTypeRecognition:
         assert "testDeviceStatus" in content, (
             "testDeviceStatus column should reference StatusType TC"
         )
-        assert "testDeviceName" in content, (
-            "testDeviceName column should reference DeviceName TC"
-        )
+        assert "testDeviceName" in content, "testDeviceName column should reference DeviceName TC"
 
 
 class TestTCTableWalking:
@@ -278,9 +262,7 @@ class TestTCTableWalking:
 
         # DeviceName columns (should use string/DisplayString base)
         assert "testDeviceName" in content and (
-            "DeviceName" in content
-            or "OctetString" in content
-            or "DisplayString" in content
+            "DeviceName" in content or "OctetString" in content or "DisplayString" in content
         ), "testDeviceName should use DeviceName TC"
 
         # Priority columns (should use Integer with constraints)
@@ -337,12 +319,8 @@ class TestTCTableWalking:
             content = f.read()
 
         # Verify TC-based table structure is present
-        assert "testDeviceTable" in content, (
-            "testDeviceTable should be in compiled code"
-        )
-        assert "testDeviceEntry" in content, (
-            "testDeviceEntry should be in compiled code"
-        )
+        assert "testDeviceTable" in content, "testDeviceTable should be in compiled code"
+        assert "testDeviceEntry" in content, "testDeviceEntry should be in compiled code"
         assert "exportSymbols" in content, (
             "MIB should export symbols needed for behavior generation"
         )
@@ -389,15 +367,9 @@ class TestTCTableWalking:
             assert col in content, f"TC column {col} should be in compiled code"
 
         # Verify the compiled code has proper class structure for TC detection
-        assert "TextualConvention" in content, (
-            "TextualConvention should be present for extraction"
-        )
-        assert "class StatusType" in content, (
-            "StatusType TC class should be recognizable"
-        )
-        assert "class DeviceName" in content, (
-            "DeviceName TC class should be recognizable"
-        )
+        assert "TextualConvention" in content, "TextualConvention should be present for extraction"
+        assert "class StatusType" in content, "StatusType TC class should be recognizable"
+        assert "class DeviceName" in content, "DeviceName TC class should be recognizable"
 
     def test_tree_walk_simulation_on_tc_tables(
         self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
@@ -426,16 +398,12 @@ class TestTCTableWalking:
         ]
 
         for pattern in oid_patterns:
-            assert pattern in content, (
-                f"OID definition {pattern} required for tree walking"
-            )
+            assert pattern in content, f"OID definition {pattern} required for tree walking"
 
         # Verify table structure required for tree walking
-        assert (
-            "MibTable" in content
-            or "TableRow" in content
-            or "testDeviceTable" in content
-        ), "Table structure should support SNMP operations"
+        assert "MibTable" in content or "TableRow" in content or "testDeviceTable" in content, (
+            "Table structure should support SNMP operations"
+        )
 
         # Verify columns exist with proper structure for GETNEXT
         column_definitions = {
@@ -461,9 +429,7 @@ class TestTCTableWalking:
                 )
 
         # Verify exportSymbols is present - required for tree walking to discover objects
-        assert "exportSymbols" in content, (
-            "exportSymbols required for SNMP tree discovery"
-        )
+        assert "exportSymbols" in content, "exportSymbols required for SNMP tree discovery"
 
         # Verify table and column symbols are exported
         assert "('testDeviceTable'" in content or '"testDeviceTable"' in content, (

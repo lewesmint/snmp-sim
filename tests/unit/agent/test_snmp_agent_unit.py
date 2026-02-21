@@ -151,9 +151,7 @@ def test_run_aborts_when_type_registry_validation_fails(
     def fake_validate(path: str) -> tuple[bool, list[str], int]:
         return False, ["broken"], 0
 
-    monkeypatch.setattr(
-        "app.type_registry_validator.validate_type_registry_file", fake_validate
-    )
+    monkeypatch.setattr("app.type_registry_validator.validate_type_registry_file", fake_validate)
 
     # Prevent SNMP engine setup from running by patching it and asserting it is not called
     called = {"setup_called": False}
@@ -308,9 +306,7 @@ def test_setup_snmpEngine_loads_compiled_modules(
         "pysnmp.entity.rfc3413.context",
         types.SimpleNamespace(
             SnmpContext=lambda eng: types.SimpleNamespace(
-                get_mib_instrum=lambda: types.SimpleNamespace(
-                    get_mib_builder=fake_get_mib_builder
-                )
+                get_mib_instrum=lambda: types.SimpleNamespace(get_mib_builder=fake_get_mib_builder)
             )
         ),
     )
@@ -435,9 +431,7 @@ def test_setup_transport_adds_transport(monkeypatch: pytest.MonkeyPatch) -> None
         monkeypatch.setitem(
             sys.modules,
             "pysnmp.entity.config",
-            types.SimpleNamespace(
-                add_transport=fake_add_transport, SNMP_UDP_DOMAIN="udp"
-            ),
+            types.SimpleNamespace(add_transport=fake_add_transport, SNMP_UDP_DOMAIN="udp"),
         )
 
     agent = SNMPAgent(preloaded_model={})
@@ -480,9 +474,7 @@ def test_setup_responders_registers_responders(monkeypatch: pytest.MonkeyPatch) 
     agent = SNMPAgent(preloaded_model={})
     # Provide lightweight objects compatible with pysnmp cmdrsp expectations
     engine_obj = types.SimpleNamespace(
-        message_dispatcher=types.SimpleNamespace(
-            register_context_engine_id=lambda *_a, **_k: None
-        )
+        message_dispatcher=types.SimpleNamespace(register_context_engine_id=lambda *_a, **_k: None)
     )
     context_obj = types.SimpleNamespace(contextEngineId="ctxid")
     agent.snmpEngine = engine_obj

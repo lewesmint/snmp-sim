@@ -49,9 +49,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     # Check if compiled MIBs directory exists
     compiled_dir = Path(args.compiled_mibs_dir)
     if not compiled_dir.exists():
-        print(
-            f"Error: Compiled MIBs directory not found: {compiled_dir}", file=sys.stderr
-        )
+        print(f"Error: Compiled MIBs directory not found: {compiled_dir}", file=sys.stderr)
         print(
             "Please compile MIBs first using: python -m app.cli_compile_mib",
             file=sys.stderr,
@@ -137,9 +135,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                     mib_name = defined_in
                 elif used_by_list:
                     first_usage = used_by_list[0]
-                    mib_name = (
-                        first_usage.split("::")[0] if "::" in first_usage else "unknown"
-                    )
+                    mib_name = first_usage.split("::")[0] if "::" in first_usage else "unknown"
                 else:
                     mib_name = "SNMPv2-SMI"
 

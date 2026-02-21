@@ -18,9 +18,7 @@ def test_send_and_receive_test_trap() -> None:
         received_traps.append(trap_data)
 
     # Start receiver
-    receiver = TrapReceiver(
-        port=test_port, community="public", on_trap_callback=trap_callback
-    )
+    receiver = TrapReceiver(port=test_port, community="public", on_trap_callback=trap_callback)
     receiver.start()
 
     # Give receiver time to start
@@ -31,9 +29,7 @@ def test_send_and_receive_test_trap() -> None:
         sender = TrapSender(dest=("localhost", test_port), community="public")
 
         # Send coldStart trap from SNMPv2-MIB
-        sender.send_mib_notification(
-            mib="SNMPv2-MIB", notification="coldStart", trap_type="trap"
-        )
+        sender.send_mib_notification(mib="SNMPv2-MIB", notification="coldStart", trap_type="trap")
 
         # Wait for trap to be received
         time.sleep(1.0)
@@ -73,9 +69,7 @@ def test_send_and_receive_regular_trap() -> None:
         sender = TrapSender(dest=("localhost", test_port))
 
         # Send a coldStart trap
-        sender.send_mib_notification(
-            mib="SNMPv2-MIB", notification="coldStart", trap_type="trap"
-        )
+        sender.send_mib_notification(mib="SNMPv2-MIB", notification="coldStart", trap_type="trap")
 
         time.sleep(1.0)
 

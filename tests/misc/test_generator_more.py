@@ -40,9 +40,7 @@ def test_extract_type_info_enums_and_constraints() -> None:
     assert info["constraints"] is not None
 
 
-def test_generate_writes_schema(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_generate_writes_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # Prepare fake symbol objects
     class MibTable:
         def getName(self) -> tuple[int, ...]:
@@ -124,9 +122,7 @@ def test_generate_writes_schema(
     assert "MyTable" in data["objects"]
 
 
-def test_extract_mib_info_non_dict(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_extract_mib_info_non_dict(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     class BadBuilder:
         def __init__(self) -> None:
             # mibSymbols value is not a dict
@@ -140,9 +136,7 @@ def test_extract_mib_info_non_dict(
 
     monkeypatch.setattr(
         "app.generator.builder",
-        types.SimpleNamespace(
-            MibBuilder=lambda: BadBuilder(), DirMibSource=lambda p: p
-        ),
+        types.SimpleNamespace(MibBuilder=lambda: BadBuilder(), DirMibSource=lambda p: p),
     )
 
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
@@ -256,9 +250,7 @@ def test_generate_creates_default_table_row_with_index_extraction(
                 "testEntry": {
                     "type": "MibTableRow",
                     "oid": [1, 2, 3, 1],
-                    "indexes": [
-                        "testTableCol1"
-                    ],  # Pre-set indexes to skip mibBuilder code
+                    "indexes": ["testTableCol1"],  # Pre-set indexes to skip mibBuilder code
                 },
                 "testTableCol1": {"oid": [1, 2, 3, 1, 1], "type": "Integer32"},
             },
@@ -268,9 +260,7 @@ def test_generate_creates_default_table_row_with_index_extraction(
     monkeypatch.setattr(g, "_extract_mib_info", mock_extract)
 
     # Mock type registry and default value
-    monkeypatch.setattr(
-        g, "_load_type_registry", lambda: {"Integer32": {"base_type": "Integer32"}}
-    )
+    monkeypatch.setattr(g, "_load_type_registry", lambda: {"Integer32": {"base_type": "Integer32"}})
     monkeypatch.setattr(g, "_get_default_value_from_type_info", lambda ti, s: 42)
 
     path = g.generate("dummy.py", mib_name="TEST-MIB")
@@ -351,9 +341,7 @@ def test_generate_handles_dir_mib_source_exception(
     assert os.path.exists(path)
 
 
-def test_parse_mib_name_from_py_fallback(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_parse_mib_name_from_py_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # Test the fallback when exportSymbols is not found
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
 
@@ -473,9 +461,7 @@ def test_extract_mib_info_handles_symbol_without_getname(
             pass
 
     monkeypatch.setattr("pysnmp.smi.builder.MibBuilder", MockMibBuilder3)
-    monkeypatch.setattr(
-        g, "_extract_type_info", lambda s, n: {"base_type": "Integer32"}
-    )
+    monkeypatch.setattr(g, "_extract_type_info", lambda s, n: {"base_type": "Integer32"})
     monkeypatch.setattr("app.generator.get_default_value", lambda t, s: "mock_value")
 
     result = g._extract_mib_info("dummy.py", "TEST-MIB")
@@ -563,9 +549,7 @@ def test_get_default_value_legacy_cases(monkeypatch: pytest.MonkeyPatch) -> None
         g._get_default_value("DisplayString", "sysDescr")
         == "Simple Python SNMP Agent - Demo System"
     )
-    assert (
-        g._get_default_value("ObjectIdentifier", "sysObjectID") == "1.3.6.1.4.1.99999"
-    )
+    assert g._get_default_value("ObjectIdentifier", "sysObjectID") == "1.3.6.1.4.1.99999"
     assert g._get_default_value("Integer32", "someInt") == 0
     assert g._get_default_value("UnknownType", "unknown") is None
 
@@ -612,9 +596,7 @@ def test_detect_inherited_indexes(monkeypatch: pytest.MonkeyPatch) -> None:
     g._detect_inherited_indexes(result, table_entries, "TEST-MIB")
 
     assert "index_from" in result["testEntry"]
-    assert result["testEntry"]["index_from"] == [
-        {"mib": "OTHER-MIB", "column": "inheritedIndex"}
-    ]  # type: ignore[comparison-overlap]
+    assert result["testEntry"]["index_from"] == [{"mib": "OTHER-MIB", "column": "inheritedIndex"}]  # type: ignore[comparison-overlap]
 
 
 def test_generate_force_regenerate_removes_existing_file(
@@ -978,9 +960,7 @@ def test_write_schema_include_enums_in_entry(
     )
 
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
-    g._type_registry = {
-        "Integer32": {"base_type": "Integer32", "enums": {"up": 1, "down": 2}}
-    }
+    g._type_registry = {"Integer32": {"base_type": "Integer32", "enums": {"up": 1, "down": 2}}}
     monkeypatch.setattr(g, "_get_default_value_from_type_info", lambda *args: 0)
 
     g.generate(str(py_path), force_regenerate=True)

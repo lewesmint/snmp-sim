@@ -7,53 +7,93 @@ warn_unreachable = true
 show_error_codes = true
 ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
-exclude = [
-    "retired/*",
-    "compiled-mibs-test/",
-    "^compiled-mibs/",  # Exclude auto-generated MIB files
-    "minimal-for-reference/*",  # Exclude reference examples
-]
+
+# mypy requires ONE regex string, not a list
+exclude = '(^|/)(retired|compiled-mibs-test|compiled-mibs|minimal-for-reference|manual-tests|logs|ui|tests|ui/logs)/'
+
 
 [tool.coverage.run]
-source = ["app"]
+source = ["app", "plugins", "ui"]
 omit = [
-    "tests/*",
-    "compiled-mibs/*"
-]
-
-[tool.ruff]
-# Exclude auto-generated, tests, retired/ compatibility files, and site-packages
-exclude = [
-    "retired/**",
+    "tests/**",
+    "manual-tests/**",
+    "minimal-for-reference/**",
     "compiled-mibs/**",
+    "compiled-mibs-test/**",
+    "retired/**",
+    "logs/**",
+    "ui/logs/**",
     ".venv/**",
     ".pyenv/**",
     "**/.venv/**",
     "**/.pyenv/**",
 ]
 
+[tool.coverage.report]
+skip_empty = true
+show_missing = true
+
+
+[tool.ruff]
+line-length = 100
+exclude = [
+    "retired/**",
+    "compiled-mibs/**",
+    "compiled-mibs-test/**",
+    "minimal-for-reference/**",
+    "manual-tests/**",
+    "logs/**",
+    "ui/logs/**",
+    ".venv/**",
+    ".pyenv/**",
+    "**/.venv/**",
+    "**/.pyenv/**",
+]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+extend-select = ["E501"]
+ignore = ["E501", "E741"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+
 [tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = [
+    "--ignore=minimal-for-reference",
+    "--ignore=compiled-mibs",
+    "--ignore=compiled-mibs-test",
+    "--ignore=retired",
+    "--ignore=manual-tests",
+    "--ignore=logs",
+    "--ignore=snmp-wrapper",
+    "--ignore=tests/integration",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
 
+
 [tool.pyright]
+pythonVersion = "3.10"
 exclude = [
-    "compiled-mibs",
-    "compiled-mibs/**",
-    "retired",
-    "retired/**",
     "**/node_modules",
     "**/__pycache__",
     "**/.*",
     ".venv",
-    ".venv/**",
     ".pyenv",
-    ".pyenv/**",
-    "**/.venv",
-    "**/.venv/**",
-    "**/.pyenv",
-    "**/.pyenv/**"
+    "compiled-mibs",
+    "compiled-mibs-test",
+    "retired",
+    "minimal-for-reference",
+    "manual-tests",
+    "tests",
+    "ui",
+    "logs",
+    "ui/logs",
 ]
 
 [[tool.pyright.executionEnvironments]]

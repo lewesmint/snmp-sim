@@ -84,14 +84,10 @@ def test_create_pysnmp_value_fallback_to_rfc1902(
     out = handler.create_pysnmp_value("Integer32", 42, mib_builder=RaisingBuilder())
     assert hasattr(out, "v") and out.v == 42
 
-    out2 = handler.create_pysnmp_value(
-        "OctetString", "foo", mib_builder=RaisingBuilder()
-    )
+    out2 = handler.create_pysnmp_value("OctetString", "foo", mib_builder=RaisingBuilder())
     assert isinstance(out2, bytes)
 
-    out3 = handler.create_pysnmp_value(
-        "ObjectIdentifier", (1, 2, 3), mib_builder=RaisingBuilder()
-    )
+    out3 = handler.create_pysnmp_value("ObjectIdentifier", (1, 2, 3), mib_builder=RaisingBuilder())
     assert out3 == (1, 2, 3)
 
 
@@ -121,9 +117,7 @@ def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
 
     # Patch the existing pysnmp.proto.rfc1902 if the package is loaded
     proto_mod = importlib.import_module("pysnmp.proto")
-    monkeypatch.setattr(
-        proto_mod, "rfc1902", types.SimpleNamespace(SomeName=RfcCls), raising=False
-    )
+    monkeypatch.setattr(proto_mod, "rfc1902", types.SimpleNamespace(SomeName=RfcCls), raising=False)
 
     got2 = handler._get_pysnmp_type_class("SomeName", FailBuilder())
     assert got2 is RfcCls
@@ -177,16 +171,13 @@ def test_get_default_value_unexpected_base_type_logs_warning(
     caplog.set_level(logging.WARNING)
 
     # Mock resolve_to_base_type to return an unexpected base type
-    mocker.patch.object(
-        handler, "resolve_to_base_type", return_value="UNKNOWN_BASE_TYPE"
-    )
+    mocker.patch.object(handler, "resolve_to_base_type", return_value="UNKNOWN_BASE_TYPE")
 
     type_info = {"base_type": "SomeType"}
     result = handler.get_default_value("SomeType", {"type_info": type_info})
     assert result == 0
     assert any(
-        "Unexpected base type 'UNKNOWN_BASE_TYPE'" in record.message
-        for record in caplog.records
+        "Unexpected base type 'UNKNOWN_BASE_TYPE'" in record.message for record in caplog.records
     )
 
 
@@ -205,13 +196,9 @@ def test_create_pysnmp_value_rfc1902_fallback_exception(
     mocker.patch("pysnmp.proto.rfc1902", mock_rfc1902)
 
     # Pass a dummy mib_builder so it doesn't return early
-    result = handler.create_pysnmp_value(
-        "Integer32", 42, mib_builder=mocker.MagicMock()
-    )
+    result = handler.create_pysnmp_value("Integer32", 42, mib_builder=mocker.MagicMock())
     assert result == 42  # Should return raw value
-    assert any(
-        "Failed to create PySNMP value" in record.message for record in caplog.records
-    )
+    assert any("Failed to create PySNMP value" in record.message for record in caplog.records)
 
 
 def test_get_pysnmp_type_class_rfc1902_exception(

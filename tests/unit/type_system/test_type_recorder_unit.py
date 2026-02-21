@@ -243,9 +243,7 @@ class TestExtractEnumsList:
     def test_sorts_by_value(self, mocker: Any) -> None:
         """Should sort enums by value"""
         named_values = mocker.Mock()
-        named_values.items = mocker.Mock(
-            return_value=[("down", 2), ("up", 1), ("testing", 3)]
-        )
+        named_values.items = mocker.Mock(return_value=[("down", 2), ("up", 1), ("testing", 3)])
 
         syntax = mocker.Mock()
         syntax.namedValues = named_values
@@ -344,7 +342,9 @@ class TestParseConstraintsFromRepr:
 
     def test_multiple_size_ranges_creates_size_range(self) -> None:
         """Should create size range from multiple ranges"""
-        repr_text = "ValueSizeConstraint object, consts 1, 64 ValueSizeConstraint object, consts 0, 32"
+        repr_text = (
+            "ValueSizeConstraint object, consts 1, 64 ValueSizeConstraint object, consts 0, 32"
+        )
         size, _constraints = TypeRecorder.parse_constraints_from_repr(repr_text)
         assert size is not None
         assert size["type"] == "range"
@@ -353,7 +353,9 @@ class TestParseConstraintsFromRepr:
 
     def test_conflicting_ranges_creates_union(self) -> None:
         """Should create union for conflicting ranges"""
-        repr_text = "ValueSizeConstraint object, consts 10, 20 ValueSizeConstraint object, consts 30, 40"
+        repr_text = (
+            "ValueSizeConstraint object, consts 10, 20 ValueSizeConstraint object, consts 30, 40"
+        )
         size, _constraints = TypeRecorder.parse_constraints_from_repr(repr_text)
         # eff_min (30) > eff_max (20), so should create union
         assert size is not None
@@ -361,7 +363,9 @@ class TestParseConstraintsFromRepr:
 
     def test_deduplicates_constraints(self) -> None:
         """Should deduplicate exact duplicates"""
-        repr_text = "ValueRangeConstraint object, consts 0, 100 ValueRangeConstraint object, consts 0, 100"
+        repr_text = (
+            "ValueRangeConstraint object, consts 0, 100 ValueRangeConstraint object, consts 0, 100"
+        )
         _size, constraints = TypeRecorder.parse_constraints_from_repr(repr_text)
         assert len(constraints) == 1
 
@@ -454,9 +458,7 @@ class TestFilterConstraintsBySize:
 
     def test_invalid_size_type_returns_unchanged(self) -> None:
         """Should return constraints unchanged for invalid size format"""
-        size = cast(
-            dict[str, object], {"type": "range", "min": "not an int", "max": "also not"}
-        )
+        size = cast(dict[str, object], {"type": "range", "min": "not an int", "max": "also not"})
         constraints = [{"type": "ValueSizeConstraint", "min": 0, "max": 255}]
         result = TypeRecorder._filter_constraints_by_size(size, constraints)
         assert result == constraints
@@ -470,9 +472,7 @@ class TestFilterConstraintsBySize:
 
     def test_unknown_size_type_returns_unchanged(self) -> None:
         """Should return constraints unchanged for unknown size type"""
-        size = cast(
-            dict[str, object], {"type": "union", "ranges": [{"min": 1, "max": 2}]}
-        )
+        size = cast(dict[str, object], {"type": "union", "ranges": [{"min": 1, "max": 2}]})
         constraints = [{"type": "ValueSizeConstraint", "min": 1, "max": 2}]
         result = TypeRecorder._filter_constraints_by_size(size, constraints)
         assert result == constraints
@@ -486,9 +486,7 @@ class TestCompactSingleValueConstraintsIfEnumsPresent:
         constraints: list[dict[str, object]] = [
             {"type": "SingleValueConstraint", "values": [1, 2, 3]}
         ]
-        result = TypeRecorder._compact_single_value_constraints_if_enums_present(
-            constraints, None
-        )
+        result = TypeRecorder._compact_single_value_constraints_if_enums_present(constraints, None)
         assert result == constraints
 
     def test_compacts_single_value_with_enums(self) -> None:
@@ -497,9 +495,7 @@ class TestCompactSingleValueConstraintsIfEnumsPresent:
             {"type": "SingleValueConstraint", "values": [1, 2, 3, 4]}
         ]
         enums = [{"value": 1, "name": "a"}, {"value": 2, "name": "b"}]
-        result = TypeRecorder._compact_single_value_constraints_if_enums_present(
-            constraints, enums
-        )
+        result = TypeRecorder._compact_single_value_constraints_if_enums_present(constraints, enums)
         assert result == [{"type": "SingleValueConstraint", "count": 4}]
 
     def test_keeps_non_single_value_constraints(self) -> None:
@@ -509,21 +505,15 @@ class TestCompactSingleValueConstraintsIfEnumsPresent:
             {"type": "SingleValueConstraint", "values": [1, 2]},
         ]
         enums = [{"value": 1, "name": "a"}]
-        result = TypeRecorder._compact_single_value_constraints_if_enums_present(
-            constraints, enums
-        )
+        result = TypeRecorder._compact_single_value_constraints_if_enums_present(constraints, enums)
         assert result[0] == constraints[0]
         assert result[1] == {"type": "SingleValueConstraint", "count": 2}
 
     def test_single_value_without_list_values(self) -> None:
         """Should compact SingleValueConstraint when values is not a list"""
-        constraints: list[dict[str, object]] = [
-            {"type": "SingleValueConstraint", "values": "1"}
-        ]
+        constraints: list[dict[str, object]] = [{"type": "SingleValueConstraint", "values": "1"}]
         enums = [{"value": 1, "name": "a"}]
-        result = TypeRecorder._compact_single_value_constraints_if_enums_present(
-            constraints, enums
-        )
+        result = TypeRecorder._compact_single_value_constraints_if_enums_present(constraints, enums)
         assert result == [{"type": "SingleValueConstraint"}]
 
 
@@ -582,10 +572,8 @@ class TestCanonicaliseConstraints:
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
         constraints_repr = "some repr"
 
-        _result_size, _result_constraints, result_repr = (
-            TypeRecorder._canonicalise_constraints(
-                size, constraints, None, constraints_repr, drop_repr=True
-            )
+        _result_size, _result_constraints, result_repr = TypeRecorder._canonicalise_constraints(
+            size, constraints, None, constraints_repr, drop_repr=True
         )
         assert result_repr is None
 
@@ -595,10 +583,8 @@ class TestCanonicaliseConstraints:
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
         constraints_repr = "original repr"
 
-        _result_size, _result_constraints, result_repr = (
-            TypeRecorder._canonicalise_constraints(
-                size, constraints, None, constraints_repr, drop_repr=False
-            )
+        _result_size, _result_constraints, result_repr = TypeRecorder._canonicalise_constraints(
+            size, constraints, None, constraints_repr, drop_repr=False
         )
         assert result_repr == "original repr"
 
@@ -612,10 +598,8 @@ class TestCanonicaliseConstraints:
         constraints_repr = "original"
 
         # The compact function will change constraints
-        _result_size, _result_constraints, result_repr = (
-            TypeRecorder._canonicalise_constraints(
-                size, constraints, enums, constraints_repr, drop_repr=False
-            )
+        _result_size, _result_constraints, result_repr = TypeRecorder._canonicalise_constraints(
+            size, constraints, enums, constraints_repr, drop_repr=False
         )
         # Should drop repr since constraints were compacted
         assert result_repr is None
@@ -777,9 +761,7 @@ class TestDropRedundantBaseValueRange:
             {"type": "ValueRangeConstraint", "min": 0, "max": 50},  # stricter
         ]
 
-        result = TypeRecorder._drop_redundant_base_value_range(
-            "Integer32", constraints, types
-        )
+        result = TypeRecorder._drop_redundant_base_value_range("Integer32", constraints, types)
         # Should drop the base range since stricter exists
         assert len(result) == 1
         assert result[0]["max"] == 50
@@ -791,9 +773,7 @@ class TestDropRedundantBaseValueRange:
 
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
         types: Mapping[str, TypeEntry] = {}
-        result = TypeRecorder._drop_redundant_base_value_range(
-            "Missing", constraints, types
-        )
+        result = TypeRecorder._drop_redundant_base_value_range("Missing", constraints, types)
         assert result == constraints
 
     def test_string_min_max_base_range_dropped(self) -> None:
@@ -823,9 +803,7 @@ class TestDropRedundantBaseValueRange:
             {"type": "ValueRangeConstraint", "min": 0, "max": 50},
         ]
 
-        result = TypeRecorder._drop_redundant_base_value_range(
-            "Integer32", constraints, types
-        )
+        result = TypeRecorder._drop_redundant_base_value_range("Integer32", constraints, types)
         assert len(result) == 1
         assert result[0]["max"] == 50
 
@@ -840,9 +818,7 @@ class TestDropRedundantBaseRangeForEnums:
 
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
         types: Mapping[str, TypeEntry] = {}
-        result = TypeRecorder._drop_redundant_base_range_for_enums(
-            None, constraints, None, types
-        )
+        result = TypeRecorder._drop_redundant_base_range_for_enums(None, constraints, None, types)
         assert result == constraints
 
     def test_drops_base_range_with_enums(self) -> None:
@@ -957,9 +933,7 @@ class TestDropRedundantBaseRangeForEnums:
                 "base_type": None,
                 "display_hint": None,
                 "size": None,
-                "constraints": [
-                    {"type": "ValueRangeConstraint", "min": "0", "max": "100"}
-                ],
+                "constraints": [{"type": "ValueRangeConstraint", "min": "0", "max": "100"}],
                 "constraints_repr": None,
                 "enums": None,
                 "defined_in": None,
@@ -967,9 +941,7 @@ class TestDropRedundantBaseRangeForEnums:
                 "used_by": [],
             }
         }
-        constraints: List[JsonDict] = [
-            {"type": "ValueRangeConstraint", "min": "0", "max": "100"}
-        ]
+        constraints: List[JsonDict] = [{"type": "ValueRangeConstraint", "min": "0", "max": "100"}]
         enums = [{"value": 1, "name": "a"}]
 
         result = TypeRecorder._drop_redundant_base_range_for_enums(
@@ -1131,9 +1103,7 @@ class TestBuild:
 
         class Integer32:
             def __init__(self) -> None:
-                self.subtypeSpec = DummySubtype(
-                    "ValueSizeConstraint object, consts 4, 4"
-                )
+                self.subtypeSpec = DummySubtype("ValueSizeConstraint object, consts 4, 4")
                 self.namedValues = NamedValues()
 
         class CustomType:
@@ -1274,9 +1244,7 @@ class TestBuild:
 
         class CustomNoBase:
             def __init__(self) -> None:
-                self.subtypeSpec = DummySubtype(
-                    "ValueRangeConstraint object, consts 0, 10"
-                )
+                self.subtypeSpec = DummySubtype("ValueRangeConstraint object, consts 0, 10")
 
         class Symbol:
             def __init__(self) -> None:
@@ -1393,9 +1361,7 @@ class TestMain:
         """Should parse args and run recorder"""
         from app.type_recorder import main
 
-        mocker.patch(
-            "sys.argv", ["type_recorder.py", "compiled-mibs", "-o", "out.json"]
-        )
+        mocker.patch("sys.argv", ["type_recorder.py", "compiled-mibs", "-o", "out.json"])
         mocker.patch.object(TypeRecorder, "build")
         mocker.patch.object(TypeRecorder, "export_to_json")
         mocker.patch.object(TypeRecorder, "registry", {"type1": {}})

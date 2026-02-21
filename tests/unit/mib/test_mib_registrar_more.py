@@ -307,18 +307,13 @@ def test_register_mib_filters_existing_and_handles_export_exception(
     caplog.set_level("ERROR")
     reg.register_mib("X", {}, {})
     # export_symbols raised; should have logged an error
-    assert (
-        "Error registering MIB X" in caplog.text
-        or "Error registering MIB" in caplog.text
-    )
+    assert "Error registering MIB X" in caplog.text or "Error registering MIB" in caplog.text
 
 
 def test_register_all_mibs_type_registry_load_fails(caplog: Any, tmp_path: Any) -> None:
     # Provide a bad path so json.load fails
     b = DummyBuilder()
-    reg = MibRegistrar(
-        b, None, None, None, None, logging.getLogger("test"), time.time()
-    )
+    reg = MibRegistrar(b, None, None, None, None, logging.getLogger("test"), time.time())
     caplog.set_level("ERROR")
     reg.register_all_mibs({"FOO": {}}, type_registry_path=str(tmp_path / "nope.json"))
     assert "Failed to load type registry" in caplog.text
@@ -335,9 +330,7 @@ def test_populate_sysor_table_empty_rows(monkeypatch: Any, caplog: Any) -> None:
     assert "No sysORTable rows generated" in caplog.text
 
 
-def test_populate_sysor_table_updates_and_calls_register(
-    monkeypatch: Any, caplog: Any
-) -> None:
+def test_populate_sysor_table_updates_and_calls_register(monkeypatch: Any, caplog: Any) -> None:
     b = DummyBuilder()
     reg = make_registrar()
     reg.mib_builder = b
@@ -360,9 +353,7 @@ def test_populate_sysor_table_updates_and_calls_register(
     assert "Updated sysORTable" in caplog.text
 
 
-def test_populate_sysor_table_handles_json_load_error(
-    caplog: Any, monkeypatch: Any
-) -> None:
+def test_populate_sysor_table_handles_json_load_error(caplog: Any, monkeypatch: Any) -> None:
     reg = make_registrar()
 
     # Mock open to raise exception
@@ -379,9 +370,7 @@ def test_populate_sysor_table_handles_json_load_error(
     assert "Error" in caplog.text and "sysORTable" in caplog.text
 
 
-def test_populate_sysor_table_handles_register_mib_error(
-    caplog: Any, monkeypatch: Any
-) -> None:
+def test_populate_sysor_table_handles_register_mib_error(caplog: Any, monkeypatch: Any) -> None:
     reg = make_registrar()
 
     # Mock json.load to return empty dict
@@ -456,9 +445,7 @@ def test_register_mib_filtered_symbols_logging(monkeypatch: Any, caplog: Any) ->
     assert "Skipped 1 duplicate symbols for TEST-MIB" in caplog.text
 
 
-def test_register_mib_all_symbols_filtered_warning(
-    monkeypatch: Any, caplog: Any
-) -> None:
+def test_register_mib_all_symbols_filtered_warning(monkeypatch: Any, caplog: Any) -> None:
     """Test warning when all symbols are already exported."""
     reg = make_registrar()
     caplog.set_level("WARNING")
@@ -472,10 +459,7 @@ def test_register_mib_all_symbols_filtered_warning(
 
     reg.register_mib("TEST-MIB", mib_json, {})
 
-    assert (
-        "All symbols for TEST-MIB are already exported, skipping registration"
-        in caplog.text
-    )
+    assert "All symbols for TEST-MIB are already exported, skipping registration" in caplog.text
 
 
 def test_build_mib_symbols_skips_not_accessible(monkeypatch: Any) -> None:
@@ -609,9 +593,7 @@ def test_build_mib_symbols_sysuptime_special_handling(monkeypatch: Any) -> None:
     assert symbols["unsignedScalarInst"].value.v == 0
 
 
-def test_build_mib_symbols_table_creation_error_handling(
-    monkeypatch: Any, caplog: Any
-) -> None:
+def test_build_mib_symbols_table_creation_error_handling(monkeypatch: Any, caplog: Any) -> None:
     """Test error handling when _build_table_symbols raises exception."""
     reg = make_registrar()
     setup_fake_mib_classes(reg)
@@ -762,9 +744,7 @@ def test_build_table_symbols_skips_columns_not_in_entry(monkeypatch: Any) -> Non
         pass  # Expected
 
 
-def test_build_table_symbols_column_creation_error_handling(
-    monkeypatch: Any, caplog: Any
-) -> None:
+def test_build_table_symbols_column_creation_error_handling(monkeypatch: Any, caplog: Any) -> None:
     """Test error handling during column creation."""
     reg = make_registrar()
     setup_fake_mib_classes(reg)
@@ -849,10 +829,7 @@ def test_build_table_symbols_row_instance_creation_error_handling(
         # Should have some symbols but not all instances
         assert "testTable" in symbols
         # Should have warning for bad instance
-        assert (
-            "Error creating instance for testColumn1 row (2,): Bad instance"
-            in caplog.text
-        )
+        assert "Error creating instance for testColumn1 row (2,): Bad instance" in caplog.text
     except Exception:
         pass  # Expected due to incomplete mocking
 
@@ -1181,9 +1158,7 @@ def test_register_mib_new_structure_with_traps_and_no_objects_logs(
     reg = make_registrar()
     caplog.set_level("INFO")
 
-    monkeypatch.setattr(
-        MibRegistrar, "_build_mib_symbols", lambda self, mib, objects, tr: {}
-    )
+    monkeypatch.setattr(MibRegistrar, "_build_mib_symbols", lambda self, mib, objects, tr: {})
     reg.register_mib("TEST-MIB", {"objects": {}, "traps": {"coldStart": {}}}, {})
 
     assert "MIB TEST-MIB has 1 trap(s): ['coldStart']" in caplog.text
@@ -1218,9 +1193,7 @@ def test_populate_sysor_table_persists_and_merges_existing_schema(
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(
-        "app.mib_metadata.get_sysor_table_rows", lambda names: [{"sysORIndex": 1}]
-    )
+    monkeypatch.setattr("app.mib_metadata.get_sysor_table_rows", lambda names: [{"sysORIndex": 1}])
     called: dict[str, Any] = {}
     monkeypatch.setattr(
         MibRegistrar,
@@ -1242,9 +1215,7 @@ def test_populate_sysor_table_persists_and_merges_existing_schema(
     reg.populate_sysor_table(mib_jsons)
 
     assert called.get("mib") == "SNMPv2-MIB"
-    assert mib_jsons["SNMPv2-MIB"]["objects"]["sysORTable"]["rows"] == [
-        {"sysORIndex": 1}
-    ]
+    assert mib_jsons["SNMPv2-MIB"]["objects"]["sysORTable"]["rows"] == [{"sysORIndex": 1}]
     persisted = json.loads(schema_file.read_text(encoding="utf-8"))
     assert "keepMe" in persisted["objects"]
     persisted_rows = persisted.get("objects", {}).get("sysORTable", {}).get("rows")
@@ -1272,9 +1243,7 @@ def test_populate_sysor_table_persist_warning_on_write_failure(
     data_dir.mkdir(parents=True, exist_ok=True)
     (data_dir / "types.json").write_text("{}", encoding="utf-8")
 
-    monkeypatch.setattr(
-        "app.mib_metadata.get_sysor_table_rows", lambda names: [{"sysORIndex": 1}]
-    )
+    monkeypatch.setattr("app.mib_metadata.get_sysor_table_rows", lambda names: [{"sysORIndex": 1}])
     monkeypatch.setattr(MibRegistrar, "register_mib", lambda *args, **kwargs: None)
 
     real_path_open = Path.open

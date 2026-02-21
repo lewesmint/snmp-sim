@@ -56,9 +56,7 @@ def _format_date_and_time(value: Union[str, bytes, None]) -> bytes:
     # year(2), month(1), day(1), hour(1), minute(1), second(1), deciseconds(1)
     # plus UTC sign (0x2B for '+'), hours offset (0), minutes offset (0)
     year_bytes = now.year.to_bytes(2, byteorder="big")
-    octets = year_bytes + bytes(
-        [now.month, now.day, now.hour, now.minute, now.second, 0]
-    )
+    octets = year_bytes + bytes([now.month, now.day, now.hour, now.minute, now.second, 0])
     # Add UTC timezone: '+' (0x2B) for UTC+0:0
     octets += bytes([0x2B, 0, 0])  # +0:0
     return octets

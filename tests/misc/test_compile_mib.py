@@ -42,9 +42,7 @@ def test_compile_mib_failure(
 ) -> None:
     """Test MIB compilation failure."""
     mock_results = {"CISCO-ALARM-MIB": "failed"}
-    _setup_compiler(
-        mock_results, mocker, compile_side_effect=MibCompilationError("boom")
-    )
+    _setup_compiler(mock_results, mocker, compile_side_effect=MibCompilationError("boom"))
 
     exit_code = main(["CISCO-ALARM-MIB.txt"])
     output = capsys.readouterr()

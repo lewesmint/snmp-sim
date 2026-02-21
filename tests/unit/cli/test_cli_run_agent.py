@@ -62,9 +62,7 @@ def test_main_agent_keyboard_interrupt(monkeypatch: Any, capsys: Any) -> None:
     monkeypatch.setattr(cli, "build_internal_model", lambda mibs, sd: {"TEST-MIB": {}})
 
     class FakeAgent:
-        def __init__(
-            self, host: str, port: int, config_path: str, preloaded_model: Any
-        ) -> None:
+        def __init__(self, host: str, port: int, config_path: str, preloaded_model: Any) -> None:
             pass
 
         def run(self) -> None:
@@ -90,9 +88,7 @@ def test_main_agent_exception(monkeypatch: Any, capsys: Any) -> None:
     monkeypatch.setattr(cli, "build_internal_model", lambda mibs, sd: {"TEST-MIB": {}})
 
     class BadAgent:
-        def __init__(
-            self, host: str, port: int, config_path: str, preloaded_model: Any
-        ) -> None:
+        def __init__(self, host: str, port: int, config_path: str, preloaded_model: Any) -> None:
             pass
 
         def run(self) -> None:
@@ -118,9 +114,7 @@ def test_main_success(monkeypatch: Any, capsys: Any) -> None:
     monkeypatch.setattr(cli, "build_internal_model", lambda mibs, sd: {"TEST-MIB": {}})
 
     class OkAgent:
-        def __init__(
-            self, host: str, port: int, config_path: str, preloaded_model: Any
-        ) -> None:
+        def __init__(self, host: str, port: int, config_path: str, preloaded_model: Any) -> None:
             pass
 
         def run(self) -> None:

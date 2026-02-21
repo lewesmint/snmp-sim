@@ -144,9 +144,7 @@ def test_bake_state_handles_index_sentinel_and_bad_schema(
 
     state = {
         "scalars": {},
-        "tables": {
-            "1.3.6.1.4.1.99999.1": {"custom.idx": {"column_values": {"someCol": "v"}}}
-        },
+        "tables": {"1.3.6.1.4.1.99999.1": {"custom.idx": {"column_values": {"someCol": "v"}}}},
         "deleted_instances": [],
     }
 
@@ -169,11 +167,7 @@ def test_main_no_backup_bakes_and_clears_state(tmp_path: Path) -> None:
     data_dir.mkdir(parents=True)
     mib_dir.mkdir(parents=True)
 
-    schema = {
-        "objects": {
-            "sysContact": {"oid": [1, 3, 6, 1, 2, 1, 1, 4], "type": "DisplayString"}
-        }
-    }
+    schema = {"objects": {"sysContact": {"oid": [1, 3, 6, 1, 2, 1, 1, 4], "type": "DisplayString"}}}
     (mib_dir / "schema.json").write_text(json.dumps(schema), encoding="utf-8")
 
     state_file = data_dir / "mib_state.json"
@@ -233,9 +227,7 @@ def test_bake_state_legacy_index_values_format(tmp_path: Path) -> None:
     state = {
         "scalars": {},
         "tables": {
-            "1.3.6.1.4.1.99999.2": {
-                "1": {"index_values": {"legacyIndex": 1, "legacyCol": "x"}}
-            }
+            "1.3.6.1.4.1.99999.2": {"1": {"index_values": {"legacyIndex": 1, "legacyCol": "x"}}}
         },
         "deleted_instances": [],
     }

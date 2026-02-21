@@ -9,9 +9,7 @@ class AppConfig:
     _instance = None
     _lock = Lock()
 
-    def get_platform_setting(
-        self, key: str, default: Any = None
-    ) -> Any:  # Changed to Any
+    def get_platform_setting(self, key: str, default: Any = None) -> Any:  # Changed to Any
         platform_key = sys.platform  # e.g. 'linux', 'darwin', 'win32'
         value = self.get(key, {})
         if isinstance(value, dict):

@@ -4,7 +4,6 @@
 import sys
 import json
 
-import pytest
 
 from app.snmp_agent import SNMPAgent
 
@@ -43,9 +42,7 @@ def test_schema_loading() -> None:
 
         # Verify it's bytes
         assert isinstance(decoded, bytes), f"Expected bytes, got {type(decoded)}"
-        assert len(decoded) == 6, (
-            f"Expected 6 bytes for MAC address, got {len(decoded)}"
-        )
+        assert len(decoded) == 6, f"Expected 6 bytes for MAC address, got {len(decoded)}"
 
         # Format as MAC address
         mac_str = decoded.hex(":")

@@ -20,20 +20,14 @@ def main(argv: Iterable[str] | None = None) -> int:
         description="Send a MIB-defined SNMP notification (trap or inform)",
         epilog="Example: %(prog)s --mib SNMPv2-MIB --notification coldStart --host localhost --port 162",
     )
-    parser.add_argument(
-        "--mib", required=True, help="MIB name, e.g. SNMPv2-MIB or IF-MIB"
-    )
+    parser.add_argument("--mib", required=True, help="MIB name, e.g. SNMPv2-MIB or IF-MIB")
     parser.add_argument(
         "--notification",
         required=True,
         help="Notification name, e.g. coldStart or linkDown",
     )
-    parser.add_argument(
-        "--host", default="localhost", help="Destination host (default: localhost)"
-    )
-    parser.add_argument(
-        "--port", type=int, default=162, help="Destination port (default: 162)"
-    )
+    parser.add_argument("--host", default="localhost", help="Destination host (default: localhost)")
+    parser.add_argument("--port", type=int, default=162, help="Destination port (default: 162)")
     parser.add_argument(
         "--community", default="public", help="SNMP community string (default: public)"
     )
@@ -104,9 +98,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             trap_type=args.trap_type,
             extra_varbinds=extra_varbinds if extra_varbinds else None,
         )
-        print(
-            f"✓ Sent {args.trap_type} {args.mib}::{args.notification} to {args.host}:{args.port}"
-        )
+        print(f"✓ Sent {args.trap_type} {args.mib}::{args.notification} to {args.host}:{args.port}")
         return 0
     except Exception as e:
         print(f"Error sending notification: {e}", file=sys.stderr)

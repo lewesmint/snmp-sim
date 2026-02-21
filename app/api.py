@@ -88,9 +88,7 @@ def get_type_info(type_name: str) -> dict[str, Any]:
     type_info = handler.get_type_info(type_name)
 
     if not type_info:
-        raise HTTPException(
-            status_code=404, detail=f"Type '{type_name}' not found in registry"
-        )
+        raise HTTPException(status_code=404, detail=f"Type '{type_name}' not found in registry")
 
     base_type = handler.resolve_to_base_type(type_name)
     default_value = handler.get_default_value(type_name)
@@ -136,9 +134,7 @@ def create_or_update_link(request: LinkRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
 
     if not request.endpoints or len(request.endpoints) < 2:
-        raise HTTPException(
-            status_code=400, detail="At least two endpoints are required"
-        )
+        raise HTTPException(status_code=400, detail="At least two endpoints are required")
 
     if request.scope == "per-instance":
         for endpoint in request.endpoints:
@@ -209,9 +205,7 @@ def create_or_update_link(request: LinkRequest) -> dict[str, Any]:
                 )
 
     link_manager = get_link_manager()
-    link_id = (
-        request.id or f"link_{len(link_manager.export_links(include_schema=True)) + 1}"
-    )
+    link_id = request.id or f"link_{len(link_manager.export_links(include_schema=True)) + 1}"
 
     # Prevent overwriting schema links
     existing = {l["id"]: l for l in link_manager.export_links(include_schema=True)}
@@ -432,7 +426,7 @@ def list_oids() -> dict[str, Any]:
 
 @app.get("/oid-metadata")
 def get_oid_metadata() -> dict[str, Any]:
-    """Get full metadata for all OIDs including access, type, syntax, status, description from schema files."""
+    """Get full metadata for all OIDs from schema files."""
     if snmp_agent is None:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
 
@@ -442,9 +436,7 @@ def get_oid_metadata() -> dict[str, Any]:
 
     schema_dir = "agent-model"
     if not os.path.exists(schema_dir):
-        raise HTTPException(
-            status_code=500, detail=f"Schema directory not found: {schema_dir}"
-        )
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
 
     schemas = load_all_schemas(schema_dir)
 
@@ -499,9 +491,7 @@ def get_table_schema(oid: str) -> dict[str, Any]:
 
     schema_dir = "agent-model"
     if not os.path.exists(schema_dir):
-        raise HTTPException(
-            status_code=500, detail=f"Schema directory not found: {schema_dir}"
-        )
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
 
     schemas = load_all_schemas(schema_dir)
 
@@ -549,7 +539,9 @@ def get_table_schema(oid: str) -> dict[str, Any]:
     # Debug: if we didn't find a table, log candidates for diagnostic purposes
     if table_info is None:
         logger.debug(
-            f"/table-schema: requested OID {parts} - candidate tables found: {candidate_tables}"
+            "/table-schema: requested OID %s - candidate tables found: %s",
+            parts,
+            candidate_tables,
         )
 
     if not table_info:
@@ -580,10 +572,7 @@ def get_table_schema(oid: str) -> dict[str, Any]:
                 # Normalize oid to tuple for reliable comparison
                 obj_oid = obj_data["oid"]
                 obj_oid_t = tuple(obj_oid)
-                if (
-                    len(obj_oid_t) > len(entry_oid)
-                    and obj_oid_t[: len(entry_oid)] == entry_oid
-                ):
+                if len(obj_oid_t) > len(entry_oid) and obj_oid_t[: len(entry_oid)] == entry_oid:
                     # This is a column in the table
                     col_name = obj_name
                     is_index = col_name in index_columns
@@ -605,7 +594,8 @@ def get_table_schema(oid: str) -> dict[str, Any]:
     instances = []
     for row_data in rows_data:
         if isinstance(row_data, dict):
-            # Validate and fix index columns: ensure they don't have invalid values (like 0 for InterfaceIndex)
+            # Validate and fix index columns; ensure they don't have invalid
+            # values (like 0 for InterfaceIndex).
             # Only fix if the column type has constraints that exclude 0
             for idx_col in index_columns:
                 if idx_col in row_data and idx_col in columns:
@@ -620,14 +610,13 @@ def get_table_schema(oid: str) -> dict[str, Any]:
                         # InterfaceIndex must be > 0
                         should_fix_zero = col_type == "InterfaceIndex"
 
-                    if (
-                        should_fix_zero
-                        and idx_value == 0
-                        and isinstance(idx_value, int)
-                    ):
+                    if should_fix_zero and idx_value == 0 and isinstance(idx_value, int):
                         row_data[idx_col] = 1
                         logger.debug(
-                            f"Fixed invalid index value 0 for column {idx_col} ({col_type}) in {table_name}; changed to 1"
+                            "Fixed invalid index value 0 for column %s (%s) in %s; changed to 1",
+                            idx_col,
+                            col_type,
+                            table_name,
                         )
 
             # Build instance identifier from index columns
@@ -648,9 +637,7 @@ def get_table_schema(oid: str) -> dict[str, Any]:
     # Remove deleted instances
     if snmp_agent:
         instances = [
-            inst
-            for inst in instances
-            if f"{oid_str}.{inst}" not in snmp_agent.deleted_instances
+            inst for inst in instances if f"{oid_str}.{inst}" not in snmp_agent.deleted_instances
         ]
 
     # For no-index tables, add virtual __index__ columns to support multi-part indexes
@@ -797,9 +784,7 @@ def _try_get_table_cell_value(oid: str, parts: tuple[int, ...]) -> Any | None:
                 table_oid_str = ".".join(str(x) for x in table_parts)
                 column_num = parts[len(table_parts) + 1]
                 instance_parts = parts[len(table_parts) + 2 :]
-                instance_str = (
-                    ".".join(str(x) for x in instance_parts) if instance_parts else "1"
-                )
+                instance_str = ".".join(str(x) for x in instance_parts) if instance_parts else "1"
 
                 # Look up column name
                 for col_name, col_data in objects.items():
@@ -874,9 +859,7 @@ def _try_get_table_cell_value(oid: str, parts: tuple[int, ...]) -> Any | None:
                     continue
                 if column_name in row:
                     value = row[column_name]
-                    logger.info(
-                        f"Fetched table cell value from schema for OID {parts}: {value}"
-                    )
+                    logger.info(f"Fetched table cell value from schema for OID {parts}: {value}")
                     return value
                 continue
 
@@ -885,16 +868,12 @@ def _try_get_table_cell_value(oid: str, parts: tuple[int, ...]) -> Any | None:
             for idx_col in index_columns:
                 if idx_col in row:
                     row_instance_parts.append(str(row[idx_col]))
-            row_instance_str = (
-                ".".join(row_instance_parts) if row_instance_parts else "1"
-            )
+            row_instance_str = ".".join(row_instance_parts) if row_instance_parts else "1"
             if row_instance_str != instance_str_from_oid:
                 continue
             if column_name in row:
                 value = row[column_name]
-                logger.info(
-                    f"Fetched table cell value from schema for OID {parts}: {value}"
-                )
+                logger.info(f"Fetched table cell value from schema for OID {parts}: {value}")
                 return value
 
     return None
@@ -987,9 +966,7 @@ def get_tree_bulk_data() -> dict[str, Any]:
 
     # Build a map of parent column sources for tables with index_from
     # This helps identify which table rows to use for instances
-    index_source_map: dict[
-        str, dict[str, Any]
-    ] = {}  # table_oid -> {source_mib, source_column}
+    index_source_map: dict[str, dict[str, Any]] = {}  # table_oid -> {source_mib, source_column}
 
     # First pass: identify tables and their index sources
     for mib_name, schema in schemas.items():
@@ -1006,15 +983,9 @@ def get_tree_bulk_data() -> dict[str, Any]:
                     # Store the source info for this table row
                     table_oid_parts = obj_data.get("oid", [])
                     # Table OID is entry OID minus the .1
-                    if (
-                        table_oid_parts
-                        and len(table_oid_parts) > 0
-                        and table_oid_parts[-1] == 1
-                    ):
+                    if table_oid_parts and len(table_oid_parts) > 0 and table_oid_parts[-1] == 1:
                         table_oid = ".".join(str(x) for x in table_oid_parts[:-1])
-                        index_source_map[table_oid] = index_from[
-                            0
-                        ]  # Store first index source
+                        index_source_map[table_oid] = index_from[0]  # Store first index source
 
     # Second pass: process all tables
     for mib_name, schema in schemas.items():
@@ -1034,10 +1005,7 @@ def get_tree_bulk_data() -> dict[str, Any]:
                 expected_entry_oid = list(table_oid_parts) + [1]
 
                 for other_name, other_data in objects.items():
-                    if (
-                        isinstance(other_data, dict)
-                        and other_data.get("type") == "MibTableRow"
-                    ):
+                    if isinstance(other_data, dict) and other_data.get("type") == "MibTableRow":
                         if list(other_data.get("oid", [])) == expected_entry_oid:
                             entry_name = other_name
                             entry_obj = other_data
@@ -1058,7 +1026,11 @@ def get_tree_bulk_data() -> dict[str, Any]:
                         # Debug log for augmented tables
                         if table_oid.endswith(".31.1.1"):
                             logger.debug(
-                                f"Fetching parent instances for {obj_name} ({table_oid}) from {source_mib}.{source_column}"
+                                "Fetching parent instances for %s (%s) from %s.%s",
+                                obj_name,
+                                table_oid,
+                                source_mib,
+                                source_column,
                             )
                         if source_mib in schemas:
                             source_schema = schemas[source_mib]
@@ -1068,7 +1040,8 @@ def get_tree_bulk_data() -> dict[str, Any]:
                                 source_objects = source_schema
 
                             # First find which table contains the source column
-                            # The source_column is a column object, so we find its parent entry's parent table
+                            # The source_column is a column object; find its parent
+                            # entry's parent table.
                             parent_table_obj = None
                             if source_column in source_objects:
                                 col_data = source_objects[source_column]
@@ -1087,8 +1060,7 @@ def get_tree_bulk_data() -> dict[str, Any]:
                                             ) in source_objects.items():
                                                 if (
                                                     isinstance(tbl_data, dict)
-                                                    and tbl_data.get("type")
-                                                    == "MibTable"
+                                                    and tbl_data.get("type") == "MibTable"
                                                     and list(tbl_data.get("oid", []))
                                                     == list(table_oid_parts)
                                                 ):
@@ -1101,17 +1073,14 @@ def get_tree_bulk_data() -> dict[str, Any]:
                                 source_entry_obj = {}
 
                                 # Find the entry for the parent table
-                                source_entry_oid = list(
-                                    parent_table_obj.get("oid", [])
-                                ) + [1]
+                                source_entry_oid = list(parent_table_obj.get("oid", [])) + [1]
                                 for (
                                     source_entry_name,
                                     source_entry_data,
                                 ) in source_objects.items():
                                     if (
                                         isinstance(source_entry_data, dict)
-                                        and source_entry_data.get("type")
-                                        == "MibTableRow"
+                                        and source_entry_data.get("type") == "MibTableRow"
                                         and list(source_entry_data.get("oid", []))
                                         == source_entry_oid
                                     ):
@@ -1129,14 +1098,10 @@ def get_tree_bulk_data() -> dict[str, Any]:
                                             for idx_col in source_indexes:
                                                 if idx_col in row:
                                                     val = row[idx_col]
-                                                    col_meta = source_objects.get(
-                                                        idx_col, {}
-                                                    )
+                                                    col_meta = source_objects.get(idx_col, {})
                                                     if col_meta.get(
                                                         "type"
-                                                    ) == "IpAddress" and isinstance(
-                                                        val, str
-                                                    ):
+                                                    ) == "IpAddress" and isinstance(val, str):
                                                         parts.extend(val.split("."))
                                                     else:
                                                         parts.append(str(val))
@@ -1161,9 +1126,9 @@ def get_tree_bulk_data() -> dict[str, Any]:
                                             val = row[idx_col]
                                             # Handle IpAddress expansion
                                             col_meta = objects.get(idx_col, {})
-                                            if col_meta.get(
-                                                "type"
-                                            ) == "IpAddress" and isinstance(val, str):
+                                            if col_meta.get("type") == "IpAddress" and isinstance(
+                                                val, str
+                                            ):
                                                 parts.extend(val.split("."))
                                             else:
                                                 parts.append(str(val))
@@ -1171,7 +1136,9 @@ def get_tree_bulk_data() -> dict[str, Any]:
                                         instances.append(".".join(parts))
 
                     # Also add any dynamic instances from snmp_agent.table_instances
-                    # BUT: Skip this for augmented tables (those with index_from) - they should only use parent table instances
+                    # BUT: Skip this for augmented tables (those with
+                    # index_from) because they should only use parent table
+                    # instances.
                     # Check both entry_obj and index_source_map to detect augmented tables
                     has_index_from = isinstance(entry_obj, dict) and bool(
                         entry_obj.get("index_from")
@@ -1211,9 +1178,7 @@ def list_traps() -> dict[str, Any]:
 
     schema_dir = "agent-model"
     if not os.path.exists(schema_dir):
-        raise HTTPException(
-            status_code=500, detail=f"Schema directory not found: {schema_dir}"
-        )
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
 
     schemas = load_all_schemas(schema_dir)
 
@@ -1316,9 +1281,7 @@ def get_trap_varbinds(trap_name: str) -> dict[str, Any]:
 
     schema_dir = "agent-model"
     if not os.path.exists(schema_dir):
-        raise HTTPException(
-            status_code=500, detail=f"Schema directory not found: {schema_dir}"
-        )
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
 
     schemas = load_all_schemas(schema_dir)
 
@@ -1387,10 +1350,7 @@ def get_trap_varbinds(trap_name: str) -> dict[str, Any]:
 
             # Find the parent in the schema
             for check_name, check_data in obj_schema.get("objects", {}).items():
-                if (
-                    isinstance(check_data, dict)
-                    and tuple(check_data.get("oid", [])) == parent_oid
-                ):
+                if isinstance(check_data, dict) and tuple(check_data.get("oid", [])) == parent_oid:
                     # Found the parent (table row)
                     if check_data.get("type") == "MibTableRow":
                         # This is a table column
@@ -1399,15 +1359,14 @@ def get_trap_varbinds(trap_name: str) -> dict[str, Any]:
                             table_oid = tuple(parent_oid[:-1])
 
                             # Find the table and get index columns from the row entry
-                            for table_name, table_data in obj_schema.get(
-                                "objects", {}
-                            ).items():
+                            for table_name, table_data in obj_schema.get("objects", {}).items():
                                 if (
                                     isinstance(table_data, dict)
                                     and tuple(table_data.get("oid", [])) == table_oid
                                 ):
                                     if table_data.get("type") == "MibTable":
-                                        # Get index columns from the table row entry (not the table itself)
+                                        # Get index columns from the table row
+                                        # entry (not the table itself)
                                         table_index_cols = check_data.get("indexes", [])
                                         parent_table = {
                                             "name": table_name,
@@ -1431,20 +1390,15 @@ def get_trap_varbinds(trap_name: str) -> dict[str, Any]:
                                                 "objects", {}
                                             ).items():
                                                 if isinstance(col_data, dict):
-                                                    col_oid = tuple(
-                                                        col_data.get("oid", [])
-                                                    )
+                                                    col_oid = tuple(col_data.get("oid", []))
                                                     # Check if this column belongs to this table
                                                     if (
                                                         len(col_oid) > len(parent_oid)
-                                                        and col_oid[: len(parent_oid)]
-                                                        == parent_oid
+                                                        and col_oid[: len(parent_oid)] == parent_oid
                                                     ):
                                                         columns_meta[col_name] = {
                                                             "oid": list(col_oid),
-                                                            "type": col_data.get(
-                                                                "type", "Unknown"
-                                                            ),
+                                                            "type": col_data.get("type", "Unknown"),
                                                             "access": col_data.get(
                                                                 "access", "unknown"
                                                             ),
@@ -1524,9 +1478,7 @@ def get_trap_destinations() -> dict[str, Any]:
         return {"status": "ok", "destinations": dest_list}
     except Exception as e:
         logger.exception("Failed to get trap destinations")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get trap destinations: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get trap destinations: {str(e)}")
 
 
 @app.post("/trap-destinations")
@@ -1572,9 +1524,7 @@ def add_trap_destination(destination: TrapDestination) -> dict[str, Any]:
             }
     except Exception as e:
         logger.exception("Failed to add trap destination")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to add trap destination: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to add trap destination: {str(e)}")
 
 
 @app.delete("/trap-destinations")
@@ -1625,9 +1575,7 @@ def remove_trap_destination(destination: TrapDestination) -> dict[str, Any]:
             }
     except Exception as e:
         logger.exception("Failed to remove trap destination")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to remove trap destination: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to remove trap destination: {str(e)}")
 
 
 class TrapSendRequest(BaseModel):
@@ -1665,9 +1613,7 @@ async def send_trap(request: TrapSendRequest) -> dict[str, Any]:
 
     schema_dir = "agent-model"
     if not os.path.exists(schema_dir):
-        raise HTTPException(
-            status_code=500, detail=f"Schema directory not found: {schema_dir}"
-        )
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
 
     schemas = load_all_schemas(schema_dir)
 
@@ -1682,9 +1628,7 @@ async def send_trap(request: TrapSendRequest) -> dict[str, Any]:
                 break
 
     if not trap_info or mib_name is None:
-        raise HTTPException(
-            status_code=404, detail=f"Trap '{request.trap_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Trap '{request.trap_name}' not found")
 
     # Use the agent's SnmpEngine so traps have the correct uptime
     snmp_engine = getattr(snmp_agent, "snmpEngine", None)
@@ -1697,14 +1641,12 @@ async def send_trap(request: TrapSendRequest) -> dict[str, Any]:
     try:
         mib_builder.load_modules(mib_name)
     except MibNotFoundError as exc:
-        raise HTTPException(
-            status_code=400, detail=f"MIB module not found: {mib_name}. {exc}"
-        )
+        raise HTTPException(status_code=400, detail=f"MIB module not found: {mib_name}. {exc}")
 
     try:
-        notif = NotificationType(
-            ObjectIdentity(mib_name, request.trap_name)
-        ).resolve_with_mib(mib_view)
+        notif = NotificationType(ObjectIdentity(mib_name, request.trap_name)).resolve_with_mib(
+            mib_view
+        )
     except (SmiError, ValueError, TypeError) as exc:
         raise HTTPException(
             status_code=400,
@@ -1729,9 +1671,7 @@ async def send_trap(request: TrapSendRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to send trap: {exc}")
 
     if error_indication:
-        raise HTTPException(
-            status_code=502, detail=f"SNMP send error: {error_indication}"
-        )
+        raise HTTPException(status_code=502, detail=f"SNMP send error: {error_indication}")
 
     if error_status:
         raise HTTPException(
@@ -1793,23 +1733,17 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
         schemas = load_all_schemas(schema_dir)
 
         logger.info(f"Creating table instance for {request.table_oid}")
-        logger.info(
-            f"  index_values: {request.index_values} (type: {type(request.index_values)})"
-        )
+        logger.info(f"  index_values: {request.index_values} (type: {type(request.index_values)})")
         logger.info(f"  column_values: {request.column_values}")
 
         # Log each column value's type
         if request.column_values:
             for col_name, col_val in request.column_values.items():
-                logger.info(
-                    f"    {col_name}: {col_val} (type: {type(col_val).__name__})"
-                )
+                logger.info(f"    {col_name}: {col_val} (type: {type(col_val).__name__})")
 
         # Parse table OID
         table_parts = (
-            tuple(int(x) for x in request.table_oid.split("."))
-            if request.table_oid
-            else ()
+            tuple(int(x) for x in request.table_oid.split(".")) if request.table_oid else ()
         )
         entry_oid = table_parts + (1,)
 
@@ -1836,14 +1770,9 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
             """Get default row values from schema rows, if available."""
             parts = tuple(int(x) for x in table_oid.split(".")) if table_oid else ()
             for mib, schema in schemas.items():
-                objects = (
-                    schema.get("objects", schema) if isinstance(schema, dict) else {}
-                )
+                objects = schema.get("objects", schema) if isinstance(schema, dict) else {}
                 for obj_data in objects.values():
-                    if (
-                        isinstance(obj_data, dict)
-                        and obj_data.get("type") == "MibTable"
-                    ):
+                    if isinstance(obj_data, dict) and obj_data.get("type") == "MibTable":
                         obj_oid = tuple(obj_data.get("oid", []))
                         if obj_oid == parts:
                             rows = obj_data.get("rows", [])
@@ -1929,9 +1858,7 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
             }
 
         # Helper function to convert index value based on column type
-        def convert_index_value(
-            col_name: str, value: str | int
-        ) -> int | tuple[int, ...] | str:
+        def convert_index_value(col_name: str, value: str | int) -> int | tuple[int, ...] | str:
             """Convert index value to appropriate format based on column type."""
             if col_name not in columns:
                 # Try to parse as int, otherwise keep as string
@@ -2022,9 +1949,7 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
         for col_name, col_meta in columns.items():
             if col_name in index_columns:
                 continue
-            if col_name in incoming_values and not _should_use_default(
-                incoming_values[col_name]
-            ):
+            if col_name in incoming_values and not _should_use_default(incoming_values[col_name]):
                 merged_values[col_name] = incoming_values[col_name]
                 continue
             if col_name in default_row:
@@ -2048,17 +1973,13 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
             "table_oid": request.table_oid,
             "instance_index": instance_index_str.lstrip("."),
             "instance_oid": instance_oid,
-            "columns_created": [str(col) for col in merged_values.keys()]
-            if merged_values
-            else [],
+            "columns_created": [str(col) for col in merged_values.keys()] if merged_values else [],
         }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to create table instance: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to create instance: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to create instance: {str(e)}")
 
 
 @app.delete("/table-row")
@@ -2125,9 +2046,7 @@ def delete_table_row(request: CreateTableRowRequest) -> dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Failed to delete table instance: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to delete instance: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to delete instance: {str(e)}")
 
 
 @app.get("/config")
@@ -2229,9 +2148,7 @@ def start_trap_receiver(config: Optional[TrapReceiverConfig] = None) -> dict[str
         }
     except Exception as e:
         logger.exception("Failed to start trap receiver")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to start trap receiver: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to start trap receiver: {str(e)}")
 
 
 @app.post("/trap-receiver/stop")
@@ -2247,9 +2164,7 @@ def stop_trap_receiver() -> dict[str, Any]:
         return {"status": "stopped", "message": "Trap receiver stopped"}
     except Exception as e:
         logger.exception("Failed to stop trap receiver")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to stop trap receiver: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to stop trap receiver: {str(e)}")
 
 
 @app.get("/trap-receiver/status")
@@ -2334,9 +2249,9 @@ async def send_test_trap(request: TestTrapRequest) -> dict[str, Any]:
         )
 
     try:
-        notif = NotificationType(
-            ObjectIdentity(test_mib, test_notification)
-        ).resolve_with_mib(mib_view)
+        notif = NotificationType(ObjectIdentity(test_mib, test_notification)).resolve_with_mib(
+            mib_view
+        )
     except (SmiError, ValueError, TypeError) as exc:
         raise HTTPException(
             status_code=500,
@@ -2560,9 +2475,7 @@ def save_preset(request: PresetRequest) -> dict[str, Any]:
         sys.stdout = old_stdout
 
         if result != 0:
-            raise HTTPException(
-                status_code=400, detail=f"Failed to save preset: {output}"
-            )
+            raise HTTPException(status_code=400, detail=f"Failed to save preset: {output}")
 
         return {
             "status": "ok",
@@ -2600,9 +2513,7 @@ def load_preset(request: PresetRequest) -> dict[str, Any]:
         sys.stdout = old_stdout
 
         if result != 0:
-            raise HTTPException(
-                status_code=400, detail=f"Failed to load preset: {output}"
-            )
+            raise HTTPException(status_code=400, detail=f"Failed to load preset: {output}")
 
         # Clear state after loading preset
         try:
@@ -2621,7 +2532,10 @@ def load_preset(request: PresetRequest) -> dict[str, Any]:
         return {
             "status": "ok",
             "preset_name": request.preset_name,
-            "message": f"Preset '{request.preset_name}' loaded successfully. Restart agent to apply changes.",
+            "message": (
+                f"Preset '{request.preset_name}' loaded successfully. "
+                "Restart agent to apply changes."
+            ),
         }
     except HTTPException:
         raise
@@ -2650,9 +2564,7 @@ def delete_preset(preset_name: str) -> dict[str, Any]:
         sys.stdout = old_stdout
 
         if result != 0:
-            raise HTTPException(
-                status_code=400, detail=f"Failed to delete preset: {output}"
-            )
+            raise HTTPException(status_code=400, detail=f"Failed to delete preset: {output}")
 
         return {
             "status": "ok",

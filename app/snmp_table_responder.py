@@ -44,9 +44,7 @@ class SNMPTableResponder:
     def _build_table_oid_map(self) -> None:
         """Build mapping of table OIDs to (mib_name, table_name, table_data)."""
         for mib_name, mib_json in self.behavior_jsons.items():
-            objects = (
-                mib_json.get("objects", mib_json) if isinstance(mib_json, dict) else {}
-            )
+            objects = mib_json.get("objects", mib_json) if isinstance(mib_json, dict) else {}
             if not isinstance(objects, dict):
                 continue
             for obj_name, obj_data in objects.items():
@@ -82,10 +80,7 @@ class SNMPTableResponder:
             if not isinstance(oid_list, list):
                 continue
             oid_tuple = tuple(oid_list)
-            if (
-                len(oid_tuple) > len(table_oid)
-                and oid_tuple[: len(table_oid)] == table_oid
-            ):
+            if len(oid_tuple) > len(table_oid) and oid_tuple[: len(table_oid)] == table_oid:
                 matches.append((oid_tuple, other_data))
 
         if not matches:
@@ -127,9 +122,7 @@ class SNMPTableResponder:
 
         return None
 
-    def get_next_oid(
-        self, requested_oid: Tuple[int, ...]
-    ) -> Optional[Tuple[Tuple[int, ...], Any]]:
+    def get_next_oid(self, requested_oid: Tuple[int, ...]) -> Optional[Tuple[Tuple[int, ...], Any]]:
         """
         Find the next OID after the requested one in lexicographic order.
 
@@ -154,9 +147,7 @@ class SNMPTableResponder:
         oids = []
 
         for mib_name, mib_json in self.behavior_jsons.items():
-            objects = (
-                mib_json.get("objects", mib_json) if isinstance(mib_json, dict) else {}
-            )
+            objects = mib_json.get("objects", mib_json) if isinstance(mib_json, dict) else {}
             if not isinstance(objects, dict):
                 continue
             for obj_name, obj_data in objects.items():
@@ -164,9 +155,7 @@ class SNMPTableResponder:
                     table_oid = tuple(obj_data.get("oid", []))
                     if not table_oid:
                         continue
-                    entry_data = self._find_entry_for_table(
-                        objects, table_oid, obj_name
-                    )
+                    entry_data = self._find_entry_for_table(objects, table_oid, obj_name)
                     if entry_data:
                         # Get all rows in the table
                         rows = obj_data.get("rows", [])
@@ -214,8 +203,7 @@ class SNMPTableResponder:
                                 if isinstance(entry_oid, tuple):
                                     try:
                                         full_oid = tuple(
-                                            list(entry_oid)
-                                            + [int(p) for p in instance_parts]
+                                            list(entry_oid) + [int(p) for p in instance_parts]
                                         )
                                     except ValueError:
                                         continue
@@ -226,8 +214,7 @@ class SNMPTableResponder:
                                 if col_name in row:
                                     try:
                                         full_oid = tuple(
-                                            col_oid_list
-                                            + [int(p) for p in instance_parts]
+                                            col_oid_list + [int(p) for p in instance_parts]
                                         )
                                     except ValueError:
                                         continue
@@ -248,9 +235,7 @@ class SNMPTableResponder:
         # We need to find which column and row this refers to
 
         mib_json = self.behavior_jsons[mib_name]
-        objects = (
-            mib_json.get("objects", mib_json) if isinstance(mib_json, dict) else {}
-        )
+        objects = mib_json.get("objects", mib_json) if isinstance(mib_json, dict) else {}
         if not isinstance(objects, dict):
             return None
 
@@ -282,9 +267,7 @@ class SNMPTableResponder:
             if oid[: len(entry_oid)] != entry_oid:
                 return None
             instance_parts = oid[len(entry_oid) :]
-            instance_str = (
-                ".".join(str(x) for x in instance_parts) if instance_parts else "1"
-            )
+            instance_str = ".".join(str(x) for x in instance_parts) if instance_parts else "1"
             col_name = next(iter(columns))
             rows = table_data.get("rows", [])
             if not isinstance(rows, list):
@@ -343,9 +326,7 @@ class SNMPTableResponder:
         col_id = oid[len(entry_oid)]
         # Instance parts follow the column id
         instance_parts = oid[len(entry_oid) + 1 :]
-        instance_str = (
-            ".".join(str(x) for x in instance_parts) if instance_parts else "1"
-        )
+        instance_str = ".".join(str(x) for x in instance_parts) if instance_parts else "1"
 
         # Find which column has this OID
         for col_name, col_info in columns.items():
@@ -372,9 +353,7 @@ class SNMPTableResponder:
                         if col_name not in row:
                             continue
                         row_idx_val = row.get(idx_col)
-                        row_idx_str = (
-                            str(row_idx_val) if row_idx_val is not None else ""
-                        )
+                        row_idx_str = str(row_idx_val) if row_idx_val is not None else ""
                         if row_idx_str == instance_str:
                             return row[col_name]
                 else:
@@ -392,9 +371,7 @@ class SNMPTableResponder:
                             if isinstance(row_val, (list, tuple)):
                                 row_idx_parts.extend(str(v) for v in row_val)
                             else:
-                                row_idx_parts.extend(
-                                    str(v) for v in str(row_val).split(".")
-                                )
+                                row_idx_parts.extend(str(v) for v in str(row_val).split("."))
                         row_idx_str = ".".join(row_idx_parts)
                         if row_idx_str == instance_str:
                             return row[col_name]
@@ -406,8 +383,6 @@ class SNMPTableResponder:
         """Handle SNMP GET request for an OID."""
         return self._get_oid_value(oid)
 
-    def handle_getnext_request(
-        self, oid: Tuple[int, ...]
-    ) -> Optional[Tuple[Tuple[int, ...], Any]]:
+    def handle_getnext_request(self, oid: Tuple[int, ...]) -> Optional[Tuple[Tuple[int, ...], Any]]:
         """Handle SNMP GETNEXT request for an OID."""
         return self.get_next_oid(oid)

@@ -51,9 +51,7 @@ if __name__ == "__main__":  # pragma: no cover
                 print(f"Removing {schema_dir}...")
                 shutil.rmtree(schema_dir)
 
-            print(
-                "Rebuild flags cleared. MIBs and schemas will be regenerated on startup."
-            )
+            print("Rebuild flags cleared. MIBs and schemas will be regenerated on startup.")
 
         if args.rebuild_schemas:
             print("Forcing regeneration of schemas...")
@@ -63,9 +61,7 @@ if __name__ == "__main__":  # pragma: no cover
                 print(f"Removing {schema_dir}...")
                 shutil.rmtree(schema_dir)
 
-            print(
-                "Schema regeneration flag set. Schemas will be regenerated on startup."
-            )
+            print("Schema regeneration flag set. Schemas will be regenerated on startup.")
 
         # Create the SNMP agent
         agent = SNMPAgent()
@@ -74,9 +70,7 @@ if __name__ == "__main__":  # pragma: no cover
         app.api.snmp_agent = agent
 
         # Start SNMP agent in background thread
-        snmp_thread = threading.Thread(
-            target=run_snmp_agent, args=(agent,), daemon=True
-        )
+        snmp_thread = threading.Thread(target=run_snmp_agent, args=(agent,), daemon=True)
         snmp_thread.start()
 
         print("Starting SNMP Agent with REST API...")

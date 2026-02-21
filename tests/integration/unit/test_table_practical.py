@@ -108,9 +108,7 @@ def snmp_engine_with_table(test_mib_json: Dict[str, Any]) -> engine.SnmpEngine:
     mib_jsons = {"TEST-MIB": test_mib_json.copy()}
 
     # Register the table
-    registrar.register_single_table(
-        "TEST-MIB", "testTable", table_data, type_registry, mib_jsons
-    )
+    registrar.register_single_table("TEST-MIB", "testTable", table_data, type_registry, mib_jsons)
 
     return snmp_engine
 
@@ -157,18 +155,14 @@ def test_mib_view_can_query_unregistered_table(
         # Try to get the next MIB node - since our table isn't registered,
         # this should skip over our range
         modName, symName, indices = mib_view.getNextMibNode(table_oid)
-        print(
-            f"getNextMibNode result: modName={modName}, symName={symName}, indices={indices}"
-        )
+        print(f"getNextMibNode result: modName={modName}, symName={symName}, indices={indices}")
     except Exception as e:
         print(f"getNextMibNode failed: {type(e).__name__}: {e}")
 
     # Try to translate the table OID
     try:
         modName, symName, indices = mib_view.getNodeName((table_oid,))
-        print(
-            f"getNodeName result: modName={modName}, symName={symName}, indices={indices}"
-        )
+        print(f"getNodeName result: modName={modName}, symName={symName}, indices={indices}")
     except Exception as e:
         print(f"getNodeName failed: {type(e).__name__}: {e}")
 
@@ -218,9 +212,7 @@ def test_table_oid_walkthrough() -> None:
     # Verify the OID structure is correct
     for oid, expected_value in getnext_walk:
         assert len(oid) == 10, f"OID {oid} should have 10 parts"
-        assert oid[:8] == (1, 3, 6, 1, 99, 1, 1, 1), (
-            f"OID {oid} should be in testEntry subtree"
-        )
+        assert oid[:8] == (1, 3, 6, 1, 99, 1, 1, 1), f"OID {oid} should be in testEntry subtree"
 
     print("Expected GETNEXT walk through table:")
     for oid, value in getnext_walk:

@@ -43,9 +43,7 @@ class TestPluginLoader:
         result = load_plugins_from_directory(str(plugin_dir))
         assert result == []
 
-    def test_load_plugins_from_directory_with_underscore_files(
-        self, tmp_path: Path
-    ) -> None:
+    def test_load_plugins_from_directory_with_underscore_files(self, tmp_path: Path) -> None:
         """Test that files starting with underscore are skipped."""
         plugin_dir = tmp_path / "plugins"
         plugin_dir.mkdir()

@@ -123,9 +123,7 @@ def test_run_generator_failure_logged(
         lambda self, mib_name: os.path.join(compiled_dir, f"{mib_name}.py"),
     )
     # Ensure run uses our compiled_dir by monkeypatching _setup_snmpEngine to no-op and continue
-    monkeypatch.setattr(
-        agent, "_setup_snmpEngine", lambda _cd: setattr(agent, "snmpEngine", None)
-    )
+    monkeypatch.setattr(agent, "_setup_snmpEngine", lambda _cd: setattr(agent, "snmpEngine", None))
 
     caplog.set_level("ERROR")
     agent.run()
@@ -577,9 +575,7 @@ def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -
         if defaults:
             sample_col = next(iter(defaults))
             assert (
-                agent.table_instances[child.table_oid]["31415"]["column_values"][
-                    sample_col
-                ]
+                agent.table_instances[child.table_oid]["31415"]["column_values"][sample_col]
                 == defaults[sample_col]
             )
 
@@ -608,9 +604,7 @@ def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -
         if defaults:
             sample_col = next(iter(defaults))
             assert (
-                agent.table_instances[child.table_oid]["8675309"]["column_values"][
-                    sample_col
-                ]
+                agent.table_instances[child.table_oid]["8675309"]["column_values"][sample_col]
                 == defaults[sample_col]
             )
 
@@ -653,9 +647,7 @@ def test_find_table_and_entry_name_by_oid() -> None:
     }
 
     assert agent._find_table_name_by_oid(objects, (1, 3, 6, 1, 2, 1, 2, 2)) == "ifTable"
-    assert (
-        agent._find_entry_name_by_oid(objects, (1, 3, 6, 1, 2, 1, 2, 2, 1)) == "ifEntry"
-    )
+    assert agent._find_entry_name_by_oid(objects, (1, 3, 6, 1, 2, 1, 2, 2, 1)) == "ifEntry"
     assert agent._find_table_name_by_oid(objects, (9, 9, 9)) is None
     assert agent._find_entry_name_by_oid(objects, (9, 9, 9)) is None
 
@@ -695,15 +687,11 @@ def test_build_instance_str_from_row_variants() -> None:
     }
 
     row_with_ip_list = {"ifIndex": 7, "ipCol": [10, 0, 0, 1]}
-    assert (
-        agent._build_instance_str_from_row(row_with_ip_list, idx_cols, cols_meta)
-        == "7.10.0.0.1"
-    )
+    assert agent._build_instance_str_from_row(row_with_ip_list, idx_cols, cols_meta) == "7.10.0.0.1"
 
     row_with_ip_str = {"ifIndex": 8, "ipCol": "192.168.1.10"}
     assert (
-        agent._build_instance_str_from_row(row_with_ip_str, idx_cols, cols_meta)
-        == "8.192.168.1.10"
+        agent._build_instance_str_from_row(row_with_ip_str, idx_cols, cols_meta) == "8.192.168.1.10"
     )
 
     assert agent._build_instance_str_from_row({"x": 1}, [], {}) == "1"
@@ -737,9 +725,7 @@ def test_collect_schema_instance_oids_and_filter_deleted(
     assert "1.3.6.1.2.1.2.2.2" in instance_oids
 
     saved: dict[str, bool] = {}
-    monkeypatch.setattr(
-        agent, "_save_mib_state", lambda: saved.setdefault("called", True)
-    )
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: saved.setdefault("called", True))
     agent.deleted_instances = ["1.3.6.1.2.1.2.2.2", "1.3.6.1.2.1.2.2.999"]
     agent._filter_deleted_instances_against_schema()
 
@@ -767,22 +753,13 @@ def test_instance_defined_in_schema_true_and_false() -> None:
     }
 
     assert (
-        agent._instance_defined_in_schema(
-            "1.3.6.1.2.1.4.20", {"ipAdEntAddr": "10.0.0.1"}
-        )
-        is True
+        agent._instance_defined_in_schema("1.3.6.1.2.1.4.20", {"ipAdEntAddr": "10.0.0.1"}) is True
     )
     assert (
-        agent._instance_defined_in_schema(
-            "1.3.6.1.2.1.4.20", {"ipAdEntAddr": "10.0.0.2"}
-        )
-        is False
+        agent._instance_defined_in_schema("1.3.6.1.2.1.4.20", {"ipAdEntAddr": "10.0.0.2"}) is False
     )
     assert (
-        agent._instance_defined_in_schema(
-            "1.3.6.1.2.1.4.999", {"ipAdEntAddr": "10.0.0.1"}
-        )
-        is False
+        agent._instance_defined_in_schema("1.3.6.1.2.1.4.999", {"ipAdEntAddr": "10.0.0.1"}) is False
     )
 
 
@@ -822,9 +799,7 @@ def test_normalize_loaded_instances_and_fill_defaults(
     assert "1.3.6.1.2.1.2.2" in agent.table_instances
 
     saved: dict[str, bool] = {}
-    monkeypatch.setattr(
-        agent, "_save_mib_state", lambda: saved.setdefault("called", True)
-    )
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: saved.setdefault("called", True))
     agent._fill_missing_table_defaults()
 
     values = agent.table_instances["1.3.6.1.2.1.2.2"]["1"]["column_values"]
@@ -934,9 +909,7 @@ def test_migrate_legacy_state_files_triggers_save(
 
     data_dir = project_root / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "overrides.json").write_text(
-        json.dumps({"1.3.6.1": 7}), encoding="utf-8"
-    )
+    (data_dir / "overrides.json").write_text(json.dumps({"1.3.6.1": 7}), encoding="utf-8")
     (data_dir / "table_instances.json").write_text(
         json.dumps({"1.3.6.1.2": {"1": {"column_values": {"x": 1}}}}),
         encoding="utf-8",
@@ -944,9 +917,7 @@ def test_migrate_legacy_state_files_triggers_save(
 
     agent = SNMPAgent(config_path="agent_config.yaml")
     called: dict[str, bool] = {}
-    monkeypatch.setattr(
-        agent, "_save_mib_state", lambda: called.setdefault("saved", True)
-    )
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: called.setdefault("saved", True))
 
     agent._migrate_legacy_state_files()
     assert called.get("saved", False) is True
@@ -969,11 +940,7 @@ def test_load_mib_state_loads_and_normalizes(
         json.dumps(
             {
                 "scalars": {"1.3.6.1.2.1.1.1.0": "desc"},
-                "tables": {
-                    " .1..3.6.1.2.1.2.2. ": {
-                        "1": {"column_values": {"ifDescr": "eth0"}}
-                    }
-                },
+                "tables": {" .1..3.6.1.2.1.2.2. ": {"1": {"column_values": {"ifDescr": "eth0"}}}},
                 "deleted_instances": ["1.3.6.1.2.1.2.2.1"],
                 "links": [{"id": "l1"}],
             }
@@ -1062,9 +1029,7 @@ def test_apply_overrides_applies_and_prunes_invalid(
     }
 
     saved: dict[str, bool] = {}
-    monkeypatch.setattr(
-        agent, "_save_mib_state", lambda: saved.setdefault("saved", True)
-    )
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: saved.setdefault("saved", True))
 
     agent._apply_overrides()
 
@@ -1143,9 +1108,7 @@ def test_delete_table_instance_schema_and_non_schema(
     norm_table_oid = "1.3.6.1.2.1.2.2"
     index_values = {"ifIndex": 9}
 
-    agent.table_instances = {
-        norm_table_oid: {"9": {"column_values": {"ifDescr": "eth9"}}}
-    }
+    agent.table_instances = {norm_table_oid: {"9": {"column_values": {"ifDescr": "eth9"}}}}
 
     saved: dict[str, int] = {"count": 0}
     monkeypatch.setattr(
@@ -1154,10 +1117,7 @@ def test_delete_table_instance_schema_and_non_schema(
 
     # First call: instance is in schema -> should append to deleted_instances
     monkeypatch.setattr(agent, "_instance_defined_in_schema", lambda t, i: True)
-    assert (
-        agent.delete_table_instance(table_oid, index_values, propagate_augments=False)
-        is True
-    )
+    assert agent.delete_table_instance(table_oid, index_values, propagate_augments=False) is True
     assert norm_table_oid not in agent.table_instances  # removed and cleaned up
     assert f"{norm_table_oid}.9" in agent.deleted_instances
     assert saved["count"] == 1
@@ -1165,9 +1125,6 @@ def test_delete_table_instance_schema_and_non_schema(
     # Second call: not in schema -> should not append duplicate and not save again
     monkeypatch.setattr(agent, "_instance_defined_in_schema", lambda t, i: False)
     assert (
-        agent.delete_table_instance(
-            norm_table_oid, index_values, propagate_augments=False
-        )
-        is True
+        agent.delete_table_instance(norm_table_oid, index_values, propagate_augments=False) is True
     )
     assert agent.deleted_instances.count(f"{norm_table_oid}.9") == 1

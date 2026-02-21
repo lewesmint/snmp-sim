@@ -23,9 +23,7 @@ def agent(mocker: MockerFixture) -> Any:
 
 
 @pytest.fixture
-def mock_agent_methods(
-    agent: Any, mocker: MockerFixture
-) -> Generator[None, None, None]:
+def mock_agent_methods(agent: Any, mocker: MockerFixture) -> Generator[None, None, None]:
     """Mock internal agent methods using pytest-mock."""
     # Only mock methods that actually exist on the agent
     yield
@@ -138,25 +136,17 @@ def test_multi_column_index_inherited_and_local(agent: Any) -> None:
     assert agent is not None
     assert agent.mib_builder is not None
     # Verify table with multi-column index has proper structure
-    assert len(table_data["columns"]) > 2, (
-        "Multi-column index table should have multiple columns"
-    )
+    assert len(table_data["columns"]) > 2, "Multi-column index table should have multiple columns"
     # Count index columns (access='not-accessible')
     index_columns = [
-        col
-        for col, info in table_data["columns"].items()
-        if info.get("access") == "not-accessible"
+        col for col, info in table_data["columns"].items() if info.get("access") == "not-accessible"
     ]
-    assert len(index_columns) >= 2, (
-        "Multi-column index should have at least 2 index columns"
-    )
+    assert len(index_columns) >= 2, "Multi-column index should have at least 2 index columns"
     # Verify inherited index is specified
     assert "index_from" in table_data["entry"]
     # Verify non-index columns exist (those with access != 'not-accessible')
     non_index_columns = [
-        col
-        for col, info in table_data["columns"].items()
-        if info.get("access") != "not-accessible"
+        col for col, info in table_data["columns"].items() if info.get("access") != "not-accessible"
     ]
     assert len(non_index_columns) > 0, "Table should have non-index columns"
 
@@ -184,9 +174,7 @@ def test_table_structure_validation(agent: Any) -> None:
     # Validate entry OID is child of table OID
     table_oid = tuple(table_data["table"]["oid"])
     entry_oid = tuple(table_data["entry"]["oid"])
-    assert entry_oid[: len(table_oid)] == table_oid, (
-        "Entry OID should be child of table OID"
-    )
+    assert entry_oid[: len(table_oid)] == table_oid, "Entry OID should be child of table OID"
 
     # Validate all columns are children of entry OID
     for col_name, col_info in table_data["columns"].items():
@@ -231,9 +219,7 @@ def test_agent_mib_builder_mock_interaction(agent: Any, mocker: MockerFixture) -
 # Integration Tests - Testing the full workflow
 
 
-def test_find_table_related_objects_integration(
-    agent: Any, mocker: MockerFixture
-) -> None:
+def test_find_table_related_objects_integration(agent: Any, mocker: MockerFixture) -> None:
     """Test that table discovery correctly identifies table components via TableRegistrar."""
     # Since _find_table_related_objects was refactored to TableRegistrar,
     # this test validates the pattern with the new architecture
@@ -350,9 +336,7 @@ def test_table_column_type_resolution_in_registration(agent: Any) -> None:
     }
 
     col_type = column_data["ifDescr"]["type"]
-    assert col_type in type_registry, (
-        f"Column type {col_type} should be in type registry"
-    )
+    assert col_type in type_registry, f"Column type {col_type} should be in type registry"
 
     type_info = type_registry[col_type]
     assert type_info["base_type"] == "OctetString", (

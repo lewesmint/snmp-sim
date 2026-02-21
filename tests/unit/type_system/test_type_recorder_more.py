@@ -50,17 +50,13 @@ def test_filter_constraints_by_size_range_and_set() -> None:
         {"type": "ValueSizeConstraint", "min": 5, "max": 5},
     ]
     filtered2 = TypeRecorder._filter_constraints_by_size(size_set, constraints2)
-    assert all(
-        c["min"] in (3, 4) for c in filtered2 if c["type"] == "ValueSizeConstraint"
-    )
+    assert all(c["min"] in (3, 4) for c in filtered2 if c["type"] == "ValueSizeConstraint")
 
 
 def test_compact_single_value_constraints_if_enums_present() -> None:
     constraints = [{"type": "SingleValueConstraint", "values": [1, 2, 3]}]
     enums = [{"value": 1, "name": "one"}]
-    out = TypeRecorder._compact_single_value_constraints_if_enums_present(
-        constraints, enums
-    )
+    out = TypeRecorder._compact_single_value_constraints_if_enums_present(constraints, enums)
     assert out[0].get("count") == 3
 
 
@@ -77,9 +73,7 @@ def test_drop_dominated_value_ranges() -> None:
 
 def test_drop_redundant_base_value_range() -> None:
     base = "BaseType"
-    types = {
-        base: {"constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]}
-    }
+    types = {base: {"constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]}}
     constraints = [
         {"type": "ValueRangeConstraint", "min": 0, "max": 100},
         {"type": "ValueRangeConstraint", "min": 10, "max": 90},
@@ -93,9 +87,7 @@ def test_drop_redundant_base_value_range() -> None:
 
 def test_drop_redundant_base_range_for_enums() -> None:
     base = "BaseType"
-    types = {
-        base: {"constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 5}]}
-    }
+    types = {base: {"constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 5}]}}
     constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 5}]
     enums = [{"value": 1, "name": "one"}]
     out = TypeRecorder._drop_redundant_base_range_for_enums(

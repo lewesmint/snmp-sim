@@ -99,13 +99,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         for mib in mibs:
             compiled_path = Path("compiled-mibs") / f"{mib}.py"
             if not compiled_path.exists():
-                print(
-                    f"Warning: Compiled MIB not found: {compiled_path}", file=sys.stderr
-                )
+                print(f"Warning: Compiled MIB not found: {compiled_path}", file=sys.stderr)
                 continue
-            json_path = generator.generate(
-                str(compiled_path), mib_name=mib, force_regenerate=True
-            )
+            json_path = generator.generate(str(compiled_path), mib_name=mib, force_regenerate=True)
             print(f"Schema JSON written to {json_path}")
     else:
         # Process single MIB
