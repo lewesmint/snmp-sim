@@ -17,7 +17,7 @@ tools:
   dodgy:
     run: true
   mccabe:
-    run: false
+    run: true
   pycodestyle:
     run: false
   pyflakes:

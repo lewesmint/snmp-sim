@@ -2,7 +2,10 @@
 
 This module can be run independently or embedded in other applications.
 """
-# pylint: disable=broad-exception-caught,attribute-defined-outside-init,too-many-lines,too-many-instance-attributes,too-many-arguments,too-many-positional-arguments,too-many-locals,too-many-statements,too-many-nested-blocks,too-many-branches,no-else-return
+# pylint: disable=broad-exception-caught,attribute-defined-outside-init,no-else-return
+# pylint: disable=too-many-lines,too-many-instance-attributes,too-many-arguments
+# pylint: disable=too-many-positional-arguments,too-many-locals,too-many-statements
+# pylint: disable=too-many-nested-blocks,too-many-branches
 
 from __future__ import annotations
 

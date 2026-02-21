@@ -52,8 +52,11 @@ exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F"]
-extend-select = ["E501"]
+extend-select = ["E501", "C90", "PLR"]
 ignore = ["E501", "E741"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
 
 [tool.ruff.format]
 quote-style = "double"

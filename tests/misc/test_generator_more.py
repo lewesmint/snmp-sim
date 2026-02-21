@@ -1,3 +1,7 @@
+"""Extended unit tests for `BehaviourGenerator` edge cases and fallback paths."""
+
+# pylint: disable=too-many-lines,missing-function-docstring,protected-access,missing-class-docstring,invalid-name,too-few-public-methods,import-outside-toplevel,import-error,unused-argument,broad-exception-raised,unused-variable
+
 import os
 import types
 import json
@@ -6,7 +10,11 @@ from typing import Any, Dict
 
 import pytest
 
-from app.generator import BehaviourGenerator
+from app.generator import BehaviourGenerator  # pylint: disable=import-error
+
+
+def _return_zero(*_args: Any) -> int:
+    return 0
 
 
 def test_parse_mib_name_from_py(tmp_path: Path) -> None:
@@ -100,12 +108,14 @@ def test_generate_writes_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     monkeypatch.setattr(
         genmod,
         "builder",
-        types.SimpleNamespace(MibBuilder=lambda: fake_mibbuilder_factory()),
+        types.SimpleNamespace(MibBuilder=fake_mibbuilder_factory),
     )
 
     # Monkeypatch default value lookup to avoid plugin dependency
     monkeypatch.setattr(
-        BehaviourGenerator, "_get_default_value_from_type_info", lambda self, t, s: 0
+        BehaviourGenerator,
+        "_get_default_value_from_type_info",
+        _return_zero,
     )
 
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
@@ -115,7 +125,7 @@ def test_generate_writes_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
     schema_path = g.generate(str(compiled), mib_name="TESTMIB", force_regenerate=True)
     assert os.path.exists(schema_path)
-    with open(schema_path, "r") as f:
+    with open(schema_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     # Ensure columns and table entry exist
     assert "col1" in data["objects"]
@@ -123,6 +133,9 @@ def test_generate_writes_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
 
 def test_extract_mib_info_non_dict(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def identity_dir_source(path: str) -> str:
+        return path
+
     class BadBuilder:
         def __init__(self) -> None:
             # mibSymbols value is not a dict
@@ -136,7 +149,7 @@ def test_extract_mib_info_non_dict(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
 
     monkeypatch.setattr(
         "app.generator.builder",
-        types.SimpleNamespace(MibBuilder=lambda: BadBuilder(), DirMibSource=lambda p: p),
+        types.SimpleNamespace(MibBuilder=BadBuilder, DirMibSource=identity_dir_source),
     )
 
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
@@ -147,6 +160,9 @@ def test_extract_mib_info_non_dict(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
 def test_detect_inherited_indexes_through_extract(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    def identity_dir_source(path: str) -> str:
+        return path
+
     # Build an entry with index referencing a column not present in this table
     class EntryWithIndex:
         def getIndexNames(self) -> list[tuple[object, str, str]]:
@@ -193,12 +209,14 @@ def test_detect_inherited_indexes_through_extract(
 
     monkeypatch.setattr(
         "app.generator.builder",
-        types.SimpleNamespace(MibBuilder=lambda: MB(), DirMibSource=lambda p: p),
+        types.SimpleNamespace(MibBuilder=MB, DirMibSource=identity_dir_source),
     )
 
     # Ensure default value plugin returns something so extract proceeds
     monkeypatch.setattr(
-        BehaviourGenerator, "_get_default_value_from_type_info", lambda self, t, s: 0
+        BehaviourGenerator,
+        "_get_default_value_from_type_info",
+        _return_zero,
     )
 
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
@@ -212,8 +230,11 @@ def test_detect_inherited_indexes_through_extract(
 def test_get_default_value_from_type_info_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    def no_default(_type_name: str, _symbol_name: str) -> None:
+        return None
+
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
-    monkeypatch.setattr("app.generator.get_default_value", lambda _t, _s: None)
+    monkeypatch.setattr("app.generator.get_default_value", no_default)
     with pytest.raises(RuntimeError):
         g._get_default_value_from_type_info({"base_type": "Integer32"}, "symbolX")
 
@@ -260,13 +281,19 @@ def test_generate_creates_default_table_row_with_index_extraction(
     monkeypatch.setattr(g, "_extract_mib_info", mock_extract)
 
     # Mock type registry and default value
-    monkeypatch.setattr(g, "_load_type_registry", lambda: {"Integer32": {"base_type": "Integer32"}})
-    monkeypatch.setattr(g, "_get_default_value_from_type_info", lambda ti, s: 42)
+    def load_type_registry() -> dict[str, dict[str, str]]:
+        return {"Integer32": {"base_type": "Integer32"}}
+
+    def default_from_type_info(_type_info: Any, _symbol: Any) -> int:
+        return 42
+
+    monkeypatch.setattr(g, "_load_type_registry", load_type_registry)
+    monkeypatch.setattr(g, "_get_default_value_from_type_info", default_from_type_info)
 
     path = g.generate("dummy.py", mib_name="TEST-MIB")
     assert os.path.exists(path)
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
     # Check that a default row was created
@@ -341,7 +368,7 @@ def test_generate_handles_dir_mib_source_exception(
     assert os.path.exists(path)
 
 
-def test_parse_mib_name_from_py_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_parse_mib_name_from_py_fallback(tmp_path: Path) -> None:
     # Test the fallback when exportSymbols is not found
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
 
@@ -435,7 +462,10 @@ def test_extract_mib_info_handles_symbol_without_getname(
         delattr(g, "_type_registry")
 
     mock_registry = {"Integer32": {"base_type": "Integer32"}}
-    monkeypatch.setattr(g, "_load_type_registry", lambda: mock_registry)
+    def load_type_registry() -> dict[str, dict[str, str]]:
+        return mock_registry
+
+    monkeypatch.setattr(g, "_load_type_registry", load_type_registry)
 
     class MockSyntax3:
         pass
@@ -461,8 +491,14 @@ def test_extract_mib_info_handles_symbol_without_getname(
             pass
 
     monkeypatch.setattr("pysnmp.smi.builder.MibBuilder", MockMibBuilder3)
-    monkeypatch.setattr(g, "_extract_type_info", lambda s, n: {"base_type": "Integer32"})
-    monkeypatch.setattr("app.generator.get_default_value", lambda t, s: "mock_value")
+    def extract_type_info(_syntax_obj: Any, _name: str) -> dict[str, str]:
+        return {"base_type": "Integer32"}
+
+    def default_value(_type_name: str, _symbol_name: str) -> str:
+        return "mock_value"
+
+    monkeypatch.setattr(g, "_extract_type_info", extract_type_info)
+    monkeypatch.setattr("app.generator.get_default_value", default_value)
 
     result = g._extract_mib_info("dummy.py", "TEST-MIB")
     assert "sym1" in result["objects"]
@@ -474,7 +510,16 @@ def test_extract_mib_info_base_type_mapping(monkeypatch: pytest.MonkeyPatch) -> 
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
 
     mock_registry: Dict[str, Any] = {}  # Empty registry
-    monkeypatch.setattr(g, "_load_type_registry", lambda: mock_registry)
+    def load_type_registry() -> Dict[str, Any]:
+        return mock_registry
+
+    def extract_type_info(_syntax_obj: Any, _name: str) -> dict[str, str]:
+        return {"base_type": "INTEGER"}
+
+    def default_value(_type_name: str, _symbol_name: str) -> str:
+        return "mock_value"
+
+    monkeypatch.setattr(g, "_load_type_registry", load_type_registry)
 
     class MockSyntax:
         pass
@@ -500,10 +545,8 @@ def test_extract_mib_info_base_type_mapping(monkeypatch: pytest.MonkeyPatch) -> 
             pass
 
     monkeypatch.setattr("pysnmp.smi.builder.MibBuilder", MockMibBuilder)
-    monkeypatch.setattr(
-        g, "_extract_type_info", lambda s, n: {"base_type": "INTEGER"}
-    )  # Will map to Integer32
-    monkeypatch.setattr("app.generator.get_default_value", lambda t, s: "mock_value")
+    monkeypatch.setattr(g, "_extract_type_info", extract_type_info)  # Will map to Integer32
+    monkeypatch.setattr("app.generator.get_default_value", default_value)
 
     result = g._extract_mib_info("dummy.py", "TEST-MIB")
     assert "sym1" in result["objects"]
@@ -511,7 +554,7 @@ def test_extract_mib_info_base_type_mapping(monkeypatch: pytest.MonkeyPatch) -> 
     assert result["objects"]["sym1"]["type"] == "MockSyntax"
 
 
-def test_extract_type_info_with_constraints(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_extract_type_info_with_constraints() -> None:
     # Test constraints extraction
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
 
@@ -535,13 +578,16 @@ def test_get_default_value_from_type_info_raises_on_no_plugin(
     # Test RuntimeError when no plugin handles the type
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
 
-    monkeypatch.setattr("app.generator.get_default_value", lambda t, s: None)
+    def no_default(_type_name: str, _symbol_name: str) -> None:
+        return None
+
+    monkeypatch.setattr("app.generator.get_default_value", no_default)
 
     with pytest.raises(RuntimeError, match="No plugin provided default value"):
         g._get_default_value_from_type_info({"base_type": "UnknownType"}, "testSymbol")
 
 
-def test_get_default_value_legacy_cases(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_default_value_legacy_cases() -> None:
     # Test various cases in _get_default_value
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
 
@@ -554,7 +600,7 @@ def test_get_default_value_legacy_cases(monkeypatch: pytest.MonkeyPatch) -> None
     assert g._get_default_value("UnknownType", "unknown") is None
 
 
-def test_get_dynamic_function(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_dynamic_function() -> None:
     # Test _get_dynamic_function
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
 
@@ -566,16 +612,16 @@ def test_load_type_registry_missing_file(monkeypatch: pytest.MonkeyPatch) -> Non
     # Test FileNotFoundError in _load_type_registry
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
 
-    # Patch Path.exists to return False
-    from pathlib import Path
+    def path_missing(_self: Path) -> bool:
+        return False
 
-    monkeypatch.setattr(Path, "exists", lambda self: False)
+    monkeypatch.setattr(Path, "exists", path_missing)
 
     with pytest.raises(FileNotFoundError, match="Type registry JSON not found"):
         g._load_type_registry()
 
 
-def test_detect_inherited_indexes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_detect_inherited_indexes() -> None:
     # Test _detect_inherited_indexes
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
 
@@ -596,7 +642,9 @@ def test_detect_inherited_indexes(monkeypatch: pytest.MonkeyPatch) -> None:
     g._detect_inherited_indexes(result, table_entries, "TEST-MIB")
 
     assert "index_from" in result["testEntry"]
-    assert result["testEntry"]["index_from"] == [{"mib": "OTHER-MIB", "column": "inheritedIndex"}]  # type: ignore[comparison-overlap]
+    assert result["testEntry"]["index_from"] == [
+        {"mib": "OTHER-MIB", "column": "inheritedIndex"}
+    ]  # type: ignore[comparison-overlap]
 
 
 def test_generate_force_regenerate_removes_existing_file(
@@ -615,7 +663,7 @@ def test_generate_force_regenerate_removes_existing_file(
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
 
     # Mock _extract_mib_info to avoid full parsing
-    def mock_extract_mib_info(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    def mock_extract_mib_info(*_args: Any, **_kwargs: Any) -> Dict[str, Any]:
         return {
             "objects": {"testSymbol": {"oid": [1, 2, 3], "type": "Integer32"}},
             "traps": {},
@@ -628,7 +676,7 @@ def test_generate_force_regenerate_removes_existing_file(
 
     # File should have been recreated (content changed)
     assert json_path.exists()
-    with open(json_path, "r") as f:
+    with open(json_path, "r", encoding="utf-8") as f:
         content = json.load(f)
         assert "testSymbol" in content["objects"]  # Should have new content
 
@@ -655,7 +703,7 @@ def test_generate_skips_existing_file_when_not_force(
     assert result == str(json_path)
 
     # Content should remain unchanged
-    with open(json_path, "r") as f:
+    with open(json_path, "r", encoding="utf-8") as f:
         content = json.load(f)
         assert content == {"existing": "data"}
 
@@ -850,7 +898,7 @@ def test_write_schema_debug_logging(
     )
 
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
-    monkeypatch.setattr(g, "_get_default_value_from_type_info", lambda *args: 0)
+    monkeypatch.setattr(g, "_get_default_value_from_type_info", _return_zero)
 
     g.generate(str(py_path), force_regenerate=True)
 
@@ -905,13 +953,13 @@ def test_write_schema_merge_extracted_enums(
 
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
     g._type_registry = {"Integer32": {"base_type": "Integer32"}}
-    monkeypatch.setattr(g, "_get_default_value_from_type_info", lambda *args: 0)
+    monkeypatch.setattr(g, "_get_default_value_from_type_info", _return_zero)
 
     g.generate(str(py_path), force_regenerate=True)
 
     # Check the generated JSON has the enums
     json_path = tmp_path / "TEST-MIB" / "schema.json"
-    with open(json_path, "r") as f:
+    with open(json_path, "r", encoding="utf-8") as f:
         content = json.load(f)
         assert "enums" in content["objects"]["testSymbol"]
 
@@ -961,13 +1009,13 @@ def test_write_schema_include_enums_in_entry(
 
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
     g._type_registry = {"Integer32": {"base_type": "Integer32", "enums": {"up": 1, "down": 2}}}
-    monkeypatch.setattr(g, "_get_default_value_from_type_info", lambda *args: 0)
+    monkeypatch.setattr(g, "_get_default_value_from_type_info", _return_zero)
 
     g.generate(str(py_path), force_regenerate=True)
 
     # Check the generated JSON has the enums from registry
     json_path = tmp_path / "TEST-MIB" / "schema.json"
-    with open(json_path, "r") as f:
+    with open(json_path, "r", encoding="utf-8") as f:
         content = json.load(f)
         assert "enums" in content["objects"]["testSymbol"]
 
@@ -1019,7 +1067,7 @@ def test_detect_inherited_indexes_with_inheritance(
     assert "index_from" in result["testEntry"]
 
 
-def test_extract_type_info_with_named_values(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_extract_type_info_with_named_values() -> None:
     """Test extracting type info when syntax_obj has namedValues."""
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
 
@@ -1030,9 +1078,10 @@ def test_extract_type_info_with_named_values(monkeypatch: pytest.MonkeyPatch) ->
 
     result = g._extract_type_info(MockSyntax(), "TestType")
 
-    assert result["enums"] is not None
-    assert "one" in result["enums"]
-    assert "two" in result["enums"]
+    enums = result.get("enums")
+    assert isinstance(enums, dict)
+    assert "one" in enums
+    assert "two" in enums
 
 
 def test_extract_type_info_with_constraints_detailed(
