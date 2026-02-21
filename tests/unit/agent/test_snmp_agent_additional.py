@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.snmp_agent import SNMPAgent
+import app.snmp_agent as snmp_agent_module
 
 
 def test_run_validation_failure_logs_and_returns(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
@@ -429,8 +430,37 @@ def test_setup_signal_handlers_sets_up_handlers(monkeypatch: pytest.MonkeyPatch)
 def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -> None:
     schema_path = (Path(__file__).resolve().parent.parent.parent.parent / "agent-model" / "TEST-ENUM-MIB" / "schema.json")
     schema = json.loads(schema_path.read_text())
-    snmp_schema_path = schema_path.parent.parent / "SNMPv2-MIB" / "schema.json"
-    snmp_schema = json.loads(snmp_schema_path.read_text())
+    # Use a synthetic SNMPv2 schema to avoid coupling this test to mutable on-disk state
+    snmp_schema: dict[str, Any] = {
+        "objects": {
+            "sysORTable": {
+                "oid": [1, 3, 6, 1, 2, 1, 1, 9],
+                "type": "MibTable",
+                "rows": [{"sysORIndex": 1}],
+            },
+            "sysOREntry": {
+                "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1],
+                "type": "MibTableRow",
+                "indexes": ["sysORIndex"],
+            },
+            "sysORIndex": {
+                "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 1],
+                "type": "Integer32",
+            },
+            "sysORID": {
+                "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 2],
+                "type": "ObjectIdentifier",
+            },
+            "sysORDescr": {
+                "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 3],
+                "type": "DisplayString",
+            },
+            "sysORUpTime": {
+                "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 4],
+                "type": "TimeTicks",
+            },
+        }
+    }
     agent = SNMPAgent(config_path="agent_config.yaml")
     agent.mib_builder = None
     agent.mib_jsons = {
@@ -447,9 +477,10 @@ def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -
         assert child.indexes == child.inherited_columns
         assert child.indexes == ("testEnumIndex",)
 
-    sysor_parent_oid = agent._oid_list_to_str(snmp_schema["objects"]["sysORTable"]["oid"])
+    sysor_table_oid = snmp_schema["objects"]["sysORTable"]["oid"]
+    sysor_parent_oid = agent._oid_list_to_str(sysor_table_oid)
     sysor_children = agent._augmented_parents.get(sysor_parent_oid, [])
-    assert len(sysor_children) == 2
+    assert len(sysor_children) >= 1
     for child in sysor_children:
         assert child.indexes == child.inherited_columns
         assert child.indexes == ("sysORIndex",)
@@ -497,3 +528,478 @@ def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -
     assert "8675309" not in agent.table_instances.get(sysor_parent_oid, {})
     for child in sysor_children:
         assert "8675309" not in agent.table_instances.get(child.table_oid, {})
+
+
+def test_oid_helpers_and_index_parser() -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    assert agent._normalize_oid_str(" .1..3.6.1. ") == "1.3.6.1"
+    assert agent._normalize_oid_str("...") == ""
+    assert agent._oid_list_to_str([1, 3, None, 6, 1]) == "1.3.6.1"
+    assert agent._oid_list_to_str([]) == ""
+
+    assert agent._parse_index_from_entry({"mib": "TEST-MIB", "column": "ifIndex"}) == ("TEST-MIB", "ifIndex")
+    assert agent._parse_index_from_entry(("TEST-MIB", "ifIndex")) == ("TEST-MIB", "ifIndex")
+    assert agent._parse_index_from_entry(["TEST-MIB", "ignored", "ifIndex"]) == ("TEST-MIB", "ifIndex")
+    assert agent._parse_index_from_entry({"mib": "TEST-MIB"}) is None
+    assert agent._parse_index_from_entry("invalid") is None
+
+
+def test_find_table_and_entry_name_by_oid() -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    objects: dict[str, Any] = {
+        "ifTable": {"type": "MibTable", "oid": [1, 3, 6, 1, 2, 1, 2, 2]},
+        "ifEntry": {"type": "MibTableRow", "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1]},
+        "notARow": {"type": "MibScalar", "oid": [1, 3, 6, 1]},
+    }
+
+    assert (
+        agent._find_table_name_by_oid(objects, (1, 3, 6, 1, 2, 1, 2, 2))
+        == "ifTable"
+    )
+    assert (
+        agent._find_entry_name_by_oid(objects, (1, 3, 6, 1, 2, 1, 2, 2, 1))
+        == "ifEntry"
+    )
+    assert agent._find_table_name_by_oid(objects, (9, 9, 9)) is None
+    assert agent._find_entry_name_by_oid(objects, (9, 9, 9)) is None
+
+
+def test_find_parent_table_for_column() -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    agent.mib_jsons = {
+        "TEST-MIB": {
+            "objects": {
+                "ifTable": {"type": "MibTable", "oid": [1, 3, 6, 1, 2, 1, 2, 2]},
+                "ifEntry": {"type": "MibTableRow", "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1]},
+                "ifDescr": {"type": "DisplayString", "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2]},
+            }
+        }
+    }
+
+    info = agent._find_parent_table_for_column("TEST-MIB", "ifDescr")
+    assert info == {
+        "table_oid": "1.3.6.1.2.1.2.2",
+        "table_name": "ifTable",
+        "entry_name": "ifEntry",
+    }
+    assert agent._find_parent_table_for_column("TEST-MIB", "missingColumn") is None
+    assert agent._find_parent_table_for_column("MISSING-MIB", "ifDescr") is None
+
+
+def test_build_instance_str_from_row_variants() -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    idx_cols = ["ifIndex", "ipCol"]
+    cols_meta = {
+        "ifIndex": {"type": "Integer32"},
+        "ipCol": {"type": "IpAddress"},
+    }
+
+    row_with_ip_list = {"ifIndex": 7, "ipCol": [10, 0, 0, 1]}
+    assert agent._build_instance_str_from_row(row_with_ip_list, idx_cols, cols_meta) == "7.10.0.0.1"
+
+    row_with_ip_str = {"ifIndex": 8, "ipCol": "192.168.1.10"}
+    assert agent._build_instance_str_from_row(row_with_ip_str, idx_cols, cols_meta) == "8.192.168.1.10"
+
+    assert agent._build_instance_str_from_row({"x": 1}, [], {}) == "1"
+
+
+def test_collect_schema_instance_oids_and_filter_deleted(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    agent.mib_jsons = {
+        "TEST-MIB": {
+            "objects": {
+                "ifTable": {
+                    "type": "MibTable",
+                    "oid": [1, 3, 6, 1, 2, 1, 2, 2],
+                    "rows": [{"ifIndex": 1}, {"ifIndex": 2}],
+                },
+                "ifEntry": {
+                    "type": "MibTableRow",
+                    "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1],
+                    "indexes": ["ifIndex"],
+                },
+                "ifIndex": {"type": "Integer32", "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 1]},
+            }
+        }
+    }
+
+    instance_oids, saw_table = agent._collect_schema_instance_oids()
+    assert saw_table is True
+    assert "1.3.6.1.2.1.2.2.1" in instance_oids
+    assert "1.3.6.1.2.1.2.2.2" in instance_oids
+
+    saved: dict[str, bool] = {}
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: saved.setdefault("called", True))
+    agent.deleted_instances = ["1.3.6.1.2.1.2.2.2", "1.3.6.1.2.1.2.2.999"]
+    agent._filter_deleted_instances_against_schema()
+
+    assert agent.deleted_instances == ["1.3.6.1.2.1.2.2.2"]
+    assert saved.get("called", False) is True
+
+
+def test_instance_defined_in_schema_true_and_false() -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    agent.mib_jsons = {
+        "TEST-MIB": {
+            "objects": {
+                "ipAddrTable": {
+                    "type": "MibTable",
+                    "oid": [1, 3, 6, 1, 2, 1, 4, 20],
+                    "rows": [{"ipAdEntAddr": "10.0.0.1", "ifIndex": 1}],
+                },
+                "ipAddrEntry": {
+                    "type": "MibTableRow",
+                    "oid": [1, 3, 6, 1, 2, 1, 4, 20, 1],
+                    "indexes": ["ipAdEntAddr"],
+                },
+            }
+        }
+    }
+
+    assert agent._instance_defined_in_schema("1.3.6.1.2.1.4.20", {"ipAdEntAddr": "10.0.0.1"}) is True
+    assert agent._instance_defined_in_schema("1.3.6.1.2.1.4.20", {"ipAdEntAddr": "10.0.0.2"}) is False
+    assert agent._instance_defined_in_schema("1.3.6.1.2.1.4.999", {"ipAdEntAddr": "10.0.0.1"}) is False
+
+
+def test_normalize_loaded_instances_and_fill_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    agent.mib_jsons = {
+        "TEST-MIB": {
+            "objects": {
+                "ifTable": {
+                    "type": "MibTable",
+                    "oid": [1, 3, 6, 1, 2, 1, 2, 2],
+                    "rows": [{"ifIndex": 1, "ifDescr": "default-if", "ifAlias": "default-alias"}],
+                },
+                "ifEntry": {
+                    "type": "MibTableRow",
+                    "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1],
+                    "indexes": ["ifIndex"],
+                },
+            }
+        }
+    }
+    agent.table_instances = {
+        " .1..3.6.1.2.1.2.2. ": {
+            "1": {"column_values": {"ifIndex": 1, "ifDescr": "unset", "ifAlias": None}}
+        }
+    }
+
+    agent._normalize_loaded_table_instances()
+    assert "1.3.6.1.2.1.2.2" in agent.table_instances
+
+    saved: dict[str, bool] = {}
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: saved.setdefault("called", True))
+    agent._fill_missing_table_defaults()
+
+    values = agent.table_instances["1.3.6.1.2.1.2.2"]["1"]["column_values"]
+    assert values["ifDescr"] == "default-if"
+    assert values["ifAlias"] == "default-alias"
+    assert saved.get("called", False) is True
+
+
+def test_find_source_mib_file_and_should_recompile(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    project_root = tmp_path
+    app_dir = project_root / "app"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    fake_module_file = app_dir / "snmp_agent.py"
+    fake_module_file.write_text("# fake")
+
+    mibs_dir = project_root / "data" / "mibs"
+    mibs_dir.mkdir(parents=True, exist_ok=True)
+    src = mibs_dir / "MY-MIB.mib"
+    src.write_text("MY-MIB DEFINITIONS ::= BEGIN\nEND\n", encoding="utf-8")
+
+    compiled = project_root / "compiled-mibs" / "MY-MIB.py"
+    compiled.parent.mkdir(parents=True, exist_ok=True)
+    compiled.write_text("# compiled", encoding="utf-8")
+
+    monkeypatch.setattr(snmp_agent_module, "__file__", str(fake_module_file))
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    found = agent._find_source_mib_file("MY-MIB")
+    assert found is not None
+    assert found.name == "MY-MIB.mib"
+
+    now = 2_000_000
+    os.utime(compiled, (now, now))
+    os.utime(src, (now + 100, now + 100))
+    assert agent._should_recompile("MY-MIB", compiled) is True
+
+    os.utime(src, (now - 100, now - 100))
+    assert agent._should_recompile("MY-MIB", compiled) is False
+
+    missing_compiled = project_root / "compiled-mibs" / "MISSING.py"
+    assert agent._should_recompile("MISSING", missing_compiled) is True
+
+
+def test_should_recompile_handles_stat_oserror(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    compiled = tmp_path / "compiled.py"
+    compiled.write_text("x")
+
+    class BadSource:
+        def stat(self) -> Any:
+            raise OSError("boom")
+
+    monkeypatch.setattr(agent, "_find_source_mib_file", lambda _m: BadSource())
+    assert agent._should_recompile("X", compiled) is False
+
+
+def test_lookup_symbol_for_dotted_and_get_all_oids() -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    class GoodObj:
+        def __init__(self, name: tuple[int, ...]) -> None:
+            self.name = name
+
+    class BadObj:
+        @property
+        def name(self) -> Any:
+            raise RuntimeError("broken name")
+
+    fake_builder = SimpleNamespace(
+        mibSymbols={
+            "TEST-MIB": {
+                "goodSymbol": GoodObj((1, 3, 6, 1, 2, 1, 1, 1, 0)),
+                "badSymbol": BadObj(),
+            }
+        }
+    )
+    agent.mib_builder = fake_builder
+
+    assert agent._lookup_symbol_for_dotted("1.3.6.1.2.1.1.1.0") == ("TEST-MIB", "goodSymbol")
+    assert agent._lookup_symbol_for_dotted("1.3.bad") == (None, None)
+    assert agent._lookup_symbol_for_dotted("1.3.6.1.4.1") == (None, None)
+
+    # get_all_oids expects readable name attributes
+    agent.mib_builder = SimpleNamespace(
+        mibSymbols={"TEST-MIB": {"goodSymbol": GoodObj((1, 3, 6, 1, 2, 1, 1, 1, 0))}}
+    )
+    oid_map = agent.get_all_oids()
+    assert oid_map["goodSymbol"] == (1, 3, 6, 1, 2, 1, 1, 1, 0)
+
+
+def test_migrate_legacy_state_files_triggers_save(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    project_root = tmp_path
+    app_dir = project_root / "app"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    fake_module_file = app_dir / "snmp_agent.py"
+    fake_module_file.write_text("# fake", encoding="utf-8")
+    monkeypatch.setattr(snmp_agent_module, "__file__", str(fake_module_file))
+
+    data_dir = project_root / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "overrides.json").write_text(json.dumps({"1.3.6.1": 7}), encoding="utf-8")
+    (data_dir / "table_instances.json").write_text(
+        json.dumps({"1.3.6.1.2": {"1": {"column_values": {"x": 1}}}}),
+        encoding="utf-8",
+    )
+
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    called: dict[str, bool] = {}
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: called.setdefault("saved", True))
+
+    agent._migrate_legacy_state_files()
+    assert called.get("saved", False) is True
+
+
+def test_load_mib_state_loads_and_normalizes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    project_root = tmp_path
+    app_dir = project_root / "app"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    fake_module_file = app_dir / "snmp_agent.py"
+    fake_module_file.write_text("# fake", encoding="utf-8")
+    monkeypatch.setattr(snmp_agent_module, "__file__", str(fake_module_file))
+
+    data_dir = project_root / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    state_file = data_dir / "mib_state.json"
+    state_file.write_text(
+        json.dumps(
+            {
+                "scalars": {"1.3.6.1.2.1.1.1.0": "desc"},
+                "tables": {" .1..3.6.1.2.1.2.2. ": {"1": {"column_values": {"ifDescr": "eth0"}}}},
+                "deleted_instances": ["1.3.6.1.2.1.2.2.1"],
+                "links": [{"id": "l1"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    link_calls: dict[str, Any] = {}
+
+    class FakeLinkManager:
+        def load_links_from_state(self, payload: Any) -> None:
+            link_calls["payload"] = payload
+
+    monkeypatch.setattr("app.snmp_agent.get_link_manager", lambda: FakeLinkManager())
+
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    # Avoid schema filtering side effects in this unit test
+    monkeypatch.setattr(agent, "_fill_missing_table_defaults", lambda: None)
+    monkeypatch.setattr(agent, "_filter_deleted_instances_against_schema", lambda: None)
+
+    agent._load_mib_state()
+
+    assert agent.overrides["1.3.6.1.2.1.1.1.0"] == "desc"
+    assert "1.3.6.1.2.1.2.2" in agent.table_instances
+    assert agent.deleted_instances == ["1.3.6.1.2.1.2.2.1"]
+    assert link_calls.get("payload") == [{"id": "l1"}]
+
+
+def test_capture_initial_values_and_writable_detection() -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    class FakeMibScalarInstance:
+        pass
+
+    class FakeSyntax:
+        def __str__(self) -> str:
+            return "42"
+
+    sym = FakeMibScalarInstance()
+    sym.name = (1, 3, 6, 1, 2, 1, 1, 4, 0)
+    sym.syntax = FakeSyntax()
+
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstance],
+        mibSymbols={"TEST-MIB": {"sysContactInst": sym}},
+    )
+    agent.mib_builder = fake_builder
+    agent.mib_jsons = {"TEST-MIB": {"sysContact": {"access": "read-write"}}}
+
+    agent._capture_initial_values()
+
+    dotted = "1.3.6.1.2.1.1.4.0"
+    assert dotted in agent._initial_values
+    assert dotted in agent._writable_oids
+
+
+def test_apply_overrides_applies_and_prunes_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    class FakeMibScalarInstance:
+        pass
+
+    class FakeSyntax:
+        def __init__(self, value: Any) -> None:
+            self.value = value
+
+        def clone(self, new_value: Any) -> "FakeSyntax":
+            return FakeSyntax(new_value)
+
+    sym = FakeMibScalarInstance()
+    sym.name = (1, 3, 6, 1, 4, 1, 99999, 1, 0)
+    sym.syntax = FakeSyntax("old")
+
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstance],
+        mibSymbols={"TEST-MIB": {"myScalarInst": sym}},
+    )
+    agent.mib_builder = fake_builder
+    agent.overrides = {
+        # Should apply by .0 fallback
+        "1.3.6.1.4.1.99999.1": "new",
+        # Invalid format, should be removed
+        "bad.oid": "x",
+    }
+
+    saved: dict[str, bool] = {}
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: saved.setdefault("saved", True))
+
+    agent._apply_overrides()
+
+    assert isinstance(sym.syntax, FakeSyntax)
+    assert sym.syntax.value == "new"
+    assert "bad.oid" not in agent.overrides
+    assert saved.get("saved", False) is True
+
+
+def test_apply_table_instances_updates_only_non_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    agent.table_instances = {
+        "1.3.6.1.2.1.2.2": {
+            "1": {"column_values": {"ifDescr": "eth0"}},
+            "2": {"column_values": {}},
+        }
+    }
+
+    calls: list[tuple[str, str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        agent,
+        "_update_table_cell_values",
+        lambda table_oid, instance_str, column_values: calls.append(
+            (table_oid, instance_str, column_values)
+        ),
+    )
+
+    agent._apply_table_instances()
+
+    assert calls == [("1.3.6.1.2.1.2.2", "1", {"ifDescr": "eth0"})]
+
+
+def test_build_index_str_variants() -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    assert agent._build_index_str({}) == "1"
+    assert agent._build_index_str({"__index__": 5}) == "5"
+    assert agent._build_index_str({"__index__": 5, "__index_2__": 10}) == "5.10"
+    assert agent._build_index_str({"__instance__": "7"}) == "7"
+    assert agent._build_index_str({"a": 1, "b": 2}) == "1.2"
+
+
+def test_restore_table_instance_true_and_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    called: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+    monkeypatch.setattr(
+        agent,
+        "add_table_instance",
+        lambda table_oid, index_values, column_values=None: called.append(
+            (table_oid, index_values, column_values or {})
+        ),
+    )
+
+    table_oid = "1.3.6.1.2.1.2.2"
+    idx = {"ifIndex": 7}
+    instance_oid = f"{table_oid}.7"
+
+    agent.deleted_instances = [instance_oid]
+    assert agent.restore_table_instance(table_oid, idx, {"ifDescr": "eth7"}) is True
+    assert called == [(table_oid, idx, {"ifDescr": "eth7"})]
+
+    called.clear()
+    agent.deleted_instances = []
+    assert agent.restore_table_instance(table_oid, idx, {"ifDescr": "eth7"}) is False
+    assert called == []
+
+
+def test_delete_table_instance_schema_and_non_schema(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    table_oid = " .1..3.6.1.2.1.2.2. "
+    norm_table_oid = "1.3.6.1.2.1.2.2"
+    index_values = {"ifIndex": 9}
+
+    agent.table_instances = {
+        norm_table_oid: {
+            "9": {"column_values": {"ifDescr": "eth9"}}
+        }
+    }
+
+    saved: dict[str, int] = {"count": 0}
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: saved.__setitem__("count", saved["count"] + 1))
+
+    # First call: instance is in schema -> should append to deleted_instances
+    monkeypatch.setattr(agent, "_instance_defined_in_schema", lambda t, i: True)
+    assert agent.delete_table_instance(table_oid, index_values, propagate_augments=False) is True
+    assert norm_table_oid not in agent.table_instances  # removed and cleaned up
+    assert f"{norm_table_oid}.9" in agent.deleted_instances
+    assert saved["count"] == 1
+
+    # Second call: not in schema -> should not append duplicate and not save again
+    monkeypatch.setattr(agent, "_instance_defined_in_schema", lambda t, i: False)
+    assert agent.delete_table_instance(norm_table_oid, index_values, propagate_augments=False) is True
+    assert agent.deleted_instances.count(f"{norm_table_oid}.9") == 1

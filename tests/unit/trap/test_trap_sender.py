@@ -201,3 +201,54 @@ def test_cli_sends_notification_with_varbinds(mocker: MockerFixture, capsys: pyt
     assert call_args.kwargs["trap_type"] == "inform"
     assert call_args.kwargs["extra_varbinds"] is not None
     assert len(call_args.kwargs["extra_varbinds"]) == 2
+
+
+def test_cli_varbind_string_and_index_string_parsing(
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI should parse non-int varbind value/index as OctetString/string."""
+    mock_sender = mocker.MagicMock()
+    mocker.patch("app.cli_trap_sender.TrapSender", return_value=mock_sender)
+
+    exit_code = cli_main([
+        "--mib", "IF-MIB",
+        "--notification", "linkDown",
+        "--varbind", "SNMPv2-MIB", "sysName", "router-a",
+        "--varbind-index", "IF-MIB", "ifOperStatus", "up", "eth0",
+    ])
+    output = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Sent inform IF-MIB::linkDown" in output.out
+    call_args = mock_sender.send_mib_notification.call_args
+    extra = call_args.kwargs["extra_varbinds"]
+    assert extra is not None
+    assert len(extra) == 2
+
+    vb1 = extra[0]
+    assert vb1[0] == "SNMPv2-MIB"
+    assert vb1[1] == "sysName"
+    assert isinstance(vb1[2], rfc1902.OctetString)
+
+    vb2 = extra[1]
+    assert vb2[0] == "IF-MIB"
+    assert vb2[1] == "ifOperStatus"
+    assert isinstance(vb2[2], rfc1902.OctetString)
+    assert vb2[3] == "eth0"
+
+
+def test_cli_sender_exception_returns_error(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
+    """CLI should return 1 and print stderr when TrapSender raises."""
+    mock_sender = mocker.MagicMock()
+    mock_sender.send_mib_notification.side_effect = RuntimeError("send failed")
+    mocker.patch("app.cli_trap_sender.TrapSender", return_value=mock_sender)
+
+    exit_code = cli_main([
+        "--mib", "SNMPv2-MIB",
+        "--notification", "coldStart",
+    ])
+    output = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "Error sending notification: send failed" in output.err

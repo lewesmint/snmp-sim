@@ -1,0 +1,61 @@
+--------- coverage: platform darwin, python 3.10.14-final-0 ----------
+Name                             Stmts   Miss Branch BrPart  Cover
+------------------------------------------------------------------
+app/__init__.py                     13      0      0      0   100%
+app/api.py                        1406   1212    602      2    10%
+app/app_config.py                   36      0     12      2    96%
+app/app_logger.py                  142     14     20      4    89%
+app/base_type_handler.py           147     11     90      6    90%
+app/behaviour_store.py              12      0      0      0   100%
+app/cli_bake_state.py              156      9     76     16    88%
+app/cli_build_model.py              64      1     16      2    96%
+app/cli_compile_mib.py              36      0      8      1    98%
+app/cli_load_model.py               60      2     20      1    96%
+app/cli_mib_to_json.py              73      1     30      3    96%
+app/cli_preset_manager.py           97      2     36      3    96%
+app/cli_register_types.py           79     13     28      7    79%
+app/cli_run_agent.py                37      0      4      0   100%
+app/cli_schema_upgrade.py           39      1     12      1    96%
+app/cli_trap_sender.py              44      0      8      0   100%
+app/compiler.py                     80      0     28      1    99%
+app/default_value_plugins.py        39      0     10      2    96%
+app/generator.py                   331     60    192     26    79%
+app/mib_dependency_resolver.py     124      6     54      7    93%
+app/mib_metadata.py                 10      0      4      0   100%
+app/mib_object.py                   10      0      0      0   100%
+app/mib_registrar.py               552    104    238     34    79%
+app/mib_registry.py                  8      0      0      0   100%
+app/mib_table.py                    11      0      0      0   100%
+app/oid_utils.py                    18      0     10      0   100%
+app/plugin_loader.py                34      0     10      0   100%
+app/snmp_agent.py                 1070    276    518    112    71%
+app/snmp_table_responder.py        252    114    184     31    50%
+app/snmp_transport.py                7      0      0      0   100%
+app/table_registrar.py             198     14     88      6    92%
+app/trap_receiver.py               120     11     30     10    86%
+app/trap_sender.py                  89     34     26      6    58%
+app/type_recorder.py               518     12    260     11    97%
+app/type_registry.py                24      2      4      2    86%
+app/type_registry_validator.py      42      0     20      0   100%
+app/types.py                         7      0      0      0   100%
+app/value_links.py                 157    116     68      2    19%
+makereqs.py                         92     92     34      0     0%
+normalize_state_types.py            98     98     56      0     0%
+plugins/__init__.py                  0      0      0      0   100%
+plugins/basic_types.py              87      3     62      6    94%
+plugins/date_and_time.py            20      0      8      0   100%
+plugins/snmp_framework.py           26      2      4      0    93%
+plugins/type_encoders.py            15      0      2      0   100%
+reformat_schema_oids.py             51     51     12      0     0%
+run_agent_with_rest.py              17     17      0      0     0%
+start_with_gui.py                   35     35      4      0     0%
+ui/__init__.py                       0      0      0      0   100%
+ui/common.py                        64      5      8      2    90%
+ui/mib_browser.py                  932    710    306     20    24%
+ui/snmp_gui.py                    3931   3587   1316     37     8%
+------------------------------------------------------------------
+TOTAL                            11510   6615   4518    363    42%
+
+
+============================= 671 passed in 21.18s =============================
+Finished running tests!

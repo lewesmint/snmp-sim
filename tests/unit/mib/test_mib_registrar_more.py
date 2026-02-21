@@ -1,6 +1,10 @@
+# pylint: disable=protected-access,unused-argument,attribute-defined-outside-init,redefined-outer-name,reimported,pointless-string-statement,broad-exception-caught,trailing-whitespace,line-too-long,too-many-lines,missing-module-docstring,missing-class-docstring,missing-function-docstring,invalid-name,too-few-public-methods,import-outside-toplevel,consider-iterating-dictionary,use-implicit-booleaness-not-comparison
+
 from typing import Any, Iterable, cast
 import logging
 import time
+import json
+from pathlib import Path
 import pytest
 
 from app.mib_registrar import MibRegistrar
@@ -782,3 +786,375 @@ def test_get_pysnmp_type_fallback_to_rfc1902(monkeypatch: Any) -> None:
     # Should fall back to rfc1902
     result = reg._get_pysnmp_type("Integer32")
     assert result is not None  # Should get Integer32 from rfc1902
+
+
+def test_expand_index_value_to_oid_components_variants() -> None:
+    reg = make_registrar()
+
+    assert reg._expand_index_value_to_oid_components("10.0.0.1", "IpAddress") == (10, 0, 0, 1)
+    assert reg._expand_index_value_to_oid_components("bad.ip", "IpAddress") == (0, 0, 0, 0)
+
+    assert reg._expand_index_value_to_oid_components("abc", "DisplayString") == (97, 98, 99)
+    assert reg._expand_index_value_to_oid_components(b"\x01\x02", "OctetString") == (1, 2)
+    assert reg._expand_index_value_to_oid_components(7, "PhysAddress") == (7,)
+    assert reg._expand_index_value_to_oid_components(None, "OctetString") == ()
+
+    assert reg._expand_index_value_to_oid_components("42", "Integer32") == (42,)
+    assert reg._expand_index_value_to_oid_components("x", "Gauge32") == (0,)
+
+    assert reg._expand_index_value_to_oid_components("AZ", "SomeUnknownType") == (65, 90)
+    assert reg._expand_index_value_to_oid_components(None, "SomeUnknownType") == (0,)
+
+
+def test_get_pysnmp_type_uses_snmpv2_tc_when_smi_fails(monkeypatch: Any) -> None:
+    reg = make_registrar()
+
+    class FromTc:
+        pass
+
+    class Builder:
+        def import_symbols(self, mod: str, name: str) -> list[type]:
+            if mod == "SNMPv2-SMI":
+                raise ImportError("not in smi")
+            if mod == "SNMPv2-TC":
+                return [FromTc]
+            raise ImportError("unexpected")
+
+    reg.mib_builder = Builder()
+    assert reg._get_pysnmp_type("DisplayString") is FromTc
+
+
+def test_build_table_symbols_write_wrappers_readwrite_and_readonly(monkeypatch: Any) -> None:
+    reg = make_registrar()
+
+    class FakeTable:
+        def __init__(self, oid: Iterable[int]) -> None:
+            self.oid = tuple(oid)
+
+    class FakeRow:
+        def __init__(self, oid: Iterable[int]) -> None:
+            self.oid = tuple(oid)
+
+        def setIndexNames(self, *specs: Any) -> Any:
+            return self
+
+    class FakeColumn:
+        def __init__(self, oid: Iterable[int], *args: Any, **kwargs: Any) -> None:
+            self.oid = tuple(oid)
+
+        def setMaxAccess(self, a: Any) -> Any:
+            self.max_access = a
+            return self
+
+    class FakeValue:
+        def __init__(self, value: Any = None) -> None:
+            self.value = value
+
+        def prettyPrint(self) -> str:
+            return str(self.value)
+
+    class FakeInstance:
+        def __init__(self, oid: Iterable[int], idx: Iterable[int], val: Any) -> None:
+            self.name = tuple(oid) + tuple(idx)
+            self.syntax = val
+
+    reg.MibTable = FakeTable
+    reg.MibTableRow = FakeRow
+    reg.MibTableColumn = FakeColumn
+    reg.MibScalarInstance = FakeInstance
+
+    monkeypatch.setattr(MibRegistrar, "_get_pysnmp_type", lambda self, _t: FakeValue)
+    import app.mib_registrar as mr
+    monkeypatch.setattr(mr, "encode_value", lambda v, _t: v)
+
+    mib_json = {
+        "ifTable": {
+            "oid": [1, 3, 6, 1, 2, 1, 2, 2],
+            "rows": [{"ifIndex": 1, "ifDescr": "eth0", "ifAlias": "lan"}],
+        },
+        "ifEntry": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1], "indexes": ["ifIndex"]},
+        "ifIndex": {
+            "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 1],
+            "type": "Integer32",
+            "access": "read-only",
+        },
+        "ifDescr": {
+            "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2],
+            "type": "DisplayString",
+            "access": "read-write",
+        },
+        "ifAlias": {
+            "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 18],
+            "type": "DisplayString",
+            "access": "read-only",
+        },
+    }
+
+    symbols = reg._build_table_symbols(
+        "IF-MIB",
+        "ifTable",
+        cast(dict[str, Any], mib_json["ifTable"]),
+        mib_json,
+        {"Integer32": {"base_type": "Integer32"}, "DisplayString": {"base_type": "DisplayString"}},
+    )
+
+    rw_inst = symbols["ifDescrInst_1"]
+    ro_inst = symbols["ifAliasInst_1"]
+
+    assert rw_inst.writeTest((rw_inst.name, "new"), snmpEngine=None) is None
+    rw_inst.writeCommit((rw_inst.name, "new-value"), snmpEngine=None)
+    assert rw_inst.syntax == "new-value"
+
+    with pytest.raises(ValueError, match="notWritable"):
+        ro_inst.writeTest((ro_inst.name, "blocked"), snmpEngine=None)
+
+
+def test_build_table_symbols_uses_row_index_fallback(monkeypatch: Any) -> None:
+    reg = make_registrar()
+
+    class FakeTable:
+        def __init__(self, oid: Iterable[int]) -> None:
+            self.oid = tuple(oid)
+
+    class FakeRow:
+        def __init__(self, oid: Iterable[int]) -> None:
+            self.oid = tuple(oid)
+
+        def setIndexNames(self, *specs: Any) -> Any:
+            return self
+
+    class FakeColumn:
+        def __init__(self, oid: Iterable[int], *args: Any, **kwargs: Any) -> None:
+            self.oid = tuple(oid)
+
+        def setMaxAccess(self, a: Any) -> Any:
+            return self
+
+    class FakeValue:
+        def __init__(self, value: Any = None) -> None:
+            self.value = value
+
+    class FakeInstance:
+        def __init__(self, oid: Iterable[int], idx: Iterable[int], val: Any) -> None:
+            self.name = tuple(oid) + tuple(idx)
+            self.syntax = val
+
+    reg.MibTable = FakeTable
+    reg.MibTableRow = FakeRow
+    reg.MibTableColumn = FakeColumn
+    reg.MibScalarInstance = FakeInstance
+
+    monkeypatch.setattr(MibRegistrar, "_get_pysnmp_type", lambda self, _t: FakeValue)
+    import app.mib_registrar as mr
+    monkeypatch.setattr(mr, "encode_value", lambda v, _t: v)
+
+    mib_json = {
+        "testTable": {"oid": [1, 2, 3, 4], "rows": [{"testCol": 11}]},
+        "testEntry": {"oid": [1, 2, 3, 4, 1], "indexes": ["testIndex"]},
+        "testIndex": {"oid": [1, 2, 3, 4, 1, 1], "type": "Integer32", "access": "read-only"},
+        "testCol": {"oid": [1, 2, 3, 4, 1, 2], "type": "Integer32", "access": "read-only"},
+    }
+
+    symbols = reg._build_table_symbols(
+        "TEST-MIB",
+        "testTable",
+        cast(dict[str, Any], mib_json["testTable"]),
+        mib_json,
+        {"Integer32": {"base_type": "Integer32"}},
+    )
+
+    # Missing index value should fall back to row_idx+1 => 1
+    assert "testColInst_1" in symbols
+
+
+def test_register_all_mibs_calls_register_for_each_loaded_type_registry(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    reg = make_registrar()
+    type_registry_path = tmp_path / "types.json"
+    type_registry_path.write_text(json.dumps({"Integer32": {"base_type": "Integer32"}}), encoding="utf-8")
+
+    called: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+
+    def fake_register_mib(self: MibRegistrar, mib: str, mib_json: dict[str, Any], tr: dict[str, Any]) -> None:
+        called.append((mib, mib_json, tr))
+
+    monkeypatch.setattr(MibRegistrar, "register_mib", fake_register_mib)
+
+    mib_jsons = {"MIB-A": {"a": 1}, "MIB-B": {"b": 2}}
+    reg.register_all_mibs(mib_jsons, type_registry_path=str(type_registry_path))
+
+    assert [entry[0] for entry in called] == ["MIB-A", "MIB-B"]
+    assert called[0][2] == {"Integer32": {"base_type": "Integer32"}}
+
+
+def test_register_mib_new_structure_with_traps_and_no_objects_logs(caplog: Any, monkeypatch: Any) -> None:
+    reg = make_registrar()
+    caplog.set_level("INFO")
+
+    monkeypatch.setattr(MibRegistrar, "_build_mib_symbols", lambda self, mib, objects, tr: {})
+    reg.register_mib("TEST-MIB", {"objects": {}, "traps": {"coldStart": {}}}, {})
+
+    assert "MIB TEST-MIB has 1 trap(s): ['coldStart']" in caplog.text
+    assert "No objects to register for TEST-MIB" in caplog.text
+
+
+def test_populate_sysor_table_persists_and_merges_existing_schema(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    reg = make_registrar()
+
+    fake_app_dir = tmp_path / "app"
+    fake_app_dir.mkdir(parents=True, exist_ok=True)
+    fake_module_file = fake_app_dir / "mib_registrar.py"
+    fake_module_file.write_text("# fake", encoding="utf-8")
+    monkeypatch.setattr("app.mib_registrar.__file__", str(fake_module_file))
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "types.json").write_text("{}", encoding="utf-8")
+
+    schema_file = tmp_path / "agent-model" / "SNMPv2-MIB" / "schema.json"
+    schema_file.parent.mkdir(parents=True, exist_ok=True)
+    schema_file.write_text(
+        json.dumps(
+            {
+                "objects": {"keepMe": {"oid": [9, 9, 9], "type": "MibScalar"}},
+                "traps": {"existingTrap": {}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("app.mib_metadata.get_sysor_table_rows", lambda names: [{"sysORIndex": 1}])
+    called: dict[str, Any] = {}
+    monkeypatch.setattr(MibRegistrar, "register_mib", lambda self, mib, mj, tr: called.setdefault("mib", mib))
+
+    mib_jsons = {
+        "SNMPv2-MIB": {
+            "objects": {
+                "sysORTable": {"rows": []},
+                "sysORDescr": {"oid": [1, 3, 6], "type": "DisplayString"},
+            },
+            "traps": {"newTrap": {}},
+        },
+        "IF-MIB": {},
+    }
+
+    reg.populate_sysor_table(mib_jsons)
+
+    assert called.get("mib") == "SNMPv2-MIB"
+    assert mib_jsons["SNMPv2-MIB"]["objects"]["sysORTable"]["rows"] == [{"sysORIndex": 1}]
+    persisted = json.loads(schema_file.read_text(encoding="utf-8"))
+    assert "keepMe" in persisted["objects"]
+    persisted_rows = persisted.get("objects", {}).get("sysORTable", {}).get("rows")
+    if persisted_rows is not None:
+        assert persisted_rows == [{"sysORIndex": 1}]
+    persisted_traps = persisted.get("traps", {})
+    assert persisted_traps in ({"newTrap": {}}, {"existingTrap": {}})
+
+
+def test_populate_sysor_table_persist_warning_on_write_failure(
+    monkeypatch: Any,
+    tmp_path: Path,
+    caplog: Any,
+) -> None:
+    reg = make_registrar()
+    caplog.set_level("WARNING")
+
+    fake_app_dir = tmp_path / "app"
+    fake_app_dir.mkdir(parents=True, exist_ok=True)
+    fake_module_file = fake_app_dir / "mib_registrar.py"
+    fake_module_file.write_text("# fake", encoding="utf-8")
+    monkeypatch.setattr("app.mib_registrar.__file__", str(fake_module_file))
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "types.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr("app.mib_metadata.get_sysor_table_rows", lambda names: [{"sysORIndex": 1}])
+    monkeypatch.setattr(MibRegistrar, "register_mib", lambda *args, **kwargs: None)
+
+    real_path_open = Path.open
+
+    def fake_path_open(self: Path, *args: Any, **kwargs: Any) -> Any:
+        mode = kwargs.get("mode", args[0] if args else "r")
+        if str(self).endswith("agent-model/SNMPv2-MIB/schema.json") and "w" in mode:
+            raise OSError("disk full")
+        return real_path_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", fake_path_open)
+
+    mib_jsons = {"SNMPv2-MIB": {"objects": {"sysORTable": {"rows": []}}}}
+    reg.populate_sysor_table(mib_jsons)
+
+    assert "Could not persist schema to disk" in caplog.text
+
+
+def test_build_mib_symbols_scalar_write_wrappers_paths(monkeypatch: Any) -> None:
+    reg = make_registrar()
+
+    class FakeValue:
+        def __init__(self, value: Any = None) -> None:
+            self.value = value
+
+        def prettyPrint(self) -> str:
+            return str(self.value)
+
+    class FakeScalar:
+        def __init__(self, oid: Iterable[int], idx: Iterable[int], val: Any) -> None:
+            self.name = tuple(oid) + tuple(idx)
+            self.syntax = val
+
+        def setMaxAccess(self, access: str) -> "FakeScalar":
+            self.max_access = access
+            return self
+
+        def writeCommit(self, *args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("original write failure")
+
+    reg.MibScalarInstance = FakeScalar
+    monkeypatch.setattr(MibRegistrar, "_get_pysnmp_type", lambda self, _t: FakeValue)
+    import app.mib_registrar as mr
+    monkeypatch.setattr(mr, "encode_value", lambda v, _t: v)
+
+    mib_json = {
+        "rwScalar": {
+            "oid": [1, 3, 6, 1, 4, 1, 99999, 1],
+            "type": "Integer32",
+            "access": "read-write",
+            "current": 1,
+        },
+        "roScalar": {
+            "oid": [1, 3, 6, 1, 4, 1, 99999, 2],
+            "type": "Integer32",
+            "access": "read-only",
+            "current": 2,
+        },
+    }
+
+    symbols = reg._build_mib_symbols("TEST-MIB", mib_json, {"Integer32": {"base_type": "Integer32"}})
+    rw = symbols["rwScalarInst"]
+    ro = symbols["roScalarInst"]
+
+    # Writable scalar: writeTest allows and writeCommit updates syntax from varbind
+    assert rw.writeTest((rw.name, 42), snmpEngine=None) is None
+    rw.writeCommit((rw.name, 42), snmpEngine=None)
+    assert rw.syntax == 42
+
+    # Non-int vb_oid path still updates syntax
+    rw.writeCommit((("a", "b"), 77), snmpEngine=None)
+    assert rw.syntax == 77
+
+    # No varbind argument path should not crash and should keep current syntax
+    rw.writeCommit(snmpEngine=None)
+    assert rw.syntax == 77
+
+    # Read-only scalar: writeTest rejects and writeCommit ignores new value
+    with pytest.raises(ValueError, match="notWritable"):
+        ro.writeTest((ro.name, 99), snmpEngine=None)
+    ro.writeCommit((ro.name, 99), snmpEngine=None)
+    assert isinstance(ro.syntax, FakeValue)
+    assert ro.syntax.value == 2

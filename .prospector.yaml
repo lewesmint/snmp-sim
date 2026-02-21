@@ -1,0 +1,26 @@
+strictness: medium
+test-warnings: false
+doc-warnings: false
+member-warnings: false
+
+ignore-paths:
+  - agent-model
+  - agent-model-backups
+  - compiled-mibs
+  - docs
+  - logs
+  - manual-tests
+  - minimal-for-reference
+  - retired
+
+tools:
+  dodgy:
+    run: true
+  mccabe:
+    run: false
+  pycodestyle:
+    run: false
+  pyflakes:
+    run: true
+  pylint:
+    run: true

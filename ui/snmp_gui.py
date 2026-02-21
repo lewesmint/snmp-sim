@@ -1,3 +1,5 @@
+# pylint: disable=broad-exception-caught,protected-access,unused-argument,unused-variable,attribute-defined-outside-init,trailing-whitespace,line-too-long,too-many-lines,missing-module-docstring,invalid-name,missing-class-docstring,too-many-instance-attributes,too-many-locals,too-many-statements,too-many-branches,too-many-nested-blocks,wrong-import-order,ungrouped-imports,consider-using-dict-items,consider-iterating-dictionary,no-else-return,no-else-break,consider-using-max-builtin,consider-using-in,import-outside-toplevel,use-maxsplit-arg,consider-using-f-string,too-many-return-statements,too-many-arguments,too-many-positional-arguments,superfluous-parens
+
 from __future__ import annotations
 
 import customtkinter as ctk
@@ -25,7 +27,6 @@ except ImportError:
     except ImportError:
         # If module is not found, import from ui using absolute path
         import sys
-        from pathlib import Path
         ui_dir = str(Path(__file__).parent)
         if ui_dir not in sys.path:
             sys.path.insert(0, ui_dir)
@@ -66,6 +67,7 @@ class SNMPControllerGUI:
         self.oid_values: Dict[str, str] = {}  # oid_str -> value
         self.oid_metadata: Dict[str, Dict[str, Any]] = {}  # oid_str -> metadata
         self.table_instances_data: Dict[str, Dict[str, Any]] = {}  # Pre-loaded table instances data
+        self.table_schemas: Dict[str, Dict[str, Any]] = {}
         self.oid_to_item: Dict[str, str] = {}  # oid_str -> tree item id
         self._pending_oid_focus: Dict[str, Optional[str]] | None = None
         self._pending_oid_focus_retries: int = 0
@@ -794,7 +796,7 @@ class SNMPControllerGUI:
             scope = scope_var.get()
             # Clear selected items that don't match new scope
             to_remove = []
-            for oid_str, (name, table_oid, column) in selected_map.items():
+            for oid_str, (_, table_oid, _) in selected_map.items():
                 if scope == "per-instance" and table_oid is None:
                     to_remove.append(oid_str)
                 elif scope == "global" and table_oid is not None:
@@ -838,7 +840,7 @@ class SNMPControllerGUI:
         def _save() -> None:
             endpoints = []
             for oid_str in selected_map.keys():
-                name, table_oid, column = selected_map[oid_str]
+                _, table_oid, column = selected_map[oid_str]
                 endpoints.append({"table_oid": table_oid, "column": column})
             if len(endpoints) < 2:
                 messagebox.showerror("Links", "Provide at least two endpoints.")
@@ -1409,11 +1411,11 @@ class SNMPControllerGUI:
             sysuptime_label.grid(row=0, column=2, columnspan=2, padx=(0, 5), sticky="w")
 
             # Add click handlers for sysUpTime row
-            def on_sysuptime_single_click(event: Any) -> None:
+            def on_sysuptime_single_click(_: Any) -> None:
                 """Refresh sysUpTime value on single click."""
                 self._refresh_sysuptime_value(oid_name, current_label)
 
-            def on_sysuptime_double_click(event: Any) -> None:
+            def on_sysuptime_double_click(_: Any) -> None:
                 """Show notification on double click."""
                 messagebox.showinfo(
                     "sysUpTime is Real-time",
@@ -1719,7 +1721,7 @@ class SNMPControllerGUI:
                     row["current_label"].configure(text="")
                 self._log(f"Failed to get current value for {oid_name}: {e}", "WARNING")
 
-    def _refresh_sysuptime_value(self, oid_name: str, label_widget: Any) -> None:
+    def _refresh_sysuptime_value(self, _oid_name: str, label_widget: Any) -> None:
         """Refresh the sysUpTime value for a specific label widget."""
         if not self.connected:
             return
@@ -1926,7 +1928,7 @@ class SNMPControllerGUI:
 
     def _update_forced_display(self) -> None:
         """Update the forced OIDs display (legacy method - kept for compatibility)."""
-        pass  # No longer used with table-based system
+        return
 
     def _set_trap_override(self) -> None:
         """Set a trap-specific OID override (legacy method - kept for compatibility)."""
@@ -2256,7 +2258,7 @@ class SNMPControllerGUI:
 
         self.trap_index_frame.pack(fill="x", pady=(0, 5), anchor="w")
     
-    def _resolve_table_oid(self, oid_str: str, row: Dict[str, Any] | None = None) -> str | None:
+    def _resolve_table_oid(self, oid_str: str, _row: Dict[str, Any] | None = None) -> str | None:
         """Resolve a table OID with .index suffix to an actual OID with instance number."""
         # Handle dot notation (e.g., "IF-MIB::ifAdminStatus.1")
         if "." in oid_str and oid_str[-1].isdigit():
@@ -2316,7 +2318,7 @@ class SNMPControllerGUI:
         if "::" not in oid_name:
             return {}
 
-        for oid, metadata in self.oid_metadata.items():
+        for _, metadata in self.oid_metadata.items():
             metadata_name = metadata.get("name", "")
             mib_name = metadata.get("mib", "")
             if mib_name and metadata_name:
@@ -2430,8 +2432,6 @@ class SNMPControllerGUI:
         varbinds_label.pack(anchor="w", padx=20, pady=(10, 5))
 
         # Create frame for treeview (using tkinter's ttk.Treeview for table)
-        from tkinter import ttk
-
         tree_frame = ctk.CTkFrame(dialog)
         tree_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
 
@@ -3991,7 +3991,6 @@ class SNMPControllerGUI:
         def get_next_default() -> str:
             """Calculate default for the last index field based on existing instances."""
             instances = [str(inst) for inst in schema.get("instances", [])]
-            columns_meta = schema.get("columns", {})
             if not instances:
                 return "1"
             
@@ -4022,11 +4021,10 @@ class SNMPControllerGUI:
             # Create entry fields for each index column
             for i in range(num_index_parts):
                 if i < len(index_columns):
-                    col_name, col_info = index_columns[i]
+                    col_name, _col_info = index_columns[i]
                 else:
                     # Shouldn't happen if num_index_parts matches index_columns
                     col_name = f"index{i}"
-                    col_info = {}
                 
                 # Label with actual column name
                 label = ctk.CTkLabel(input_frame, text=f"{col_name}:")
@@ -4610,8 +4608,7 @@ class SNMPControllerGUI:
             resp = requests.post(f"{self.api_url}/value",
                                json={"oid": oid, "value": new_value},
                                timeout=5)
-            
-            # If 404, try as a table column OID
+               # If 404, try as a table column OID
             if resp.status_code == 404:
                 decomposed = self._decompose_table_oid(oid)
                 if decomposed:
@@ -4619,7 +4616,6 @@ class SNMPControllerGUI:
                     # Convert instance string to index dict
                     # For simple single-index tables, instance is just the index value
                     # For multi-index tables, instance is dot-separated values
-                    schema = self.table_schemas.get(None)  # Find matching schema
                     index_cols = []
                     for schema_name, schema_data in self.table_schemas.items():
                         if schema_data.get("oid") and '.'.join(str(x) for x in schema_data["oid"]) == table_oid:
@@ -6331,7 +6327,6 @@ class SNMPControllerGUI:
             ctk.CTkLabel(dialog, text="Select a preset to load:", font=("", 14, "bold")).pack(pady=10)
 
             # Listbox for presets
-            from tkinter import ttk
             listbox_frame = ctk.CTkFrame(dialog)
             listbox_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
 

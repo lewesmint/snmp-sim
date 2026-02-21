@@ -36,3 +36,15 @@ exclude = [
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
+
+[tool.pyright]
+exclude = [
+    "compiled-mibs",
+    "compiled-mibs/**",
+    "retired",
+    "retired/**",
+]
+
+[[tool.pyright.executionEnvironments]]
+root = "."
+pythonVersion = "3.10"
