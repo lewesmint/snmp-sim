@@ -8,6 +8,7 @@ import shutil
 from app.snmp_agent import SNMPAgent
 import app.api
 
+
 def run_snmp_agent(agent: SNMPAgent) -> None:
     """Run the SNMP agent in a separate thread with its own event loop."""
     try:
@@ -19,63 +20,70 @@ def run_snmp_agent(agent: SNMPAgent) -> None:
         print(f"\nSNMP Agent ERROR: {type(e).__name__}: {e}", file=sys.stderr)
         sys.exit(1)
 
-if __name__ == "__main__": # pragma: no cover
+
+if __name__ == "__main__":  # pragma: no cover
     try:
         # Parse command-line arguments
         parser = argparse.ArgumentParser(description="Run SNMP Agent with REST API")
         parser.add_argument(
             "--rebuild",
             action="store_true",
-            help="Force rebuild of compiled MIB files and schemas"
+            help="Force rebuild of compiled MIB files and schemas",
         )
         parser.add_argument(
             "--rebuild-schemas",
             action="store_true",
-            help="Force regeneration of schema files only"
+            help="Force regeneration of schema files only",
         )
         args = parser.parse_args()
-        
+
         # Handle rebuild flags
         if args.rebuild:
             print("Forcing rebuild of compiled MIBs and schemas...")
             compiled_dir = Path("compiled-mibs")
             schema_dir = Path("agent-model")
-            
+
             if compiled_dir.exists():
                 print(f"Removing {compiled_dir}...")
                 shutil.rmtree(compiled_dir)
-            
+
             if schema_dir.exists():
                 print(f"Removing {schema_dir}...")
                 shutil.rmtree(schema_dir)
-            
-            print("Rebuild flags cleared. MIBs and schemas will be regenerated on startup.")
-        
+
+            print(
+                "Rebuild flags cleared. MIBs and schemas will be regenerated on startup."
+            )
+
         if args.rebuild_schemas:
             print("Forcing regeneration of schemas...")
             schema_dir = Path("agent-model")
-            
+
             if schema_dir.exists():
                 print(f"Removing {schema_dir}...")
                 shutil.rmtree(schema_dir)
-            
-            print("Schema regeneration flag set. Schemas will be regenerated on startup.")
-        
+
+            print(
+                "Schema regeneration flag set. Schemas will be regenerated on startup."
+            )
+
         # Create the SNMP agent
         agent = SNMPAgent()
-        
+
         # Set the global reference for the REST API
         app.api.snmp_agent = agent
-        
+
         # Start SNMP agent in background thread
-        snmp_thread = threading.Thread(target=run_snmp_agent, args=(agent,), daemon=True)
+        snmp_thread = threading.Thread(
+            target=run_snmp_agent, args=(agent,), daemon=True
+        )
         snmp_thread.start()
-        
+
         print("Starting SNMP Agent with REST API...")
         print("SNMP Agent running in background")
         print("REST API available at http://localhost:8800")
         print("Press Ctrl+C to stop")
-        
+
         # Ensure uvicorn loggers propagate to the root logger configured by AppLogger
         import logging
         import socket
@@ -107,10 +115,11 @@ if __name__ == "__main__": # pragma: no cover
             # Try psutil first (pure python, recommended)
             try:
                 import psutil
+
                 pids = set()
-                for conn in psutil.net_connections(kind='inet'):
-                    laddr = getattr(conn, 'laddr', None)
-                    if laddr and getattr(laddr, 'port', None) == port:
+                for conn in psutil.net_connections(kind="inet"):
+                    laddr = getattr(conn, "laddr", None)
+                    if laddr and getattr(laddr, "port", None) == port:
                         if conn.pid:
                             pids.add(conn.pid)
                 return list(pids)
@@ -123,15 +132,17 @@ if __name__ == "__main__": # pragma: no cover
             if is_windows:
                 # netstat -ano : parse lines with LISTENING and the PID in last column
                 try:
-                    out = subprocess.check_output(["netstat", "-ano"], stderr=subprocess.DEVNULL, text=True)
+                    out = subprocess.check_output(
+                        ["netstat", "-ano"], stderr=subprocess.DEVNULL, text=True
+                    )
                     pids = set()
                     for line in out.splitlines():
                         parts = line.split()
                         if len(parts) >= 5:
                             local = parts[1]
-                            state = parts[3] if len(parts) >= 4 else ''
+                            state = parts[3] if len(parts) >= 4 else ""
                             pid = parts[-1]
-                            if f":{port}" in local and state.upper() == 'LISTENING':
+                            if f":{port}" in local and state.upper() == "LISTENING":
                                 try:
                                     pids.add(int(pid))
                                 except Exception:
@@ -141,15 +152,21 @@ if __name__ == "__main__": # pragma: no cover
                     return []
             else:
                 # POSIX systems: try lsof, then ss, then netstat
-                if shutil.which('lsof'):
+                if shutil.which("lsof"):
                     try:
-                        out = subprocess.check_output(["lsof", "-ti", f":{port}"], stderr=subprocess.DEVNULL, text=True)
+                        out = subprocess.check_output(
+                            ["lsof", "-ti", f":{port}"],
+                            stderr=subprocess.DEVNULL,
+                            text=True,
+                        )
                         return [int(x) for x in out.split() if x.strip()]
                     except Exception:
                         pass
-                if shutil.which('ss'):
+                if shutil.which("ss"):
                     try:
-                        out = subprocess.check_output(["ss", "-ltnp"], stderr=subprocess.DEVNULL, text=True)
+                        out = subprocess.check_output(
+                            ["ss", "-ltnp"], stderr=subprocess.DEVNULL, text=True
+                        )
                         pids = set()
                         for line in out.splitlines():
                             if f":{port} " in line or f":{port}\n" in line:
@@ -160,9 +177,11 @@ if __name__ == "__main__": # pragma: no cover
                         return list(pids)
                     except Exception:
                         pass
-                if shutil.which('netstat'):
+                if shutil.which("netstat"):
                     try:
-                        out = subprocess.check_output(["netstat", "-ltnp"], stderr=subprocess.DEVNULL, text=True)
+                        out = subprocess.check_output(
+                            ["netstat", "-ltnp"], stderr=subprocess.DEVNULL, text=True
+                        )
                         pids = set()
                         for line in out.splitlines():
                             if f":{port} " in line:
@@ -182,10 +201,13 @@ if __name__ == "__main__": # pragma: no cover
             if not pids:
                 return
             system = platform.system()
-            if system == 'Windows':
+            if system == "Windows":
                 for pid in pids:
                     try:
-                        subprocess.check_call(["taskkill", "/PID", str(pid), "/T", "/F"], stderr=subprocess.DEVNULL)
+                        subprocess.check_call(
+                            ["taskkill", "/PID", str(pid), "/T", "/F"],
+                            stderr=subprocess.DEVNULL,
+                        )
                     except Exception:
                         pass
                 return
@@ -250,7 +272,7 @@ if __name__ == "__main__": # pragma: no cover
             reload=False,
             log_level="info",
         )
-        
+
     except Exception as e:
         print(f"\nERROR: {type(e).__name__}: {e}", file=sys.stderr)
         sys.exit(1)

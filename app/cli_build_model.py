@@ -45,13 +45,17 @@ def print_model_summary(model: Dict[str, Dict[str, Any]]) -> None:
             objects = schema["objects"]
         else:
             objects = schema
-        
+
         object_count = len(objects) if isinstance(objects, dict) else 0
-        table_count = sum(
-            1
-            for obj in objects.values()
-            if isinstance(obj, dict) and obj.get("type") == "MibTable"
-        ) if isinstance(objects, dict) else 0
+        table_count = (
+            sum(
+                1
+                for obj in objects.values()
+                if isinstance(obj, dict) and obj.get("type") == "MibTable"
+            )
+            if isinstance(objects, dict)
+            else 0
+        )
         print(f"  {mib}: {object_count} objects, {table_count} tables")
 
 
@@ -105,5 +109,5 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__": # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     sys.exit(main())

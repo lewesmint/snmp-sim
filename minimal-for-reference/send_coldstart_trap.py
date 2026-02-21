@@ -6,6 +6,7 @@ This script sends an SNMPv2c coldStart notification using PySNMP v7+.
 Mandatory SNMPv2 varbinds (sysUpTime.0 and snmpTrapOID.0) are generated
 automatically by NotificationType.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,9 +31,7 @@ async def send_coldstart_trap(destination: str, port: int) -> None:
         await UdpTransportTarget.create((destination, port)),
         ContextData(),
         "trap",
-        NotificationType(
-            ObjectIdentity("SNMPv2-MIB", "coldStart")
-        ),
+        NotificationType(ObjectIdentity("SNMPv2-MIB", "coldStart")),
     )
 
     if error_indication:
@@ -55,6 +54,7 @@ def main() -> None:
     args = parser.parse_args()
 
     asyncio.run(send_coldstart_trap(args.destination, args.port))
+
 
 if __name__ == "__main__":
     main()

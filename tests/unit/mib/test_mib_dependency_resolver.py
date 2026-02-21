@@ -16,7 +16,9 @@ def test_find_mib_source_direct_and_recursive(tmp_path: Path) -> None:
     d2 = tmp_path / "mibs"
     d3 = tmp_path / "compiled-mibs"
     _write_mib(d1 / "IF-MIB.txt", "IF-MIB DEFINITIONS ::= BEGIN\nEND\n")
-    _write_mib(d2 / "nested" / "SNMPv2-MIB.mib", "SNMPv2-MIB DEFINITIONS ::= BEGIN\nEND\n")
+    _write_mib(
+        d2 / "nested" / "SNMPv2-MIB.mib", "SNMPv2-MIB DEFINITIONS ::= BEGIN\nEND\n"
+    )
 
     resolver = MibDependencyResolver([str(d1), str(d2), str(d3)])
 

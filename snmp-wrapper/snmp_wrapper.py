@@ -41,14 +41,17 @@ GetResult = Tuple[Any, Any, Any, Tuple[ObjectType, ...]]
 # Custom Exception
 # ============================================================================
 
+
 class SnmpSyncError(Exception):
     """Raised when SNMP operation (GET/SET/GET-NEXT) fails."""
+
     pass
 
 
 # ============================================================================
 # Background Thread Event Loop Management
 # ============================================================================
+
 
 class _LoopThread(threading.Thread):
     """Background thread with persistent event loop for reusable engine."""
@@ -87,6 +90,7 @@ def _get_global_loop_thread() -> _LoopThread:
 # Sync Runners
 # ============================================================================
 
+
 def run_sync(coro: Any) -> Any:
     """Run async coroutine: fresh loop per call.
 
@@ -120,6 +124,7 @@ def run_sync_persistent(coro: Any) -> Any:
 # ============================================================================
 # Internal Async Operations
 # ============================================================================
+
 
 async def _get_async(
     engine: SnmpEngine,
@@ -191,6 +196,7 @@ def _raise_on_error(error_indication: Any, error_status: Any, error_index: Any) 
 # Public Sync Functions
 # ============================================================================
 
+
 def get_sync(
     engine: SnmpEngine,
     auth: Union[CommunityData, UsmUserData],
@@ -221,7 +227,15 @@ def get_sync(
     """
     runner = run_sync_persistent if use_persistent_loop else run_sync
     error_indication, error_status, error_index, result_var_binds = runner(
-        _get_async(engine, auth, address, var_binds, timeout=timeout, retries=retries, context=context)
+        _get_async(
+            engine,
+            auth,
+            address,
+            var_binds,
+            timeout=timeout,
+            retries=retries,
+            context=context,
+        )
     )
     _raise_on_error(error_indication, error_status, error_index)
     return tuple(result_var_binds)
@@ -257,7 +271,15 @@ def set_sync(
     """
     runner = run_sync_persistent if use_persistent_loop else run_sync
     error_indication, error_status, error_index, result_var_binds = runner(
-        _set_async(engine, auth, address, var_binds, timeout=timeout, retries=retries, context=context)
+        _set_async(
+            engine,
+            auth,
+            address,
+            var_binds,
+            timeout=timeout,
+            retries=retries,
+            context=context,
+        )
     )
     _raise_on_error(error_indication, error_status, error_index)
     return tuple(result_var_binds)
@@ -293,7 +315,15 @@ def get_next_sync(
     """
     runner = run_sync_persistent if use_persistent_loop else run_sync
     error_indication, error_status, error_index, result_var_binds = runner(
-        _next_async(engine, auth, address, var_binds, timeout=timeout, retries=retries, context=context)
+        _next_async(
+            engine,
+            auth,
+            address,
+            var_binds,
+            timeout=timeout,
+            retries=retries,
+            context=context,
+        )
     )
     _raise_on_error(error_indication, error_status, error_index)
     return tuple(result_var_binds)
@@ -302,6 +332,7 @@ def get_next_sync(
 # ============================================================================
 # Client Classes
 # ============================================================================
+
 
 @dataclass(slots=True)
 class StatelessSnmpClient:
@@ -328,17 +359,41 @@ class StatelessSnmpClient:
     def get(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
         """Synchronous GET (fresh engine)."""
         engine = SnmpEngine()
-        return get_sync(engine, self.auth, self.address, var_binds, self.timeout, self.retries, self.context)
+        return get_sync(
+            engine,
+            self.auth,
+            self.address,
+            var_binds,
+            self.timeout,
+            self.retries,
+            self.context,
+        )
 
     def set(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
         """Synchronous SET (fresh engine)."""
         engine = SnmpEngine()
-        return set_sync(engine, self.auth, self.address, var_binds, self.timeout, self.retries, self.context)
+        return set_sync(
+            engine,
+            self.auth,
+            self.address,
+            var_binds,
+            self.timeout,
+            self.retries,
+            self.context,
+        )
 
     def get_next(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
         """Synchronous GET-NEXT (fresh engine)."""
         engine = SnmpEngine()
-        return get_next_sync(engine, self.auth, self.address, var_binds, self.timeout, self.retries, self.context)
+        return get_next_sync(
+            engine,
+            self.auth,
+            self.address,
+            var_binds,
+            self.timeout,
+            self.retries,
+            self.context,
+        )
 
 
 @dataclass(slots=True)
@@ -384,24 +439,42 @@ class PersistentSnmpClient:
         """Synchronous GET (reused engine + persistent loop)."""
         engine = self._ensure_engine()
         return get_sync(
-            engine, self.auth, self.address, var_binds, self.timeout, self.retries, self.context,
-            use_persistent_loop=True
+            engine,
+            self.auth,
+            self.address,
+            var_binds,
+            self.timeout,
+            self.retries,
+            self.context,
+            use_persistent_loop=True,
         )
 
     def set(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
         """Synchronous SET (reused engine + persistent loop)."""
         engine = self._ensure_engine()
         return set_sync(
-            engine, self.auth, self.address, var_binds, self.timeout, self.retries, self.context,
-            use_persistent_loop=True
+            engine,
+            self.auth,
+            self.address,
+            var_binds,
+            self.timeout,
+            self.retries,
+            self.context,
+            use_persistent_loop=True,
         )
 
     def get_next(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
         """Synchronous GET-NEXT (reused engine + persistent loop)."""
         engine = self._ensure_engine()
         return get_next_sync(
-            engine, self.auth, self.address, var_binds, self.timeout, self.retries, self.context,
-            use_persistent_loop=True
+            engine,
+            self.auth,
+            self.address,
+            var_binds,
+            self.timeout,
+            self.retries,
+            self.context,
+            use_persistent_loop=True,
         )
 
     def shutdown(self) -> None:
@@ -413,6 +486,7 @@ class PersistentSnmpClient:
 # ============================================================================
 # Utility Functions
 # ============================================================================
+
 
 def make_oid(oid: str) -> ObjectIdentity:
     """Create ObjectIdentity from OID string. Example: make_oid("1.3.6.1.2.1.1.1.0")"""

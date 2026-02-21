@@ -118,13 +118,18 @@ def test_validate_type_registry_file_valid(tmp_path: Path) -> None:
 
 def test_main_no_args(capsys: pytest.CaptureFixture[str]) -> None:
     # Test the main function with no arguments
-    result = subprocess.run([sys.executable, "-m", "app.type_registry_validator"], 
-                          capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, "-m", "app.type_registry_validator"],
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 2
     assert "Usage:" in result.stdout
 
 
-def test_main_with_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_with_valid_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     # Create a valid registry file
     registry = {
         "MyType": {
@@ -136,10 +141,13 @@ def test_main_with_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]
     }
     path = tmp_path / "types.json"
     path.write_text(json.dumps(registry))
-    
+
     # Run the main function
-    result = subprocess.run([sys.executable, "-m", "app.type_registry_validator", str(path)], 
-                          capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, "-m", "app.type_registry_validator", str(path)],
+        capture_output=True,
+        text=True,
+    )
     assert result.returncode == 0
     assert result.stdout == ""
     assert result.stderr == ""

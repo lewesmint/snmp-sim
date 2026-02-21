@@ -81,7 +81,9 @@ class TestIntegrationGetOperations(unittest.TestCase):
     def test_get_sysdescr(self) -> None:
         """Test getting sysDescr.0 from real SNMP agent."""
         oid = ObjectType(make_oid(OID_SYSDESCR))
-        result = get_sync(self.engine, self.auth, self.address, [oid], self.timeout, self.retries)
+        result = get_sync(
+            self.engine, self.auth, self.address, [oid], self.timeout, self.retries
+        )
 
         # Verify we got results
         self.assertIsNotNone(result)
@@ -99,7 +101,14 @@ class TestIntegrationGetOperations(unittest.TestCase):
         oid_uptime = ObjectType(make_oid(OID_SYSUPTIME))
         oid_name = ObjectType(make_oid(OID_SYSNAME))
 
-        result = get_sync(self.engine, self.auth, self.address, [oid_descr, oid_uptime, oid_name], self.timeout, self.retries)
+        result = get_sync(
+            self.engine,
+            self.auth,
+            self.address,
+            [oid_descr, oid_uptime, oid_name],
+            self.timeout,
+            self.retries,
+        )
 
         # Should get 3 results
         self.assertEqual(len(result), 3)
@@ -115,7 +124,14 @@ class TestIntegrationGetOperations(unittest.TestCase):
         invalid_oid = ObjectType(make_oid("1.3.6.1.2.1.999.999.999.0"))
 
         with self.assertRaises(SnmpSyncError) as context:
-            get_sync(self.engine, self.auth, self.address, [invalid_oid], self.timeout, self.retries)
+            get_sync(
+                self.engine,
+                self.auth,
+                self.address,
+                [invalid_oid],
+                self.timeout,
+                self.retries,
+            )
 
         # Verify error message contains useful info
         error_msg = str(context.exception)
@@ -189,7 +205,12 @@ class TestIntegrationAsyncContext(unittest.TestCase):
             auth = CommunityData(TEST_COMMUNITY, mpModel=1)
             oid = ObjectType(make_oid(OID_SYSDESCR))
             result = get_sync(
-                engine, auth, (TEST_HOST, TEST_PORT), [oid], timeout=TEST_TIMEOUT, retries=TEST_RETRIES
+                engine,
+                auth,
+                (TEST_HOST, TEST_PORT),
+                [oid],
+                timeout=TEST_TIMEOUT,
+                retries=TEST_RETRIES,
             )
             return result
 
@@ -231,7 +252,14 @@ class TestIntegrationErrorHandling(unittest.TestCase):
 
         # Wrong community typically results in timeout (agent doesn't respond)
         with self.assertRaises(SnmpSyncError):
-            get_sync(engine, auth, (TEST_HOST, TEST_PORT), [oid], timeout=TEST_TIMEOUT, retries=0)
+            get_sync(
+                engine,
+                auth,
+                (TEST_HOST, TEST_PORT),
+                [oid],
+                timeout=TEST_TIMEOUT,
+                retries=0,
+            )
 
 
 def tearDownModule() -> None:
@@ -251,7 +279,9 @@ if __name__ == "__main__":
     if not check_snmp_agent_available():
         print("ERROR: No SNMP agent detected on localhost:161")
         print("\nTo run these tests, ensure snmpd is running:")
-        print("  macOS: sudo launchctl load -w /System/Library/LaunchDaemons/org.net-snmp.snmpd.plist")
+        print(
+            "  macOS: sudo launchctl load -w /System/Library/LaunchDaemons/org.net-snmp.snmpd.plist"
+        )
         print("  Linux: sudo systemctl start snmpd")
         print("\nVerify with: snmpget -v2c -c public localhost:161 sysDescr.0")
         exit(1)

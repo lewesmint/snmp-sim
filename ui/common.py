@@ -1,4 +1,5 @@
 """Common utilities shared across UI modules."""
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -78,7 +79,7 @@ def format_snmp_value(value: Any) -> str:
     """Format SNMP value for display."""
     try:
         # Try to prettyPrint if available (pysnmp objects)
-        if hasattr(value, 'prettyPrint'):
+        if hasattr(value, "prettyPrint"):
             result = value.prettyPrint()
             return str(result)
         return str(value)
@@ -86,7 +87,9 @@ def format_snmp_value(value: Any) -> str:
         return str(value)
 
 
-def safe_call(func: Callable[..., Any], default: Any = None, logger: Optional[Logger] = None) -> Any:
+def safe_call(
+    func: Callable[..., Any], default: Any = None, logger: Optional[Logger] = None
+) -> Any:
     """Safely call a function and log errors if logger is provided."""
     try:
         return func()

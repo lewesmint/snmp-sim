@@ -10,18 +10,18 @@ from typing import Tuple, Union, List
 
 def oid_str_to_tuple(oid_str: str) -> Tuple[int, ...]:
     """Convert OID string to tuple of integers.
-    
+
     Handles various OID string formats:
     - With leading dot: ".1.3.6.1.2.1.1.1.0"
     - Without leading dot: "1.3.6.1.2.1.1.1.0"
     - Empty strings return empty tuple
-    
+
     Args:
         oid_str: OID string with dot-separated integers
-        
+
     Returns:
         Tuple of integers representing the OID
-        
+
     Examples:
         >>> oid_str_to_tuple("1.3.6.1.2.1.1.1.0")
         (1, 3, 6, 1, 2, 1, 1, 1, 0)
@@ -40,13 +40,13 @@ def oid_str_to_tuple(oid_str: str) -> Tuple[int, ...]:
 
 def oid_tuple_to_str(oid_tuple: Tuple[int, ...]) -> str:
     """Convert OID tuple to dot-separated string.
-    
+
     Args:
         oid_tuple: Tuple of integers representing the OID
-        
+
     Returns:
         Dot-separated string representation of the OID
-        
+
     Examples:
         >>> oid_tuple_to_str((1, 3, 6, 1, 2, 1, 1, 1, 0))
         "1.3.6.1.2.1.1.1.0"
@@ -58,15 +58,15 @@ def oid_tuple_to_str(oid_tuple: Tuple[int, ...]) -> str:
 
 def normalize_oid(oid: Union[str, Tuple[int, ...], List[int]]) -> Tuple[int, ...]:
     """Normalize OID to tuple format regardless of input type.
-    
+
     Accepts OIDs in various formats and returns a consistent tuple representation.
-    
+
     Args:
         oid: OID in string, tuple, or list format
-        
+
     Returns:
         Tuple of integers representing the OID
-        
+
     Examples:
         >>> normalize_oid("1.3.6.1.2.1.1.1.0")
         (1, 3, 6, 1, 2, 1, 1, 1, 0)
@@ -83,4 +83,3 @@ def normalize_oid(oid: Union[str, Tuple[int, ...], List[int]]) -> Tuple[int, ...
         return oid
     else:
         raise TypeError(f"OID must be string, tuple, or list, got {type(oid)}")
-

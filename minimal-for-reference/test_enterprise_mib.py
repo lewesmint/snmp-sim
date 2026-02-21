@@ -19,7 +19,7 @@ print("=" * 60)
 
 # Define enterprise OIDs
 OIDS = {
-    "myString": "1.3.6.1.4.1.99999.1.1.0",           # read-write
+    "myString": "1.3.6.1.4.1.99999.1.1.0",  # read-write
 }
 
 # Test GETs
@@ -37,7 +37,11 @@ for name, oid in OIDS.items():
             retries=1,
         )
         for var_bind in result:
-            value = str(var_bind).split(" = ", 1)[1] if " = " in str(var_bind) else str(var_bind)
+            value = (
+                str(var_bind).split(" = ", 1)[1]
+                if " = " in str(var_bind)
+                else str(var_bind)
+            )
             print(f"✓ {name:18} = {value}")
     except SnmpSyncError as e:
         print(f"✗ {name:18} → ERROR: {e}")
@@ -49,4 +53,3 @@ print("• Custom MIB file installed to ~/.snmp/mibs/")
 print("• Synchronous API successfully reads enterprise OIDs")
 print("• The wrapper handles async transport creation internally")
 print("=" * 60 + "\n")
-

@@ -21,7 +21,7 @@ def test_decode_value_hex() -> None:
     v = {"value": "\\xAA\\xBB", "encoding": "hex"}
     decoded = agent._decode_value(v)
     assert isinstance(decoded, (bytes, bytearray))
-    assert decoded == b"\xAA\xBB"
+    assert decoded == b"\xaa\xbb"
 
 
 def test_decode_value_unknown_encoding() -> None:
@@ -32,6 +32,7 @@ def test_decode_value_unknown_encoding() -> None:
 
 
 # Additional tests to cover more of SNMPAgent
+
 
 def test_setup_signal_handlers_registers_signals(monkeypatch: Any) -> None:
     calls: dict[Any, Any] = {}
@@ -66,7 +67,9 @@ def test_shutdown_closes_dispatcher(monkeypatch: Any, caplog: Any, mocker: Any) 
     assert "Transport dispatcher closed successfully" in caplog.text
 
 
-def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(monkeypatch: Any, tmp_path: Any, caplog: Any) -> None:
+def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(
+    monkeypatch: Any, tmp_path: Any, caplog: Any
+) -> None:
     # Ensure data/types.json exists
     data_dir = Path("data")
     data_dir.mkdir(exist_ok=True)
@@ -79,10 +82,17 @@ def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(monkeypatc
     monkeypatch.setattr(agent.app_config, "get", lambda key, default=None: [])
 
     # Stub validation to succeed
-    monkeypatch.setattr("app.type_registry_validator.validate_type_registry_file", lambda p: (True, [], 1))
+    monkeypatch.setattr(
+        "app.type_registry_validator.validate_type_registry_file",
+        lambda p: (True, [], 1),
+    )
 
     # Prevent SNMP engine setup and further networking
-    monkeypatch.setattr(SNMPAgent, "_setup_snmpEngine", lambda self, cd: setattr(self, "snmpEngine", None))
+    monkeypatch.setattr(
+        SNMPAgent,
+        "_setup_snmpEngine",
+        lambda self, cd: setattr(self, "snmpEngine", None),
+    )
 
     with caplog.at_level(logging.INFO):
         agent.run()

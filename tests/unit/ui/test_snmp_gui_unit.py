@@ -57,11 +57,16 @@ def test_oid_list_to_str_formats_list_tuple_and_scalar() -> None:
 def test_links_helpers_format_and_parse_endpoints() -> None:
     gui = _mk_gui()
     formatted = gui._format_link_endpoints(
-        [{"table_oid": "1.2.3", "column": "ifDescr"}, {"table_oid": None, "column": "sysName"}]
+        [
+            {"table_oid": "1.2.3", "column": "ifDescr"},
+            {"table_oid": None, "column": "sysName"},
+        ]
     )
     assert formatted == "1.2.3:ifDescr | sysName"
 
-    parsed = gui._parse_endpoints_text("\n1.3.6.1.2.1.2.2.1 ifDescr\n1.3.6.1.2.1.2.2:ifType\nsysName\n")
+    parsed = gui._parse_endpoints_text(
+        "\n1.3.6.1.2.1.2.2.1 ifDescr\n1.3.6.1.2.1.2.2:ifType\nsysName\n"
+    )
     assert parsed == [
         {"table_oid": "1.3.6.1.2.1.2.2.1", "column": "ifDescr"},
         {"table_oid": "1.3.6.1.2.1.2.2", "column": "ifType"},
@@ -80,10 +85,30 @@ def test_varbind_detection_index_and_sysuptime() -> None:
 def test_oid_metadata_and_table_oid_resolution_paths() -> None:
     gui = _mk_gui()
     gui.oid_metadata = {
-        "1.3.6.1.2.1.1.5": {"mib": "SNMPv2-MIB", "name": "sysName", "type": "MibScalar", "access": "read-write"},
-        "1.3.6.1.2.1.2.2": {"mib": "IF-MIB", "name": "ifTable", "type": "MibTable", "access": "not-accessible"},
-        "1.3.6.1.2.1.2.2.1": {"mib": "IF-MIB", "name": "ifEntry", "type": "MibTableRow", "access": "not-accessible"},
-        "1.3.6.1.2.1.2.2.1.7": {"mib": "IF-MIB", "name": "ifAdminStatus", "type": "Integer32", "access": "read-write"},
+        "1.3.6.1.2.1.1.5": {
+            "mib": "SNMPv2-MIB",
+            "name": "sysName",
+            "type": "MibScalar",
+            "access": "read-write",
+        },
+        "1.3.6.1.2.1.2.2": {
+            "mib": "IF-MIB",
+            "name": "ifTable",
+            "type": "MibTable",
+            "access": "not-accessible",
+        },
+        "1.3.6.1.2.1.2.2.1": {
+            "mib": "IF-MIB",
+            "name": "ifEntry",
+            "type": "MibTableRow",
+            "access": "not-accessible",
+        },
+        "1.3.6.1.2.1.2.2.1.7": {
+            "mib": "IF-MIB",
+            "name": "ifAdminStatus",
+            "type": "Integer32",
+            "access": "read-write",
+        },
     }
 
     assert gui._get_oid_metadata_by_name("SNMPv2-MIB::sysName")["name"] == "sysName"
@@ -115,7 +140,9 @@ def test_index_encode_decode_helpers_with_ipaddress() -> None:
     decoded = gui._extract_index_values("192.168.1.2.7", index_columns, columns_meta)
     assert decoded == {"addr": "192.168.1.2", "idx": "7"}
 
-    encoded = gui._build_instance_from_index_values(decoded, index_columns, columns_meta)
+    encoded = gui._build_instance_from_index_values(
+        decoded, index_columns, columns_meta
+    )
     assert encoded == "192.168.1.2.7"
 
 
@@ -227,7 +254,9 @@ def test_trap_index_helpers_and_interface_indices(monkeypatch: Any) -> None:
         def json(self) -> dict[str, Any]:
             return self._payload
 
-    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int = 0) -> _Resp:
+    def fake_get(
+        url: str, params: dict[str, Any] | None = None, timeout: int = 0
+    ) -> _Resp:
         if url.endswith("/table-schema"):
             return _Resp(200, {"instances": ["3", "1", "2"]})
         return _Resp(500, {})
@@ -252,7 +281,9 @@ def test_interface_indices_fallback_to_ifnumber(monkeypatch: Any) -> None:
         def json(self) -> dict[str, Any]:
             return self._payload
 
-    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int = 0) -> _Resp:
+    def fake_get(
+        url: str, params: dict[str, Any] | None = None, timeout: int = 0
+    ) -> _Resp:
         if url.endswith("/table-schema"):
             return _Resp(404, {})
         if url.endswith("/value"):
@@ -275,7 +306,9 @@ def test_interface_indices_probe_fallback(monkeypatch: Any) -> None:
         def json(self) -> dict[str, Any]:
             return {}
 
-    def fake_get(url: str, params: dict[str, Any] | None = None, timeout: int = 0) -> _Resp:
+    def fake_get(
+        url: str, params: dict[str, Any] | None = None, timeout: int = 0
+    ) -> _Resp:
         if url.endswith("/table-schema"):
             return _Resp(500)
         if url.endswith("/value") and "1.3.6.1.2.1.2.1.0" in url:

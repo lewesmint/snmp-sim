@@ -1,4 +1,5 @@
 """Integration tests for trap sender and receiver."""
+
 import time
 from typing import Any
 from app.trap_sender import TrapSender
@@ -18,9 +19,7 @@ def test_send_and_receive_test_trap() -> None:
 
     # Start receiver
     receiver = TrapReceiver(
-        port=test_port,
-        community="public",
-        on_trap_callback=trap_callback
+        port=test_port, community="public", on_trap_callback=trap_callback
     )
     receiver.start()
 
@@ -29,16 +28,11 @@ def test_send_and_receive_test_trap() -> None:
 
     try:
         # Send test trap
-        sender = TrapSender(
-            dest=("localhost", test_port),
-            community="public"
-        )
+        sender = TrapSender(dest=("localhost", test_port), community="public")
 
         # Send coldStart trap from SNMPv2-MIB
         sender.send_mib_notification(
-            mib="SNMPv2-MIB",
-            notification="coldStart",
-            trap_type="trap"
+            mib="SNMPv2-MIB", notification="coldStart", trap_type="trap"
         )
 
         # Wait for trap to be received
@@ -70,10 +64,7 @@ def test_send_and_receive_regular_trap() -> None:
     def trap_callback(trap_data: dict[str, Any]) -> None:
         received_traps.append(trap_data)
 
-    receiver = TrapReceiver(
-        port=test_port,
-        on_trap_callback=trap_callback
-    )
+    receiver = TrapReceiver(port=test_port, on_trap_callback=trap_callback)
     receiver.start()
 
     time.sleep(0.5)
@@ -83,9 +74,7 @@ def test_send_and_receive_regular_trap() -> None:
 
         # Send a coldStart trap
         sender.send_mib_notification(
-            mib="SNMPv2-MIB",
-            notification="coldStart",
-            trap_type="trap"
+            mib="SNMPv2-MIB", notification="coldStart", trap_type="trap"
         )
 
         time.sleep(1.0)
@@ -101,17 +90,17 @@ def test_send_and_receive_regular_trap() -> None:
 def test_receiver_clear_traps() -> None:
     """Test clearing received traps."""
     receiver = TrapReceiver(port=16665)
-    
+
     # Add some mock traps
     receiver.received_traps = [
         {"timestamp": "2024-01-01T10:00:00", "trap_oid_str": "1.2.3"},
         {"timestamp": "2024-01-01T10:01:00", "trap_oid_str": "1.2.4"},
     ]
-    
+
     assert len(receiver.received_traps) == 2
-    
+
     receiver.clear_traps()
-    
+
     assert len(receiver.received_traps) == 0
     assert len(receiver.get_received_traps()) == 0
 
@@ -119,15 +108,14 @@ def test_receiver_clear_traps() -> None:
 def test_receiver_status() -> None:
     """Test receiver status checking."""
     receiver = TrapReceiver(port=16666)
-    
-    assert receiver.is_running() is False
-    
-    receiver.start()
-    time.sleep(0.1)
-    
-    assert receiver.is_running() is True
-    
-    receiver.stop()
-    
+
     assert receiver.is_running() is False
 
+    receiver.start()
+    time.sleep(0.1)
+
+    assert receiver.is_running() is True
+
+    receiver.stop()
+
+    assert receiver.is_running() is False

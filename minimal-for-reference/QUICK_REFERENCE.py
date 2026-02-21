@@ -9,7 +9,14 @@ from typing import Any
 # 1. SETUP
 # ============================================================================
 
-from async_wrapper import get_sync, set_sync, SyncSnmpClient, make_oid, shutdown_sync_wrapper, SnmpSyncError
+from async_wrapper import (
+    get_sync,
+    set_sync,
+    SyncSnmpClient,
+    make_oid,
+    shutdown_sync_wrapper,
+    SnmpSyncError,
+)
 from pysnmp.hlapi.asyncio import SnmpEngine, ObjectType, CommunityData
 
 # ============================================================================
@@ -22,6 +29,7 @@ auth_v2c_write = CommunityData("private", mpModel=1)  # Write
 
 # SNMPv3 (requires pysnmp.hlapi.asyncio.UsmUserData)
 from pysnmp.hlapi.asyncio import UsmUserData, usmHMACMD5AuthProtocol, usmDESPrivProtocol  # noqa: E402
+
 auth_v3 = UsmUserData(
     "username",
     "authPassword",
@@ -40,20 +48,26 @@ auth = CommunityData("public", mpModel=1)
 address = ("192.168.1.1", 161)
 
 result = get_sync(
-    engine, auth, address,
+    engine,
+    auth,
+    address,
     [ObjectType(make_oid("1.3.6.1.2.1.1.1.0"))],  # sysDescr
-    timeout=1.0, retries=2
+    timeout=1.0,
+    retries=2,
 )
 print(result[0].prettyPrint())
 
 # GET Multiple OIDs
 result = get_sync(
-    engine, auth, address,
+    engine,
+    auth,
+    address,
     [
         ObjectType(make_oid("1.3.6.1.2.1.1.1.0")),  # sysDescr
         ObjectType(make_oid("1.3.6.1.2.1.1.5.0")),  # sysName
     ],
-    timeout=1.0, retries=2
+    timeout=1.0,
+    retries=2,
 )
 for vb in result:
     print(vb.prettyPrint())
@@ -61,9 +75,12 @@ for vb in result:
 # SET Single OID
 auth_write = CommunityData("private", mpModel=1)
 result = set_sync(
-    engine, auth_write, address,
+    engine,
+    auth_write,
+    address,
     [ObjectType(make_oid("1.3.6.1.2.1.1.4.0"), "admin@example.com")],
-    timeout=1.0, retries=2
+    timeout=1.0,
+    retries=2,
 )
 
 # ============================================================================
@@ -89,7 +106,14 @@ result = client.set(ObjectType(make_oid("1.3.6.1.2.1.1.4.0"), "admin@example.com
 # ============================================================================
 
 try:
-    result = get_sync(engine, auth, address, [ObjectType(make_oid("1.3.6.1.2.1.1.1.0"))], timeout=1.0, retries=5)
+    result = get_sync(
+        engine,
+        auth,
+        address,
+        [ObjectType(make_oid("1.3.6.1.2.1.1.1.0"))],
+        timeout=1.0,
+        retries=5,
+    )
 except SnmpSyncError as e:
     # Raised on:
     # - Transport errors (timeout, no route, etc)
@@ -114,10 +138,12 @@ COMMON_OIDS = {
 
 # Usage
 result = get_sync(
-    engine, auth, address,
+    engine,
+    auth,
+    address,
     [ObjectType(make_oid(COMMON_OIDS["sysUpTime"]))],
     timeout=1.0,
-    retries=5
+    retries=5,
 )
 
 # ============================================================================
@@ -129,7 +155,8 @@ address = ("192.168.1.1", 161)
 
 # Use with custom timeout/retries
 result = get_sync(
-    engine, auth,
+    engine,
+    auth,
     address=("192.168.1.1", 161),
     var_binds=[ObjectType(make_oid("1.3.6.1.2.1.1.1.0"))],
     timeout=2.0,  # Seconds
@@ -146,11 +173,13 @@ context = ContextData()  # Default context
 # Standard SNMP uses no context (ContextData())
 
 result = get_sync(
-    engine, auth, address,
+    engine,
+    auth,
+    address,
     [ObjectType(make_oid("1.3.6.1.2.1.1.1.0"))],
     timeout=1.0,
     retries=5,
-    context=context
+    context=context,
 )
 
 # ============================================================================
@@ -167,8 +196,16 @@ shutdown_sync_wrapper()
 
 async def my_async_function() -> Any:
     """This automatically works even though it's async!"""
-    result = get_sync(engine, auth, address, [ObjectType(make_oid("1.3.6.1.2.1.1.1.0"))], timeout=1.0, retries=5)
+    result = get_sync(
+        engine,
+        auth,
+        address,
+        [ObjectType(make_oid("1.3.6.1.2.1.1.1.0"))],
+        timeout=1.0,
+        retries=5,
+    )
     return result
+
 
 # asyncio.run(my_async_function())
 

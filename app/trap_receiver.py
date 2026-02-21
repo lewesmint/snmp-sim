@@ -1,4 +1,5 @@
 """SNMP Trap Receiver for monitoring incoming traps."""
+
 from __future__ import annotations
 
 import asyncio
@@ -24,7 +25,7 @@ class TrapReceiver:
     # Standard SNMP OIDs
     SYS_UPTIME_OID = (1, 3, 6, 1, 2, 1, 1, 3, 0)
     SNMP_TRAP_OID = (1, 3, 6, 1, 6, 3, 1, 1, 4, 1, 0)
-    
+
     # Test trap OID - we'll use this to identify test traps from the UI
     TEST_TRAP_OID = (1, 3, 6, 1, 4, 1, 99999, 0, 1)
 
@@ -37,7 +38,7 @@ class TrapReceiver:
     ) -> None:
         """
         Initialize the trap receiver.
-        
+
         Args:
             port: UDP port to listen on (default: 16662 for GUI, not 162 for production)
             community: SNMPv2c community string to accept
@@ -48,12 +49,12 @@ class TrapReceiver:
         self.community = community
         self.logger = logger or AppLogger.get(__name__)
         self.on_trap_callback = on_trap_callback
-        
+
         self.snmp_engine: Optional[SnmpEngine] = None
         self.running = False
         self.thread: Optional[Thread] = None
         self.loop: Optional[asyncio.AbstractEventLoop] = None
-        
+
         # Store received traps
         self.received_traps: list[dict[str, Any]] = []
         self.max_traps = 100  # Keep last 100 traps
@@ -63,7 +64,7 @@ class TrapReceiver:
         if self.running:
             self.logger.warning("Trap receiver already running")
             return
-        
+
         self.running = True
         self.thread = Thread(target=self._run_receiver, daemon=True)
         self.thread.start()
@@ -73,15 +74,15 @@ class TrapReceiver:
         """Stop the trap receiver."""
         if not self.running:
             return
-        
+
         self.running = False
-        
+
         if self.loop and self.loop.is_running():
             self.loop.call_soon_threadsafe(self.loop.stop)
-        
+
         if self.thread:
             self.thread.join(timeout=2.0)
-        
+
         self.logger.info("Trap receiver stopped")
 
     def _run_receiver(self) -> None:
@@ -89,7 +90,7 @@ class TrapReceiver:
         # Create new event loop for this thread
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        
+
         try:
             self.loop.run_until_complete(self._async_receiver())
         except Exception as e:
@@ -101,23 +102,23 @@ class TrapReceiver:
         """Async trap receiver implementation."""
         # Create SNMP engine
         self.snmp_engine = SnmpEngine()
-        
+
         # UDP transport
         config.addTransport(
             self.snmp_engine,
             udp.domainName,
-            udp.UdpTransport().openServerMode(('0.0.0.0', self.port))
+            udp.UdpTransport().openServerMode(("0.0.0.0", self.port)),
         )
-        
+
         # SNMPv2c community
-        config.addV1System(self.snmp_engine, 'my-area', self.community)
-        
+        config.addV1System(self.snmp_engine, "my-area", self.community)
+
         # Register callback for trap reception
         ntfrcv.NotificationReceiver(self.snmp_engine, self._trap_callback)
-        
+
         self.logger.info(f"Listening for traps on UDP port {self.port}")
         self.snmp_engine.transportDispatcher.jobStarted(1)
-        
+
         # Run until stopped
         try:
             while self.running:
@@ -152,18 +153,18 @@ class TrapReceiver:
         try:
             # Parse varbinds
             trap_data = self._parse_trap(varBinds)
-            
+
             # Store trap
             self.received_traps.append(trap_data)
             if len(self.received_traps) > self.max_traps:
                 self.received_traps.pop(0)  # Remove oldest
-            
+
             # Log trap
             self.logger.info(
                 f"Received trap: {trap_data['trap_oid_str']} "
                 f"from {trap_data.get('source', 'unknown')}"
             )
-            
+
             # Call callback if provided
             if self.on_trap_callback:
                 try:
@@ -189,7 +190,7 @@ class TrapReceiver:
 
             # Extract value
             value_str = str(val)
-            if hasattr(val, 'prettyPrint'):
+            if hasattr(val, "prettyPrint"):
                 value_str = val.prettyPrint()
 
             # Check for standard trap OIDs
@@ -202,12 +203,14 @@ class TrapReceiver:
                 if trap_oid == self.TEST_TRAP_OID:
                     is_test_trap = True
 
-            varbinds.append({
-                "oid": oid_tuple,
-                "oid_str": oid_str,
-                "value": value_str,
-                "type": type(val).__name__,
-            })
+            varbinds.append(
+                {
+                    "oid": oid_tuple,
+                    "oid_str": oid_str,
+                    "value": value_str,
+                    "type": type(val).__name__,
+                }
+            )
 
         return {
             "timestamp": timestamp,
@@ -234,4 +237,3 @@ class TrapReceiver:
     def is_running(self) -> bool:
         """Check if the receiver is running."""
         return self.running
-

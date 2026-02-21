@@ -41,42 +41,47 @@ def main():
     print()
     print("=" * 70)
     print()
-    
+
     # Check if TEST-ENUM-MIB data exists
     mib_dir = Path(__file__).parent / "agent-model" / "TEST-ENUM-MIB"
     if not mib_dir.exists():
         print(f"ERROR: {mib_dir} not found!")
         print("Please ensure TEST-ENUM-MIB model exists.")
         return 1
-    
+
     schema_file = mib_dir / "schema.json"
     if not schema_file.exists():
         print(f"ERROR: {schema_file} not found!")
         return 1
-    
+
     # Read schema to verify enums exist
     import json
+
     with open(schema_file) as f:
         schema = json.load(f)
-    
+
     print("Enum definitions found in schema:")
     print()
-    
+
     # Check all objects for enums
     objects = schema.get("objects", {})
     if not objects:
         print("  No objects found in schema!")
         return 1
-    
+
     for name, data in objects.items():
         if "enums" in data:
-            obj_type = "Table Column" if "." in name or "Entry" in name.title() else "Scalar/Object"
+            obj_type = (
+                "Table Column"
+                if "." in name or "Entry" in name.title()
+                else "Scalar/Object"
+            )
             print(f"  {obj_type}: {name}")
             print(f"    OID: {'.'.join(map(str, data.get('oid', [])))}")
             print(f"    Type: {data.get('type', 'Unknown')}")
             print(f"    Enums: {data['enums']}")
             print()
-    
+
     print("=" * 70)
     print("Ready to test!")
     print()
@@ -86,7 +91,7 @@ def main():
     print("  Terminal 2: python start_with_gui.py")
     print()
     print("=" * 70)
-    
+
     return 0
 
 

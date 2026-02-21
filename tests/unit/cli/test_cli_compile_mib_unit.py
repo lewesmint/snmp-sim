@@ -1,4 +1,5 @@
 """Unit tests for cli_compile_mib module."""
+
 import pytest
 from typing import Any
 from app.cli_compile_mib import _print_results, _has_failures, main
@@ -16,7 +17,9 @@ class TestPrintResults:
         assert "TEST-MIB: compiled" in captured.out
         assert "OTHER-MIB: untouched" in captured.out
 
-    def test_print_results_with_failure(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_print_results_with_failure(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """Should print results including failures"""
         results = {"TEST-MIB": "failed"}
         _print_results(results)
@@ -62,68 +65,76 @@ class TestMain:
         captured = capsys.readouterr()
         assert "not found" in captured.err
 
-    def test_main_no_app_config(self, capsys: pytest.CaptureFixture[str], mocker: Any) -> None:
+    def test_main_no_app_config(
+        self, capsys: pytest.CaptureFixture[str], mocker: Any
+    ) -> None:
         """Should handle missing app_config gracefully"""
         mocker.patch("os.path.exists", return_value=True)
         mocker.patch("app.cli_compile_mib.AppConfig", side_effect=FileNotFoundError)
         mock_compiler_class = mocker.patch("app.cli_compile_mib.MibCompiler")
-        
+
         mock_compiler = mocker.Mock()
         mock_compiler.last_compile_results = {"TEST-MIB": "compiled"}
         mock_compiler_class.return_value = mock_compiler
-        
+
         result = main(["test.txt", "output"])
         assert result == 0
         mock_compiler_class.assert_called_once_with("output", None)
 
-    def test_main_compilation_error(self, capsys: pytest.CaptureFixture[str], mocker: Any) -> None:
+    def test_main_compilation_error(
+        self, capsys: pytest.CaptureFixture[str], mocker: Any
+    ) -> None:
         """Should handle compilation errors"""
         mocker.patch("os.path.exists", return_value=True)
         mock_config_class = mocker.patch("app.cli_compile_mib.AppConfig")
         mock_compiler_class = mocker.patch("app.cli_compile_mib.MibCompiler")
-        
+
         mock_config = mocker.Mock()
         mock_config_class.return_value = mock_config
-        
+
         mock_compiler = mocker.Mock()
         mock_compiler.compile.side_effect = MibCompilationError("Compilation failed")
         mock_compiler.last_compile_results = {"TEST-MIB": "error"}
         mock_compiler_class.return_value = mock_compiler
-        
+
         result = main(["test.txt", "output"])
         assert result == 1
         captured = capsys.readouterr()
         assert "Compilation failed" in captured.err
         assert "TEST-MIB: error" in captured.out
 
-    def test_main_success_with_untouched(self, capsys: pytest.CaptureFixture[str], mocker: Any) -> None:
+    def test_main_success_with_untouched(
+        self, capsys: pytest.CaptureFixture[str], mocker: Any
+    ) -> None:
         """Should return 0 when compilation succeeds"""
         mocker.patch("os.path.exists", return_value=True)
         mock_config_class = mocker.patch("app.cli_compile_mib.AppConfig")
         mock_compiler_class = mocker.patch("app.cli_compile_mib.MibCompiler")
-        
+
         mock_config = mocker.Mock()
         mock_config_class.return_value = mock_config
-        
+
         mock_compiler = mocker.Mock()
         mock_compiler.last_compile_results = {"TEST-MIB": "compiled"}
         mock_compiler_class.return_value = mock_compiler
-        
+
         result = main(["test.txt", "output"])
         assert result == 0
 
-    def test_main_with_failures(self, capsys: pytest.CaptureFixture[str], mocker: Any) -> None:
+    def test_main_with_failures(
+        self, capsys: pytest.CaptureFixture[str], mocker: Any
+    ) -> None:
         """Should return 1 when compilation has failures"""
         mocker.patch("os.path.exists", return_value=True)
         mock_config_class = mocker.patch("app.cli_compile_mib.AppConfig")
         mock_compiler_class = mocker.patch("app.cli_compile_mib.MibCompiler")
-        
+
         mock_config = mocker.Mock()
         mock_config_class.return_value = mock_config
-        
+
         mock_compiler = mocker.Mock()
         mock_compiler.last_compile_results = {"TEST-MIB": "compiled", "OTHER": "failed"}
         mock_compiler_class.return_value = mock_compiler
-        
+
         result = main(["test.txt", "output"])
         assert result == 1

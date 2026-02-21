@@ -121,6 +121,7 @@ class MibCompiler:
             raise MibCompilationError(f"No MIB module found in {mib_filename}")
 
         from pathlib import Path
+
         compiled_py = str(Path(self.output_dir) / f"{actual_mib_name}.py")
 
         # If there are missing dependencies, provide helpful error message

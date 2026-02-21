@@ -99,14 +99,18 @@ def test_main_no_schemas_loaded(monkeypatch: Any) -> None:
 def test_main_output_write_error(monkeypatch: Any, tmp_path: Any) -> None:
     # Provide a model and attempt to write to a directory path to force an IOError
     monkeypatch.setattr(cbm, "AppConfig", DummyConfigWithMibs)
-    monkeypatch.setattr(cbm, "build_internal_model", lambda mibs, schema_dir: {"M1": {}})
+    monkeypatch.setattr(
+        cbm, "build_internal_model", lambda mibs, schema_dir: {"M1": {}}
+    )
     out_dir = tmp_path / "outdir"
     out_dir.mkdir()
     rc = cbm.main(["--schema-dir", str(tmp_path), "--output", str(out_dir)])
     assert rc == 1
 
 
-def test_main_success_writes_output(monkeypatch: Any, tmp_path: Any, capsys: Any) -> None:
+def test_main_success_writes_output(
+    monkeypatch: Any, tmp_path: Any, capsys: Any
+) -> None:
     monkeypatch.setattr(cbm, "AppConfig", DummyConfigWithMibs)
     model: dict[str, dict[str, Any]] = {"M1": {"a": {}}}
     monkeypatch.setattr(cbm, "build_internal_model", lambda mibs, schema_dir: model)

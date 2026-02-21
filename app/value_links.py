@@ -188,8 +188,8 @@ class ValueLinkManager:
                 logger.warning(f"Link config #{i} is not a dict, skipping")
                 continue
 
-            link_id, endpoints, scope, match, _, description, create_missing = self._parse_link_config(
-                link_config, objects
+            link_id, endpoints, scope, match, _, description, create_missing = (
+                self._parse_link_config(link_config, objects)
             )
             if not link_id:
                 link_id = f"link_{i}"
@@ -209,8 +209,8 @@ class ValueLinkManager:
             return
 
         for i, link_config in enumerate(link_configs):
-            link_id, endpoints, scope, match, _, description, create_missing = self._parse_link_config(
-                link_config, None
+            link_id, endpoints, scope, match, _, description, create_missing = (
+                self._parse_link_config(link_config, None)
             )
             if not link_id:
                 link_id = f"state_link_{i}"
@@ -263,7 +263,11 @@ class ValueLinkManager:
             for endpoint in link.endpoints:
                 if endpoint.column_name != column_name:
                     continue
-                if link.scope == "per-instance" and table_oid and endpoint.table_oid != table_oid:
+                if (
+                    link.scope == "per-instance"
+                    and table_oid
+                    and endpoint.table_oid != table_oid
+                ):
                     continue
                 source_matches = True
                 break
@@ -272,7 +276,10 @@ class ValueLinkManager:
                 continue
 
             for endpoint in link.endpoints:
-                if endpoint.column_name == column_name and endpoint.table_oid == table_oid:
+                if (
+                    endpoint.column_name == column_name
+                    and endpoint.table_oid == table_oid
+                ):
                     continue
                 key = (endpoint.table_oid, endpoint.column_name)
                 if key in seen:

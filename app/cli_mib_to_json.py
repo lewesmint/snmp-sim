@@ -42,6 +42,7 @@ def check_imported_mibs(mib_txt_path: str, compiled_dir: str) -> None:
 
     for mib in imported_mibs:
         from pathlib import Path
+
         py_path = Path(compiled_dir) / f"{mib}.py"
         if not py_path.exists():
             print(

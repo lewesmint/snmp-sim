@@ -81,20 +81,22 @@ class IconTreeDemo:
 
         tb.Label(top, text="Label:").pack(side=LEFT)
         self.label_var = tk.StringVar(value="New item")
-        tb.Entry(top, textvariable=self.label_var, width=30).pack(side=LEFT, padx=(8, 16))
+        tb.Entry(top, textvariable=self.label_var, width=30).pack(
+            side=LEFT, padx=(8, 16)
+        )
 
-        tb.Button(top, text="Add child", bootstyle="success", command=self.add_child).pack(
-            side=LEFT, padx=(0, 8)
-        )
-        tb.Button(top, text="Add sibling", bootstyle="info", command=self.add_sibling).pack(
-            side=LEFT, padx=(0, 8)
-        )
-        tb.Button(top, text="Rename", bootstyle="warning", command=self.rename_selected).pack(
-            side=LEFT, padx=(0, 8)
-        )
-        tb.Button(top, text="Delete", bootstyle="danger", command=self.delete_selected).pack(
-            side=LEFT
-        )
+        tb.Button(
+            top, text="Add child", bootstyle="success", command=self.add_child
+        ).pack(side=LEFT, padx=(0, 8))
+        tb.Button(
+            top, text="Add sibling", bootstyle="info", command=self.add_sibling
+        ).pack(side=LEFT, padx=(0, 8))
+        tb.Button(
+            top, text="Rename", bootstyle="warning", command=self.rename_selected
+        ).pack(side=LEFT, padx=(0, 8))
+        tb.Button(
+            top, text="Delete", bootstyle="danger", command=self.delete_selected
+        ).pack(side=LEFT)
 
         main = tb.Frame(self.root, padding=(12, 0, 12, 12))
         main.pack(fill=BOTH, expand=True)
@@ -134,7 +136,9 @@ class IconTreeDemo:
         if nt is None:
             return None
 
-        icon_obj = BootstrapIcon(nt.icon_name, size=self.icon_size, color=self.icon_colour)
+        icon_obj = BootstrapIcon(
+            nt.icon_name, size=self.icon_size, color=self.icon_colour
+        )
         image = cast(tk.PhotoImage, icon_obj.image)
 
         self.icon_cache[node_type_key] = image
@@ -144,7 +148,9 @@ class IconTreeDemo:
         image = self._get_icon(node_type_key)
         return image if image is not None else ""
 
-    def _insert(self, parent: str, text: str, node_type_key: str, open_item: bool = False) -> str:
+    def _insert(
+        self, parent: str, text: str, node_type_key: str, open_item: bool = False
+    ) -> str:
         nt = self._node_type(node_type_key)
         type_label = nt.label if nt else node_type_key
 

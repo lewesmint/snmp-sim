@@ -28,25 +28,27 @@ MIB_METADATA = {
 
 def get_sysor_table_rows(mib_names: list[str]) -> list[dict[str, object]]:
     """Generate sysORTable rows based on the MIBs being served.
-    
+
     Args:
         mib_names: List of MIB names (e.g., ['SNMPv2-MIB', 'IF-MIB', ...])
-        
+
     Returns:
         List of sysORTable rows with index, OID, description, and uptime
     """
     rows = []
     index = 1
-    
+
     for mib_name in mib_names:
         if mib_name in MIB_METADATA:
             metadata = MIB_METADATA[mib_name]
-            rows.append({
-                "sysORIndex": index,
-                "sysORID": metadata["oid"],
-                "sysORDescr": metadata["description"],
-                "sysORUpTime": index * 10,  # Incrementing TimeTicks (10, 20, 30...)
-            })
+            rows.append(
+                {
+                    "sysORIndex": index,
+                    "sysORID": metadata["oid"],
+                    "sysORDescr": metadata["description"],
+                    "sysORUpTime": index * 10,  # Incrementing TimeTicks (10, 20, 30...)
+                }
+            )
             index += 1
-    
+
     return rows

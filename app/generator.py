@@ -101,12 +101,18 @@ class BehaviourGenerator:
                         entry_name = None
                         expected_entry_oid = list(symbol_info["oid"]) + [1]
                         for other_name, other_data in info.items():
-                            if isinstance(other_data, dict) and other_data.get("type") == "MibTableRow":
-                                if list(other_data.get("oid", [])) == expected_entry_oid:
+                            if (
+                                isinstance(other_data, dict)
+                                and other_data.get("type") == "MibTableRow"
+                            ):
+                                if (
+                                    list(other_data.get("oid", []))
+                                    == expected_entry_oid
+                                ):
                                     entry_info = other_data
                                     entry_name = other_name
                                     break
-                        
+
                         # Extract index columns for ALL table entries (including augmented ones)
                         # If not already present, add 'indexes' field to entry_info
                         if entry_info and "indexes" not in entry_info:
@@ -144,7 +150,7 @@ class BehaviourGenerator:
                                 logger.warning(
                                     f"Could not extract index columns for {entry_name}: {e}"
                                 )
-                        
+
                         # Find columns: direct children of entry OID
                         # Note: Even augmented tables (with index_from) need default rows
                         # for their non-index columns
@@ -182,19 +188,25 @@ class BehaviourGenerator:
                                 type_info = {**type_info, "enums": col_info["enums"]}
                             # If this column is an index, set appropriate default based on type
                             if col in index_names:
-                                default_value = self._get_default_index_value(col_type, type_info)
+                                default_value = self._get_default_index_value(
+                                    col_type, type_info
+                                )
                                 # Ensure index values respect their type constraints
                                 # For types with constraints excluding 0 (like InterfaceIndex), use 1 as minimum
                                 if isinstance(default_value, int) and default_value < 1:
                                     # Check if type has constraints that exclude 0
                                     constraints = type_info.get("constraints", [])
                                     has_nonzero_constraint = any(
-                                        c.get("min", 0) > 0 if isinstance(c, dict) and c.get("type") == "ValueRangeConstraint"
+                                        c.get("min", 0) > 0
+                                        if isinstance(c, dict)
+                                        and c.get("type") == "ValueRangeConstraint"
                                         else False
                                         for c in constraints
                                     )
                                     # Only fix to 1 if constraints require it
-                                    if has_nonzero_constraint or col_type in ("InterfaceIndex",):
+                                    if has_nonzero_constraint or col_type in (
+                                        "InterfaceIndex",
+                                    ):
                                         default_value = 1
                                 default_row[col] = default_value
                                 # Don't set col_info["initial"] - table columns shouldn't have initial values
@@ -246,7 +258,9 @@ class BehaviourGenerator:
         mibBuilder = builder.MibBuilder()
         # Protect against minimal / mocked `builder` objects that lack DirMibSource
         try:
-            mibBuilder.add_mib_sources(builder.DirMibSource(os.path.dirname(mib_py_path)))
+            mibBuilder.add_mib_sources(
+                builder.DirMibSource(os.path.dirname(mib_py_path))
+            )
         except Exception:
             try:
                 mibBuilder.add_mib_sources()
@@ -307,7 +321,7 @@ class BehaviourGenerator:
                 if not type_info:
                     # Create minimal type_info with base_type set to the mapped type
                     type_info = {"base_type": mapped_type}
-            
+
             # CRITICAL: Always enrich type_info with enums from the compiled MIB syntax object
             # This is necessary because the registry has generic types (Integer32, OctetString)
             # but the actual compiled MIB has specific enums for each symbol
@@ -315,11 +329,15 @@ class BehaviourGenerator:
                 extracted_type_info = self._extract_type_info(syntax_obj, type_name)
                 # DEBUG
                 if symbol_name_str in ("ifAdminStatus", "ifOperStatus"):
-                    logger.warning(f"DEBUG {symbol_name_str}: extracted enums = {extracted_type_info.get('enums')}")
+                    logger.warning(
+                        f"DEBUG {symbol_name_str}: extracted enums = {extracted_type_info.get('enums')}"
+                    )
                 # Merge extracted enums and constraints into type_info
                 # Extracted info has priority as it comes from the specific symbol
                 if extracted_type_info.get("enums"):
-                    type_info = dict(type_info)  # Create a copy to avoid modifying registry
+                    type_info = dict(
+                        type_info
+                    )  # Create a copy to avoid modifying registry
                     type_info["enums"] = extracted_type_info["enums"]
                 if extracted_type_info.get("constraints"):
                     type_info = dict(type_info)  # Create a copy if not already done
@@ -349,12 +367,12 @@ class BehaviourGenerator:
             if not is_structural:
                 entry["initial"] = initial_value
                 entry["dynamic_function"] = dynamic_func
-            
+
             # Include enums in the schema if they exist
             # This is critical for fields like ifAdminStatus that have enum constraints
             if type_info and type_info.get("enums"):
                 entry["enums"] = type_info["enums"]
-            
+
             result[symbol_name_str] = entry
 
         # Detect tables that inherit their index from another table (AUGMENTS pattern)
@@ -369,32 +387,36 @@ class BehaviourGenerator:
         # Extract trap/notification definitions
         traps = self._extract_traps(mib_symbols, mib_name)
         if traps:
-            logger.info(f"Found {len(traps)} trap(s) in {mib_name}: {list(traps.keys())}")
-        
+            logger.info(
+                f"Found {len(traps)} trap(s) in {mib_name}: {list(traps.keys())}"
+            )
+
         logger.debug(f"Extracted MIB info for {mib_name}: {list(result.keys())}")
         return {"objects": result, "traps": traps}
 
-    def _extract_traps(self, mib_symbols: Dict[str, Any], mib_name: str) -> Dict[str, Any]:
+    def _extract_traps(
+        self, mib_symbols: Dict[str, Any], mib_name: str
+    ) -> Dict[str, Any]:
         """Extract NOTIFICATION-TYPE definitions from MIB symbols.
-        
+
         Args:
             mib_symbols: Dictionary of MIB symbols from the compiled MIB
             mib_name: Name of the MIB module
-            
+
         Returns:
             Dictionary mapping trap names to their metadata (OID, objects, description)
         """
         traps: Dict[str, Any] = {}
-        
+
         for symbol_name, symbol_obj in mib_symbols.items():
             symbol_name_str: str = str(cast(Any, symbol_name))
-            
+
             # Check if this is a NotificationType
             if symbol_obj.__class__.__name__ == "NotificationType":
                 try:
                     # Get the OID
                     oid = symbol_obj.getName()
-                    
+
                     # Get the OBJECTS list (varbinds that will be sent with the trap)
                     objects = []
                     if hasattr(symbol_obj, "getObjects"):
@@ -409,21 +431,26 @@ class BehaviourGenerator:
                                 elif hasattr(obj_ref, "__iter__"):
                                     # Handle nested tuples
                                     for sub_ref in obj_ref:
-                                        if isinstance(sub_ref, tuple) and len(sub_ref) >= 2:
+                                        if (
+                                            isinstance(sub_ref, tuple)
+                                            and len(sub_ref) >= 2
+                                        ):
                                             obj_mib = str(sub_ref[0])
                                             obj_name = str(sub_ref[1])
-                                            objects.append({"mib": obj_mib, "name": obj_name})
-                    
+                                            objects.append(
+                                                {"mib": obj_mib, "name": obj_name}
+                                            )
+
                     # Get the description if available
                     description = ""
                     if hasattr(symbol_obj, "getDescription"):
                         description = symbol_obj.getDescription() or ""
-                    
+
                     # Get the status
                     status = "current"
                     if hasattr(symbol_obj, "getStatus"):
                         status = symbol_obj.getStatus() or "current"
-                    
+
                     traps[symbol_name_str] = {
                         "oid": oid,
                         "objects": objects,
@@ -431,10 +458,14 @@ class BehaviourGenerator:
                         "status": status,
                         "mib": mib_name,
                     }
-                    logger.debug(f"Extracted trap {symbol_name_str} with OID {oid} and {len(objects)} objects")
+                    logger.debug(
+                        f"Extracted trap {symbol_name_str} with OID {oid} and {len(objects)} objects"
+                    )
                 except Exception as e:
-                    logger.warning(f"Failed to extract trap info for {symbol_name_str}: {e}")
-        
+                    logger.warning(
+                        f"Failed to extract trap info for {symbol_name_str}: {e}"
+                    )
+
         return traps
 
     def _load_type_registry(self) -> Dict[str, Any]:
@@ -561,9 +592,10 @@ class BehaviourGenerator:
                 type_info["constraints"] = constraints
 
         return type_info
+
     def _get_default_index_value(self, col_type: str, type_info: Dict[str, Any]) -> Any:
         """Get an appropriate default value for an index column based on its type.
-        
+
         For complex types like IpAddress, returns a representative value.
         For integer types, returns 1.
         """
@@ -587,6 +619,7 @@ class BehaviourGenerator:
         else:
             # Use the generic default value generator
             return self._get_default_value_from_type_info(type_info, "index")
+
     def _get_default_value_from_type_info(
         self, type_info: Dict[str, Any], symbol_name: str
     ) -> Any:

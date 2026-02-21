@@ -18,21 +18,47 @@ from app.trap_sender import TrapSender, VarBindSpec
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Send a MIB-defined SNMP notification (trap or inform)",
-        epilog="Example: %(prog)s --mib SNMPv2-MIB --notification coldStart --host localhost --port 162"
+        epilog="Example: %(prog)s --mib SNMPv2-MIB --notification coldStart --host localhost --port 162",
     )
-    parser.add_argument("--mib", required=True, help="MIB name, e.g. SNMPv2-MIB or IF-MIB")
-    parser.add_argument("--notification", required=True, help="Notification name, e.g. coldStart or linkDown")
-    parser.add_argument("--host", default="localhost", help="Destination host (default: localhost)")
-    parser.add_argument("--port", type=int, default=162, help="Destination port (default: 162)")
-    parser.add_argument("--community", default="public", help="SNMP community string (default: public)")
-    parser.add_argument("--trap-type", choices=["trap", "inform"], default="inform",
-                       help="Notification type: trap (unconfirmed) or inform (confirmed)")
+    parser.add_argument(
+        "--mib", required=True, help="MIB name, e.g. SNMPv2-MIB or IF-MIB"
+    )
+    parser.add_argument(
+        "--notification",
+        required=True,
+        help="Notification name, e.g. coldStart or linkDown",
+    )
+    parser.add_argument(
+        "--host", default="localhost", help="Destination host (default: localhost)"
+    )
+    parser.add_argument(
+        "--port", type=int, default=162, help="Destination port (default: 162)"
+    )
+    parser.add_argument(
+        "--community", default="public", help="SNMP community string (default: public)"
+    )
+    parser.add_argument(
+        "--trap-type",
+        choices=["trap", "inform"],
+        default="inform",
+        help="Notification type: trap (unconfirmed) or inform (confirmed)",
+    )
 
     # Optional varbinds
-    parser.add_argument("--varbind", action="append", nargs=3, metavar=("MIB", "SYMBOL", "VALUE"),
-                       help="Add extra varbind: --varbind IF-MIB ifIndex 1 (can be repeated)")
-    parser.add_argument("--varbind-index", action="append", nargs=4, metavar=("MIB", "SYMBOL", "VALUE", "INDEX"),
-                       help="Add indexed varbind: --varbind-index IF-MIB ifOperStatus 1 2 (can be repeated)")
+    parser.add_argument(
+        "--varbind",
+        action="append",
+        nargs=3,
+        metavar=("MIB", "SYMBOL", "VALUE"),
+        help="Add extra varbind: --varbind IF-MIB ifIndex 1 (can be repeated)",
+    )
+    parser.add_argument(
+        "--varbind-index",
+        action="append",
+        nargs=4,
+        metavar=("MIB", "SYMBOL", "VALUE", "INDEX"),
+        help="Add indexed varbind: --varbind-index IF-MIB ifOperStatus 1 2 (can be repeated)",
+    )
 
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -78,7 +104,9 @@ def main(argv: Iterable[str] | None = None) -> int:
             trap_type=args.trap_type,
             extra_varbinds=extra_varbinds if extra_varbinds else None,
         )
-        print(f"✓ Sent {args.trap_type} {args.mib}::{args.notification} to {args.host}:{args.port}")
+        print(
+            f"✓ Sent {args.trap_type} {args.mib}::{args.notification} to {args.host}:{args.port}"
+        )
         return 0
     except Exception as e:
         print(f"Error sending notification: {e}", file=sys.stderr)

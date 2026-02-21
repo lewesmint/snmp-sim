@@ -1,7 +1,6 @@
 # pylint: disable=missing-module-docstring,missing-function-docstring
 # pylint: disable=missing-class-docstring,too-few-public-methods
-# pylint: disable=import-error,no-name-in-module,wrong-import-order
-
+# pylint: disable=import-error,no-name-in-module
 from __future__ import annotations
 
 import runpy

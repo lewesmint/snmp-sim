@@ -19,13 +19,22 @@ class _Var:
 
 class _Tree:
     def __init__(self) -> None:
-        self.nodes: dict[str, dict[str, Any]] = {"": {"children": [], "text": "", "open": False}}
+        self.nodes: dict[str, dict[str, Any]] = {
+            "": {"children": [], "text": "", "open": False}
+        }
         self._next_id = 1
 
-    def insert(self, parent: str, _index: str, text: str = "", values: Any = None) -> str:
+    def insert(
+        self, parent: str, _index: str, text: str = "", values: Any = None
+    ) -> str:
         node_id = f"n{self._next_id}"
         self._next_id += 1
-        self.nodes[node_id] = {"children": [], "text": text, "open": False, "values": values}
+        self.nodes[node_id] = {
+            "children": [],
+            "text": text,
+            "open": False,
+            "values": values,
+        }
         self.nodes.setdefault(parent, {"children": [], "text": "", "open": False})
         self.nodes[parent]["children"].append(node_id)
         return node_id
@@ -94,7 +103,9 @@ END
     assert "SNMPv2-MIB" in deps_txt
 
     py = tmp_path / "B-MIB.py"
-    py.write_text("# FROM IF-MIB import foo\n FROM TCP-MIB import bar\n", encoding="utf-8")
+    py.write_text(
+        "# FROM IF-MIB import foo\n FROM TCP-MIB import bar\n", encoding="utf-8"
+    )
     deps_py = browser._extract_mib_imports(py)
     assert "TCP-MIB" in deps_py
 
@@ -118,7 +129,9 @@ def test_find_mib_file_in_cache_and_loaded_check(tmp_path: Path) -> None:
     assert browser._is_mib_loaded_in_pysnmp("IF-MIB") is False
 
 
-def test_find_mib_file_prefers_cache_and_compiled(monkeypatch: Any, tmp_path: Path) -> None:
+def test_find_mib_file_prefers_cache_and_compiled(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     browser = _make_browser(tmp_path)
 
     cache_py = browser.mib_cache_dir / "SNMPv2-MIB.py"
@@ -169,10 +182,14 @@ def test_resolve_oid_name_and_format_errors(tmp_path: Path) -> None:
             return (1, 3, 6, 1, 2, 1, 1, 1, 0)
 
     browser.loaded_mibs = ["SNMPv2-MIB"]
-    browser.mib_builder = SimpleNamespace(mibSymbols={"SNMPv2-MIB": {"sysDescr": Sym()}})
+    browser.mib_builder = SimpleNamespace(
+        mibSymbols={"SNMPv2-MIB": {"sysDescr": Sym()}}
+    )
     assert browser._resolve_oid_name_to_tuple("sysDescr") == (1, 3, 6, 1, 2, 1, 1, 1, 0)
 
-    msg = browser._format_mib_error(Exception("MibNotFoundError: 'sysDescr' compilation error"))
+    msg = browser._format_mib_error(
+        Exception("MibNotFoundError: 'sysDescr' compilation error")
+    )
     assert "Cannot resolve 'sysDescr'" in msg
     assert "Load the MIB containing 'sysDescr'" in msg
     assert browser._format_mib_error(Exception("plain error")) == "plain error"
@@ -224,7 +241,9 @@ def test_resolve_mib_dependencies_reports_resolved_and_missing(tmp_path: Path) -
         "C": ["MISSING"],
     }
 
-    browser._find_mib_file = lambda name: tmp_path / f"{name}.mib" if name != "MISSING" else None
+    browser._find_mib_file = lambda name: (
+        tmp_path / f"{name}.mib" if name != "MISSING" else None
+    )
     browser._extract_mib_imports = lambda p: deps[p.stem]
 
     resolved, missing = browser._resolve_mib_dependencies("ROOT")

@@ -808,7 +808,11 @@ class TypeRecorder:
                 # If the base_type_out refers to a seeded type that itself has no
                 # canonical base_type (eg ...: None), treat the base_type_out as
                 # effectively None so we don't drop useful constraints_repr.
-                if base_type_out is not None and base_type_out in types and types[base_type_out].get("base_type") is None:
+                if (
+                    base_type_out is not None
+                    and base_type_out in types
+                    and types[base_type_out].get("base_type") is None
+                ):
                     base_type_out = None
 
                 is_tc_def = self._is_textual_convention_symbol(sym_obj)
@@ -976,5 +980,5 @@ def main() -> None:
     print(f"Wrote {len(recorder.registry)} types to {args.output}")
 
 
-if __name__ == "__main__": # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     main()

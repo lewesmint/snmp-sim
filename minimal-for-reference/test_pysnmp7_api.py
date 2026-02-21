@@ -1,4 +1,5 @@
 """Quick test of PySNMP 7.x API"""
+
 import asyncio
 from pysnmp.hlapi.asyncio import (
     CommunityData,

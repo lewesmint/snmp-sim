@@ -11,7 +11,10 @@ def test_add_link_rejects_single_endpoint() -> None:
 
 def test_add_and_remove_link_updates_indexes() -> None:
     manager = ValueLinkManager()
-    endpoints = [ValueLinkEndpoint("1.2.3", "ifDescr"), ValueLinkEndpoint("1.2.3", "ifName")]
+    endpoints = [
+        ValueLinkEndpoint("1.2.3", "ifDescr"),
+        ValueLinkEndpoint("1.2.3", "ifName"),
+    ]
     manager.add_link("link1", endpoints)
 
     targets = manager.get_linked_targets("ifDescr", "1.2.3")
@@ -29,17 +32,19 @@ def test_parse_link_config_endpoints_and_columns() -> None:
         "ifName": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 3]},
     }
 
-    link_id, endpoints, scope, match, source, description, create_missing = manager._parse_link_config(
-        {
-            "id": "link-x",
-            "scope": "per-instance",
-            "match": "shared-index",
-            "source": "schema",
-            "description": "desc",
-            "create_missing": True,
-            "columns": ["ifDescr", "ifName"],
-        },
-        objects,
+    link_id, endpoints, scope, match, source, description, create_missing = (
+        manager._parse_link_config(
+            {
+                "id": "link-x",
+                "scope": "per-instance",
+                "match": "shared-index",
+                "source": "schema",
+                "description": "desc",
+                "create_missing": True,
+                "columns": ["ifDescr", "ifName"],
+            },
+            objects,
+        )
     )
 
     assert link_id == "link-x"
@@ -137,6 +142,8 @@ def test_update_tracking_and_clear() -> None:
     manager.end_update("ifDescr", "1")
     assert manager.should_propagate("ifDescr", "1") is True
 
-    manager.add_link("link", [ValueLinkEndpoint(None, "ifDescr"), ValueLinkEndpoint(None, "ifName")])
+    manager.add_link(
+        "link", [ValueLinkEndpoint(None, "ifDescr"), ValueLinkEndpoint(None, "ifName")]
+    )
     manager.clear()
     assert manager.export_links() == []

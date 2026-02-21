@@ -86,11 +86,11 @@ def mib_schema_dir(temp_dir: Path, sample_mib_schema: Dict[str, Any]) -> Path:
     schema_dir = temp_dir / "agent-model"
     mib_dir = schema_dir / "SNMPv2-MIB"
     mib_dir.mkdir(parents=True)
-    
+
     schema_path = mib_dir / "schema.json"
     with open(schema_path, "w") as f:
         json.dump(sample_mib_schema, f, indent=2)
-    
+
     return schema_dir
 
 
@@ -103,4 +103,3 @@ def mock_logger(mocker: Any) -> Any:
     logger.warning = mocker.Mock()
     logger.error = mocker.Mock()
     return logger
-

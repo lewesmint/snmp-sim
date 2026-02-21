@@ -4,6 +4,7 @@ MIB Registrar: Handles registration of MIB objects (scalars and tables) in the S
 Separates MIB registration logic from SNMPAgent, improving testability
 and making MIB registration behavior clearer and more maintainable.
 """
+
 from __future__ import annotations
 
 import json
@@ -49,7 +50,9 @@ class MibRegistrar:
         self.start_time = start_time
 
     def register_all_mibs(
-        self, mib_jsons: Dict[str, Dict[str, Any]], type_registry_path: Optional[str] = None
+        self,
+        mib_jsons: Dict[str, Dict[str, Any]],
+        type_registry_path: Optional[str] = None,
     ) -> None:
         """
         Register all MIBs with their objects (scalars and tables).
@@ -64,8 +67,11 @@ class MibRegistrar:
 
         # Load the type registry from the exported JSON file
         from pathlib import Path
+
         if type_registry_path is None:
-            type_registry_path = str(Path(__file__).resolve().parent.parent / "data" / "types.json")
+            type_registry_path = str(
+                Path(__file__).resolve().parent.parent / "data" / "types.json"
+            )
 
         try:
             with open(type_registry_path, "r") as f:
@@ -79,7 +85,9 @@ class MibRegistrar:
             self.register_mib(mib, mib_json, type_registry)
 
     def populate_sysor_table(
-        self, mib_jsons: Dict[str, Dict[str, Any]], type_registry_path: Optional[str] = None
+        self,
+        mib_jsons: Dict[str, Dict[str, Any]],
+        type_registry_path: Optional[str] = None,
     ) -> None:
         """
         Populate sysORTable with the MIBs being served by this agent.
@@ -109,24 +117,35 @@ class MibRegistrar:
             if "SNMPv2-MIB" in mib_jsons:
                 snmp2 = mib_jsons["SNMPv2-MIB"]
                 # Support new schema format {"objects": {...}, "traps": {...}}
-                if isinstance(snmp2, dict) and "objects" in snmp2 and isinstance(snmp2["objects"], dict):
+                if (
+                    isinstance(snmp2, dict)
+                    and "objects" in snmp2
+                    and isinstance(snmp2["objects"], dict)
+                ):
                     container = snmp2["objects"]
                 else:
                     container = snmp2
 
                 # Ensure sysORTable exists (create minimal structure if absent)
-                if "sysORTable" not in container or not isinstance(container.get("sysORTable"), dict):
+                if "sysORTable" not in container or not isinstance(
+                    container.get("sysORTable"), dict
+                ):
                     container["sysORTable"] = {"rows": []}
-                    self.logger.info("Created missing sysORTable entry in SNMPv2-MIB schema")
+                    self.logger.info(
+                        "Created missing sysORTable entry in SNMPv2-MIB schema"
+                    )
 
                 container["sysORTable"]["rows"] = sysor_rows
                 self.logger.info(f"Updated sysORTable with {len(sysor_rows)} rows")
 
                 # Re-register SNMPv2-MIB to apply the updated sysORTable
                 from pathlib import Path
+
                 type_registry_path_obj: Path
                 if type_registry_path is None:
-                    type_registry_path_obj = Path(__file__).resolve().parent.parent / "data" / "types.json"
+                    type_registry_path_obj = (
+                        Path(__file__).resolve().parent.parent / "data" / "types.json"
+                    )
                 else:
                     type_registry_path_obj = Path(type_registry_path)
                 try:
@@ -138,38 +157,45 @@ class MibRegistrar:
                 # Update only the sysORTable symbols
                 # If the MIB uses new structure, pass the full structured schema so register_mib handles it
                 self.register_mib("SNMPv2-MIB", snmp2, type_registry)
-                
+
                 # Persist the updated schema back to disk so API calls see the updated rows
                 schema_dir = Path(__file__).resolve().parent.parent / "agent-model"
                 snmp2_schema_file = schema_dir / "SNMPv2-MIB" / "schema.json"
                 try:
                     snmp2_schema_file.parent.mkdir(parents=True, exist_ok=True)
-                    
+
                     # Load existing schema to preserve all metadata
                     existing_schema = {}
                     if snmp2_schema_file.exists():
                         with snmp2_schema_file.open("r", encoding="utf-8") as f:
                             existing_schema = json.load(f)
-                    
+
                     # Merge updated data into existing schema
                     if "objects" in snmp2:
                         if "objects" not in existing_schema:
                             existing_schema["objects"] = {}
                         # Merge only the modified objects (sysORTable and sysOREntry)
                         for obj_name, obj_data in snmp2["objects"].items():
-                            if obj_name in ("sysORTable", "sysOREntry") or obj_name.startswith("sysOR"):
+                            if obj_name in (
+                                "sysORTable",
+                                "sysOREntry",
+                            ) or obj_name.startswith("sysOR"):
                                 existing_schema["objects"][obj_name] = obj_data
-                    
+
                     if "traps" in snmp2:
                         existing_schema["traps"] = snmp2["traps"]
-                    
+
                     with snmp2_schema_file.open("w", encoding="utf-8") as f:
                         json.dump(existing_schema, f, indent=2)
-                    self.logger.info(f"Persisted updated sysORTable schema to {snmp2_schema_file}")
+                    self.logger.info(
+                        f"Persisted updated sysORTable schema to {snmp2_schema_file}"
+                    )
                 except Exception as e:
                     self.logger.warning(f"Could not persist schema to disk: {e}")
-                
-                self.logger.info("sysORTable successfully populated with MIB implementations")
+
+                self.logger.info(
+                    "sysORTable successfully populated with MIB implementations"
+                )
         except Exception as e:
             self.logger.error(f"Error populating sysORTable: {e}", exc_info=True)
 
@@ -185,11 +211,13 @@ class MibRegistrar:
                 objects_json = mib_json["objects"]
                 traps_json = mib_json.get("traps", {})
                 if traps_json:
-                    self.logger.info(f"MIB {mib} has {len(traps_json)} trap(s): {list(traps_json.keys())}")
+                    self.logger.info(
+                        f"MIB {mib} has {len(traps_json)} trap(s): {list(traps_json.keys())}"
+                    )
             else:
                 # Old flat structure - all items are objects
                 objects_json = mib_json
-                
+
             export_symbols = self._build_mib_symbols(mib, objects_json, type_registry)
             if export_symbols:
                 if mib == "SNMPv2-MIB":
@@ -363,7 +391,9 @@ class MibRegistrar:
                             return original_read_get(*args, **kwargs)
                         return inst.syntax
 
-                    scalar_inst.readGet = types.MethodType(_sysuptime_read_get, scalar_inst)
+                    scalar_inst.readGet = types.MethodType(
+                        _sysuptime_read_get, scalar_inst
+                    )
 
                 export_symbols[f"{name}Inst"] = scalar_inst
                 # Attach a small write-commit wrapper so network-originated SNMP SETs
@@ -403,6 +433,7 @@ class MibRegistrar:
                                     _friendly,
                                 )
                                 return
+
                             def _format_value(val: Any) -> str:
                                 if val is None:
                                     return "<none>"
@@ -425,7 +456,10 @@ class MibRegistrar:
                                         elif hasattr(val, "asNumbers"):
                                             text = str(val.asNumbers())
                                         elif isinstance(val, (bytes, bytearray)):
-                                            text = val.decode("utf-8", errors="replace") or "<empty-bytes>"
+                                            text = (
+                                                val.decode("utf-8", errors="replace")
+                                                or "<empty-bytes>"
+                                            )
                                         else:
                                             text = repr(val)
                                     except Exception:
@@ -487,7 +521,10 @@ class MibRegistrar:
                             pass
 
                     # Bind wrapper as method on the instance
-                    scalar_inst.writeCommit = types.MethodType(_write_commit_wrapper, scalar_inst)
+                    scalar_inst.writeCommit = types.MethodType(
+                        _write_commit_wrapper, scalar_inst
+                    )
+
                     # Also override writeTest to accept any value
                     def _write_test_wrapper(
                         self: Any,
@@ -507,7 +544,10 @@ class MibRegistrar:
                             raise ValueError("notWritable")
                         _logger.debug(f"writeTest called for {varBind}")
                         return None
-                    scalar_inst.writeTest = types.MethodType(_write_test_wrapper, scalar_inst)
+
+                    scalar_inst.writeTest = types.MethodType(
+                        _write_test_wrapper, scalar_inst
+                    )
                 except Exception:
                     # Don't fail registration if hooking logging fails
                     pass
@@ -540,16 +580,18 @@ class MibRegistrar:
 
         return export_symbols
 
-    def _expand_index_value_to_oid_components(self, value: Any, index_type: str) -> tuple[int, ...]:
+    def _expand_index_value_to_oid_components(
+        self, value: Any, index_type: str
+    ) -> tuple[int, ...]:
         """Expand an index value into OID components based on its type.
-        
+
         For complex types like IpAddress, this expands them into multiple integers.
         For simple integer types, returns a single-element tuple.
-        
+
         Args:
             value: The index value (could be int, string, etc.)
             index_type: The SNMP type of the index (e.g., "IpAddress", "Integer32")
-            
+
         Returns:
             Tuple of integers representing the OID components
         """
@@ -564,7 +606,7 @@ class MibRegistrar:
                     pass
             # Fallback: treat as 0.0.0.0
             return (0, 0, 0, 0)
-        
+
         # Handle OctetString and DisplayString - convert to length-prefixed or just octets
         # For now, we'll use IMPLIED encoding (no length prefix) for string indexes
         elif index_type in ("OctetString", "DisplayString", "PhysAddress"):
@@ -575,14 +617,21 @@ class MibRegistrar:
             elif isinstance(value, int):
                 return (value,)
             return ()
-        
+
         # Handle integer types - simple single value
-        elif index_type in ("Integer32", "Unsigned32", "Integer", "Gauge32", "Counter32", "TimeTicks"):
+        elif index_type in (
+            "Integer32",
+            "Unsigned32",
+            "Integer",
+            "Gauge32",
+            "Counter32",
+            "TimeTicks",
+        ):
             try:
                 return (int(value),)
             except (ValueError, TypeError):
                 return (0,)
-        
+
         # Default: try to convert to int
         try:
             return (int(value),)
@@ -730,19 +779,23 @@ class MibRegistrar:
             index_components: list[int] = []
             for i, idx_name in enumerate(index_names):
                 idx_value = row_data.get(idx_name, row_idx + 1 if i == 0 else 0)
-                
+
                 # Get the type of this index column
                 idx_type = "Integer32"  # default
                 if idx_name in columns_by_name:
                     _, idx_type, _ = columns_by_name[idx_name]
 
                 # Log what we're expanding for diagnostics
-                self.logger.info(f"Expanding index: {idx_name} value={idx_value} type={idx_type}")
+                self.logger.info(
+                    f"Expanding index: {idx_name} value={idx_value} type={idx_type}"
+                )
                 # Expand the value into OID components
-                components = self._expand_index_value_to_oid_components(idx_value, idx_type)
+                components = self._expand_index_value_to_oid_components(
+                    idx_value, idx_type
+                )
                 self.logger.info(f"Expanded components for {idx_name}: {components}")
                 index_components.extend(components)
-            
+
             index_tuple = tuple(index_components)
 
             if table_name == "sysORTable":
@@ -759,7 +812,11 @@ class MibRegistrar:
             else:
                 row_values = row_data
 
-            for col_name, (col_oid, base_type, col_is_writable) in columns_by_name.items():
+            for col_name, (
+                col_oid,
+                base_type,
+                col_is_writable,
+            ) in columns_by_name.items():
                 # Get value for this cell
                 if col_name in row_values:
                     value = row_values[col_name]
@@ -794,7 +851,9 @@ class MibRegistrar:
                             inst_name_tuple = tuple(inst.name)
                         except Exception:
                             inst_name_tuple = tuple(col_oid + index_tuple)
-                        self.logger.info(f"Registered instance {inst_name} -> {inst_name_tuple}")
+                        self.logger.info(
+                            f"Registered instance {inst_name} -> {inst_name_tuple}"
+                        )
                     except Exception:
                         pass
 
@@ -830,6 +889,7 @@ class MibRegistrar:
                                         _friendly,
                                     )
                                     return
+
                                 def _format_value(val: Any) -> str:
                                     if val is None:
                                         return "<none>"
@@ -845,14 +905,21 @@ class MibRegistrar:
                                             if hasattr(val, "asOctets"):
                                                 octs = val.asOctets()
                                                 text = (
-                                                    octs.decode("utf-8", errors="replace")
+                                                    octs.decode(
+                                                        "utf-8", errors="replace"
+                                                    )
                                                     if octs
                                                     else "<empty-octets>"
                                                 )
                                             elif hasattr(val, "asNumbers"):
                                                 text = str(val.asNumbers())
                                             elif isinstance(val, (bytes, bytearray)):
-                                                text = val.decode("utf-8", errors="replace") or "<empty-bytes>"
+                                                text = (
+                                                    val.decode(
+                                                        "utf-8", errors="replace"
+                                                    )
+                                                    or "<empty-bytes>"
+                                                )
                                             else:
                                                 text = repr(val)
                                         except Exception:
@@ -897,7 +964,9 @@ class MibRegistrar:
 
                                 final_dotted = _dotted
                                 if vb_oid_tuple:
-                                    final_dotted = ".".join(str(x) for x in vb_oid_tuple)
+                                    final_dotted = ".".join(
+                                        str(x) for x in vb_oid_tuple
+                                    )
 
                                 _logger.info(
                                     "SNMP SET applied to %s (%s): old=%s new=%s",
@@ -1063,4 +1132,3 @@ class MibRegistrar:
                 from pysnmp.proto import rfc1902
 
                 return getattr(rfc1902, pysnmp_name, None)
-

@@ -110,19 +110,25 @@ class TableRegistrar:
         for name, info in mib_json.items():
             if not isinstance(info, dict):
                 continue
-            if info.get("type") == "MibTable" and info.get("access") == "not-accessible":
+            if (
+                info.get("type") == "MibTable"
+                and info.get("access") == "not-accessible"
+            ):
                 # Found a table, now find its entry by OID structure
                 expected_entry_oid = list(info["oid"]) + [1]
                 entry_name = None
                 entry_oid = None
-                
+
                 for other_name, other_data in mib_json.items():
-                    if isinstance(other_data, dict) and other_data.get("type") == "MibTableRow":
+                    if (
+                        isinstance(other_data, dict)
+                        and other_data.get("type") == "MibTableRow"
+                    ):
                         if list(other_data.get("oid", [])) == expected_entry_oid:
                             entry_name = other_name
                             entry_oid = tuple(other_data["oid"])
                             break
-                
+
                 if not entry_name or not entry_oid:
                     continue
 
@@ -298,7 +304,13 @@ class TableRegistrar:
 
         # Register row instances (best-effort)
         self._register_row_instances(
-            mib, table_name, table_data, type_registry, col_names, new_row, suppress_export=True
+            mib,
+            table_name,
+            table_data,
+            type_registry,
+            col_names,
+            new_row,
+            suppress_export=True,
         )
 
     def _register_row_instances(
@@ -347,7 +359,9 @@ class TableRegistrar:
                     base_type = type_info.get("base_type") or type_name
 
                     # Skip if SNMP type cannot be resolved
-                    pysnmp_type = self._resolve_snmp_type(base_type, col_name, table_name)
+                    pysnmp_type = self._resolve_snmp_type(
+                        base_type, col_name, table_name
+                    )
                     if pysnmp_type is None:
                         continue
 
@@ -362,7 +376,9 @@ class TableRegistrar:
                         # Attempt to cast/construct the value for the type (int, pysnmp classes, etc.)
                         pysnmp_type(raw_val)
                     except Exception:
-                        self.logger.error("Error registering row instance", exc_info=True)
+                        self.logger.error(
+                            "Error registering row instance", exc_info=True
+                        )
                         continue
 
                     # Create scalar instance (best-effort). Tests patch this method.

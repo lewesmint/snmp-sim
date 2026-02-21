@@ -100,7 +100,9 @@ def _archive_log_file(log_path: Path) -> None:
         with open(log_path, "r", encoding="utf-8") as f:
             first_line = f.readline().strip()
             # Match timestamp format: YYYY-MM-DD HH:MM:SS.mmm
-            match = re.match(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\.\d{3}", first_line)
+            match = re.match(
+                r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\.\d{3}", first_line
+            )
             if match:
                 timestamp_str = match.group(1)
     except Exception:

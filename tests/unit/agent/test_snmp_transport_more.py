@@ -1,4 +1,3 @@
-
 from app.snmp_transport import SNMPTransport
 
 

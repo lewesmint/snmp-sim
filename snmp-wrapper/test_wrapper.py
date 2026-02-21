@@ -20,9 +20,12 @@ PUBLIC_AUTH = CommunityData("public", mpModel=1)
 # Test 1: StatelessSnmpClient
 # ============================================================================
 
+
 def test_stateless_client_get() -> None:
     """Test: StatelessSnmpClient.get() retrieves values correctly."""
-    client = StatelessSnmpClient(auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1)
+    client = StatelessSnmpClient(
+        auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1
+    )
 
     # Old test with enterprise MIB OIDs
     # oids = [
@@ -39,33 +42,39 @@ def test_stateless_client_get() -> None:
 
     # Build ObjectType objects for variadic call
     var_binds = [ObjectType(make_oid(oid)) for oid, _, _ in oids]
-    
+
     # Call get with multiple OIDs at once
     result = client.get(*var_binds)
-    assert result is not None and len(result) == len(oids), f"Expected {len(oids)} results, got {len(result)}"
-    
+    assert result is not None and len(result) == len(oids), (
+        f"Expected {len(oids)} results, got {len(result)}"
+    )
+
     # Validate each result
     for i, (oid, name, expected_str) in enumerate(oids):
         obj_type = result[i]
         value_str = str(obj_type[1])
-        assert expected_str in value_str, f"Expected '{expected_str}' in {name} value, got: {value_str}"
+        assert expected_str in value_str, (
+            f"Expected '{expected_str}' in {name} value, got: {value_str}"
+        )
 
     print("StatelessSnmpClient.get() works")
 
 
 def test_stateless_client_repeated_calls() -> None:
     """Test: StatelessSnmpClient handles repeated calls (different engine each time)."""
-    client = StatelessSnmpClient(auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1)
+    client = StatelessSnmpClient(
+        auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1
+    )
 
     # Make 5 rapid calls (each creates fresh engine)
     for i in range(5):
         result = client.get(ObjectType(make_oid("1.3.6.1.4.1.99999.1.1.0")))
-        assert result is not None and len(result) >= 1, f"Call {i+1} failed"
+        assert result is not None and len(result) >= 1, f"Call {i + 1} failed"
         obj_type = result[0]
         oid_str = str(obj_type[0])
-        assert "99999" in oid_str, f"Call {i+1} returned wrong OID"
+        assert "99999" in oid_str, f"Call {i + 1} returned wrong OID"
         value = obj_type[1]
-        assert value is not None, f"Call {i+1} returned None value"
+        assert value is not None, f"Call {i + 1} returned None value"
 
     print("StatelessSnmpClient handles repeated calls")
 
@@ -74,9 +83,12 @@ def test_stateless_client_repeated_calls() -> None:
 # Test 2: PersistentSnmpClient
 # ============================================================================
 
+
 def test_persistent_client_get() -> None:
     """Test: PersistentSnmpClient.get() retrieves values correctly."""
-    client = PersistentSnmpClient(auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1)
+    client = PersistentSnmpClient(
+        auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1
+    )
 
     try:
         # Test multiple OIDs (same engine reused)
@@ -87,12 +99,16 @@ def test_persistent_client_get() -> None:
 
         for oid, name, expected_str in oids:
             result = client.get(ObjectType(make_oid(oid)))
-            assert result is not None and len(result) >= 1, f"Expected result for {name}"
-            
+            assert result is not None and len(result) >= 1, (
+                f"Expected result for {name}"
+            )
+
             # result is (ObjectType(...),), so result[0] is ObjectType, result[0][1] is the value
             obj_type = result[0]
             value_str = str(obj_type[1])
-            assert expected_str in value_str, f"Expected '{expected_str}' in {name} value, got: {value_str}"
+            assert expected_str in value_str, (
+                f"Expected '{expected_str}' in {name} value, got: {value_str}"
+            )
 
         print("✅ PersistentSnmpClient.get() works")
     finally:
@@ -101,7 +117,9 @@ def test_persistent_client_get() -> None:
 
 def test_persistent_client_interleaved_ops() -> None:
     """Test: PersistentSnmpClient handles mixed get/set/get_next operations."""
-    client = PersistentSnmpClient(auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1)
+    client = PersistentSnmpClient(
+        auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1
+    )
 
     try:
         # GET
@@ -124,26 +142,30 @@ def test_persistent_client_interleaved_ops() -> None:
 def test_persistent_client_set() -> None:
     """Test: PersistentSnmpClient.set() can set writable OID values."""
     from pysnmp.proto.rfc1902 import Integer
-    
-    client = PersistentSnmpClient(auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1)
+
+    client = PersistentSnmpClient(
+        auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1
+    )
 
     try:
         # Set a writable integer value
         oid = "1.3.6.1.4.1.99999.1.4.0"
         new_value = 80
-        
+
         # Perform SET operation
         result = client.set(ObjectType(make_oid(oid), Integer(new_value)))
         assert result is not None and len(result) >= 1, f"SET failed for {oid}"
-        
+
         # Verify by getting the value back
         get_result = client.get(ObjectType(make_oid(oid)))
         assert get_result is not None and len(get_result) >= 1, "GET after SET failed"
-        
+
         obj_type = get_result[0]
         retrieved_value = int(obj_type[1])
-        assert retrieved_value == new_value, f"Expected {new_value}, got {retrieved_value}"
-        
+        assert retrieved_value == new_value, (
+            f"Expected {new_value}, got {retrieved_value}"
+        )
+
         print(f"✅ PersistentSnmpClient.set() works (set to {new_value})")
     finally:
         client.shutdown()
@@ -153,9 +175,12 @@ def test_persistent_client_set() -> None:
 # Test 3: GET-NEXT for snmpwalk
 # ============================================================================
 
+
 def test_snmpwalk_simulation() -> None:
     """Test: PersistentSnmpClient.get_next() can simulate snmpwalk."""
-    client = PersistentSnmpClient(auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1)
+    client = PersistentSnmpClient(
+        auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1
+    )
 
     try:
         current_oid = ObjectType(make_oid("1.3.6.1.4.1.99999"))
@@ -164,8 +189,10 @@ def test_snmpwalk_simulation() -> None:
         # Walk through enterprise MIB using get_next
         for iteration in range(20):
             result = client.get_next(current_oid)
-            assert result is not None and len(result) >= 1, f"GET-NEXT failed at iteration {iteration}"
-            
+            assert result is not None and len(result) >= 1, (
+                f"GET-NEXT failed at iteration {iteration}"
+            )
+
             # result is (ObjectType(...),), so result[0] is ObjectType with [0]=OID, [1]=value
             obj_type = result[0]
             oid_str = str(obj_type[0])
@@ -188,6 +215,7 @@ def test_snmpwalk_simulation() -> None:
 # Test 4: Performance Comparison
 # ============================================================================
 
+
 def test_performance_comparison() -> None:
     """Test: Compare performance of both clients."""
     oid = ObjectType(make_oid("1.3.6.1.4.1.99999.1.1.0"))
@@ -195,28 +223,40 @@ def test_performance_comparison() -> None:
 
     # Stateless: fresh engine per call
     print("\n  Stateless client (fresh engine per call):")
-    client_stateless = StatelessSnmpClient(auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1)
+    client_stateless = StatelessSnmpClient(
+        auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1
+    )
     start = time.time()
     for i in range(iterations):
         client_stateless.get(oid)
     stateless_time = time.time() - start
-    print(f"    {iterations} calls: {stateless_time:.2f}s ({stateless_time/iterations:.2f}s per call)")
+    print(
+        f"    {iterations} calls: {stateless_time:.2f}s ({stateless_time / iterations:.2f}s per call)"
+    )
 
     # Persistent: reused engine
     print("\n  Persistent client (reused engine):")
-    client_persistent = PersistentSnmpClient(auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1)
+    client_persistent = PersistentSnmpClient(
+        auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1
+    )
     try:
         start = time.time()
         for i in range(iterations):
             client_persistent.get(oid)
         persistent_time = time.time() - start
-        print(f"    {iterations} calls: {persistent_time:.2f}s ({persistent_time/iterations:.2f}s per call)")
+        print(
+            f"    {iterations} calls: {persistent_time:.2f}s ({persistent_time / iterations:.2f}s per call)"
+        )
 
         # Speed comparison
-        speedup = stateless_time / persistent_time if persistent_time > 0 else float('inf')
+        speedup = (
+            stateless_time / persistent_time if persistent_time > 0 else float("inf")
+        )
         print(f"\n  Speedup: {speedup:.1f}x faster with persistent client")
         assert persistent_time > 0, "Persistent client timing must be positive"
-        assert speedup >= 0.9, "Expected persistent client to be roughly equal or faster (allowing 10% margin)"
+        assert speedup >= 0.9, (
+            "Expected persistent client to be roughly equal or faster (allowing 10% margin)"
+        )
     finally:
         client_persistent.shutdown()
 
@@ -225,15 +265,20 @@ def test_performance_comparison() -> None:
 # Test 5: Error Handling
 # ============================================================================
 
+
 def test_error_handling() -> None:
     """Test: Wrapper handles errors gracefully."""
-    client = StatelessSnmpClient(auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1)
+    client = StatelessSnmpClient(
+        auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1
+    )
 
     # Try invalid OID (should not crash, just return "no such object")
     try:
         result = client.get(ObjectType(make_oid("1.3.6.1.999.999.999.0")))
         # May succeed but return "No Such Object" string
-        assert result is not None and isinstance(result, (list, tuple)), "Expected non-None result for invalid OID"
+        assert result is not None and isinstance(result, (list, tuple)), (
+            "Expected non-None result for invalid OID"
+        )
     except SnmpSyncError as e:
         # Or raise error - both are acceptable
         print(f"  (Invalid OID raised error as expected: {e})")
@@ -244,6 +289,7 @@ def test_error_handling() -> None:
 # ============================================================================
 # Main
 # ============================================================================
+
 
 def main() -> None:
     """Run all tests."""
@@ -256,7 +302,10 @@ def main() -> None:
         ("StatelessSnmpClient.get()", test_stateless_client_get),
         ("StatelessSnmpClient (repeated calls)", test_stateless_client_repeated_calls),
         ("PersistentSnmpClient.get()", test_persistent_client_get),
-        ("PersistentSnmpClient (interleaved ops)", test_persistent_client_interleaved_ops),
+        (
+            "PersistentSnmpClient (interleaved ops)",
+            test_persistent_client_interleaved_ops,
+        ),
         ("PersistentSnmpClient (SET operation)", test_persistent_client_set),
         ("Snmpwalk simulation", test_snmpwalk_simulation),
         ("Performance comparison", test_performance_comparison),

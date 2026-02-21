@@ -33,6 +33,7 @@ class AppConfig:
             # If caller passed the default name, prefer data/agent_config.yaml if present
             if config_path == "agent_config.yaml":
                 from pathlib import Path
+
                 data_path = Path("data") / "agent_config.yaml"
                 if data_path.exists():
                     config_path = str(data_path)

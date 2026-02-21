@@ -58,7 +58,9 @@ class _LoopThread:
     def __init__(self) -> None:
         self._loop_ready = threading.Event()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
-        self._thread = threading.Thread(target=self._run, name="pysnmp-sync-loop", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name="pysnmp-sync-loop", daemon=True
+        )
         self._thread.start()
         self._loop_ready.wait()
 
@@ -76,7 +78,9 @@ class _LoopThread:
             for task in pending:
                 task.cancel()
             if pending:
-                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                loop.run_until_complete(
+                    asyncio.gather(*pending, return_exceptions=True)
+                )
             loop.close()
 
     @property
@@ -318,7 +322,15 @@ def get_sync(
     """
     runner = run_sync_persistent if use_persistent_loop else run_sync
     error_indication, error_status, error_index, result_var_binds = runner(
-        _get_async(engine, auth, address, var_binds, timeout=timeout, retries=retries, context=context)
+        _get_async(
+            engine,
+            auth,
+            address,
+            var_binds,
+            timeout=timeout,
+            retries=retries,
+            context=context,
+        )
     )
     _raise_on_error(error_indication, error_status, error_index)
     return tuple(result_var_binds)
@@ -364,7 +376,15 @@ def set_sync(
     """
     runner = run_sync_persistent if use_persistent_loop else run_sync
     error_indication, error_status, error_index, result_var_binds = runner(
-        _set_async(engine, auth, address, var_binds, timeout=timeout, retries=retries, context=context)
+        _set_async(
+            engine,
+            auth,
+            address,
+            var_binds,
+            timeout=timeout,
+            retries=retries,
+            context=context,
+        )
     )
     _raise_on_error(error_indication, error_status, error_index)
     return tuple(result_var_binds)
@@ -410,7 +430,15 @@ def get_next_sync(
     """
     runner = run_sync_persistent if use_persistent_loop else run_sync
     error_indication, error_status, error_index, result_var_binds = runner(
-        _next_async(engine, auth, address, var_binds, timeout=timeout, retries=retries, context=context)
+        _next_async(
+            engine,
+            auth,
+            address,
+            var_binds,
+            timeout=timeout,
+            retries=retries,
+            context=context,
+        )
     )
     _raise_on_error(error_indication, error_status, error_index)
     return tuple(result_var_binds)
@@ -572,7 +600,7 @@ class PersistentSnmpClient:
         vb = ObjectType(ObjectIdentity("1.3.6.1.2.1.1.1.0"))
         res = client.get(vb)  # Uses persistent loop + engine
         res = client.get(vb)  # Reuses same loop + engine ✓
-        
+
         # When done:
         client.shutdown()
     """
@@ -660,7 +688,9 @@ if __name__ == "__main__":
     auth_ = CommunityData("public", mpModel=1)
     address_ = ("127.0.0.1", 161)
 
-    client = SyncSnmpClient(engine=engine_, auth=auth_, address=address_, timeout=1.0, retries=1)
+    client = SyncSnmpClient(
+        engine=engine_, auth=auth_, address=address_, timeout=1.0, retries=1
+    )
 
     sys_descr = ObjectType(ObjectIdentity("1.3.6.1.2.1.1.1.0"))
     try:

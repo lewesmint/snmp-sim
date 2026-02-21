@@ -21,7 +21,9 @@ def make_fake_builder(mib_symbols: dict[str, dict[str, object]]) -> Any:
     return FakeBuilder(mib_symbols)
 
 
-def test_build_with_textual_convention_and_scalar(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_build_with_textual_convention_and_scalar(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     # Prepare fake TextualConvention base class so _is_textual_convention_symbol detects it
     class TextualConvention:
         pass
@@ -35,7 +37,11 @@ def test_build_with_textual_convention_and_scalar(monkeypatch: pytest.MonkeyPatc
 
     class SyntaxObj:
         def __init__(self) -> None:
-            self.subtypeSpec = type("S", (), {"__repr__": lambda self: "ValueSizeConstraint object, consts 2, 2"})()
+            self.subtypeSpec = type(
+                "S",
+                (),
+                {"__repr__": lambda self: "ValueSizeConstraint object, consts 2, 2"},
+            )()
             # Declare namedValues so static analyzers know the attribute exists; tests may overwrite it.
             self.namedValues: Any = types.SimpleNamespace()
 
@@ -76,11 +82,21 @@ def test_build_with_textual_convention_and_scalar(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(
         TypeRecorder,
         "_seed_base_types",
-        staticmethod(lambda: {"Integer32": {"base_type": "INTEGER", "constraints": [], "defined_in": None}}),
+        staticmethod(
+            lambda: {
+                "Integer32": {
+                    "base_type": "INTEGER",
+                    "constraints": [],
+                    "defined_in": None,
+                }
+            }
+        ),
     )
 
     # Also ensure get_snmpv2_smi_types returns at least the seeded name
-    monkeypatch.setattr(TypeRecorder, "get_snmpv2_smi_types", lambda self: {"Integer32"})
+    monkeypatch.setattr(
+        TypeRecorder, "get_snmpv2_smi_types", lambda self: {"Integer32"}
+    )
 
     tr = TypeRecorder(tmp_path)
     tr.build()

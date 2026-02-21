@@ -7,10 +7,17 @@ from pathlib import Path
 
 import pytest
 
-from app.cli_bake_state import backup_schemas, bake_state_into_schemas, load_mib_state, main
+from app.cli_bake_state import (
+    backup_schemas,
+    bake_state_into_schemas,
+    load_mib_state,
+    main,
+)
 
 
-def test_backup_schemas_existing_and_missing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_backup_schemas_existing_and_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     schema_dir = tmp_path / "agent-model"
     backup_base = tmp_path / "backups"
 
@@ -31,7 +38,9 @@ def test_backup_schemas_existing_and_missing(tmp_path: Path, capsys: pytest.Capt
     assert "does not exist, skipping backup" in out2.out
 
 
-def test_load_mib_state_missing_and_present(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_load_mib_state_missing_and_present(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     missing = tmp_path / "mib_state.json"
     state_missing = load_mib_state(missing)
     out_missing = capsys.readouterr()
@@ -39,7 +48,11 @@ def test_load_mib_state_missing_and_present(tmp_path: Path, capsys: pytest.Captu
     assert "does not exist" in out_missing.out
 
     present = tmp_path / "present_state.json"
-    expected = {"scalars": {"1.2.3": 1}, "tables": {"1.2.4": {}}, "deleted_instances": ["1.2.4.9"]}
+    expected = {
+        "scalars": {"1.2.3": 1},
+        "tables": {"1.2.4": {}},
+        "deleted_instances": ["1.2.4.9"],
+    }
     present.write_text(json.dumps(expected), encoding="utf-8")
     assert load_mib_state(present) == expected
 
@@ -62,9 +75,15 @@ def test_bake_state_into_schemas_scalars_and_tables(tmp_path: Path) -> None:
                 "type": "MibTableRow",
                 "indexes": ["ipAdEntAddr", "ifIndex"],
             },
-            "ipAdEntAddr": {"oid": [1, 3, 6, 1, 2, 1, 4, 20, 1, 1], "type": "IpAddress"},
+            "ipAdEntAddr": {
+                "oid": [1, 3, 6, 1, 2, 1, 4, 20, 1, 1],
+                "type": "IpAddress",
+            },
             "ifIndex": {"oid": [1, 3, 6, 1, 2, 1, 4, 20, 1, 2], "type": "Integer32"},
-            "ipAdEntIfIndex": {"oid": [1, 3, 6, 1, 2, 1, 4, 20, 1, 2], "type": "Integer32"},
+            "ipAdEntIfIndex": {
+                "oid": [1, 3, 6, 1, 2, 1, 4, 20, 1, 2],
+                "type": "Integer32",
+            },
         }
     }
     schema_file = mib_dir / "schema.json"
@@ -97,7 +116,9 @@ def test_bake_state_into_schemas_scalars_and_tables(tmp_path: Path) -> None:
     assert row["ifIndex"] == 7
 
 
-def test_bake_state_handles_index_sentinel_and_bad_schema(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_bake_state_handles_index_sentinel_and_bad_schema(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     schema_dir = tmp_path / "agent-model"
     mib_dir = schema_dir / "TEST-MIB"
     bad_dir = schema_dir / "BAD-MIB"
@@ -124,9 +145,7 @@ def test_bake_state_handles_index_sentinel_and_bad_schema(tmp_path: Path, capsys
     state = {
         "scalars": {},
         "tables": {
-            "1.3.6.1.4.1.99999.1": {
-                "custom.idx": {"column_values": {"someCol": "v"}}
-            }
+            "1.3.6.1.4.1.99999.1": {"custom.idx": {"column_values": {"someCol": "v"}}}
         },
         "deleted_instances": [],
     }
@@ -230,7 +249,9 @@ def test_bake_state_legacy_index_values_format(tmp_path: Path) -> None:
     assert rows[0]["legacyCol"] == "x"
 
 
-def test_main_with_backup_enabled_creates_backup_and_clears_state(tmp_path: Path) -> None:
+def test_main_with_backup_enabled_creates_backup_and_clears_state(
+    tmp_path: Path,
+) -> None:
     schema_dir = tmp_path / "agent-model"
     mib_dir = schema_dir / "TEST-MIB"
     backup_dir = tmp_path / "agent-model-backups"
@@ -243,7 +264,10 @@ def test_main_with_backup_enabled_creates_backup_and_clears_state(tmp_path: Path
         encoding="utf-8",
     )
     state_file = data_dir / "mib_state.json"
-    state_file.write_text(json.dumps({"scalars": {}, "tables": {}, "deleted_instances": []}), encoding="utf-8")
+    state_file.write_text(
+        json.dumps({"scalars": {}, "tables": {}, "deleted_instances": []}),
+        encoding="utf-8",
+    )
 
     code = main(
         [
@@ -266,7 +290,9 @@ def test_main_with_backup_enabled_creates_backup_and_clears_state(tmp_path: Path
     }
 
 
-def test_bake_state_flat_schema_structure_and_non_dict_table_entries(tmp_path: Path) -> None:
+def test_bake_state_flat_schema_structure_and_non_dict_table_entries(
+    tmp_path: Path,
+) -> None:
     schema_dir = tmp_path / "agent-model"
     mib_dir = schema_dir / "FLAT-MIB"
     mib_dir.mkdir(parents=True)
@@ -275,7 +301,11 @@ def test_bake_state_flat_schema_structure_and_non_dict_table_entries(tmp_path: P
     flat_schema = {
         "flatScalar": {"oid": [1, 3, 6, 1, 4, 1, 9, 9], "type": "Integer32"},
         "flatTable": {"oid": [1, 3, 6, 1, 4, 1, 9, 10], "type": "MibTable", "rows": []},
-        "flatEntry": {"oid": [1, 3, 6, 1, 4, 1, 9, 10, 1], "type": "MibTableRow", "indexes": ["idx"]},
+        "flatEntry": {
+            "oid": [1, 3, 6, 1, 4, 1, 9, 10, 1],
+            "type": "MibTableRow",
+            "indexes": ["idx"],
+        },
         "idx": {"oid": [1, 3, 6, 1, 4, 1, 9, 10, 1, 1], "type": "Integer32"},
     }
     schema_file = mib_dir / "schema.json"

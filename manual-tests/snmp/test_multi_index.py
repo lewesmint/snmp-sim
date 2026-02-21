@@ -8,9 +8,11 @@ from app.mib_registrar import MibRegistrar
 logger = logging.getLogger("test")
 logger.setLevel(logging.DEBUG)
 
+
 # Create a minimal test with mock objects
 class MockTable:
     pass
+
 
 # Create registrar with minimal args
 registrar = MibRegistrar(
@@ -20,7 +22,7 @@ registrar = MibRegistrar(
     mib_table_row=MockTable,
     mib_table_column=MockTable,
     logger=logger,
-    start_time=0.0
+    start_time=0.0,
 )
 
 # Test IpAddress expansion
@@ -29,7 +31,7 @@ result = registrar._expand_index_value_to_oid_components("192.168.1.1", "IpAddre
 print(f"  '192.168.1.1' -> {result}")
 assert result == (192, 168, 1, 1), f"Expected (192, 168, 1, 1), got {result}"
 
-# Test port expansion  
+# Test port expansion
 print("Testing Unsigned32 expansion:")
 result = registrar._expand_index_value_to_oid_components(8080, "Unsigned32")
 print(f"  8080 -> {result}")
@@ -41,6 +43,8 @@ ip_parts = registrar._expand_index_value_to_oid_components("192.168.1.1", "IpAdd
 port_parts = registrar._expand_index_value_to_oid_components(8080, "Unsigned32")
 combined = ip_parts + port_parts
 print(f"  Combined OID suffix: .{'.'.join(str(x) for x in combined)}")
-assert combined == (192, 168, 1, 1, 8080), f"Expected (192, 168, 1, 1, 8080), got {combined}"
+assert combined == (192, 168, 1, 1, 8080), (
+    f"Expected (192, 168, 1, 1, 8080), got {combined}"
+)
 
 print("\n✅ All tests passed!")

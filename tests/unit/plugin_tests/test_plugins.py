@@ -1,12 +1,17 @@
 """
 Tests for the plugins module.
 """
+
 from typing import Any
 
-from plugins.basic_types import get_default_value as basic_get_default_value, _get_first_enum_value
+from plugins.basic_types import (
+    get_default_value as basic_get_default_value,
+    _get_first_enum_value,
+)
 from plugins.date_and_time import _format_date_and_time
 from plugins.snmp_framework import get_default_value as framework_get_default_value
 from plugins.type_encoders import register_type_encoder, get_type_encoder, encode_value
+
 
 class TestBasicTypesPlugin:
     """Test the basic_types plugin."""
@@ -85,7 +90,7 @@ class TestBasicTypesPlugin:
             {"base_type": "OctetString"},
             {"base_type": "DisplayString"},
             {"base_type": "SnmpAdminString"},
-            {"base_type": "OCTET STRING"}
+            {"base_type": "OCTET STRING"},
         ]
         for type_info in type_infos:
             result = basic_get_default_value(type_info, "someString")
@@ -102,7 +107,7 @@ class TestBasicTypesPlugin:
         type_infos = [
             {"base_type": "ObjectIdentifier"},
             {"base_type": "AutonomousType"},
-            {"base_type": "OBJECT IDENTIFIER"}
+            {"base_type": "OBJECT IDENTIFIER"},
         ]
         for type_info in type_infos:
             result = basic_get_default_value(type_info, "someOid")
@@ -112,7 +117,7 @@ class TestBasicTypesPlugin:
         """Test integer types with enums return first enum value."""
         type_info = {
             "base_type": "Integer32",
-            "enums": {"up": 1, "down": 2, "testing": 3}
+            "enums": {"up": 1, "down": 2, "testing": 3},
         }
         result = basic_get_default_value(type_info, "someInt")
         assert result == 1  # First (lowest) enum value
@@ -124,7 +129,7 @@ class TestBasicTypesPlugin:
             {"base_type": "Integer"},
             {"base_type": "Gauge32"},
             {"base_type": "Unsigned32"},
-            {"base_type": "INTEGER"}
+            {"base_type": "INTEGER"},
         ]
         for type_info in type_infos:
             result = basic_get_default_value(type_info, "someInt")
@@ -132,10 +137,7 @@ class TestBasicTypesPlugin:
 
     def test_counter_types(self) -> None:
         """Test counter types return 0."""
-        type_infos = [
-            {"base_type": "Counter32"},
-            {"base_type": "Counter64"}
-        ]
+        type_infos = [{"base_type": "Counter32"}, {"base_type": "Counter64"}]
         for type_info in type_infos:
             result = basic_get_default_value(type_info, "someCounter")
             assert result == 0
@@ -219,13 +221,13 @@ class TestDateAndTimePlugin:
 
     def test_format_date_and_time_bytes_passthrough(self) -> None:
         """Test _format_date_and_time passes through valid bytes."""
-        test_bytes = b'\x07\xe6\x01\x01\x00\x00\x00\x00\x00\x00\x00'  # 2022-01-01 00:00:00.0 +00:00
+        test_bytes = b"\x07\xe6\x01\x01\x00\x00\x00\x00\x00\x00\x00"  # 2022-01-01 00:00:00.0 +00:00
         result = _format_date_and_time(test_bytes)
         assert result == test_bytes
 
     def test_format_date_and_time_short_bytes(self) -> None:
         """Test _format_date_and_time with short bytes returns current time."""
-        short_bytes = b'\x07\xe6\x01\x01'  # Only 4 bytes
+        short_bytes = b"\x07\xe6\x01\x01"  # Only 4 bytes
         result = _format_date_and_time(short_bytes)
         assert isinstance(result, bytes)
         assert len(result) == 11  # Should format as current time
@@ -238,7 +240,7 @@ class TestDateAndTimePlugin:
         assert len(result) == 11
 
         # Should contain year 2026 (0x07ea in big-endian)
-        assert result[0:2] == b'\x07\xea'
+        assert result[0:2] == b"\x07\xea"
 
 
 class TestSNMPFrameworkPlugin:
@@ -253,7 +255,7 @@ class TestSNMPFrameworkPlugin:
 
     def test_snmpengineid_stable(self, mocker: Any) -> None:
         """Test snmpEngineID is stable for the same hostname."""
-        mock_hostname = mocker.patch('plugins.snmp_framework.socket.gethostname')
+        mock_hostname = mocker.patch("plugins.snmp_framework.socket.gethostname")
         mock_hostname.return_value = "test-host"
 
         result1 = framework_get_default_value({}, "snmpEngineID")
@@ -263,16 +265,16 @@ class TestSNMPFrameworkPlugin:
 
     def test_snmpengineid_caching_behavior(self, mocker: Any) -> None:
         """Test that snmpEngineID caching works correctly."""
-        mock_hostname = mocker.patch('plugins.snmp_framework.socket.gethostname')
-        mocker.patch('plugins.snmp_framework._CACHED_ENGINE_ID', None)
+        mock_hostname = mocker.patch("plugins.snmp_framework.socket.gethostname")
+        mocker.patch("plugins.snmp_framework._CACHED_ENGINE_ID", None)
         mock_hostname.return_value = "test-host"
-        
+
         # First call should generate and cache
         result1 = framework_get_default_value({}, "snmpEngineID")
-        
+
         # Second call should return cached value
         result2 = framework_get_default_value({}, "snmpEngineID")
-        
+
         assert result1 == result2  # Should be identical due to caching
         assert isinstance(result1, list)
         assert len(result1) == 16  # 5 prefix + 11 hash bytes
@@ -288,6 +290,7 @@ class TestTypeEncodersPlugin:
 
     def test_register_and_get_encoder(self) -> None:
         """Test registering and retrieving type encoders."""
+
         def test_encoder(value: Any) -> Any:
             return f"encoded_{value}"
 
@@ -302,6 +305,7 @@ class TestTypeEncodersPlugin:
 
     def test_encode_value_with_encoder(self) -> None:
         """Test encode_value uses registered encoder."""
+
         def test_encoder(value: Any) -> Any:
             return f"encoded_{value}"
 

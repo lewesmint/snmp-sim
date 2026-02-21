@@ -11,18 +11,18 @@ from plugins.type_encoders import register_type_encoder
 
 def _get_first_enum_value(enums: Any) -> Any:
     """Extract the first valid enum value from enums.
-    
+
     Handles both dict format {'name': value, ...} and list format [{'value': v, 'name': n}, ...].
-    
+
     Args:
         enums: Either a dict mapping names to values, or a list of dicts with 'value' keys
-        
+
     Returns:
         The first valid enum value, or None if no valid enums found
     """
     if not enums:
         return None
-        
+
     # Handle dict format (from generator._extract_type_info)
     if isinstance(enums, dict):
         # Sort by value to get the first (lowest) enum value
@@ -30,17 +30,17 @@ def _get_first_enum_value(enums: Any) -> Any:
             values = list(enums.values())
             values.sort()
             return values[0]
-    
+
     # Handle list format (from type registry)
     elif isinstance(enums, list):
         if enums:
             # List of dicts with 'value' key
             first_enum = enums[0]
             if isinstance(first_enum, dict):
-                return first_enum.get('value')
+                return first_enum.get("value")
             # Or list of values
             return enums[0]
-    
+
     return None
 
 
@@ -65,8 +65,10 @@ def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
     elif symbol_name == "sysServices":
         return 72  # Application + End-to-end
     # MAC address fields should have proper null MAC
-    elif "PhysAddress" in symbol_name or "MacAddress" in symbol_name or symbol_name in (
-        "ifPhysAddress", "ipNetMediaPhysAddress", "atPhysAddress"
+    elif (
+        "PhysAddress" in symbol_name
+        or "MacAddress" in symbol_name
+        or symbol_name in ("ifPhysAddress", "ipNetMediaPhysAddress", "atPhysAddress")
     ):
         return [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
@@ -75,8 +77,11 @@ def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
     # so we need to handle both the base_type and common derived types
     if base_type in ("OctetString", "DisplayString", "SnmpAdminString", "OCTET STRING"):
         # For MAC/physical addresses, use proper null MAC instead of "unset"
-        if "PhysAddress" in symbol_name or "MacAddress" in symbol_name or symbol_name in (
-            "ifPhysAddress", "ipNetMediaPhysAddress", "atPhysAddress"
+        if (
+            "PhysAddress" in symbol_name
+            or "MacAddress" in symbol_name
+            or symbol_name
+            in ("ifPhysAddress", "ipNetMediaPhysAddress", "atPhysAddress")
         ):
             return [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         return "unset"
@@ -117,6 +122,7 @@ def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
     # Fallback for unknown types - return None to indicate no default
     # (caller should handle appropriately, e.g., skip or use type-specific logic)
     return None
+
 
 # ObjectIdentifier and aliases - pass through as-is (already handled by base_type_handler)
 register_type_encoder("ObjectIdentifier", lambda x: x)

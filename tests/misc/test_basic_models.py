@@ -23,21 +23,27 @@ def api_client() -> TestClient:
     return TestClient(api.app)
 
 
-def test_api_get_sysdescr_without_agent(api_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_api_get_sysdescr_without_agent(
+    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(api, "snmp_agent", None)
     response = api_client.get("/sysdescr")
     assert response.status_code == 500
     assert response.json()["detail"] == "SNMP agent not initialized"
 
 
-def test_api_set_sysdescr_without_agent(api_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_api_set_sysdescr_without_agent(
+    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(api, "snmp_agent", None)
     response = api_client.post("/sysdescr", json={"value": "test"})
     assert response.status_code == 500
     assert response.json()["detail"] == "SNMP agent not initialized"
 
 
-def test_api_get_and_set_sysdescr_with_agent(api_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_api_get_and_set_sysdescr_with_agent(
+    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     class FakeAgent:
         def __init__(self) -> None:
             self.last_set: tuple[tuple[int, ...], Any] | None = None
@@ -111,13 +117,13 @@ def _reset_app_config_singleton() -> None:
 
 
 def test_app_config_reads_values(tmp_path: Path) -> None:
-        _reset_app_config_singleton()
-        try:
-                config_dir = tmp_path / "cfg"
-                config_dir.mkdir()
-                config_path = config_dir / "test_config.yaml"
-                config_path.write_text(
-                        """
+    _reset_app_config_singleton()
+    try:
+        config_dir = tmp_path / "cfg"
+        config_dir.mkdir()
+        config_path = config_dir / "test_config.yaml"
+        config_path.write_text(
+            """
 logger:
     level: INFO
 simple_key: simple_value
@@ -125,19 +131,19 @@ system_mib_dir:
     darwin: /opt/test/mibs
     linux: /usr/share/snmp/mibs
 """.strip()
-                )
+        )
 
-                config = AppConfig(config_path=str(config_path))
-                assert config.get("simple_key") == "simple_value"
-                platform_value = config.get_platform_setting("system_mib_dir")
-                if sys.platform == "darwin":
-                        assert platform_value == "/opt/test/mibs"
-                else:
-                        assert platform_value in {"/usr/share/snmp/mibs", None}
-                assert config.get_platform_setting("simple_key", "default") == "default"
-                config.reload()
-        finally:
-                _reset_app_config_singleton()
+        config = AppConfig(config_path=str(config_path))
+        assert config.get("simple_key") == "simple_value"
+        platform_value = config.get_platform_setting("system_mib_dir")
+        if sys.platform == "darwin":
+            assert platform_value == "/opt/test/mibs"
+        else:
+            assert platform_value in {"/usr/share/snmp/mibs", None}
+        assert config.get_platform_setting("simple_key", "default") == "default"
+        config.reload()
+    finally:
+        _reset_app_config_singleton()
 
 
 def test_app_config_missing_file() -> None:
@@ -162,7 +168,9 @@ def test_app_logger_configures_handlers(tmp_path: Path) -> None:
             root.removeHandler(handler)
         AppLogger(config)
         root.info("test log")
-        assert any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers)
+        assert any(
+            isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers
+        )
         assert any(isinstance(h, logging.StreamHandler) for h in root.handlers)
         assert any(isinstance(h.formatter, ColoredFormatter) for h in root.handlers)
     finally:
@@ -184,7 +192,9 @@ def test_app_logger_no_console(tmp_path: Path) -> None:
         for handler in list(root.handlers):
             root.removeHandler(handler)
         AppLogger(config)
-        assert any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers)
+        assert any(
+            isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers
+        )
         assert not any(isinstance(h.formatter, ColoredFormatter) for h in root.handlers)
     finally:
         for handler in list(root.handlers):
@@ -295,7 +305,12 @@ def test_log_rotation_archives_existing_log(tmp_path: Path) -> None:
         AppLogger(config)
 
         # Original log file should be archived
-        assert not log_path.exists() or log_path.stat().st_size == 0 or log_path.read_text() != "2026-02-07 10:30:45.123 INFO test.module [MainThread] Test message\n"
+        assert (
+            not log_path.exists()
+            or log_path.stat().st_size == 0
+            or log_path.read_text()
+            != "2026-02-07 10:30:45.123 INFO test.module [MainThread] Test message\n"
+        )
 
         # Check that archive directory was created
         archive_dir = log_dir / "archive"
@@ -326,7 +341,9 @@ def test_log_no_rotation_appends_to_existing(tmp_path: Path) -> None:
     log_path = log_dir / log_file
 
     # Create an existing log file
-    existing_content = "2026-02-07 10:30:45.123 INFO test.module [MainThread] Existing message\n"
+    existing_content = (
+        "2026-02-07 10:30:45.123 INFO test.module [MainThread] Existing message\n"
+    )
     log_path.write_text(existing_content)
 
     root = logging.getLogger()

@@ -12,24 +12,26 @@ class StrategyTest:
         self.root = tk.Tk()
         self.root.title("Dropdown Strategy Test")
         self.root.geometry("800x600")
-        
+
         # Instructions
         instructions = tk.Label(
             self.root,
             text="Test different strategies for handling dropdown selection.\n"
-                 "Double-click on cells in Column 2 to edit.",
+            "Double-click on cells in Column 2 to edit.",
             bg="yellow",
             fg="black",
-            font=("Helvetica", 12, "bold")
+            font=("Helvetica", 12, "bold"),
         )
         instructions.pack(fill="x", padx=10, pady=10)
-        
+
         # Strategy selector
         strategy_frame = tk.Frame(self.root)
         strategy_frame.pack(fill="x", padx=10, pady=5)
-        
-        tk.Label(strategy_frame, text="Strategy:", font=("Helvetica", 11, "bold")).pack(side="left")
-        
+
+        tk.Label(strategy_frame, text="Strategy:", font=("Helvetica", 11, "bold")).pack(
+            side="left"
+        )
+
         self.strategy_var = tk.StringVar(value="strategy3")
         strategies = [
             ("1: Save on ComboboxSelected (immediate)", "strategy1"),
@@ -37,115 +39,123 @@ class StrategyTest:
             ("3: Save on FocusOut only", "strategy3"),
             ("4: Save on ComboboxSelected + close dropdown", "strategy4"),
         ]
-        
+
         for text, value in strategies:
             rb = tk.Radiobutton(
                 strategy_frame,
                 text=text,
                 variable=self.strategy_var,
                 value=value,
-                font=("Helvetica", 10)
+                font=("Helvetica", 10),
             )
             rb.pack(side="left", padx=5)
-        
+
         # Create treeview
-        self.tree = ttk.Treeview(self.root, columns=("col1", "col2", "col3"), show="headings")
+        self.tree = ttk.Treeview(
+            self.root, columns=("col1", "col2", "col3"), show="headings"
+        )
         self.tree.heading("col1", text="Column 1")
         self.tree.heading("col2", text="Column 2 (Enum)")
         self.tree.heading("col3", text="Column 3")
-        
+
         self.tree.column("col1", width=200)
         self.tree.column("col2", width=250)
         self.tree.column("col3", width=200)
-        
+
         self.tree.pack(fill="both", expand=True, padx=10, pady=10)
-        
+
         # Add sample rows
         self.tree.insert("", "end", values=("Row 1", "1 (up)", "Value A"))
         self.tree.insert("", "end", values=("Row 2", "2 (down)", "Value B"))
         self.tree.insert("", "end", values=("Row 3", "1 (up)", "Value C"))
-        
+
         # Create edit overlay
         self.edit_frame = tk.Frame(self.root, bg="white", relief="solid", borderwidth=1)
         self.edit_combo = ttk.Combobox(self.edit_frame, font=("Helvetica", 12))
         self.edit_combo.pack(padx=2, pady=2, fill="both", expand=True)
-        
+
         # State
         self.editing_item = None
         self.editing_column = None
         self._saving = False
         self._combo_just_selected = False
-        
+
         # Bind double-click
         self.tree.bind("<Double-1>", self._on_double_click)
-        
+
         # Status
-        self.status = tk.Label(self.root, text="Ready", bg="lightgray", fg="black", font=("Helvetica", 10))
+        self.status = tk.Label(
+            self.root, text="Ready", bg="lightgray", fg="black", font=("Helvetica", 10)
+        )
         self.status.pack(fill="x", padx=10, pady=5)
-        
+
     def _on_double_click(self, event):
         region = self.tree.identify_region(event.x, event.y)
         if region != "cell":
             return
-        
+
         item = self.tree.identify_row(event.y)
         column = self.tree.identify_column(event.x)
-        
+
         if not item or not column:
             return
-        
+
         col_num = int(column[1:]) - 1
         if col_num != 1:  # Only column 2
             self.status.config(text="Only Column 2 is editable", bg="orange")
             return
-        
+
         values = self.tree.item(item, "values")
         if col_num >= len(values):
             return
-        
+
         current_value = str(values[col_num])
         self._show_edit_overlay(event, item, column, current_value)
-    
+
     def _show_edit_overlay(self, event, item, column, current_value):
         self._hide_edit_overlay()
-        
+
         bbox = self.tree.bbox(item, column)
         if not bbox:
             return
-        
+
         cell_x, cell_y, cell_width, cell_height = bbox
-        
+
         tree_rootx = self.tree.winfo_rootx()
         tree_rooty = self.tree.winfo_rooty()
         root_rootx = self.root.winfo_rootx()
         root_rooty = self.root.winfo_rooty()
-        
+
         overlay_x = tree_rootx + cell_x - root_rootx
         overlay_y = tree_rooty + cell_y - root_rooty
-        
+
         self.editing_item = item
         self.editing_column = column
-        
-        self.edit_frame.place(x=overlay_x, y=overlay_y, width=cell_width, height=cell_height)
+
+        self.edit_frame.place(
+            x=overlay_x, y=overlay_y, width=cell_width, height=cell_height
+        )
         self.edit_frame.lift()
-        
+
         enum_values = ["1 (up)", "2 (down)", "3 (testing)"]
         self.edit_combo.config(values=enum_values, state="readonly")
         self.edit_combo.set(current_value)
         self.edit_combo.focus()
-        
+
         # Unbind previous events
         self.edit_combo.unbind("<Return>")
         self.edit_combo.unbind("<Escape>")
         self.edit_combo.unbind("<<ComboboxSelected>>")
         self.edit_combo.unbind("<FocusOut>")
-        
+
         # Bind events
         self.edit_combo.bind("<Return>", lambda e: self._save_edit())
         self.edit_combo.bind("<Escape>", lambda e: self._hide_edit_overlay())
-        self.edit_combo.bind("<<ComboboxSelected>>", lambda e: self._on_combo_selected())
+        self.edit_combo.bind(
+            "<<ComboboxSelected>>", lambda e: self._on_combo_selected()
+        )
         self.edit_combo.bind("<FocusOut>", lambda e: self._on_focus_out())
-        
+
         strategy = self.strategy_var.get()
         self.status.config(text=f"Using {strategy} - Select a value", bg="lightblue")
 
@@ -236,5 +246,3 @@ class StrategyTest:
 if __name__ == "__main__":
     app = StrategyTest()
     app.run()
-
-

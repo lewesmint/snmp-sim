@@ -23,7 +23,9 @@ def _setup_compiler(
     mocker.patch("app.cli_compile_mib.os.path.exists", return_value=True)
 
 
-def test_compile_mib_success(mocker: pytest_mock.MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
+def test_compile_mib_success(
+    mocker: pytest_mock.MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test successful MIB compilation."""
     mock_results = {"CISCO-ALARM-MIB": "compiled"}
     _setup_compiler(mock_results, mocker)
@@ -35,10 +37,14 @@ def test_compile_mib_success(mocker: pytest_mock.MockerFixture, capsys: pytest.C
     assert "CISCO-ALARM-MIB: compiled" in output.out
 
 
-def test_compile_mib_failure(mocker: pytest_mock.MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
+def test_compile_mib_failure(
+    mocker: pytest_mock.MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test MIB compilation failure."""
     mock_results = {"CISCO-ALARM-MIB": "failed"}
-    _setup_compiler(mock_results, mocker, compile_side_effect=MibCompilationError("boom"))
+    _setup_compiler(
+        mock_results, mocker, compile_side_effect=MibCompilationError("boom")
+    )
 
     exit_code = main(["CISCO-ALARM-MIB.txt"])
     output = capsys.readouterr()
@@ -48,7 +54,9 @@ def test_compile_mib_failure(mocker: pytest_mock.MockerFixture, capsys: pytest.C
     assert "boom" in output.err
 
 
-def test_compile_mib_partial_success(mocker: pytest_mock.MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
+def test_compile_mib_partial_success(
+    mocker: pytest_mock.MockerFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test MIB compilation with partial success."""
     mock_results = {
         "CISCO-ALARM-MIB": "compiled",

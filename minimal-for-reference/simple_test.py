@@ -34,7 +34,7 @@ try:
         address,
         [ObjectType(make_oid("1.3.6.1.2.1.1.1.0"))],
         timeout=1.0,
-        retries=2
+        retries=2,
     )
     for var_bind in result:
         print(f"   ✓ {var_bind.prettyPrint()}")
@@ -51,13 +51,17 @@ if test_set:
             engine,
             auth_write,
             address,
-            [ObjectType(make_oid("1.3.6.1.2.1.1.4.0"), OctetString("test@example.com"))],
+            [
+                ObjectType(
+                    make_oid("1.3.6.1.2.1.1.4.0"), OctetString("test@example.com")
+                )
+            ],
             timeout=1.0,
-            retries=1
+            retries=1,
         )
         for var_bind in result:
             print(f"   ✓ SET: {var_bind.prettyPrint()}")
-        
+
         # Verify SET worked
         print("\n3. GET sysContact.0 (verify SET)")
         result = get_sync(
@@ -66,11 +70,11 @@ if test_set:
             address,
             [ObjectType(make_oid("1.3.6.1.2.1.1.4.0"))],
             timeout=1.0,
-            retries=2
+            retries=2,
         )
         for var_bind in result:
             print(f"   ✓ {var_bind.prettyPrint()}")
-            
+
     except SnmpSyncError as e:
         print(f"   ✗ ERROR: {e}")
 else:

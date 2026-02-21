@@ -21,8 +21,8 @@ from pysnmp.smi import builder as snmp_builder
 OidIndex = Union[int, str, Tuple[int, ...]]
 VarBindSpec = Union[
     ObjectType,
-    Tuple[str, str, Any],              # (mib, symbol, value) for scalars
-    Tuple[str, str, Any, OidIndex],    # (mib, symbol, value, index) for table columns
+    Tuple[str, str, Any],  # (mib, symbol, value) for scalars
+    Tuple[str, str, Any, OidIndex],  # (mib, symbol, value, index) for table columns
 ]
 
 
@@ -151,7 +151,9 @@ class TrapSender:
             )
             self.snmp_engine = SnmpEngine()
             self._configure_mib_sources(self.snmp_engine)
-            error_indication, error_status, error_index, _ = await _send_with(self.snmp_engine)
+            error_indication, error_status, error_index, _ = await _send_with(
+                self.snmp_engine
+            )
 
         if error_indication:
             self.logger.error("Notification send error: %s", error_indication)

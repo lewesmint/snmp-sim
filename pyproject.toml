@@ -43,6 +43,17 @@ exclude = [
     "compiled-mibs/**",
     "retired",
     "retired/**",
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    ".venv",
+    ".venv/**",
+    ".pyenv",
+    ".pyenv/**",
+    "**/.venv",
+    "**/.venv/**",
+    "**/.pyenv",
+    "**/.pyenv/**"
 ]
 
 [[tool.pyright.executionEnvironments]]

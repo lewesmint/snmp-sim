@@ -1,6 +1,7 @@
 """
 Tests for the default value plugin system.
 """
+
 import pytest
 from typing import Any, Optional
 
@@ -27,7 +28,9 @@ class TestDefaultValuePluginRegistry:
         assert "test_plugin" in registry.list_plugins()
         assert len(registry.list_plugins()) == 1
 
-    def test_register_duplicate_plugin_replaces(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_register_duplicate_plugin_replaces(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Test that registering a plugin with the same name replaces the old one."""
         registry = DefaultValuePluginRegistry()
 
@@ -82,7 +85,9 @@ class TestDefaultValuePluginRegistry:
         result = registry.get_default_value({"base_type": "Integer32"}, "unknown")
         assert result is None
 
-    def test_get_default_value_plugin_exception_handled(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_get_default_value_plugin_exception_handled(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Test that plugin exceptions are caught and logged, allowing other plugins to run."""
         registry = DefaultValuePluginRegistry()
 
@@ -109,14 +114,16 @@ class TestGlobalFunctions:
         """Test the register_plugin decorator."""
         # Create a fresh registry for this test to avoid interference
         from app.default_value_plugins import _registry
+
         original_plugins = _registry._plugins.copy()
         original_names = _registry._plugin_names.copy()
-        
+
         # Clear the global registry
         _registry._plugins.clear()
         _registry._plugin_names.clear()
-        
+
         try:
+
             @register_plugin("decorated_plugin")
             def my_plugin(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
                 if type_info.get("base_type") == "Counter32":
@@ -126,7 +133,7 @@ class TestGlobalFunctions:
             assert "decorated_plugin" in _registry.list_plugins()
             result = get_default_value({"base_type": "Counter32"}, "test")
             assert result == 42
-            
+
             # Test that it returns None for non-matching types
             result = get_default_value({"base_type": "Integer32"}, "test")
             assert result is None
@@ -144,6 +151,7 @@ class TestGlobalFunctions:
         registry._plugin_names.clear()
 
         try:
+
             def test_plugin(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
                 return "global_test"
 
@@ -154,7 +162,10 @@ class TestGlobalFunctions:
         finally:
             # Restore original plugins
             registry._plugins = original_plugins
-            registry._plugin_names = {name: plugin for name, plugin in zip(registry.list_plugins(), original_plugins)}
+            registry._plugin_names = {
+                name: plugin
+                for name, plugin in zip(registry.list_plugins(), original_plugins)
+            }
 
     def test_get_registry_returns_global_instance(self) -> None:
         """Test that get_registry returns the global registry instance."""

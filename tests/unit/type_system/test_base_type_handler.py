@@ -9,7 +9,10 @@ def handler() -> BaseTypeHandler:
     # Provide a minimal registry for tests; tests can pass explicit type_info too
     registry: TypeRegistry = {
         "OctetString": {"base_type": "OCTET STRING"},
-        "Integer32": {"base_type": "INTEGER", "constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]},
+        "Integer32": {
+            "base_type": "INTEGER",
+            "constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 100}],
+        },
         "ObjectIdentifier": {"base_type": "OBJECT IDENTIFIER"},
     }
     return BaseTypeHandler(type_registry=registry)
@@ -34,21 +37,33 @@ def test_string_type_info_by_name_returns_unset(handler: BaseTypeHandler) -> Non
 
 
 def test_enum_prefers_common_default(handler: BaseTypeHandler) -> None:
-    type_info: TypeInfo = {"base_type": "Integer32", "enums": [{"name": "unknown", "value": 99}, {"name": "up", "value": 1}]}
+    type_info: TypeInfo = {
+        "base_type": "Integer32",
+        "enums": [{"name": "unknown", "value": 99}, {"name": "up", "value": 1}],
+    }
     assert handler.get_default_value("InterfaceStatus", {"type_info": type_info}) == 99
 
 
 def test_enum_first_value_fallback(handler: BaseTypeHandler) -> None:
-    type_info: TypeInfo = {"base_type": "Integer32", "enums": [{"name": "up", "value": 1}, {"name": "down", "value": 2}]}
+    type_info: TypeInfo = {
+        "base_type": "Integer32",
+        "enums": [{"name": "up", "value": 1}, {"name": "down", "value": 2}],
+    }
     assert handler.get_default_value("IfState", {"type_info": type_info}) == 1
 
 
 def test_integer_constraints_choose_zero_or_min(handler: BaseTypeHandler) -> None:
     # 0 in range
-    type_info: TypeInfo = {"base_type": "Integer32", "constraints": [{"type": "ValueRangeConstraint", "min": -5, "max": 5}]}
+    type_info: TypeInfo = {
+        "base_type": "Integer32",
+        "constraints": [{"type": "ValueRangeConstraint", "min": -5, "max": 5}],
+    }
     assert handler.get_default_value("RangeType", {"type_info": type_info}) == 0
     # 0 not in range -> min
-    type_info2: TypeInfo = {"base_type": "Integer32", "constraints": [{"type": "ValueRangeConstraint", "min": 10, "max": 20}]}
+    type_info2: TypeInfo = {
+        "base_type": "Integer32",
+        "constraints": [{"type": "ValueRangeConstraint", "min": 10, "max": 20}],
+    }
     assert handler.get_default_value("RangeType", {"type_info": type_info2}) == 10
 
 
@@ -57,7 +72,9 @@ def test_octet_ip_and_mac_and_bits_and_default_bytes(handler: BaseTypeHandler) -
     assert handler.get_default_value("IpAddress", {}) == "0.0.0.0"
 
     # Mac-like name
-    val = handler.get_default_value("EthernetMacAddress", {"type_info": {"base_type": "OctetString"}})
+    val = handler.get_default_value(
+        "EthernetMacAddress", {"type_info": {"base_type": "OctetString"}}
+    )
     assert val == "00:00:00:00:00:00"
 
     # Bits syntax
@@ -66,7 +83,10 @@ def test_octet_ip_and_mac_and_bits_and_default_bytes(handler: BaseTypeHandler) -
 
     # Default octet fallback returns bytes when not human-readable
     type_info2: TypeInfo = {"base_type": "OctetString"}
-    assert isinstance(handler.get_default_value("OpaqueValue", {"type_info": type_info2}), (bytes, bytearray))
+    assert isinstance(
+        handler.get_default_value("OpaqueValue", {"type_info": type_info2}),
+        (bytes, bytearray),
+    )
 
 
 def test_object_identifier_default(handler: BaseTypeHandler) -> None:
@@ -95,7 +115,9 @@ def test_create_pysnmp_value_uses_mib_builder_class(handler: BaseTypeHandler) ->
     assert isinstance(out, DummyClass) and out.v == 123
 
 
-def test_create_pysnmp_value_returns_raw_when_no_builder(handler: BaseTypeHandler) -> None:
+def test_create_pysnmp_value_returns_raw_when_no_builder(
+    handler: BaseTypeHandler,
+) -> None:
     assert handler.create_pysnmp_value("SomeType", 7, mib_builder=None) == 7
 
 
@@ -114,5 +136,8 @@ def test_validate_value_integer_and_octets_and_oid(handler: BaseTypeHandler) -> 
 
 def test_get_default_value_prefers_context_type_info(handler: BaseTypeHandler) -> None:
     # If caller provides full type_info including constraints, it should be used
-    type_info: TypeInfo = {"base_type": "Integer32", "constraints": [{"type": "ValueRangeConstraint", "min": 10, "max": 20}]}
+    type_info: TypeInfo = {
+        "base_type": "Integer32",
+        "constraints": [{"type": "ValueRangeConstraint", "min": 10, "max": 20}],
+    }
     assert handler.get_default_value("Integer32", {"type_info": type_info}) == 10
