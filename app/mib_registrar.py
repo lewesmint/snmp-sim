@@ -16,6 +16,7 @@ import types
 from typing import Any, Dict, Iterator, Optional, Set
 
 from app.model_paths import AGENT_MODEL_DIR
+from app.json_format import write_json_with_horizontal_oid_lists
 from plugins.type_encoders import encode_value
 
 
@@ -189,8 +190,7 @@ class MibRegistrar:
                     if "traps" in snmp2:
                         existing_schema["traps"] = snmp2["traps"]
 
-                    with snmp2_schema_file.open("w", encoding="utf-8") as f:
-                        json.dump(existing_schema, f, indent=2)
+                    write_json_with_horizontal_oid_lists(snmp2_schema_file, existing_schema)
                     self.logger.info(f"Persisted updated sysORTable schema to {snmp2_schema_file}")
                 except Exception as e:
                     self.logger.warning(f"Could not persist schema to disk: {e}")

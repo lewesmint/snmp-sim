@@ -2,32 +2,14 @@
   "schema_version": "1.0.1",
   "objects": {
     "sysDescr": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 1],
       "type": "DisplayString",
       "access": "read-only",
       "initial": "Simple Python SNMP Agent",
       "dynamic_function": null
     },
     "sysObjectID": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 2],
       "type": "ObjectIdentifier",
       "access": "read-only",
       "initial": [
@@ -42,205 +24,56 @@
       "dynamic_function": null
     },
     "sysUpTime": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 3],
       "type": "TimeTicks",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": "uptime"
     },
     "sysContact": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 4],
       "type": "DisplayString",
       "access": "read-write",
       "initial": "Admin <admin@example.com>",
       "dynamic_function": null
     },
     "sysName": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 5],
       "type": "DisplayString",
       "access": "read-write",
       "initial": "snmp-agent",
       "dynamic_function": null
     },
     "sysLocation": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 6],
       "type": "DisplayString",
       "access": "read-write",
       "initial": "Server Room",
       "dynamic_function": null
     },
     "sysServices": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        7
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 7],
       "type": "Integer32",
       "access": "read-only",
       "initial": 72,
       "dynamic_function": null
     },
     "sysORLastChange": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        8
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 8],
       "type": "TimeStamp",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "sysORTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        9
-      ],
-      "type": "MibTable",
-      "access": "not-accessible",
       "rows": [
         {
-          "sysORIndex": 1,
-          "sysORID": [
-            1,
-            3,
-            6,
-            1,
-            2,
-            1,
-            11,
-            2,
-            1
-          ],
-          "sysORDescr": "The MIB module for SNMPv2 entities",
-          "sysORUpTime": 10
-        },
-        {
-          "sysORIndex": 2,
-          "sysORID": [
-            1,
-            3,
-            6,
-            1,
-            2,
-            1,
-            2
-          ],
-          "sysORDescr": "The MIB module for managing network interfaces",
-          "sysORUpTime": 20
-        },
-        {
-          "sysORIndex": 3,
-          "sysORID": [
-            1,
-            3,
-            6,
-            1,
-            2,
-            1,
-            25
-          ],
-          "sysORDescr": "The MIB module for Host Resources",
-          "sysORUpTime": 30
-        },
-        {
-          "sysORIndex": 4,
-          "sysORID": [
-            1,
-            3,
-            6,
-            1,
-            2,
-            1,
-            25,
-            3,
-            1
-          ],
-          "sysORDescr": "Host Resources types and textual conventions",
-          "sysORUpTime": 40
-        },
-        {
-          "sysORIndex": 5,
-          "sysORID": [
-            1,
-            3,
-            6,
-            1,
-            4,
-            1,
-            9,
-            9,
-            46
-          ],
-          "sysORDescr": "Cisco Alarm MIB for alarm management",
-          "sysORUpTime": 50
+          "sysORIndex": 1
         }
       ]
     },
     "sysOREntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        9,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -248,512 +81,215 @@
       ]
     },
     "sysORIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        9,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 1],
       "type": "Integer32",
       "access": "not-accessible"
     },
     "sysORID": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        9,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 2],
       "type": "ObjectIdentifier",
       "access": "read-only"
     },
     "sysORDescr": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        9,
-        1,
-        3
-      ],
-      "type": "DisplayString",
-      "access": "read-only"
+      "oid": [1, 3, 6],
+      "type": "DisplayString"
     },
     "sysORUpTime": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        1,
-        9,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 4],
       "type": "TimeStamp",
       "access": "read-only"
     },
     "snmpInPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 1],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpOutPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 2],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInBadVersions": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 3],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInBadCommunityNames": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 4],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInBadCommunityUses": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 5],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInASNParseErrs": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 6],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInTooBigs": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        8
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 8],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInNoSuchNames": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        9
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 9],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInBadValues": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        10
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 10],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInReadOnlys": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        11
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 11],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInGenErrs": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        12
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 12],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInTotalReqVars": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        13
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 13],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInTotalSetVars": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        14
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 14],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInGetRequests": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        15
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 15],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInGetNexts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        16
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 16],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInSetRequests": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        17
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 17],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInGetResponses": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        18
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 18],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpInTraps": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        19
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 19],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpOutTooBigs": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        20
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 20],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpOutNoSuchNames": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        21
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 21],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpOutBadValues": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        22
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 22],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpOutGenErrs": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        24
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 24],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpOutGetRequests": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        25
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 25],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpOutGetNexts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        26
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 26],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpOutSetRequests": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        27
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 27],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpOutGetResponses": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        28
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 28],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpOutTraps": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        29
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 29],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpEnableAuthenTraps": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        30
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 30],
       "type": "Integer32",
       "access": "read-write",
       "initial": 1,
@@ -764,50 +300,21 @@
       }
     },
     "snmpSilentDrops": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        31
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 31],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpProxyDrops": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        11,
-        32
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 11, 32],
       "type": "Counter32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "snmpTrapOID": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        6,
-        3,
-        1,
-        1,
-        4,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 6, 3, 1, 1, 4, 1],
       "type": "ObjectIdentifier",
       "access": "accessible-for-notify",
       "initial": [
@@ -817,18 +324,7 @@
       "dynamic_function": null
     },
     "snmpTrapEnterprise": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        6,
-        3,
-        1,
-        1,
-        4,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 6, 3, 1, 1, 4, 3],
       "type": "ObjectIdentifier",
       "access": "accessible-for-notify",
       "initial": [
@@ -838,18 +334,7 @@
       "dynamic_function": null
     },
     "snmpSetSerialNo": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        6,
-        3,
-        1,
-        1,
-        6,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 6, 3, 1, 1, 6, 1],
       "type": "TestAndIncr",
       "access": "read-write",
       "initial": 0,
@@ -857,59 +342,6 @@
     }
   },
   "traps": {
-    "coldStart": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        6,
-        3,
-        1,
-        1,
-        5,
-        1
-      ],
-      "objects": [],
-      "description": "",
-      "status": "current",
-      "mib": "SNMPv2-MIB"
-    },
-    "warmStart": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        6,
-        3,
-        1,
-        1,
-        5,
-        2
-      ],
-      "objects": [],
-      "description": "",
-      "status": "current",
-      "mib": "SNMPv2-MIB"
-    },
-    "authenticationFailure": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        6,
-        3,
-        1,
-        1,
-        5,
-        5
-      ],
-      "objects": [],
-      "description": "",
-      "status": "current",
-      "mib": "SNMPv2-MIB"
-    }
+    "newTrap": {}
   }
 }

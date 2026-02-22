@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.json_format import write_json_with_horizontal_oid_lists
 from app.model_paths import AGENT_MODEL_BACKUPS_DIR, AGENT_MODEL_DIR, MIB_STATE_FILE
 
 
@@ -194,8 +195,7 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
 
             # Write back if modified
             if modified:
-                with open(schema_file, "w", encoding="utf-8") as f:
-                    json.dump(schema, f, indent=2)
+                write_json_with_horizontal_oid_lists(schema_file, schema)
                 print(f"✓ Updated {schema_file.relative_to(schema_dir.parent)}")
 
         except Exception as e:

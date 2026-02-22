@@ -10,6 +10,7 @@ from pysnmp.smi import builder
 
 from app.app_logger import AppLogger
 from app.default_value_plugins import get_default_value
+from app.json_format import dumps_with_horizontal_oid_lists
 from app.model_paths import AGENT_MODEL_DIR
 from app.plugin_loader import load_plugins
 
@@ -221,7 +222,7 @@ class BehaviourGenerator:
         }
         tmp_path = json_path.with_suffix(".json.tmp")
         with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(output_data, f, indent=2)
+            f.write(dumps_with_horizontal_oid_lists(output_data, indent=2))
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_path, json_path)

@@ -2,32 +2,14 @@
   "schema_version": "1.0.1",
   "objects": {
     "ifNumber": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 1],
       "type": "Integer32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "ifTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -68,17 +50,7 @@
       ]
     },
     "ifEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -86,50 +58,17 @@
       ]
     },
     "ifIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 1],
       "type": "InterfaceIndex",
       "access": "read-only"
     },
     "ifDescr": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2],
       "type": "DisplayString",
       "access": "read-only"
     },
     "ifType": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 3],
       "type": "IANAifType",
       "access": "read-only",
       "enums": {
@@ -435,66 +374,22 @@
       }
     },
     "ifMtu": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 4],
       "type": "Integer32",
       "access": "read-only"
     },
     "ifSpeed": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 5],
       "type": "Gauge32",
       "access": "read-only"
     },
     "ifPhysAddress": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 6],
       "type": "PhysAddress",
       "access": "read-only"
     },
     "ifAdminStatus": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        7
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 7],
       "type": "Integer32",
       "access": "read-write",
       "enums": {
@@ -504,18 +399,7 @@
       }
     },
     "ifOperStatus": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        8
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 8],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -529,241 +413,77 @@
       }
     },
     "ifLastChange": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        9
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 9],
       "type": "TimeTicks",
       "access": "read-only"
     },
     "ifInOctets": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        10
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 10],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifInUcastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        11
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 11],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifInNUcastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        12
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 12],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifInDiscards": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        13
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 13],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifInErrors": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        14
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 14],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifInUnknownProtos": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        15
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 15],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifOutOctets": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        16
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 16],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifOutUcastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        17
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 17],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifOutNUcastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        18
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 18],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifOutDiscards": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        19
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 19],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifOutErrors": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        20
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 20],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifOutQLen": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        21
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 21],
       "type": "Gauge32",
       "access": "read-only"
     },
     "ifSpecific": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        2,
-        2,
-        1,
-        22
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 22],
       "type": "ObjectIdentifier",
       "access": "read-only"
     },
     "ifXTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -791,18 +511,7 @@
       ]
     },
     "ifXEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "index_from": [
@@ -816,240 +525,72 @@
       ]
     },
     "ifName": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 1],
       "type": "DisplayString",
       "access": "read-only"
     },
     "ifInMulticastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 2],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifInBroadcastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 3],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifOutMulticastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 4],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifOutBroadcastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 5],
       "type": "Counter32",
       "access": "read-only"
     },
     "ifHCInOctets": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 6],
       "type": "Counter64",
       "access": "read-only"
     },
     "ifHCInUcastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        7
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 7],
       "type": "Counter64",
       "access": "read-only"
     },
     "ifHCInMulticastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        8
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 8],
       "type": "Counter64",
       "access": "read-only"
     },
     "ifHCInBroadcastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        9
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 9],
       "type": "Counter64",
       "access": "read-only"
     },
     "ifHCOutOctets": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        10
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 10],
       "type": "Counter64",
       "access": "read-only"
     },
     "ifHCOutUcastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        11
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 11],
       "type": "Counter64",
       "access": "read-only"
     },
     "ifHCOutMulticastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        12
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 12],
       "type": "Counter64",
       "access": "read-only"
     },
     "ifHCOutBroadcastPkts": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        13
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 13],
       "type": "Counter64",
       "access": "read-only"
     },
     "ifLinkUpDownTrapEnable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        14
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 14],
       "type": "Integer32",
       "access": "read-write",
       "enums": {
@@ -1058,36 +599,12 @@
       }
     },
     "ifHighSpeed": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        15
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 15],
       "type": "Gauge32",
       "access": "read-only"
     },
     "ifPromiscuousMode": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        16
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 16],
       "type": "TruthValue",
       "access": "read-write",
       "enums": {
@@ -1096,19 +613,7 @@
       }
     },
     "ifConnectorPresent": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        17
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 17],
       "type": "TruthValue",
       "access": "read-only",
       "enums": {
@@ -1117,51 +622,17 @@
       }
     },
     "ifAlias": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        18
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 18],
       "type": "DisplayString",
       "access": "read-write"
     },
     "ifCounterDiscontinuityTime": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        1,
-        1,
-        19
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1, 19],
       "type": "TimeStamp",
       "access": "read-only"
     },
     "ifStackTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 2],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -1173,18 +644,7 @@
       ]
     },
     "ifStackEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        2,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 2, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -1193,53 +653,17 @@
       ]
     },
     "ifStackHigherLayer": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        2,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 2, 1, 1],
       "type": "InterfaceIndexOrZero",
       "access": "not-accessible"
     },
     "ifStackLowerLayer": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        2,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 2, 1, 2],
       "type": "InterfaceIndexOrZero",
       "access": "not-accessible"
     },
     "ifStackStatus": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        2,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 2, 1, 3],
       "type": "RowStatus",
       "access": "read-create",
       "enums": {
@@ -1253,17 +677,7 @@
       }
     },
     "ifTestTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 3],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -1284,18 +698,7 @@
       ]
     },
     "ifTestEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        3,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 3, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "index_from": [
@@ -1309,36 +712,12 @@
       ]
     },
     "ifTestId": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        3,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 3, 1, 1],
       "type": "TestAndIncr",
       "access": "read-write"
     },
     "ifTestStatus": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        3,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 3, 1, 2],
       "type": "Integer32",
       "access": "read-write",
       "enums": {
@@ -1347,36 +726,12 @@
       }
     },
     "ifTestType": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        3,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 3, 1, 3],
       "type": "AutonomousType",
       "access": "read-write"
     },
     "ifTestResult": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        3,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 3, 1, 4],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -1390,51 +745,17 @@
       }
     },
     "ifTestCode": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        3,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 3, 1, 5],
       "type": "ObjectIdentifier",
       "access": "read-only"
     },
     "ifTestOwner": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        3,
-        1,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 3, 1, 6],
       "type": "OwnerString",
       "access": "read-write"
     },
     "ifRcvAddressTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 4],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -1446,18 +767,7 @@
       ]
     },
     "ifRcvAddressEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        4,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 4, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "index_from": [
@@ -1472,36 +782,12 @@
       ]
     },
     "ifRcvAddressAddress": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        4,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 4, 1, 1],
       "type": "PhysAddress",
       "access": "not-accessible"
     },
     "ifRcvAddressStatus": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        4,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 4, 1, 2],
       "type": "RowStatus",
       "access": "read-create",
       "enums": {
@@ -1515,19 +801,7 @@
       }
     },
     "ifRcvAddressType": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        4,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 4, 1, 3],
       "type": "Integer32",
       "access": "read-create",
       "enums": {
@@ -1537,34 +811,14 @@
       }
     },
     "ifTableLastChange": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 5],
       "type": "TimeTicks",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "ifStackLastChange": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        31,
-        1,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 31, 1, 6],
       "type": "TimeTicks",
       "access": "read-only",
       "initial": 0,
@@ -1573,18 +827,7 @@
   },
   "traps": {
     "linkDown": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        6,
-        3,
-        1,
-        1,
-        5,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 6, 3, 1, 1, 5, 3],
       "objects": [
         {
           "mib": "IF-MIB",
@@ -1604,18 +847,7 @@
       "mib": "IF-MIB"
     },
     "linkUp": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        6,
-        3,
-        1,
-        1,
-        5,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 6, 3, 1, 1, 5, 4],
       "objects": [
         {
           "mib": "IF-MIB",

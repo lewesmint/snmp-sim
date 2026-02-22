@@ -2,153 +2,63 @@
   "schema_version": "1.0.1",
   "objects": {
     "hrSystemUptime": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 1, 1],
       "type": "TimeTicks",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "hrSystemDate": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 1, 2],
       "type": "DateAndTime",
       "access": "read-write",
       "initial": "unset",
       "dynamic_function": null
     },
     "hrSystemInitialLoadDevice": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 1, 3],
       "type": "Integer32",
       "access": "read-write",
       "initial": 0,
       "dynamic_function": null
     },
     "hrSystemInitialLoadParameters": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 1, 4],
       "type": "InternationalDisplayString",
       "access": "read-write",
       "initial": "unset",
       "dynamic_function": null
     },
     "hrSystemNumUsers": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 1, 5],
       "type": "Gauge32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "hrSystemProcesses": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        1,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 1, 6],
       "type": "Gauge32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "hrSystemMaxProcesses": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        1,
-        7
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 1, 7],
       "type": "Integer32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "hrMemorySize": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        2,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 2, 2],
       "type": "KBytes",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "hrStorageTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        2,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 2, 3],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -167,18 +77,7 @@
       ]
     },
     "hrStorageEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        2,
-        3,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 2, 3, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -186,136 +85,42 @@
       ]
     },
     "hrStorageIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        2,
-        3,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 2, 3, 1, 1],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrStorageType": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        2,
-        3,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 2, 3, 1, 2],
       "type": "AutonomousType",
       "access": "read-only"
     },
     "hrStorageDescr": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        2,
-        3,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 2, 3, 1, 3],
       "type": "DisplayString",
       "access": "read-only"
     },
     "hrStorageAllocationUnits": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        2,
-        3,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 2, 3, 1, 4],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrStorageSize": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        2,
-        3,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 2, 3, 1, 5],
       "type": "Integer32",
       "access": "read-write"
     },
     "hrStorageUsed": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        2,
-        3,
-        1,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 2, 3, 1, 6],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrStorageAllocationFailures": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        2,
-        3,
-        1,
-        7
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 2, 3, 1, 7],
       "type": "Counter32",
       "access": "read-only"
     },
     "hrDeviceTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 2],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -336,18 +141,7 @@
       ]
     },
     "hrDeviceEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        2,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 2, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -355,87 +149,27 @@
       ]
     },
     "hrDeviceIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        2,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 2, 1, 1],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrDeviceType": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        2,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 2, 1, 2],
       "type": "AutonomousType",
       "access": "read-only"
     },
     "hrDeviceDescr": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        2,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 2, 1, 3],
       "type": "DisplayString",
       "access": "read-only"
     },
     "hrDeviceID": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        2,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 2, 1, 4],
       "type": "ProductID",
       "access": "read-only"
     },
     "hrDeviceStatus": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        2,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 2, 1, 5],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -447,34 +181,12 @@
       }
     },
     "hrDeviceErrors": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        2,
-        1,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 2, 1, 6],
       "type": "Counter32",
       "access": "read-only"
     },
     "hrProcessorTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 3],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -488,18 +200,7 @@
       ]
     },
     "hrProcessorEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        3,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 3, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "index_from": [
@@ -513,51 +214,17 @@
       ]
     },
     "hrProcessorFrwID": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        3,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 3, 1, 1],
       "type": "ProductID",
       "access": "read-only"
     },
     "hrProcessorLoad": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        3,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 3, 1, 2],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrNetworkTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 4],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -567,18 +234,7 @@
       ]
     },
     "hrNetworkEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        4,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 4, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "index_from": [
@@ -592,34 +248,12 @@
       ]
     },
     "hrNetworkIfIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        4,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 4, 1, 1],
       "type": "InterfaceIndexOrZero",
       "access": "read-only"
     },
     "hrPrinterTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 5],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -630,18 +264,7 @@
       ]
     },
     "hrPrinterEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        5,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 5, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "index_from": [
@@ -655,19 +278,7 @@
       ]
     },
     "hrPrinterStatus": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        5,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 5, 1, 1],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -679,34 +290,12 @@
       }
     },
     "hrPrinterDetectedErrorState": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        5,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 5, 1, 2],
       "type": "OctetString",
       "access": "read-only"
     },
     "hrDiskStorageTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 6],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -719,18 +308,7 @@
       ]
     },
     "hrDiskStorageEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        6,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 6, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "index_from": [
@@ -744,19 +322,7 @@
       ]
     },
     "hrDiskStorageAccess": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        6,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 6, 1, 1],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -765,19 +331,7 @@
       }
     },
     "hrDiskStorageMedia": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        6,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 6, 1, 2],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -792,19 +346,7 @@
       }
     },
     "hrDiskStorageRemoveble": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        6,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 6, 1, 3],
       "type": "TruthValue",
       "access": "read-only",
       "enums": {
@@ -813,34 +355,12 @@
       }
     },
     "hrDiskStorageCapacity": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        6,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 6, 1, 4],
       "type": "KBytes",
       "access": "read-only"
     },
     "hrPartitionTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        7
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 7],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -854,18 +374,7 @@
       ]
     },
     "hrPartitionEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        7,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 7, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "index_from": [
@@ -880,102 +389,32 @@
       ]
     },
     "hrPartitionIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        7,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 7, 1, 1],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrPartitionLabel": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        7,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 7, 1, 2],
       "type": "InternationalDisplayString",
       "access": "read-only"
     },
     "hrPartitionID": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        7,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 7, 1, 3],
       "type": "OctetString",
       "access": "read-only"
     },
     "hrPartitionSize": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        7,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 7, 1, 4],
       "type": "KBytes",
       "access": "read-only"
     },
     "hrPartitionFSIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        7,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 7, 1, 5],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrFSTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        8
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 8],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -996,18 +435,7 @@
       ]
     },
     "hrFSEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        8,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 8, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -1015,87 +443,27 @@
       ]
     },
     "hrFSIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        8,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 8, 1, 1],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrFSMountPoint": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        8,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 8, 1, 2],
       "type": "InternationalDisplayString",
       "access": "read-only"
     },
     "hrFSRemoteMountPoint": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        8,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 8, 1, 3],
       "type": "InternationalDisplayString",
       "access": "read-only"
     },
     "hrFSType": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        8,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 8, 1, 4],
       "type": "AutonomousType",
       "access": "read-only"
     },
     "hrFSAccess": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        8,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 8, 1, 5],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -1104,19 +472,7 @@
       }
     },
     "hrFSBootable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        8,
-        1,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 8, 1, 6],
       "type": "TruthValue",
       "access": "read-only",
       "enums": {
@@ -1125,85 +481,29 @@
       }
     },
     "hrFSStorageIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        8,
-        1,
-        7
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 8, 1, 7],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrFSLastFullBackupDate": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        8,
-        1,
-        8
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 8, 1, 8],
       "type": "DateAndTime",
       "access": "read-write"
     },
     "hrFSLastPartialBackupDate": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        3,
-        8,
-        1,
-        9
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 3, 8, 1, 9],
       "type": "DateAndTime",
       "access": "read-write"
     },
     "hrSWOSIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        4,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 4, 1],
       "type": "Integer32",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "hrSWRunTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        4,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 4, 2],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -1222,18 +522,7 @@
       ]
     },
     "hrSWRunEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        4,
-        2,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 4, 2, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -1241,104 +530,32 @@
       ]
     },
     "hrSWRunIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        4,
-        2,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 4, 2, 1, 1],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrSWRunName": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        4,
-        2,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 4, 2, 1, 2],
       "type": "InternationalDisplayString",
       "access": "read-only"
     },
     "hrSWRunID": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        4,
-        2,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 4, 2, 1, 3],
       "type": "ProductID",
       "access": "read-only"
     },
     "hrSWRunPath": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        4,
-        2,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 4, 2, 1, 4],
       "type": "InternationalDisplayString",
       "access": "read-only"
     },
     "hrSWRunParameters": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        4,
-        2,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 4, 2, 1, 5],
       "type": "InternationalDisplayString",
       "access": "read-only"
     },
     "hrSWRunType": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        4,
-        2,
-        1,
-        6
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 4, 2, 1, 6],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -1349,19 +566,7 @@
       }
     },
     "hrSWRunStatus": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        4,
-        2,
-        1,
-        7
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 4, 2, 1, 7],
       "type": "Integer32",
       "access": "read-write",
       "enums": {
@@ -1372,17 +577,7 @@
       }
     },
     "hrSWRunPerfTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        5,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 5, 1],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -1393,18 +588,7 @@
       ]
     },
     "hrSWRunPerfEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        5,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 5, 1, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "index_from": [
@@ -1418,85 +602,31 @@
       ]
     },
     "hrSWRunPerfCPU": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        5,
-        1,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 5, 1, 1, 1],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrSWRunPerfMem": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        5,
-        1,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 5, 1, 1, 2],
       "type": "KBytes",
       "access": "read-only"
     },
     "hrSWInstalledLastChange": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        6,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 6, 1],
       "type": "TimeTicks",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "hrSWInstalledLastUpdateTime": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        6,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 6, 2],
       "type": "TimeTicks",
       "access": "read-only",
       "initial": 0,
       "dynamic_function": null
     },
     "hrSWInstalledTable": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        6,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 6, 3],
       "type": "MibTable",
       "access": "not-accessible",
       "rows": [
@@ -1513,18 +643,7 @@
       ]
     },
     "hrSWInstalledEntry": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        6,
-        3,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 6, 3, 1],
       "type": "MibTableRow",
       "access": "not-accessible",
       "indexes": [
@@ -1532,70 +651,22 @@
       ]
     },
     "hrSWInstalledIndex": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        6,
-        3,
-        1,
-        1
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 6, 3, 1, 1],
       "type": "Integer32",
       "access": "read-only"
     },
     "hrSWInstalledName": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        6,
-        3,
-        1,
-        2
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 6, 3, 1, 2],
       "type": "InternationalDisplayString",
       "access": "read-only"
     },
     "hrSWInstalledID": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        6,
-        3,
-        1,
-        3
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 6, 3, 1, 3],
       "type": "ProductID",
       "access": "read-only"
     },
     "hrSWInstalledType": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        6,
-        3,
-        1,
-        4
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 6, 3, 1, 4],
       "type": "Integer32",
       "access": "read-only",
       "enums": {
@@ -1606,19 +677,7 @@
       }
     },
     "hrSWInstalledDate": {
-      "oid": [
-        1,
-        3,
-        6,
-        1,
-        2,
-        1,
-        25,
-        6,
-        3,
-        1,
-        5
-      ],
+      "oid": [1, 3, 6, 1, 2, 1, 25, 6, 3, 1, 5],
       "type": "DateAndTime",
       "access": "read-only"
     }

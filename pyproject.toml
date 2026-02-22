@@ -85,6 +85,15 @@ disable = [
     "unused-variable",
 ]
 
+[tool.pylint.main]
+ignore = ["retired", "compiled-mibs", "compiled-mibs-test", "manual-tests"]
+ignore-paths = [
+    "(^|.*/)retired/.*",
+    "(^|.*/)compiled-mibs/.*",
+    "(^|.*/)compiled-mibs-test/.*",
+    "(^|.*/)manual-tests/.*",
+]
+
 [tool.ruff.format]
 quote-style = "double"
 
