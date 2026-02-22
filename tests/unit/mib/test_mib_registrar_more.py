@@ -1,10 +1,12 @@
 # pylint: disable=protected-access,unused-argument,attribute-defined-outside-init,redefined-outer-name,reimported,pointless-string-statement,broad-exception-caught,trailing-whitespace,line-too-long,too-many-lines,missing-module-docstring,missing-class-docstring,missing-function-docstring,invalid-name,too-few-public-methods,import-outside-toplevel,consider-iterating-dictionary,use-implicit-booleaness-not-comparison
 
-from typing import Any, Iterable, cast
+import json
 import logging
 import time
-import json
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Any, cast
+
 import pytest
 
 from app.mib_registrar import MibRegistrar
@@ -43,13 +45,18 @@ def make_registrar() -> MibRegistrar:
     # Simple fake logger and time
     import logging
 
+    from app.mib_registrar import SNMPContext
+
     logger = logging.getLogger("test")
-    return MibRegistrar(
+    snmp_context = SNMPContext(
         mib_builder=DummyBuilder(),
         mib_scalar_instance=DummyScalarInstance,
         mib_table=None,
         mib_table_row=None,
         mib_table_column=None,
+    )
+    return MibRegistrar(
+        snmp_context=snmp_context,
         logger=logger,
         start_time=0.0,
     )
@@ -176,7 +183,7 @@ def test_build_table_symbols_basic(monkeypatch: Any) -> None:
     symbols = reg._build_table_symbols(
         "MIB",
         "MyTable",
-        cast(dict[str, Any], mib_json["MyTable"]),
+        cast("dict[str, Any]", mib_json["MyTable"]),
         mib_json,
         {"Integer32": {"base_type": "Integer"}},
     )
@@ -185,7 +192,7 @@ def test_build_table_symbols_basic(monkeypatch: Any) -> None:
     # The registrar uses the defined Entry object name (e.g. 'MyEntry')
     assert "MyEntry" in symbols
     # instance name should be present for column
-    assert any(k.startswith("col1Inst") for k in symbols.keys())
+    assert any(k.startswith("col1Inst") for k in symbols)
 
 
 def test_get_pysnmp_type_uses_builder() -> None:
@@ -240,8 +247,8 @@ def test_build_mib_symbols_scalar_creation_with_none_value(monkeypatch: Any) -> 
     }
     symbols = reg._build_mib_symbols("MIB", mib_json, type_registry)
     # Instances should be present for 'foo' and 'bar'
-    assert any(k.startswith("foo") for k in symbols.keys())
-    assert any(k.startswith("bar") or k.startswith("barInst") for k in symbols.keys())
+    assert any(k.startswith("foo") for k in symbols)
+    assert any(k.startswith(("bar", "barInst")) for k in symbols)
 
 
 def test_read_only_scalar_allows_internal_change(monkeypatch: Any) -> None:
@@ -272,7 +279,7 @@ def test_read_only_scalar_allows_internal_change(monkeypatch: Any) -> None:
             "type": "Integer32",
             "initial": 1,
             "access": "read-only",
-        }
+        },
     }
     type_registry = {"Integer32": {"base_type": "Integer32"}}
 
@@ -287,7 +294,8 @@ def test_read_only_scalar_allows_internal_change(monkeypatch: Any) -> None:
 
 
 def test_register_mib_filters_existing_and_handles_export_exception(
-    monkeypatch: Any, caplog: Any
+    monkeypatch: Any,
+    caplog: Any,
 ) -> None:
     # Test filtering and handling export exception
     class Builder:
@@ -295,13 +303,16 @@ def test_register_mib_filters_existing_and_handles_export_exception(
             self.mibSymbols: dict[str, dict[str, Any]] = {"X": {"a": 1}}
 
         def export_symbols(self, mib: str, **symbols: Any) -> None:
-            raise RuntimeError("boom")
+            msg = "boom"
+            raise RuntimeError(msg)
 
     b = Builder()
     reg = make_registrar()
     reg.mib_builder = b
     monkeypatch.setattr(
-        MibRegistrar, "_build_mib_symbols", lambda self, mib, mj, tr: {"a": 1, "b": 2}
+        MibRegistrar,
+        "_build_mib_symbols",
+        lambda self, mib, mj, tr: {"a": 1, "b": 2},
     )
 
     caplog.set_level("ERROR")
@@ -312,8 +323,17 @@ def test_register_mib_filters_existing_and_handles_export_exception(
 
 def test_register_all_mibs_type_registry_load_fails(caplog: Any, tmp_path: Any) -> None:
     # Provide a bad path so json.load fails
+    from app.mib_registrar import SNMPContext
+
     b = DummyBuilder()
-    reg = MibRegistrar(b, None, None, None, None, logging.getLogger("test"), time.time())
+    snmp_context = SNMPContext(
+        mib_builder=b,
+        mib_scalar_instance=None,
+        mib_table=None,
+        mib_table_row=None,
+        mib_table_column=None,
+    )
+    reg = MibRegistrar(snmp_context, logging.getLogger("test"), time.time())
     caplog.set_level("ERROR")
     reg.register_all_mibs({"FOO": {}}, type_registry_path=str(tmp_path / "nope.json"))
     assert "Failed to load type registry" in caplog.text
@@ -358,7 +378,8 @@ def test_populate_sysor_table_handles_json_load_error(caplog: Any, monkeypatch: 
 
     # Mock open to raise exception
     def bad_open(*args: Any, **kwargs: Any) -> None:
-        raise IOError("file not found")
+        msg = "file not found"
+        raise OSError(msg)
 
     monkeypatch.setattr("builtins.open", bad_open)
 
@@ -367,7 +388,8 @@ def test_populate_sysor_table_handles_json_load_error(caplog: Any, monkeypatch: 
     reg.populate_sysor_table(mib_jsons)
 
     # Should log error but not crash
-    assert "Error" in caplog.text and "sysORTable" in caplog.text
+    assert "Error" in caplog.text
+    assert "sysORTable" in caplog.text
 
 
 def test_populate_sysor_table_handles_register_mib_error(caplog: Any, monkeypatch: Any) -> None:
@@ -378,7 +400,8 @@ def test_populate_sysor_table_handles_register_mib_error(caplog: Any, monkeypatc
 
     # Mock register_mib to raise
     def bad_register(*args: Any, **kwargs: Any) -> None:
-        raise RuntimeError("register failed")
+        msg = "register failed"
+        raise RuntimeError(msg)
 
     monkeypatch.setattr(MibRegistrar, "register_mib", bad_register)
 
@@ -601,7 +624,8 @@ def test_build_mib_symbols_table_creation_error_handling(monkeypatch: Any, caplo
 
     # Mock _build_table_symbols to raise exception
     def failing_build_table_symbols(*args: Any, **kwargs: Any) -> None:
-        raise ValueError("Table build failed")
+        msg = "Table build failed"
+        raise ValueError(msg)
 
     monkeypatch.setattr(reg, "_build_table_symbols", failing_build_table_symbols)
 
@@ -637,7 +661,7 @@ def test_build_table_symbols_skips_non_table_entries(monkeypatch: Any) -> None:
         reg._build_table_symbols(
             "TEST-MIB",
             "testTable",
-            cast(dict[str, Any], mib_json["testTable"]),
+            cast("dict[str, Any]", mib_json["testTable"]),
             mib_json,
             {},
         )
@@ -659,7 +683,7 @@ def test_build_table_symbols_no_entry_raises(monkeypatch: Any) -> None:
         reg._build_table_symbols(
             "TEST-MIB",
             "testTable",
-            cast(dict[str, Any], mib_json["testTable"]),
+            cast("dict[str, Any]", mib_json["testTable"]),
             mib_json,
             {},
         )
@@ -681,11 +705,11 @@ def test_build_table_symbols_skips_non_dict_columns(monkeypatch: Any) -> None:
         reg._build_table_symbols(
             "TEST-MIB",
             "testTable",
-            cast(dict[str, Any], mib_json["testTable"]),
+            cast("dict[str, Any]", mib_json["testTable"]),
             mib_json,
             {},
         )
-    except Exception:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         pass  # Expected
 
 
@@ -706,11 +730,11 @@ def test_build_table_symbols_skips_invalid_column_oid(monkeypatch: Any) -> None:
         reg._build_table_symbols(
             "TEST-MIB",
             "testTable",
-            cast(dict[str, Any], mib_json["testTable"]),
+            cast("dict[str, Any]", mib_json["testTable"]),
             mib_json,
             {},
         )
-    except Exception:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         pass  # Expected
 
 
@@ -736,11 +760,11 @@ def test_build_table_symbols_skips_columns_not_in_entry(monkeypatch: Any) -> Non
         reg._build_table_symbols(
             "TEST-MIB",
             "testTable",
-            cast(dict[str, Any], mib_json["testTable"]),
+            cast("dict[str, Any]", mib_json["testTable"]),
             mib_json,
             {},
         )
-    except Exception:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         pass  # Expected
 
 
@@ -755,7 +779,8 @@ def test_build_table_symbols_column_creation_error_handling(monkeypatch: Any, ca
 
     def failing_mib_table_column(*args: Any, **kwargs: Any) -> Any:
         if len(args) > 0 and args[0] == (1, 2, 3, 2, 1, 2):  # bad column OID
-            raise ValueError("Bad column")
+            msg = "Bad column"
+            raise ValueError(msg)
         return original_mib_table_column(*args, **kwargs)
 
     reg.mib_table_column_cls = failing_mib_table_column
@@ -772,7 +797,7 @@ def test_build_table_symbols_column_creation_error_handling(monkeypatch: Any, ca
         symbols = reg._build_table_symbols(
             "TEST-MIB",
             "testTable",
-            cast(dict[str, Any], mib_json["testTable"]),
+            cast("dict[str, Any]", mib_json["testTable"]),
             mib_json,
             {},
         )
@@ -780,12 +805,13 @@ def test_build_table_symbols_column_creation_error_handling(monkeypatch: Any, ca
         assert "badColumn" not in symbols
         # Should have warning for bad column
         assert "Error creating column badColumn: Bad column" in caplog.text
-    except Exception:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         pass  # Expected due to incomplete structure
 
 
 def test_build_table_symbols_row_instance_creation_error_handling(
-    monkeypatch: Any, caplog: Any
+    monkeypatch: Any,
+    caplog: Any,
 ) -> None:
     """Test error handling during row instance creation."""
     reg = make_registrar()
@@ -800,7 +826,8 @@ def test_build_table_symbols_row_instance_creation_error_handling(
         nonlocal call_count
         call_count += 1
         if call_count == 2:  # Fail on second call (bad row)
-            raise ValueError("Bad instance")
+            msg = "Bad instance"
+            raise ValueError(msg)
         return original_mib_scalar_instance(*args, **kwargs)
 
     reg.mib_scalar_instance_cls = failing_mib_scalar_instance
@@ -822,7 +849,7 @@ def test_build_table_symbols_row_instance_creation_error_handling(
         symbols = reg._build_table_symbols(
             "TEST-MIB",
             "testTable",
-            cast(dict[str, Any], mib_json["testTable"]),
+            cast("dict[str, Any]", mib_json["testTable"]),
             mib_json,
             {},
         )
@@ -830,7 +857,7 @@ def test_build_table_symbols_row_instance_creation_error_handling(
         assert "testTable" in symbols
         # Should have warning for bad instance
         assert "Error creating instance for testColumn1 row (2,): Bad instance" in caplog.text
-    except Exception:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         pass  # Expected due to incomplete mocking
 
 
@@ -858,11 +885,11 @@ def test_build_table_symbols_sysortable_logging(monkeypatch: Any, caplog: Any) -
         reg._build_table_symbols(
             "TEST-MIB",
             "sysORTable",
-            cast(dict[str, Any], mib_json["sysORTable"]),
+            cast("dict[str, Any]", mib_json["sysORTable"]),
             mib_json,
             {},
         )
-    except Exception:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         pass  # Expected
 
     # Should have sysORTable logging
@@ -903,7 +930,8 @@ def test_get_pysnmp_type_fallback_to_rfc1902(monkeypatch: Any) -> None:
 
     # Mock import_symbols to always fail
     def failing_import(*args: Any, **kwargs: Any) -> Any:
-        raise ImportError("Not found")
+        msg = "Not found"
+        raise ImportError(msg)
 
     reg.mib_builder.import_symbols = failing_import
 
@@ -959,10 +987,12 @@ def test_get_pysnmp_type_uses_snmpv2_tc_when_smi_fails(monkeypatch: Any) -> None
     class Builder:
         def import_symbols(self, mod: str, name: str) -> list[type]:
             if mod == "SNMPv2-SMI":
-                raise ImportError("not in smi")
+                msg = "not in smi"
+                raise ImportError(msg)
             if mod == "SNMPv2-TC":
                 return [FromTc]
-            raise ImportError("unexpected")
+            msg = "unexpected"
+            raise ImportError(msg)
 
     reg.mib_builder = Builder()
     assert reg._get_pysnmp_type("DisplayString") is FromTc
@@ -1040,7 +1070,7 @@ def test_build_table_symbols_write_wrappers_readwrite_and_readonly(
     symbols = reg._build_table_symbols(
         "IF-MIB",
         "ifTable",
-        cast(dict[str, Any], mib_json["ifTable"]),
+        cast("dict[str, Any]", mib_json["ifTable"]),
         mib_json,
         {
             "Integer32": {"base_type": "Integer32"},
@@ -1117,7 +1147,7 @@ def test_build_table_symbols_uses_row_index_fallback(monkeypatch: Any) -> None:
     symbols = reg._build_table_symbols(
         "TEST-MIB",
         "testTable",
-        cast(dict[str, Any], mib_json["testTable"]),
+        cast("dict[str, Any]", mib_json["testTable"]),
         mib_json,
         {"Integer32": {"base_type": "Integer32"}},
     )
@@ -1133,13 +1163,17 @@ def test_register_all_mibs_calls_register_for_each_loaded_type_registry(
     reg = make_registrar()
     type_registry_path = tmp_path / "types.json"
     type_registry_path.write_text(
-        json.dumps({"Integer32": {"base_type": "Integer32"}}), encoding="utf-8"
+        json.dumps({"Integer32": {"base_type": "Integer32"}}),
+        encoding="utf-8",
     )
 
     called: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
 
     def fake_register_mib(
-        self: MibRegistrar, mib: str, mib_json: dict[str, Any], tr: dict[str, Any]
+        self: MibRegistrar,
+        mib: str,
+        mib_json: dict[str, Any],
+        tr: dict[str, Any],
     ) -> None:
         called.append((mib, mib_json, tr))
 
@@ -1153,7 +1187,8 @@ def test_register_all_mibs_calls_register_for_each_loaded_type_registry(
 
 
 def test_register_mib_new_structure_with_traps_and_no_objects_logs(
-    caplog: Any, monkeypatch: Any
+    caplog: Any,
+    monkeypatch: Any,
 ) -> None:
     reg = make_registrar()
     caplog.set_level("INFO")
@@ -1188,7 +1223,7 @@ def test_populate_sysor_table_persists_and_merges_existing_schema(
             {
                 "objects": {"keepMe": {"oid": [9, 9, 9], "type": "MibScalar"}},
                 "traps": {"existingTrap": {}},
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -1251,7 +1286,8 @@ def test_populate_sysor_table_persist_warning_on_write_failure(
     def fake_path_open(self: Path, *args: Any, **kwargs: Any) -> Any:
         mode = kwargs.get("mode", args[0] if args else "r")
         if str(self).endswith("agent-model/SNMPv2-MIB/schema.json") and "w" in mode:
-            raise OSError("disk full")
+            msg = "disk full"
+            raise OSError(msg)
         return real_path_open(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "open", fake_path_open)
@@ -1282,7 +1318,8 @@ def test_build_mib_symbols_scalar_write_wrappers_paths(monkeypatch: Any) -> None
             return self
 
         def writeCommit(self, *args: Any, **kwargs: Any) -> None:
-            raise RuntimeError("original write failure")
+            msg = "original write failure"
+            raise RuntimeError(msg)
 
     reg.mib_scalar_instance_cls = FakeScalar
     monkeypatch.setattr(MibRegistrar, "_get_pysnmp_type", lambda self, _t: FakeValue)
@@ -1306,7 +1343,9 @@ def test_build_mib_symbols_scalar_write_wrappers_paths(monkeypatch: Any) -> None
     }
 
     symbols = reg._build_mib_symbols(
-        "TEST-MIB", mib_json, {"Integer32": {"base_type": "Integer32"}}
+        "TEST-MIB",
+        mib_json,
+        {"Integer32": {"base_type": "Integer32"}},
     )
     rw = symbols["rwScalarInst"]
     ro = symbols["roScalarInst"]

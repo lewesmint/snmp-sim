@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
 """Test that the agent can properly load and decode values from the improved schema."""
 
-import sys
 import json
-
+import sys
 
 from app.snmp_agent import SNMPAgent
 
 
 def test_schema_loading() -> None:
     """Test loading and decoding values from the improved schema."""
-
     # Load the improved schema
     schema_path = "data/experimental_schema/improved_schema.json"
-    with open(schema_path, "r") as f:
+    with open(schema_path) as f:
         schema = json.load(f)
-
-    print(f"✓ Loaded schema from {schema_path}")
 
     # Create agent instance
     agent = SNMPAgent()
@@ -26,15 +22,12 @@ def test_schema_loading() -> None:
     test_table = tables.get("myTestTable", {})
     rows = test_table.get("rows", [])
 
-    print(f"✓ Found {len(rows)} rows in myTestTable")
-
     # Test each row's MAC address
     for idx, row in enumerate(rows):
         values = row.get("values", {})
         mac_value = values.get("myTestMacAddress")
 
         if mac_value is None:
-            print(f"  Row {idx}: No MAC address")
             continue
 
         # Decode the value using the agent's method
@@ -45,8 +38,7 @@ def test_schema_loading() -> None:
         assert len(decoded) == 6, f"Expected 6 bytes for MAC address, got {len(decoded)}"
 
         # Format as MAC address
-        mac_str = decoded.hex(":")
-        print(f"  Row {idx}: MAC address = {mac_str}")
+        decoded.hex(":")
 
         # Verify the specific values
         if idx == 0:
@@ -60,20 +52,15 @@ def test_schema_loading() -> None:
     row0_values = rows[0].get("values", {})
     name = agent._decode_value(row0_values.get("myTestName"))
     assert name == "Interface One", f"Expected 'Interface One', got {name}"
-    print(f"✓ Regular string value works: {name}")
 
     counter = agent._decode_value(row0_values.get("myTestCounter"))
     assert counter == 0, f"Expected 0, got {counter}"
-    print(f"✓ Regular integer value works: {counter}")
-
-    print("\n✅ All schema integration tests passed!")
 
 
 if __name__ == "__main__":
     try:
         test_schema_loading()
-    except Exception as e:
-        print(f"\n❌ Test failed: {e}")
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         import traceback
 
         traceback.print_exc()

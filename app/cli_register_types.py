@@ -4,16 +4,15 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from app import build_type_registry
 from app.base_type_handler import BaseTypeHandler
 
 
 def main(argv: Iterable[str] | None = None) -> int:
-    """
-    Build the SNMP type registry from compiled MIBs and export to JSON.
+    """Build the SNMP type registry from compiled MIBs and export to JSON.
 
     This CLI tool provides a convenient way to register types discovered from
     compiled MIB files. It dynamically discovers SNMP types from SNMPv2-SMI
@@ -22,6 +21,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     Example:
         python -m app.cli_register_types
         python -m app.cli_register_types --compiled-mibs-dir custom-mibs --output types.json
+
     """
     parser = argparse.ArgumentParser(
         description="Build and export SNMP type registry from compiled MIBs"
@@ -126,7 +126,7 @@ def main(argv: Iterable[str] | None = None) -> int:
 
                     if len(default_str) > 15:
                         default_str = default_str[:12] + "..."
-                except Exception:
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
                     default_str = "N/A"
 
                 # Get MIB where this type is defined (for TCs) or first used
@@ -149,7 +149,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    except Exception as e:
+    except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         print(f"Error building type registry: {e}", file=sys.stderr)
         import traceback
 

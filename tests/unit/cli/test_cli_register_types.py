@@ -1,8 +1,9 @@
 """Tests for test cli register types."""
 
 from pathlib import Path
-import pytest
 from typing import Any
+
+import pytest
 
 from app import cli_register_types as crt
 
@@ -17,7 +18,9 @@ def test_main_missing_compiled_dir(tmp_path: Path, capsys: pytest.CaptureFixture
 
 
 def test_main_success_with_mocks(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: Any
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mocker: Any,
 ) -> None:
     """Test case for test_main_success_with_mocks."""
     # Mock build_type_registry to return a simple registry
@@ -30,7 +33,9 @@ def test_main_success_with_mocks(
 
 
 def test_main_verbose_output_formatting(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: Any
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mocker: Any,
 ) -> None:
     """Test case for test_main_verbose_output_formatting."""
     # Mock build_type_registry and BaseTypeHandler for verbose output
@@ -69,11 +74,11 @@ def test_main_verbose_output_formatting(
             """Test case for get_default_value."""
             if type_name == "MyType":
                 return 42
-            elif type_name == "EnumType":
+            if type_name == "EnumType":
                 return 1  # Should format as 1(up)
-            elif type_name == "StringType":
+            if type_name == "StringType":
                 return "hello world"  # Should truncate
-            elif type_name == "BytesType":
+            if type_name == "BytesType":
                 return b"binary data"  # Should format as b"..."
             return None
 
@@ -92,7 +97,9 @@ def test_main_verbose_output_formatting(
 
 
 def test_main_exception_handling(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: Any
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mocker: Any,
 ) -> None:
     """Test case for test_main_exception_handling."""
     mocker.patch(

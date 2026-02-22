@@ -1,14 +1,14 @@
-"""
-Tests for the canonical type registry and its integration with the agent.
-"""
+"""Tests for the canonical type registry and its integration with the agent."""
 
 import json
-import pytest
 import warnings
 from pathlib import Path
 from typing import Any
-from app.type_registry import TypeRegistry
+
+import pytest
+
 from app import build_type_registry
+from app.type_registry import TypeRegistry
 
 
 def test_type_registry_build_and_export(tmp_path: Path) -> None:
@@ -85,7 +85,7 @@ def test_agent_loads_type_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         json.dump(test_types, f)
 
     # Verify the file was created correctly
-    with open(test_types_path, "r") as f:
+    with open(test_types_path) as f:
         loaded = json.load(f)
 
     assert loaded == test_types
@@ -109,7 +109,8 @@ def test_build_type_registry(tmp_path: Path, mocker: Any) -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         result = build_type_registry(
-            compiled_mibs_dir=str(compiled_dir), output_path=str(output_path)
+            compiled_mibs_dir=str(compiled_dir),
+            output_path=str(output_path),
         )
 
     # Verify TypeRegistry was created with correct path

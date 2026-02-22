@@ -2,7 +2,8 @@
 
 import json
 from pathlib import Path
-from typing import Dict, Any, cast
+from typing import Any, cast
+
 import pytest
 
 from app import cli_load_model as clm
@@ -53,7 +54,7 @@ def test_main_no_schemas(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_main_success_writes_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Test case for test_main_success_writes_output."""
-    model: Dict[str, Dict[str, Any]] = {"M1": {"a": {}}}
+    model: dict[str, dict[str, Any]] = {"M1": {"a": {}}}
     monkeypatch.setattr(clm, "load_all_schemas", lambda d: model)
     out_file = tmp_path / "out.json"
 
@@ -66,7 +67,7 @@ def test_main_success_writes_output(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 
 def test_main_output_write_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Test case for test_main_output_write_error."""
-    model: Dict[str, Dict[str, Any]] = {"M1": {"a": {}}}
+    model: dict[str, dict[str, Any]] = {"M1": {"a": {}}}
     monkeypatch.setattr(clm, "load_all_schemas", lambda d: model)
     out_dir = tmp_path
     # Passing a directory path as output should cause file write error
@@ -110,7 +111,8 @@ def test_load_all_schemas_generic_processing_error(
     def fake_open(*args: Any, **kwargs: Any) -> Any:
         file_arg = args[0] if args else ""
         if str(file_arg).endswith("schema.json"):
-            raise RuntimeError("boom")
+            msg = "boom"
+            raise RuntimeError(msg)
         return real_open(*args, **kwargs)
 
     monkeypatch.setattr("builtins.open", fake_open)
@@ -125,18 +127,18 @@ def test_print_model_summary_handles_both_schema_shapes(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test case for test_print_model_summary_handles_both_schema_shapes."""
-    model: Dict[str, Dict[str, Any]] = {
+    model: dict[str, dict[str, Any]] = {
         "NEW": {
             "objects": {
                 "tbl": {"type": "MibTable"},
                 "s": {"type": "MibScalar"},
-            }
+            },
         },
         "OLD": {
             "a": {"type": "MibScalar"},
             "b": {"type": "MibTable"},
         },
-        "BAD": cast(Dict[str, Any], {"objects": "not-a-dict"}),
+        "BAD": cast("dict[str, Any]", {"objects": "not-a-dict"}),
     }
 
     clm.print_model_summary(model)
@@ -149,7 +151,7 @@ def test_print_model_summary_handles_both_schema_shapes(
 
 def test_main_success_without_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Test case for test_main_success_without_output."""
-    model: Dict[str, Dict[str, Any]] = {"M1": {"objects": {"x": {"type": "MibScalar"}}}}
+    model: dict[str, dict[str, Any]] = {"M1": {"objects": {"x": {"type": "MibScalar"}}}}
     monkeypatch.setattr(clm, "load_all_schemas", lambda d: model)
 
     rc = clm.main(["--schema-dir", str(tmp_path)])

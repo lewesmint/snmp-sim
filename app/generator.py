@@ -4,7 +4,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional, cast
+from typing import Any, cast
 
 from pysnmp.smi import builder
 
@@ -36,18 +36,18 @@ class BehaviourGenerator:
         load_default_plugins: bool = True,
     ) -> None:
         self.output_dir = output_dir
-        self._type_registry: Dict[str, Any] = {}
+        self._type_registry: dict[str, Any] = {}
         os.makedirs(self.output_dir, exist_ok=True)
 
         # Load plugins on initialization
         if load_default_plugins:
             loaded = load_plugins()
-            logger.info(f"Loaded {len(loaded)} default value plugins: {', '.join(loaded)}")
+            logger.info("%s", f"Loaded {len(loaded)} default value plugins: {', '.join(loaded)}")
 
     def generate(
         self,
         compiled_py_path: str,
-        mib_name: Optional[str] = None,
+        mib_name: str | None = None,
         force_regenerate: bool = True,
     ) -> str:
         """Generate schema JSON from a compiled MIB Python file.
@@ -65,8 +65,8 @@ class BehaviourGenerator:
 
         Returns:
             Path to the generated schema.json file
-        """
 
+        """
         if mib_name is None:
             mib_name = self._parse_mib_name_from_py(compiled_py_path)
 
@@ -128,12 +128,24 @@ class BehaviourGenerator:
                                     mib_builder.add_mib_sources(
                                         builder.DirMibSource(os.path.dirname(compiled_py_path))
                                     )
-                                except Exception:
+                                except (
+                                    AttributeError,
+                                    LookupError,
+                                    OSError,
+                                    TypeError,
+                                    ValueError,
+                                ):
                                     # either DirMibSource is missing (AttributeError) or
                                     # the add call failed; call without args (mocks accept it)
                                     try:
                                         mib_builder.add_mib_sources()
-                                    except Exception:
+                                    except (
+                                        AttributeError,
+                                        LookupError,
+                                        OSError,
+                                        TypeError,
+                                        ValueError,
+                                    ):
                                         # best-effort: move on if even that fails
                                         pass
                                 mib_builder.load_modules(mib_name)
@@ -142,9 +154,15 @@ class BehaviourGenerator:
                                 if entry_obj and hasattr(entry_obj, "getIndexNames"):
                                     index_names = [idx[2] for idx in entry_obj.getIndexNames()]
                                     entry_info["indexes"] = index_names
-                            except Exception as e:
+                            except (
+                                AttributeError,
+                                LookupError,
+                                OSError,
+                                TypeError,
+                                ValueError,
+                            ) as e:
                                 logger.warning(
-                                    f"Could not extract index columns for {entry_name}: {e}"
+                                    "Could not extract index columns for %s: %s", entry_name, e
                                 )
 
                         # Find columns: direct children of entry OID
@@ -164,7 +182,7 @@ class BehaviourGenerator:
                             ):
                                 columns.append(col_name)
                         # Build a default row with sensible values
-                        default_row = {}
+                        default_row: dict[str, Any] = {}
                         if not getattr(self, "_type_registry", None):
                             self._type_registry = self._load_type_registry()
                         index_names = entry_info.get("indexes", [])
@@ -227,21 +245,24 @@ class BehaviourGenerator:
             os.fsync(f.fileno())
         os.replace(tmp_path, json_path)
 
-        logger.info(f"Schema JSON written to {json_path} with {len(traps)} trap(s)")
+        logger.info("%s", f"Schema JSON written to {json_path} with {len(traps)} trap(s)")
         return str(json_path)
 
     def _parse_mib_name_from_py(self, compiled_py_path: str) -> str:
         """Parse the MIB name from the compiled Python file (looks for mibBuilder.exportSymbols)."""
-        with open(compiled_py_path, "r", encoding="utf-8") as f:
+        with open(compiled_py_path, encoding="utf-8") as f:
             for line in f:
                 if "mibBuilder.exportSymbols" in line:
-                    m = re.search(r'mibBuilder\.exportSymbols\(["\"]([A-Za-z0-9\-_.]+)["\"]', line)
+                    m = re.search(
+                        r'mibBuilder\.exportSymbols\(["\"]([A-Za-z0-9\-_.]+)["\"]',
+                        line,
+                    )
                     if m:
                         return m.group(1)
         # Fallback: use filename without extension
         return os.path.splitext(os.path.basename(compiled_py_path))[0]
 
-    def _extract_mib_info(self, mib_py_path: str, mib_name: str) -> Dict[str, Any]:
+    def _extract_mib_info(self, mib_py_path: str, mib_name: str) -> dict[str, Any]:
         """Extract MIB symbol information from a compiled MIB Python file.
 
         Args:
@@ -250,16 +271,16 @@ class BehaviourGenerator:
 
         Returns:
             Dictionary mapping symbol names to their metadata
-        """
 
+        """
         mib_builder = builder.MibBuilder()
         # Protect against minimal / mocked `builder` objects that lack DirMibSource
         try:
             mib_builder.add_mib_sources(builder.DirMibSource(os.path.dirname(mib_py_path)))
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             try:
                 mib_builder.add_mib_sources()
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 pass
         mib_builder.load_modules(mib_name)
         mib_symbols = mib_builder.mibSymbols[mib_name]
@@ -268,14 +289,17 @@ class BehaviourGenerator:
             mib_type = type(mib_symbols)
             mib_repr = repr(mib_symbols)[:500]
             logger.error(
-                f"mib_symbols for {mib_name} is not a dict (type={mib_type}). Value: {mib_repr}"
+                "mib_symbols for %s is not a dict (type=%s). Value: %s",
+                mib_name,
+                mib_type,
+                mib_repr,
             )
             # Place a breakpoint on the next line to inspect the value of mib_symbols
             raise TypeError(f"mib_symbols for {mib_name} is not a dict; cannot extract symbols.")
 
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         for symbol_name, symbol_obj in mib_symbols.items():
-            symbol_name_str: str = str(cast(Any, symbol_name))
+            symbol_name_str: str = str(cast("object", symbol_name))
             if not (hasattr(symbol_obj, "getName") and hasattr(symbol_obj, "getSyntax")):
                 continue
             try:
@@ -302,7 +326,7 @@ class BehaviourGenerator:
             # If type not in registry, try to infer base_type from type_name
             if not type_info and type_name:
                 # Map common type names to base types
-                base_type_map: Dict[str, str] = {
+                base_type_map: dict[str, str] = {
                     "INTEGER": "Integer32",
                     "OCTET STRING": "OctetString",
                     "OBJECT IDENTIFIER": "ObjectIdentifier",
@@ -321,7 +345,7 @@ class BehaviourGenerator:
                 # DEBUG
                 if symbol_name_str in ("ifAdminStatus", "ifOperStatus"):
                     logger.warning(
-                        f"DEBUG {symbol_name_str}: extracted enums = "
+                        "%s", f"DEBUG {symbol_name_str}: extracted enums = "
                         f"{extracted_type_info.get('enums')}"
                     )
                 # Merge extracted enums and constraints into type_info
@@ -375,12 +399,12 @@ class BehaviourGenerator:
         # Extract trap/notification definitions
         traps = self._extract_traps(mib_symbols, mib_name)
         if traps:
-            logger.info(f"Found {len(traps)} trap(s) in {mib_name}: {list(traps.keys())}")
+            logger.info("%s", f"Found {len(traps)} trap(s) in {mib_name}: {list(traps.keys())}")
 
-        logger.debug(f"Extracted MIB info for {mib_name}: {list(result.keys())}")
+        logger.debug("%s", f"Extracted MIB info for {mib_name}: {list(result.keys())}")
         return {"objects": result, "traps": traps}
 
-    def _extract_traps(self, mib_symbols: Dict[str, Any], mib_name: str) -> Dict[str, Any]:
+    def _extract_traps(self, mib_symbols: dict[str, Any], mib_name: str) -> dict[str, Any]:
         """Extract NOTIFICATION-TYPE definitions from MIB symbols.
 
         Args:
@@ -389,11 +413,12 @@ class BehaviourGenerator:
 
         Returns:
             Dictionary mapping trap names to their metadata (OID, objects, description)
+
         """
-        traps: Dict[str, Any] = {}
+        traps: dict[str, Any] = {}
 
         for symbol_name, symbol_obj in mib_symbols.items():
-            symbol_name_str: str = str(cast(Any, symbol_name))
+            symbol_name_str: str = str(cast("object", symbol_name))
 
             # Check if this is a NotificationType
             if symbol_obj.__class__.__name__ == "NotificationType":
@@ -439,15 +464,15 @@ class BehaviourGenerator:
                         "mib": mib_name,
                     }
                     logger.debug(
-                        f"Extracted trap {symbol_name_str} with OID {oid} "
+                        "%s", f"Extracted trap {symbol_name_str} with OID {oid} "
                         f"and {len(objects)} objects"
                     )
-                except Exception as e:
-                    logger.warning(f"Failed to extract trap info for {symbol_name_str}: {e}")
+                except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                    logger.warning("Failed to extract trap info for %s: %s", symbol_name_str, e)
 
         return traps
 
-    def _load_type_registry(self) -> Dict[str, Any]:
+    def _load_type_registry(self) -> dict[str, Any]:
         """Load the canonical type registry from the exported JSON file."""
         from pathlib import Path
 
@@ -458,10 +483,10 @@ class BehaviourGenerator:
                 "Run the type recorder/export step first."
             )
         with registry_path.open("r", encoding="utf-8") as f:
-            return cast(Dict[str, Any], json.load(f))
+            return cast("dict[str, Any]", json.load(f))
 
     def _detect_inherited_indexes(
-        self, result: Dict[str, Any], table_entries: Dict[str, Any], _mib_name: str
+        self, result: dict[str, Any], table_entries: dict[str, Any], _mib_name: str
     ) -> None:
         """Detect tables that inherit their index from another table (AUGMENTS pattern).
 
@@ -501,15 +526,16 @@ class BehaviourGenerator:
                 # Only mark as inherited if there are actually inherited index columns
                 if inherited_indexes and entry_name in result:
                     result[entry_name]["index_from"] = inherited_indexes
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 # Skip if we can't detect - not all objects have getIndexNames
                 pass
 
-    def _extract_type_info(self, syntax_obj: Any, syntax_name: str) -> Dict[str, Any]:
+    def _extract_type_info(self, syntax_obj: Any, syntax_name: str) -> dict[str, Any]:
         """Extract detailed type information from a syntax object.
 
         Returns:
             Dictionary with 'base_type', 'enums' (if applicable), 'constraints', etc.
+
         """
         # Determine base type by checking the class hierarchy (MRO)
         # For TextualConventions, we want the actual base SNMP type, not the TC name
@@ -538,7 +564,7 @@ class BehaviourGenerator:
                 base_type = cls_name
                 break
 
-        type_info: Dict[str, Any] = {
+        type_info: dict[str, Any] = {
             "base_type": base_type,
             "enums": None,
             "constraints": None,
@@ -565,7 +591,7 @@ class BehaviourGenerator:
                 else:
                     # For other constraint types, just convert to string
                     constraints.append(str(syntax_obj.subtypeSpec))
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 # If we can't extract constraints, just skip them
                 pass
             if constraints:
@@ -573,7 +599,7 @@ class BehaviourGenerator:
 
         return type_info
 
-    def _get_default_index_value(self, col_type: str, type_info: Dict[str, Any]) -> Any:
+    def _get_default_index_value(self, col_type: str, type_info: dict[str, Any]) -> object:
         """Get an appropriate default value for an index column based on its type.
 
         For complex types like IpAddress, returns a representative value.
@@ -590,7 +616,7 @@ class BehaviourGenerator:
             # For port numbers and similar, use a more realistic default
             # Check if this might be a port based on constraints
             if type_info:
-                base = type_info.get("base_type", "")
+                base = str(type_info.get("base_type", ""))
                 if "port" in base.lower():
                     return 8080
             return 1
@@ -599,7 +625,11 @@ class BehaviourGenerator:
         # Use the generic default value generator
         return self._get_default_value_from_type_info(type_info, "index")
 
-    def _get_default_value_from_type_info(self, type_info: Dict[str, Any], symbol_name: str) -> Any:
+    def _get_default_value_from_type_info(
+        self,
+        type_info: dict[str, Any],
+        symbol_name: str,
+    ) -> object:
         """Get a sensible default value based on type info and symbol name.
 
         This method uses the plugin system to determine default values.
@@ -607,6 +637,7 @@ class BehaviourGenerator:
 
         Raises:
             RuntimeError: If no plugin can provide a default value for the type.
+
         """
         # Try to get value from plugins
         value = get_default_value(type_info, symbol_name)
@@ -622,7 +653,7 @@ class BehaviourGenerator:
             f"in the plugins/ directory or ensure the type is properly registered."
         )
 
-    def _get_default_value(self, syntax: str, symbol_name: str) -> Any:
+    def _get_default_value(self, syntax: str, symbol_name: str) -> object:
         """Legacy method - kept for compatibility."""
         # This is now handled by _get_default_value_from_type_info
         # but kept as fallback
@@ -654,7 +685,7 @@ class BehaviourGenerator:
             return 0
         return None
 
-    def _get_dynamic_function(self, symbol_name: str) -> Any:
+    def _get_dynamic_function(self, symbol_name: str) -> object:
         """Determine if this symbol should use a dynamic function."""
         if symbol_name == "sysUpTime":
             return "uptime"

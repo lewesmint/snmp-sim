@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-import pytest
+from typing import TYPE_CHECKING
 
 from app.cli_bake_state import (
     backup_schemas,
@@ -14,9 +12,15 @@ from app.cli_bake_state import (
     main,
 )
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
+
 
 def test_backup_schemas_existing_and_missing(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test case for test_backup_schemas_existing_and_missing."""
     schema_dir = tmp_path / "agent-model"
@@ -40,7 +44,8 @@ def test_backup_schemas_existing_and_missing(
 
 
 def test_load_mib_state_missing_and_present(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test case for test_load_mib_state_missing_and_present."""
     missing = tmp_path / "mib_state.json"
@@ -87,7 +92,7 @@ def test_bake_state_into_schemas_scalars_and_tables(tmp_path: Path) -> None:
                 "oid": [1, 3, 6, 1, 2, 1, 4, 20, 1, 2],
                 "type": "Integer32",
             },
-        }
+        },
     }
     schema_file = mib_dir / "schema.json"
     schema_file.write_text(json.dumps(schema), encoding="utf-8")
@@ -100,9 +105,9 @@ def test_bake_state_into_schemas_scalars_and_tables(tmp_path: Path) -> None:
                     "column_values": {
                         "ipAdEntIfIndex": 7,
                         "ipAdEntAddr": "10.0.0.1",
-                    }
-                }
-            }
+                    },
+                },
+            },
         },
         "deleted_instances": [],
     }
@@ -120,7 +125,8 @@ def test_bake_state_into_schemas_scalars_and_tables(tmp_path: Path) -> None:
 
 
 def test_bake_state_handles_index_sentinel_and_bad_schema(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test case for test_bake_state_handles_index_sentinel_and_bad_schema."""
     schema_dir = tmp_path / "agent-model"
@@ -141,7 +147,7 @@ def test_bake_state_handles_index_sentinel_and_bad_schema(
                 "type": "MibTableRow",
                 "indexes": ["__index__"],
             },
-        }
+        },
     }
     (mib_dir / "schema.json").write_text(json.dumps(schema), encoding="utf-8")
     (bad_dir / "schema.json").write_text("{bad json", encoding="utf-8")
@@ -182,7 +188,7 @@ def test_main_no_backup_bakes_and_clears_state(tmp_path: Path) -> None:
                 "scalars": {"1.3.6.1.2.1.1.4": "admin@example.com"},
                 "tables": {},
                 "deleted_instances": [],
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -196,7 +202,7 @@ def test_main_no_backup_bakes_and_clears_state(tmp_path: Path) -> None:
             "--backup-dir",
             str(tmp_path / "backups"),
             "--no-backup",
-        ]
+        ],
     )
 
     assert code == 0
@@ -225,7 +231,7 @@ def test_bake_state_legacy_index_values_format(tmp_path: Path) -> None:
                 "type": "MibTableRow",
                 "indexes": "not-a-list",
             },
-        }
+        },
     }
     schema_file = mib_dir / "schema.json"
     schema_file.write_text(json.dumps(schema), encoding="utf-8")
@@ -233,7 +239,7 @@ def test_bake_state_legacy_index_values_format(tmp_path: Path) -> None:
     state = {
         "scalars": {},
         "tables": {
-            "1.3.6.1.4.1.99999.2": {"1": {"index_values": {"legacyIndex": 1, "legacyCol": "x"}}}
+            "1.3.6.1.4.1.99999.2": {"1": {"index_values": {"legacyIndex": 1, "legacyCol": "x"}}},
         },
         "deleted_instances": [],
     }
@@ -276,7 +282,7 @@ def test_main_with_backup_enabled_creates_backup_and_clears_state(
             str(state_file),
             "--backup-dir",
             str(backup_dir),
-        ]
+        ],
     )
 
     assert code == 0

@@ -1,13 +1,16 @@
 """Tests for test api."""
 
+import contextlib
 import json
+from collections.abc import Generator
 from pathlib import Path
-from typing import Dict, Any, Generator
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app import api
+from app import api_state
 
 client = TestClient(api.app)
 
@@ -16,10 +19,10 @@ client = TestClient(api.app)
 def restore_snmp_agent() -> Generator[None, None, None]:
     """Test case for restore_snmp_agent."""
     # Ensure we don't leak a fake snmp_agent between tests
-    original = getattr(api, "snmp_agent")
-    api.snmp_agent = None
+    original = api_state.state.snmp_agent
+    api_state.state.snmp_agent = None
     yield
-    api.snmp_agent = original
+    api_state.state.snmp_agent = original
 
 
 @pytest.fixture
@@ -32,10 +35,8 @@ def backup_types_json(tmp_path: Any, monkeypatch: Any) -> Generator[None, None, 
         backup = data_path.read_text()
     yield
     if backup is None:
-        try:
+        with contextlib.suppress(Exception):
             data_path.unlink()
-        except Exception:
-            pass
     else:
         data_path.write_text(backup)
 
@@ -52,7 +53,7 @@ def test_get_and_set_sysdescr_happy_path(mocker: Any) -> None:
     fake = mocker.MagicMock()
     oid = (1, 3, 6, 1, 2, 1, 1, 1, 0)
     fake.get_scalar_value.return_value = "My system"
-    api.snmp_agent = fake
+    api_state.state.snmp_agent = fake
 
     r = client.get("/sysdescr")
     assert r.status_code == 200
@@ -107,7 +108,7 @@ def test_get_type_info_found(backup_types_json: Any) -> None:
     """Test case for test_get_type_info_found."""
     # Prepare a registry where DisplayString -> OctetString and OctetString -> OCTET STRING
     Path("data").mkdir(exist_ok=True)
-    registry: Dict[str, Any] = {
+    registry: dict[str, Any] = {
         "DisplayString": {"base_type": "OctetString", "display_hint": "255a"},
         "OctetString": {"base_type": "OCTET STRING"},
     }
@@ -124,7 +125,7 @@ def test_get_type_info_found(backup_types_json: Any) -> None:
 def test_list_types(backup_types_json: Any) -> None:
     """Test case for test_list_types."""
     Path("data").mkdir(exist_ok=True)
-    registry: Dict[str, Any] = {"A": {}, "B": {}, "C": {}}
+    registry: dict[str, Any] = {"A": {}, "B": {}, "C": {}}
     Path("data/types.json").write_text(json.dumps(registry))
 
     r = client.get("/types")

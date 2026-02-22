@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from types import SimpleNamespace
 from tkinter import StringVar
-from typing import Any, cast
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, cast
 
 import ui.mib_browser as mib_browser_module
 from ui.common import Logger
 from ui.mib_browser import MIBBrowserWindow
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class _Var(StringVar):
@@ -56,7 +58,7 @@ class _Tree:
 
     def delete(self, item: str) -> None:
         """Test case for delete."""
-        for parent_id, parent_data in self.nodes.items():
+        for parent_data in self.nodes.values():
             if item in parent_data.get("children", []):
                 parent_data["children"].remove(item)
                 break
@@ -82,7 +84,7 @@ def _make_browser(tmp_path: Path) -> MIBBrowserWindow:
     browser.mib_cache_dir.mkdir(parents=True, exist_ok=True)
     browser.loaded_mibs = []
     browser.unsatisfied_mibs = {}
-    browser.mib_builder = cast(Any, SimpleNamespace(mibSymbols={}))
+    browser.mib_builder = cast("Any", SimpleNamespace(mibSymbols={}))
     browser.default_port = 161
     browser.host_var = _Var("127.0.0.1")
     browser.port_var = _Var("161")
@@ -193,7 +195,9 @@ def test_resolve_oid_name_and_format_errors(tmp_path: Path) -> None:
             return (1, 3, 6, 1, 2, 1, 1, 1, 0)
 
     browser.loaded_mibs = ["SNMPv2-MIB"]
-    browser.mib_builder = cast(Any, SimpleNamespace(mibSymbols={"SNMPv2-MIB": {"sysDescr": Sym()}}))
+    browser.mib_builder = cast(
+        "Any", SimpleNamespace(mibSymbols={"SNMPv2-MIB": {"sysDescr": Sym()}})
+    )
     assert browser._resolve_oid_name_to_tuple("sysDescr") == (1, 3, 6, 1, 2, 1, 1, 1, 0)
 
     msg = browser._format_mib_error(Exception("MibNotFoundError: 'sysDescr' compilation error"))
@@ -227,7 +231,8 @@ def test_create_object_identity_paths(monkeypatch: Any, tmp_path: Path) -> None:
     browser.loaded_mibs = []
     try:
         browser._create_object_identity("unknownName")
-        assert False, "Expected ValueError"
+        msg = "Expected ValueError"
+        raise AssertionError(msg)
     except ValueError as e:
         assert "no MIBs loaded" in str(e)
 
@@ -235,7 +240,8 @@ def test_create_object_identity_paths(monkeypatch: Any, tmp_path: Path) -> None:
     browser.loaded_mibs = ["SNMPv2-MIB"]
     try:
         browser._create_object_identity("unknownName")
-        assert False, "Expected ValueError"
+        msg = "Expected ValueError"
+        raise AssertionError(msg)
     except ValueError as e:
         assert "loaded MIBs: SNMPv2-MIB" in str(e)
 
@@ -268,7 +274,7 @@ def test_resolve_mib_dependencies_reports_resolved_and_missing(
 def test_tree_agent_and_operation_nodes_reuse_existing(tmp_path: Path) -> None:
     """Test case for test_tree_agent_and_operation_nodes_reuse_existing."""
     browser = _make_browser(tmp_path)
-    browser.results_tree = cast(Any, _Tree())
+    browser.results_tree = cast("Any", _Tree())
     browser.agent_tree_items = {}
     browser.agent_results = {}
 
@@ -286,7 +292,7 @@ def test_tree_agent_and_operation_nodes_reuse_existing(tmp_path: Path) -> None:
 def test_expand_collapse_and_clear_results(monkeypatch: Any, tmp_path: Path) -> None:
     """Test case for test_expand_collapse_and_clear_results."""
     browser = _make_browser(tmp_path)
-    browser.results_tree = cast(Any, _Tree())
+    browser.results_tree = cast("Any", _Tree())
     browser.logger = Logger()
     logs: list[tuple[str, str]] = []
     monkeypatch.setattr(

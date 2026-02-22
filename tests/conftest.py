@@ -1,18 +1,21 @@
 """Tests for conftest."""
 
-import sys
-import os
+import contextlib
 import json
+import os
+import sys
 import tempfile
-from pathlib import Path
-from typing import Generator, Any, Dict
-
-import pytest
-from app.types import TypeRegistry, JsonDict
 
 # Silence noisy DeprecationWarnings from pysnmp's generated MIBs (importSymbols/exportSymbols)
 # These come from compiled MIB files and the pysnmp library and are not actionable for this project.
 import warnings
+from collections.abc import Generator
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from app.types import JsonDict, TypeRegistry
 
 warnings.filterwarnings("ignore", ".*importSymbols is deprecated.*", DeprecationWarning)
 warnings.filterwarnings("ignore", ".*exportSymbols is deprecated.*", DeprecationWarning)
@@ -38,7 +41,7 @@ def _showwarning_filter(
         fn = str(filename)
         if category is DeprecationWarning and "compiled-mibs" in fn:
             return
-    except Exception:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         pass
     _orig_showwarning(message, category, filename, lineno, file=file, line=line)
 
@@ -125,7 +128,7 @@ def sample_mib_schema() -> JsonDict:
                 "type": "TimeTicks",
                 "access": "read-only",
             },
-        }
+        },
     }
 
 
@@ -156,7 +159,7 @@ def temp_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def mib_class_mocks(agent: Any, mocker: Any) -> Dict[str, Any]:
+def mib_class_mocks(agent: Any, mocker: Any) -> dict[str, Any]:
     """Ensure MIB class mocks are present on the agent.
 
     Tests that exercise MIB registration can include this fixture to get
@@ -164,7 +167,7 @@ def mib_class_mocks(agent: Any, mocker: Any) -> Dict[str, Any]:
     `MibScalar` set as MagicMocks on the provided `agent` object using
     `setattr(...)` which avoids mypy `attr-defined` errors in tests.
     """
-    mocks: Dict[str, Any] = {
+    mocks: dict[str, Any] = {
         "MibScalarInstance": mocker.MagicMock(),
         "MibTable": mocker.MagicMock(),
         "MibTableRow": mocker.MagicMock(),
@@ -208,7 +211,7 @@ def cleanup_asyncio_and_imports() -> Generator[None, None, None]:
             # If schema was corrupted to {"test": "schema"}, restore it
             if '{"test": "schema"}' in current_content:
                 schema_path.write_text(original_content)
-        except Exception:
+        except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
             pass
 
     # After each test, clean up asyncio event loops
@@ -221,20 +224,16 @@ def cleanup_asyncio_and_imports() -> Generator[None, None, None]:
                 task.cancel()
             # Run the loop briefly to process cancellations
             if not loop.is_running():
-                try:
+                with contextlib.suppress(Exception):
                     loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                except Exception:
-                    pass
             if not loop.is_closed():
                 loop.close()
-    except Exception:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         pass
 
     # Force garbage collection to clean up any lingering pysnmp objects
     gc.collect()
 
     # Reset the event loop for the next test
-    try:
+    with contextlib.suppress(Exception):
         asyncio.set_event_loop(asyncio.new_event_loop())
-    except Exception:
-        pass

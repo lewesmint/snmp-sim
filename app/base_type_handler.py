@@ -1,5 +1,4 @@
-"""
-BaseTypeHandler: Clean type system that only hardcodes the 3 ASN.1 base types.
+"""BaseTypeHandler: Clean type system that only hardcodes the 3 ASN.1 base types.
 
 According to SNMPv2-SMI (RFC 2578), only these 3 types are fundamental:
 - INTEGER
@@ -10,15 +9,14 @@ All other types (Integer32, Counter32, IpAddress, DisplayString, BITS, etc.)
 are derived types that should be resolved from the type registry.
 """
 
-from typing import Any, Optional
 import logging
+from typing import Any
 
 from app.types import TypeInfo, TypeRegistry
 
 
 class BaseTypeHandler:
-    """
-    Handles SNMP type resolution and value initialization using only base ASN.1 types.
+    """Handles SNMP type resolution and value initialization using only base ASN.1 types.
     All derived types, application types, and TEXTUAL-CONVENTIONs are resolved via type registry.
     """
 
@@ -29,13 +27,13 @@ class BaseTypeHandler:
         "OBJECT IDENTIFIER": "object_identifier",
     }
 
-    def __init__(self, type_registry: TypeRegistry, logger: Optional[logging.Logger] = None):
-        """
-        Initialize the BaseTypeHandler.
+    def __init__(self, type_registry: TypeRegistry, logger: logging.Logger | None = None):
+        """Initialize the BaseTypeHandler.
 
         Args:
             type_registry: Type registry dict mapping type names to type info
             logger: Optional logger instance
+
         """
         self.logger = logger or logging.getLogger(__name__)
         self._type_registry = type_registry
@@ -46,27 +44,27 @@ class BaseTypeHandler:
         return self._type_registry
 
     def get_type_info(self, type_name: str) -> TypeInfo:
-        """
-        Get type information from registry.
+        """Get type information from registry.
 
         Args:
             type_name: Name of the type (e.g., 'Integer32', 'DisplayString', 'IpAddress')
 
         Returns:
             Dict with type information, or empty dict if not found
+
         """
         result: TypeInfo = self.type_registry.get(type_name, {})
         return result
 
     def resolve_to_base_type(self, type_name: str) -> str:
-        """
-        Resolve any type name to its base ASN.1 type.
+        """Resolve any type name to its base ASN.1 type.
 
         Args:
-            type_name: Any SNMP type name
+            type_name: object SNMP type name
 
         Returns:
             One of: 'INTEGER', 'OCTET STRING', 'OBJECT IDENTIFIER'
+
         """
         # Check if it's already a base type
         if type_name in self.BASE_ASN1_TYPES:
@@ -108,12 +106,14 @@ class BaseTypeHandler:
             return self.resolve_to_base_type(base_type)
 
         # Default fallback
-        self.logger.warning(f"Could not resolve base type for '{type_name}', defaulting to INTEGER")
+        self.logger.warning(
+            "Could not resolve base type for '%s', defaulting to INTEGER",
+            type_name,
+        )
         return "INTEGER"
 
-    def get_default_value(self, type_name: str, context: Optional[TypeInfo] = None) -> Any:
-        """
-        Get a sensible default value for a type.
+    def get_default_value(self, type_name: str, context: TypeInfo | None = None) -> Any:
+        """Get a sensible default value for a type.
 
         Args:
             type_name: SNMP type name
@@ -121,6 +121,7 @@ class BaseTypeHandler:
 
         Returns:
             Default value appropriate for the type
+
         """
         context = context or {}
 
@@ -210,12 +211,11 @@ class BaseTypeHandler:
             return (0, 0)
 
         # Should never reach here
-        self.logger.warning(f"Unexpected base type '{base_type}' for '{type_name}'")
+        self.logger.warning("Unexpected base type '%s' for '%s'", base_type, type_name)
         return 0
 
     def create_pysnmp_value(self, type_name: str, value: Any, mib_builder: Any = None) -> Any:
-        """
-        Create a PySNMP value object for the given type and value.
+        """Create a PySNMP value object for the given type and value.
 
         Args:
             type_name: SNMP type name
@@ -224,6 +224,7 @@ class BaseTypeHandler:
 
         Returns:
             PySNMP value object
+
         """
         if mib_builder is None:
             # Return raw value if no MIB builder available
@@ -235,8 +236,8 @@ class BaseTypeHandler:
         if type_class is not None:
             try:
                 return type_class(value)
-            except Exception as e:
-                self.logger.warning(f"Failed to create {type_name} with value {value}: {e}")
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                self.logger.warning("Failed to create %s with value %s: %s", type_name, value, e)
                 return value
 
         # Fallback: create based on base type
@@ -257,14 +258,13 @@ class BaseTypeHandler:
                 from pysnmp.proto import rfc1902
 
                 return rfc1902.ObjectIdentifier(value)
-        except Exception as e:
-            self.logger.error(f"Failed to create PySNMP value: {e}")
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+            self.logger.error("Failed to create PySNMP value: %s", e)
 
         return value
 
-    def _get_pysnmp_type_class(self, type_name: str, mib_builder: Any) -> Optional[Any]:
-        """
-        Import PySNMP type class from MIB builder or rfc1902.
+    def _get_pysnmp_type_class(self, type_name: str, mib_builder: Any) -> Any | None:
+        """Import PySNMP type class from MIB builder or rfc1902.
 
         Strategy:
         1. Try MibBuilder first (for TEXTUAL-CONVENTIONs like DisplayString, PhysAddress)
@@ -280,6 +280,7 @@ class BaseTypeHandler:
 
         Returns:
             PySNMP type class or None if not found
+
         """
         # Try MibBuilder first - handles both base types and TEXTUAL-CONVENTIONs
         # SNMPv2-SMI: base types (Integer32, Counter32, etc.)
@@ -288,7 +289,7 @@ class BaseTypeHandler:
         for module in ["SNMPv2-SMI", "SNMPv2-TC", "SNMPv2-CONF"]:
             try:
                 return mib_builder.import_symbols(module, type_name)[0]
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 continue
 
         # Fallback to rfc1902 for base RFC 1902 types
@@ -304,8 +305,7 @@ class BaseTypeHandler:
         return None
 
     def validate_value(self, type_name: str, value: Any) -> bool:
-        """
-        Validate that a value is appropriate for the given type.
+        """Validate that a value is appropriate for the given type.
 
         Args:
             type_name: SNMP type name
@@ -313,6 +313,7 @@ class BaseTypeHandler:
 
         Returns:
             True if valid, False otherwise
+
         """
         type_info = self.get_type_info(type_name)
         base_type = self.resolve_to_base_type(type_name)

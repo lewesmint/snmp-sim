@@ -10,7 +10,8 @@ from app.snmp_agent import SNMPAgent
 
 @pytest.fixture
 def agent(
-    mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch
+    mocker: MockerFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[SNMPAgent, None, None]:
     """Create an SNMPAgent instance for testing."""
     # SNMPAgent doesn't have a _load_config method to patch
@@ -20,7 +21,7 @@ def agent(
     # Ensure mib_jsons is always present for all tests
     if not hasattr(agent, "mib_jsons"):
         agent.mib_jsons = {}
-    yield agent
+    return agent
 
 
 def test_mibs_loaded_from_config(agent: SNMPAgent) -> None:

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from typing import Any
+
+import httpx
 from fastapi import HTTPException
 
+from app.cli_load_model import load_all_schemas
 from app.model_paths import AGENT_MODEL_DIR
 
 
-def extract_schema_objects(schema: Any) -> dict[str, Any]:
+def extract_schema_objects(schema: Any) -> dict[str, Any]:  # noqa: ANN401
     """Extract objects dictionary from schema, handling both flat and nested formats."""
     if not isinstance(schema, dict):
         return {}
@@ -18,8 +21,6 @@ def extract_schema_objects(schema: Any) -> dict[str, Any]:
 
 def load_all_agent_schemas() -> dict[str, Any]:
     """Load all schemas from the agent-model directory."""
-    from app.cli_load_model import load_all_schemas
-
     return load_all_schemas(str(AGENT_MODEL_DIR))
 
 
@@ -38,13 +39,12 @@ def get_default_row_from_schemas(schemas: dict[str, Any], table_oid: str) -> dic
     return {}
 
 
-def should_use_default_value(val: Any) -> bool:
+def should_use_default_value(val: Any) -> bool:  # noqa: ANN401
     """Check if a value should be replaced with a default value."""
-    if val is None:
-        return True
-    if isinstance(val, str) and val.strip().lower() == "unset":
-        return True
-    return False
+    return (
+        val is None
+        or (isinstance(val, str) and val.strip().lower() == "unset")
+    )
 
 
 def extract_instance_index_str(values: dict[str, Any]) -> str:
@@ -156,12 +156,10 @@ def convert_index_value(  # noqa: PLR0912
 def load_table_schema_context(
     table_oid: str,
     fallback_index_values: dict[str, Any],
-    logger: Any,
+    logger: Any,  # noqa: ANN401
 ) -> tuple[dict[str, Any], list[str]]:
     """Load table schema context from the API, falling back to provided index values."""
     try:
-        import httpx
-
         schema_response = httpx.get(
             "http://127.0.0.1:8800/table-schema",
             params={"oid": table_oid},
@@ -173,10 +171,10 @@ def load_table_schema_context(
         index_columns = table_schema.get("index_columns", [])
         if isinstance(columns, dict) and isinstance(index_columns, list):
             return columns, [str(col) for col in index_columns]
-    except Exception as exc:
-        logger.warning(f"Could not fetch table schema: {exc}")
+    except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
+        logger.warning("Could not fetch table schema: %s", exc)
 
-    return {}, [str(col) for col in fallback_index_values.keys()]
+    return {}, [str(col) for col in fallback_index_values]
 
 
 def build_instance_index_string(
@@ -186,7 +184,7 @@ def build_instance_index_string(
     entry_oid: tuple[int, ...],
 ) -> str:
     """Build an instance index string from index column values."""
-    index_oid = entry_oid + (1,)
+    index_oid = (*entry_oid, 1)
     instance_index_str = ""
 
     for idx_col_name in index_columns:
@@ -203,7 +201,7 @@ def build_instance_index_string(
         )
 
         if isinstance(converted_val, tuple):
-            index_oid = index_oid + converted_val
+            index_oid = (*index_oid, *converted_val)
             instance_index_str += "." + ".".join(str(x) for x in converted_val)
         else:
             int_val = (
@@ -211,7 +209,7 @@ def build_instance_index_string(
                 if isinstance(converted_val, (int, float))
                 else int(str(converted_val))
             )
-            index_oid = index_oid + (int_val,)
+            index_oid = (*index_oid, int_val)
             instance_index_str += f".{int_val}"
 
     return instance_index_str.lstrip(".")
@@ -314,10 +312,9 @@ def normalize_and_extract_instances(
                         table_name,
                     )
 
-        instance_parts = []
-        for idx_col in index_columns:
-            if idx_col in row_data:
-                instance_parts.append(str(row_data[idx_col]))
+        instance_parts = [
+            str(row_data[idx_col]) for idx_col in index_columns if idx_col in row_data
+        ]
         instances.append(".".join(instance_parts) if instance_parts else "1")
 
     return instances

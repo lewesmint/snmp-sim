@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Dict
 
-
-ModelDict = Dict[str, Dict[str, Any]]
+ModelDict = dict[str, dict[str, object]]
 
 
 def print_model_summary(model: ModelDict) -> None:
@@ -39,6 +37,6 @@ def write_model_output(model: ModelDict, output_path: str) -> bool:
             json.dump(model, file_obj, indent=2)
         print(f"Model saved to {output_path}")
         return True
-    except IOError as error:
+    except OSError as error:
         print(f"Error: Failed to save model: {error}", file=sys.stderr)
         return False

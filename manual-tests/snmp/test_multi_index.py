@@ -15,12 +15,17 @@ class MockTable:
 
 
 # Create registrar with minimal args
-registrar = MibRegistrar(
+from app.mib_registrar import SNMPContext
+
+snmp_context = SNMPContext(
     mib_builder=object(),
     mib_scalar_instance=object(),
     mib_table=MockTable,
     mib_table_row=MockTable,
     mib_table_column=MockTable,
+)
+registrar = MibRegistrar(
+    snmp_context=snmp_context,
     logger=logger,
     start_time=0.0,
 )

@@ -4,28 +4,29 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Dict, Set, List, Optional, Any, cast
+from typing import Any, cast
 
 
 class MibDependencyResolver:
     """Resolves MIB dependencies by parsing IMPORTS sections."""
 
-    def __init__(self, mib_source_dirs: Optional[List[str]] = None):
+    def __init__(self, mib_source_dirs: list[str] | None = None):
         """Initialize the resolver with optional custom MIB directories.
 
         Args:
             mib_source_dirs: List of directories to search for MIB source files.
                             Defaults to common locations.
+
         """
         self.mib_source_dirs = mib_source_dirs or [
             "data/mibs_reference",
             "data/mibs",
             "compiled-mibs",  # Fallback to compiled MIBs if source not found
         ]
-        self._dependency_cache: Dict[str, Set[str]] = {}
-        self._mib_file_cache: Dict[str, Optional[str]] = {}
+        self._dependency_cache: dict[str, set[str]] = {}
+        self._mib_file_cache: dict[str, str | None] = {}
 
-    def _find_mib_source(self, mib_name: str) -> Optional[str]:
+    def _find_mib_source(self, mib_name: str) -> str | None:
         """Find a MIB source file by name.
 
         Args:
@@ -33,6 +34,7 @@ class MibDependencyResolver:
 
         Returns:
             Path to the MIB source file, or None if not found.
+
         """
         if mib_name in self._mib_file_cache:
             return self._mib_file_cache[mib_name]
@@ -67,7 +69,7 @@ class MibDependencyResolver:
         self._mib_file_cache[mib_name] = None
         return None
 
-    def _parse_imports(self, mib_path: str) -> Set[str]:
+    def _parse_imports(self, mib_path: str) -> set[str]:
         """Parse the IMPORTS section of a MIB file.
 
         Args:
@@ -75,14 +77,15 @@ class MibDependencyResolver:
 
         Returns:
             Set of MIB names imported by this MIB.
+
         """
         if not os.path.exists(mib_path):
             return set()
 
         try:
-            with open(mib_path, "r", encoding="utf-8") as f:
+            with open(mib_path, encoding="utf-8") as f:
                 content = f.read()
-        except (IOError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError):
             return set()
 
         # Extract IMPORTS section using regex
@@ -91,7 +94,7 @@ class MibDependencyResolver:
             return set()
 
         imports_text = imports_match.group(1)
-        imported_mibs: Set[str] = set()
+        imported_mibs: set[str] = set()
 
         # Parse "FROM MIB_NAME" patterns
         from_matches = re.findall(r"FROM\s+(\S+)", imports_text)
@@ -103,7 +106,7 @@ class MibDependencyResolver:
 
         return imported_mibs
 
-    def get_direct_dependencies(self, mib_name: str) -> Set[str]:
+    def get_direct_dependencies(self, mib_name: str) -> set[str]:
         """Get the direct dependencies of a MIB.
 
         Args:
@@ -111,6 +114,7 @@ class MibDependencyResolver:
 
         Returns:
             Set of MIB names directly imported by this MIB.
+
         """
         if mib_name in self._dependency_cache:
             return self._dependency_cache[mib_name].copy()
@@ -124,7 +128,7 @@ class MibDependencyResolver:
         self._dependency_cache[mib_name] = dependencies
         return dependencies.copy()
 
-    def get_all_dependencies(self, mib_name: str, visited: Optional[Set[str]] = None) -> Set[str]:
+    def get_all_dependencies(self, mib_name: str, visited: set[str] | None = None) -> set[str]:
         """Get all dependencies of a MIB (direct and transitive).
 
         Args:
@@ -133,6 +137,7 @@ class MibDependencyResolver:
 
         Returns:
             Set of all MIB names (direct and transitive) imported by this MIB.
+
         """
         if visited is None:
             visited = set()
@@ -141,7 +146,7 @@ class MibDependencyResolver:
             return set()
 
         visited.add(mib_name)
-        all_deps: Set[str] = set()
+        all_deps: set[str] = set()
 
         direct_deps = self.get_direct_dependencies(mib_name)
         all_deps.update(direct_deps)
@@ -151,7 +156,7 @@ class MibDependencyResolver:
 
         return all_deps
 
-    def build_dependency_tree(self, mib_names: List[str]) -> Dict[str, Dict[str, Any]]:
+    def build_dependency_tree(self, mib_names: list[str]) -> dict[str, dict[str, Any]]:
         """Build a hierarchical dependency tree for a list of MIBs.
 
         Args:
@@ -167,8 +172,9 @@ class MibDependencyResolver:
                     "is_configured": True/False    # Whether in the input list
                 }
             }
+
         """
-        tree: Dict[str, Dict[str, Any]] = {}
+        tree: dict[str, dict[str, Any]] = {}
 
         # Process each configured MIB
         for mib_name in mib_names:
@@ -199,7 +205,7 @@ class MibDependencyResolver:
 
         return tree
 
-    def get_configured_mibs_with_deps(self, mib_names: List[str]) -> Dict[str, Any]:
+    def get_configured_mibs_with_deps(self, mib_names: list[str]) -> dict[str, Any]:
         """Get a hierarchical structure of configured MIBs with their dependencies.
 
         Args:
@@ -212,6 +218,7 @@ class MibDependencyResolver:
                 "tree": {...},        # Full dependency tree
                 "summary": {...}      # Summary statistics
             }
+
         """
         tree = self.build_dependency_tree(mib_names)
 
@@ -230,7 +237,7 @@ class MibDependencyResolver:
             },
         }
 
-    def generate_mermaid_diagram(self, mib_names: List[str]) -> str:
+    def generate_mermaid_diagram(self, mib_names: list[str]) -> str:
         """Generate a Mermaid diagram showing MIB dependencies.
 
         Args:
@@ -238,18 +245,19 @@ class MibDependencyResolver:
 
         Returns:
             Mermaid diagram syntax as a string.
+
         """
         dependency_info = self.get_configured_mibs_with_deps(mib_names)
-        tree: Dict[str, Any] = cast(Dict[str, Any], dependency_info.get("tree", {}))
+        tree = cast("dict[str, dict[str, Any]]", dependency_info.get("tree", {}))
 
-        lines: List[str] = ["graph TD"]
-        added_nodes: Set[str] = set()
-        added_edges: Set[str] = set()
+        lines: list[str] = ["graph TD"]
+        added_nodes: set[str] = set()
+        added_edges: set[str] = set()
 
         # Add all nodes first, with styling based on whether they're configured
-        for mib_name in tree.keys():
+        for mib_name in tree:
             if mib_name not in added_nodes:
-                mib_data: Dict[str, Any] = cast(Dict[str, Any], tree[mib_name])
+                mib_data = tree[mib_name]
                 is_configured = mib_data.get("is_configured", False)
                 if is_configured:
                     # Configured MIBs: normal styling
@@ -268,9 +276,8 @@ class MibDependencyResolver:
                 added_nodes.add(mib_name)
 
         # Add edges for direct dependencies
-        for mib_name, mib_info_val in tree.items():
-            mib_info: Dict[str, Any] = cast(Dict[str, Any], mib_info_val)
-            direct_deps = mib_info.get("direct_deps", [])
+        for mib_name, mib_info in tree.items():
+            direct_deps = cast("list[str]", mib_info.get("direct_deps", []))
             for dep in direct_deps:
                 edge_key = f"{mib_name}->{dep}"
                 if edge_key not in added_edges:
@@ -281,7 +288,7 @@ class MibDependencyResolver:
 
         return "\n".join(lines)
 
-    def generate_mermaid_diagram_json(self, mib_names: List[str]) -> Dict[str, Any]:
+    def generate_mermaid_diagram_json(self, mib_names: list[str]) -> dict[str, Any]:
         """Generate a Mermaid diagram and return with metadata.
 
         Args:
@@ -289,6 +296,7 @@ class MibDependencyResolver:
 
         Returns:
             Dictionary with diagram and metadata.
+
         """
         diagram = self.generate_mermaid_diagram(mib_names)
         dependency_info = self.get_configured_mibs_with_deps(mib_names)

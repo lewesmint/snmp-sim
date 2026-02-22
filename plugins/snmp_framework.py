@@ -7,7 +7,8 @@ Handles SNMPv3 and SNMP Framework MIB objects that require special consideration
 
 import hashlib
 import socket
-from typing import Any, Optional
+from typing import Any
+
 from app.default_value_plugins import register_plugin
 from app.types import TypeInfo
 
@@ -28,7 +29,7 @@ def _generate_stable_engine_id() -> bytes:
     """
     try:
         hostname = socket.gethostname()
-    except Exception:
+    except (AttributeError, OSError):
         hostname = "python-snmp-agent"
 
     # RFC 3414 format prefix: 0x80 (private) + enterprise number (99999 = 0x0001869F)
@@ -42,13 +43,11 @@ def _generate_stable_engine_id() -> bytes:
 
     # Take first 11 bytes of hash to keep the full ID under typical length
     # Total: 5 (prefix) + 11 (suffix) = 16 bytes, which is reasonable
-    engine_id = prefix + suffix_hash[:11]
-
-    return engine_id
+    return prefix + suffix_hash[:11]
 
 
 # Cache the engine ID so it remains stable within the process
-_CACHED_ENGINE_ID: Optional[bytes] = None
+_CACHED_ENGINE_ID: bytes | None = None
 
 
 def _get_stable_engine_id() -> bytes:
@@ -62,7 +61,6 @@ def _get_stable_engine_id() -> bytes:
 @register_plugin("snmp_framework")
 def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
     """Provide default values for SNMP Framework MIB objects."""
-
     # snmpEngineID must be stable across agent restarts
     if symbol_name == "snmpEngineID":
         # Return as list of byte values (0-255) as expected by SNMP

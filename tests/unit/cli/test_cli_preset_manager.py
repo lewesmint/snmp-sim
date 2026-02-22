@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-import pytest
+from typing import TYPE_CHECKING
 
 from app.cli_preset_manager import (
     delete_preset,
@@ -14,6 +12,11 @@ from app.cli_preset_manager import (
     main,
     save_preset,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
 
 
 def test_list_presets_returns_sorted_names(tmp_path: Path) -> None:
@@ -37,7 +40,8 @@ def test_save_preset_missing_schema_dir(tmp_path: Path, capsys: pytest.CaptureFi
 
 
 def test_save_preset_creates_copy_and_metadata(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test case for test_save_preset_creates_copy_and_metadata."""
     schema_dir = tmp_path / "agent-model"
@@ -136,7 +140,9 @@ def test_load_preset_no_backup_skips_backup(tmp_path: Path) -> None:
 
 
 def test_delete_preset_paths(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test case for test_delete_preset_paths."""
     preset_base = tmp_path / "presets"
@@ -181,7 +187,7 @@ def test_main_dispatches_actions(
     assert "No presets found" in out_list_empty.out
 
     code_missing_name = main(
-        ["save", "--schema-dir", str(schema_dir), "--preset-dir", str(preset_dir)]
+        ["save", "--schema-dir", str(schema_dir), "--preset-dir", str(preset_dir)],
     )
     out_missing_name = capsys.readouterr()
     assert code_missing_name == 1
@@ -195,7 +201,7 @@ def test_main_dispatches_actions(
             str(schema_dir),
             "--preset-dir",
             str(preset_dir),
-        ]
+        ],
     )
     assert code_save == 0
 
@@ -215,7 +221,7 @@ def test_main_dispatches_actions(
             "--backup-dir",
             str(backup_dir),
             "--no-backup",
-        ]
+        ],
     )
     assert code_load == 0
 

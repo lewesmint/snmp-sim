@@ -1,5 +1,4 @@
-"""
-Practical test: Register a 2x2 table and try actual GET/GETNEXT operations.
+"""Practical test: Register a 2x2 table and try actual GET/GETNEXT operations.
 
 This test will:
 1. Create a simple test MIB with a 2x2 table
@@ -8,17 +7,18 @@ This test will:
 4. See what responses we get
 """
 
-import pytest
-from typing import Dict, Any
+import contextlib
+from typing import Any
 
-from pysnmp.smi import view
+import pytest
 from pysnmp.entity import engine
+from pysnmp.smi import view
 
 from app.table_registrar import TableRegistrar
 
 
 @pytest.fixture
-def test_mib_json() -> Dict[str, Any]:
+def test_mib_json() -> dict[str, Any]:
     """Create a test MIB JSON with a 2x2 table of Integer32 values."""
     return {
         "testTable": {
@@ -48,7 +48,7 @@ def test_mib_json() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def snmp_engine_with_table(test_mib_json: Dict[str, Any]) -> engine.SnmpEngine:
+def snmp_engine_with_table(test_mib_json: dict[str, Any]) -> engine.SnmpEngine:
     """Create an SNMP engine with our test table registered."""
     snmp_engine = engine.SnmpEngine()
     mib_builder = snmp_engine.get_mib_builder()
@@ -113,7 +113,7 @@ def snmp_engine_with_table(test_mib_json: Dict[str, Any]) -> engine.SnmpEngine:
     return snmp_engine
 
 
-def test_table_structure_is_registered(test_mib_json: Dict[str, Any]) -> None:
+def test_table_structure_is_registered(test_mib_json: dict[str, Any]) -> None:
     """Verify the table structure is correctly defined."""
     assert "testTable" in test_mib_json
     assert "testEntry" in test_mib_json
@@ -138,8 +138,7 @@ def test_snmp_engine_with_table_starts(
 def test_mib_view_can_query_unregistered_table(
     snmp_engine_with_table: engine.SnmpEngine,
 ) -> None:
-    """
-    Test what the MIB view returns when querying our unregistered table OID.
+    """Test what the MIB view returns when querying our unregistered table OID.
 
     Since we didn't export the table to pysnmp, the MIB view won't find it.
     This documents the current behavior and helps us understand what GETNEXT
@@ -155,16 +154,12 @@ def test_mib_view_can_query_unregistered_table(
         # Try to get the next MIB node - since our table isn't registered,
         # this should skip over our range
         modName, symName, indices = mib_view.getNextMibNode(table_oid)
-        print(f"getNextMibNode result: modName={modName}, symName={symName}, indices={indices}")
-    except Exception as e:
-        print(f"getNextMibNode failed: {type(e).__name__}: {e}")
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+        pass
 
     # Try to translate the table OID
-    try:
-        modName, symName, indices = mib_view.getNodeName((table_oid,))
-        print(f"getNodeName result: modName={modName}, symName={symName}, indices={indices}")
-    except Exception as e:
-        print(f"getNodeName failed: {type(e).__name__}: {e}")
+    with contextlib.suppress(Exception):
+        _modName, _symName, _indices = mib_view.getNodeName((table_oid,))
 
     # The key insight: without exporting to pysnmp, the MIB view doesn't know about our table
     # This means GETNEXT won't be able to properly handle table OIDs
@@ -172,8 +167,7 @@ def test_mib_view_can_query_unregistered_table(
 
 
 def test_table_oid_walkthrough() -> None:
-    """
-    Document the OID walk path through our 2x2 table.
+    """Document the OID walk path through our 2x2 table.
 
     This helps us understand what responses GETNEXT should return:
 
@@ -186,7 +180,6 @@ def test_table_oid_walkthrough() -> None:
     6. Get testValue.2 (.1.3.6.1.99.1.1.1.2.2) -> return 200
     7. Get next past table -> endOfMib
     """
-
     # Table structure
 
     # Columns (base OIDs without instance index)
@@ -194,12 +187,12 @@ def test_table_oid_walkthrough() -> None:
     testvalue_col = (1, 3, 6, 1, 99, 1, 1, 1, 2)
 
     # Instances for row 1
-    testindex_r1 = testindex_col + (1,)
-    testvalue_r1 = testvalue_col + (1,)
+    testindex_r1 = (*testindex_col, 1)
+    testvalue_r1 = (*testvalue_col, 1)
 
     # Instances for row 2
-    testindex_r2 = testindex_col + (2,)
-    testvalue_r2 = testvalue_col + (2,)
+    testindex_r2 = (*testindex_col, 2)
+    testvalue_r2 = (*testvalue_col, 2)
 
     # Expected GETNEXT walk (in order)
     getnext_walk = [
@@ -210,7 +203,7 @@ def test_table_oid_walkthrough() -> None:
     ]
 
     # Verify the OID structure is correct
-    for oid, expected_value in getnext_walk:
+    for oid, _expected_value in getnext_walk:
         assert len(oid) == 10, f"OID {oid} should have 10 parts"
         assert oid[:8] == (
             1,
@@ -223,8 +216,7 @@ def test_table_oid_walkthrough() -> None:
             1,
         ), f"OID {oid} should be in testEntry subtree"
 
-    print("Expected GETNEXT walk through table:")
-    for oid, value in getnext_walk:
-        print(f"  {oid} = {value}")
+    for oid, _value in getnext_walk:
+        pass
 
     assert len(getnext_walk) == 4, "Should have 4 accessible instances in 2x2 table"

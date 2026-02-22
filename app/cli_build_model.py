@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Dict, cast
+from typing import Any, cast
 
 from app.app_config import AppConfig
 from app.cli_model_common import print_model_summary as _print_model_summary
@@ -13,7 +13,7 @@ from app.cli_model_common import write_model_output
 from app.model_paths import AGENT_MODEL_DIR
 
 
-def load_mib_schema(mib_name: str, schema_dir: str) -> Dict[str, Any] | None:
+def load_mib_schema(mib_name: str, schema_dir: str) -> dict[str, Any] | None:
     """Load schema.json for a given MIB."""
     from pathlib import Path
 
@@ -23,13 +23,13 @@ def load_mib_schema(mib_name: str, schema_dir: str) -> Dict[str, Any] | None:
         return None
     try:
         with schema_path.open("r", encoding="utf-8") as f:
-            return cast(Dict[str, Any], json.load(f))
+            return cast("dict[str, Any]", json.load(f))
     except json.JSONDecodeError as e:
         print(f"Error: Failed to parse {schema_path}: {e}", file=sys.stderr)
         return None
 
 
-def build_internal_model(mibs: list[str], schema_dir: str) -> Dict[str, Dict[str, Any]]:
+def build_internal_model(mibs: list[str], schema_dir: str) -> dict[str, dict[str, Any]]:
     """Build internal model by loading all MIB schemas."""
     model = {}
     for mib in mibs:
@@ -39,7 +39,7 @@ def build_internal_model(mibs: list[str], schema_dir: str) -> Dict[str, Dict[str
     return model
 
 
-def print_model_summary(model: Dict[str, Dict[str, Any]]) -> None:
+def print_model_summary(model: dict[str, dict[str, Any]]) -> None:
     """Print a summary of the loaded model."""
     _print_model_summary(model)
 
@@ -68,7 +68,9 @@ def main(argv: list[str] | None = None) -> int:
         print("Error: Config file not found", file=sys.stderr)
         return 1
 
-    mibs = config.get("mibs", [])
+    mibs_raw = config.get("mibs", [])
+    mibs = mibs_raw if isinstance(mibs_raw, list) else []
+    mibs = [str(mib) for mib in mibs]
     if not mibs:
         print("No MIBs configured", file=sys.stderr)
         return 1

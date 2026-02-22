@@ -1,14 +1,14 @@
-"""
-Integration test for GETNEXT operations with real SNMP agent.
+"""Integration test for GETNEXT operations with real SNMP agent.
 
 This test actually initializes the SNMP agent, loads MIBs, registers
 objects, and verifies that GETNEXT operations work without SmiError exceptions.
 """
 
 import logging
+
 import pytest
-from pysnmp.smi import builder
 from pysnmp.entity import engine
+from pysnmp.smi import builder
 
 from app.table_registrar import TableRegistrar
 
@@ -33,10 +33,10 @@ def mib_builder(snmp_engine: engine.SnmpEngine) -> builder.MibBuilder:
 
 
 def test_snmp_agent_initialization_with_disabled_table_export(
-    snmp_engine: engine.SnmpEngine, mib_builder: builder.MibBuilder
+    snmp_engine: engine.SnmpEngine,
+    mib_builder: builder.MibBuilder,
 ) -> None:
-    """
-    Integration test: Initialize SNMP agent and verify it starts without errors.
+    """Integration test: Initialize SNMP agent and verify it starts without errors.
 
     This tests the actual app code path that registers scalars and tables.
     With the fix, table export is disabled, preventing __index_mib errors.
@@ -51,10 +51,10 @@ def test_snmp_agent_initialization_with_disabled_table_export(
 
 
 def test_table_registrar_does_not_export_table_symbols(
-    mib_builder: builder.MibBuilder, logger: logging.Logger
+    mib_builder: builder.MibBuilder,
+    logger: logging.Logger,
 ) -> None:
-    """
-    Integration test: Verify TableRegistrar doesn't export table symbols.
+    """Integration test: Verify TableRegistrar doesn't export table symbols.
 
     This directly tests the register_single_table method with real
     MIB builder instance to confirm tables are NOT exported to pysnmp.
@@ -110,13 +110,17 @@ def test_table_registrar_does_not_export_table_symbols(
         "SNMPv2-MIB": {
             "sysORTable": table_data["table"],
             "sysOREntry": table_data["entry"],
-        }
+        },
     }
 
     # Call the actual register_single_table method
     # With the fix, this should NOT call export_symbols for tables
     registrar.register_single_table(
-        "SNMPv2-MIB", "sysORTable", table_data, type_registry, mib_jsons
+        "SNMPv2-MIB",
+        "sysORTable",
+        table_data,
+        type_registry,
+        mib_jsons,
     )
 
     # If we get here without exception, the fix is working
@@ -126,8 +130,7 @@ def test_table_registrar_does_not_export_table_symbols(
 def test_mib_indexing_without_table_export_errors(
     mib_builder: builder.MibBuilder,
 ) -> None:
-    """
-    Integration test: Verify MIB classes can be imported without errors.
+    """Integration test: Verify MIB classes can be imported without errors.
 
     With the fix (disabled table export), the app should be able to
     import and use MIB classes without triggering unregister errors.
@@ -147,8 +150,7 @@ def test_mib_indexing_without_table_export_errors(
 
 
 def test_snmpagent_setup_workflow_completes(mib_builder: builder.MibBuilder) -> None:
-    """
-    Integration test: SnmpAgent setup completes without table export errors.
+    """Integration test: SnmpAgent setup completes without table export errors.
 
     This doesn't start the full agent (which requires network setup),
     but it tests the MIB initialization and registration flow.

@@ -4,43 +4,41 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
-from typing import Any, Dict
-from app.types import TypeRegistry
+from pathlib import Path
+
 from app.cli_model_common import print_model_summary as _print_model_summary
 from app.cli_model_common import write_model_output
 from app.model_paths import AGENT_MODEL_DIR
 
 
-def load_all_schemas(schema_dir: str) -> TypeRegistry:
+def load_all_schemas(schema_dir: str) -> dict[str, dict[str, object]]:
     """Load all schema.json files from subdirectories in schema_dir."""
-    model: TypeRegistry = {}
-    if not os.path.exists(schema_dir):
-        print(f"Schema directory not found: {schema_dir}", file=sys.stderr)
+    model: dict[str, dict[str, object]] = {}
+    schema_root = Path(schema_dir)
+    if not schema_root.exists():
+        sys.stderr.write(f"Schema directory not found: {schema_dir}\n")
         return model
 
-    from pathlib import Path
-
-    for item in os.listdir(schema_dir):
-        mib_dir = Path(schema_dir) / item
+    for mib_dir in schema_root.iterdir():
         if mib_dir.is_dir():
+            item = mib_dir.name
             schema_path = mib_dir / "schema.json"
             if schema_path.exists():
                 try:
-                    with open(schema_path, "r", encoding="utf-8") as f:
+                    with schema_path.open(encoding="utf-8") as f:
                         schema = json.load(f)
                     if schema:  # Only include non-empty schemas
                         model[item] = schema
                 except json.JSONDecodeError as e:
-                    print(f"Error loading {schema_path}: {e}", file=sys.stderr)
-                except Exception as e:
-                    print(f"Error processing {item}: {e}", file=sys.stderr)
+                    sys.stderr.write(f"Error loading {schema_path}: {e}\n")
+                except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                    sys.stderr.write(f"Error processing {item}: {e}\n")
 
     return model
 
 
-def print_model_summary(model: Dict[str, Dict[str, Any]]) -> None:
+def print_model_summary(model: dict[str, dict[str, object]]) -> None:
     """Print a summary of the loaded model."""
     _print_model_summary(model)
 
@@ -62,18 +60,17 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    print(f"Loading all schemas from {args.schema_dir}...")
+    sys.stdout.write(f"Loading all schemas from {args.schema_dir}...\n")
     model = load_all_schemas(args.schema_dir)
 
     if not model:
-        print("No schemas found or loaded", file=sys.stderr)
+        sys.stderr.write("No schemas found or loaded\n")
         return 1
 
     print_model_summary(model)
 
-    if args.output:
-        if not write_model_output(model, args.output):
-            return 1
+    if args.output and not write_model_output(model, args.output):
+        return 1
 
     return 0
 

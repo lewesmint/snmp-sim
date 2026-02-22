@@ -1,15 +1,16 @@
-"""
-Test that GETNEXT operations work correctly without SmiError exceptions.
+"""Test that GETNEXT operations work correctly without SmiError exceptions.
 
 This test verifies that the fix to disable table row/column export in pysnmp
 prevents __index_mib from attempting to unregister non-existent subtrees.
 """
 
 import logging
+from typing import Any, TypeAlias
+
 import pytest
-from typing import TypeAlias, Any
-from pysnmp.smi import builder
 from pysnmp.entity import engine
+from pysnmp.smi import builder
+
 from app.table_registrar import TableRegistrar
 
 # Type aliases for test data structures
@@ -31,8 +32,7 @@ def mib_builder() -> builder.MibBuilder:
 
 
 def test_table_registration_disabled_in_pysnmp(logger: logging.Logger, mocker: Any) -> None:
-    """
-    Verify that table symbols are NOT exported to pysnmp.
+    """Verify that table symbols are NOT exported to pysnmp.
 
     This prevents __index_mib() from attempting to unregister subtrees
     that were never properly indexed/registered.
@@ -82,12 +82,16 @@ def test_table_registration_disabled_in_pysnmp(logger: logging.Logger, mocker: A
         "SNMPv2-MIB": {
             "sysORTable": {"oid": [1, 3, 6, 1, 2, 1, 1, 9]},
             "sysOREntry": {"oid": [1, 3, 6, 1, 2, 1, 1, 9, 1]},
-        }
+        },
     }
 
     # Call register_single_table - should NOT export to pysnmp
     registrar.register_single_table(
-        "SNMPv2-MIB", "sysORTable", table_data, type_registry, mib_jsons
+        "SNMPv2-MIB",
+        "sysORTable",
+        table_data,
+        type_registry,
+        mib_jsons,
     )
 
     # CRITICAL: export_symbols should NOT have been called
@@ -96,8 +100,7 @@ def test_table_registration_disabled_in_pysnmp(logger: logging.Logger, mocker: A
 
 
 def test_getnext_with_scalars_only() -> None:
-    """
-    Verify GETNEXT works when only scalars are registered (no tables).
+    """Verify GETNEXT works when only scalars are registered (no tables).
 
     This is the expected behavior after the fix.
     """
@@ -110,8 +113,7 @@ def test_getnext_with_scalars_only() -> None:
 
 
 def test_disabled_table_export_log_message(logger: logging.Logger, mocker: Any) -> None:
-    """
-    Verify that the logger is properly configured.
+    """Verify that the logger is properly configured.
 
     This confirms the test setup is in place.
     """
@@ -136,8 +138,7 @@ def test_disabled_table_export_log_message(logger: logging.Logger, mocker: Any) 
 
 
 def test_export_symbols_not_called(logger: logging.Logger, mocker: Any) -> None:
-    """
-    Verify that export_symbols is NOT called when registering tables.
+    """Verify that export_symbols is NOT called when registering tables.
 
     This is the core fix: disabled table export prevents __index_mib errors.
     """
@@ -165,7 +166,7 @@ def test_export_symbols_not_called(logger: logging.Logger, mocker: Any) -> None:
                 "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 1],
                 "type": "Integer32",
                 "access": "read-only",
-            }
+            },
         },
         "prefix": "sysOR",
     }
@@ -174,7 +175,11 @@ def test_export_symbols_not_called(logger: logging.Logger, mocker: Any) -> None:
     mib_jsons: MIBJSONs = {"SNMPv2-MIB": {}}
 
     registrar.register_single_table(
-        "SNMPv2-MIB", "sysORTable", table_data, type_registry, mib_jsons
+        "SNMPv2-MIB",
+        "sysORTable",
+        table_data,
+        type_registry,
+        mib_jsons,
     )
 
     # VERIFY: export_symbols should NOT be called

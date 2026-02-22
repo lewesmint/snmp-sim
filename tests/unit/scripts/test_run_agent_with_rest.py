@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import runpy
 import socket
+import sys
 import threading
 from typing import Any
 
+import pytest
 import uvicorn
 
 import app.api
+from app import api_state
 import app.snmp_agent
 import run_agent_with_rest as raw
 
@@ -31,14 +34,13 @@ def test_run_snmp_agent_handles_success() -> None:
 def test_run_snmp_agent_reports_error(capsys: Any) -> None:
     class DummyAgent:
         def run(self) -> None:
-            raise RuntimeError("boom")
+            msg = "boom"
+            raise RuntimeError(msg)
 
-    try:
-        bad_agent: Any = DummyAgent()
+    bad_agent: Any = DummyAgent()
+    with pytest.raises(SystemExit) as exc:
         raw.run_snmp_agent(bad_agent)
-        assert False, "Expected SystemExit"
-    except SystemExit as exc:
-        assert exc.code == 1
+    assert exc.value.code == 1
 
     output = capsys.readouterr()
     assert "SNMP Agent ERROR" in output.err
@@ -71,20 +73,18 @@ def test_main_starts_uvicorn_and_sets_agent(monkeypatch: Any) -> None:
 
     def fake_run(*args: Any, **kwargs: Any) -> None:
         run_calls.append((args, kwargs))
-        raise SystemExit(0)
+        return None
 
     monkeypatch.setattr(app.snmp_agent, "SNMPAgent", DummyAgent)
     monkeypatch.setattr(threading, "Thread", DummyThread)
     monkeypatch.setattr(uvicorn, "run", fake_run)
     monkeypatch.setattr(socket, "socket", lambda *_a, **_k: DummySocket())
-    monkeypatch.setattr(raw.sys, "argv", ["run_agent_with_rest.py"])
+    monkeypatch.setattr(sys, "argv", ["run_agent_with_rest.py"])
 
-    try:
+    with pytest.raises(SystemExit):
         runpy.run_module("run_agent_with_rest", run_name="__main__")
-    except SystemExit:
-        pass
 
-    assert isinstance(app.api.snmp_agent, DummyAgent)
+    assert api_state.state.snmp_agent is not None
     assert run_calls
     args, kwargs = run_calls[0]
     assert args[0] == "app.api:app"

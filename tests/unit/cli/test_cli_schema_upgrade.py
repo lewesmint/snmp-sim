@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-import pytest
+from typing import TYPE_CHECKING
 
 from app.cli_schema_upgrade import _iter_schema_files, main
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
 
 
 def test_iter_schema_files_returns_sorted_paths(tmp_path: Path) -> None:
@@ -34,7 +37,8 @@ def test_main_returns_error_when_schema_dir_missing(
 
 
 def test_main_returns_error_when_no_schema_files(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test case for test_main_returns_error_when_no_schema_files."""
     empty_dir = tmp_path / "agent-model"
@@ -48,7 +52,8 @@ def test_main_returns_error_when_no_schema_files(
 
 
 def test_main_updates_only_changed_files(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test case for test_main_updates_only_changed_files."""
     schema_dir = tmp_path / "agent-model"
@@ -72,7 +77,8 @@ def test_main_updates_only_changed_files(
 
 
 def test_main_skips_non_dict_json_and_handles_bad_json(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test case for test_main_skips_non_dict_json_and_handles_bad_json."""
     schema_dir = tmp_path / "agent-model"

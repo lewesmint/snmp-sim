@@ -1,14 +1,17 @@
 """Tests for test agent registration."""
 
+from typing import Any
+
 import pytest
 from pytest_mock import MockerFixture
-from typing import Any
 
 from app.snmp_agent import SNMPAgent
 
 
 def test_register_mib_objects_handles_tcs(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Any, mocker: MockerFixture
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    mocker: MockerFixture,
 ) -> None:
     """Test that SNMPAgent can register MIB objects including TEXTUAL-CONVENTION types."""
     # Minimal MIB JSON with objects

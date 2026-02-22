@@ -8,7 +8,7 @@ import ui.snmp_gui as sg
 
 
 class _DummyVar:
-    def __init__(self, value: Any):
+    def __init__(self, value: Any) -> None:
         self._value = value
 
     def get(self) -> Any:
@@ -17,7 +17,7 @@ class _DummyVar:
 
 
 class _DummyEntry:
-    def __init__(self, value: str):
+    def __init__(self, value: str) -> None:
         self._value = value
 
     def get(self) -> str:
@@ -40,13 +40,13 @@ class _DummyText:
 
 
 class _Resp:
-    def __init__(self, status_code: int = 200, text: str = ""):
+    def __init__(self, status_code: int = 200, text: str = "") -> None:
         self.status_code = status_code
         self.text = text
 
 
 class _JsonResp:
-    def __init__(self, status_code: int, payload: dict[str, Any]):
+    def __init__(self, status_code: int, payload: dict[str, Any]) -> None:
         self.status_code = status_code
         self._payload = payload
 
@@ -60,7 +60,7 @@ def _mk_gui() -> sg.SNMPControllerGUI:
     gui.api_url = "http://test"
     gui.oid_metadata = {}
     gui.table_schemas = {}
-    setattr(gui, "_log", lambda *args, **kwargs: None)
+    gui._log = lambda *args, **kwargs: None
     return gui
 
 
@@ -78,12 +78,12 @@ def test_links_helpers_format_and_parse_endpoints() -> None:
         [
             {"table_oid": "1.2.3", "column": "ifDescr"},
             {"table_oid": None, "column": "sysName"},
-        ]
+        ],
     )
     assert formatted == "1.2.3:ifDescr | sysName"
 
     parsed = gui._parse_endpoints_text(
-        "\n1.3.6.1.2.1.2.2.1 ifDescr\n1.3.6.1.2.1.2.2:ifType\nsysName\n"
+        "\n1.3.6.1.2.1.2.2.1 ifDescr\n1.3.6.1.2.1.2.2:ifType\nsysName\n",
     )
     assert parsed == [
         {"table_oid": "1.3.6.1.2.1.2.2.1", "column": "ifDescr"},
@@ -178,7 +178,7 @@ def test_decompose_table_oid_returns_table_column_and_instance() -> None:
                 "ifDescr": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2]},
                 "ifAdminStatus": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 7]},
             },
-        }
+        },
     }
     result = gui._decompose_table_oid("1.3.6.1.2.1.2.2.1.7.3")
     assert result == ("1.3.6.1.2.1.2.2", "ifAdminStatus", "3")
@@ -255,8 +255,8 @@ def test_resolve_apply_overrides_and_payload(monkeypatch: Any) -> None:
 def test_log_send_helpers_write_text_widget() -> None:
     """Test case for test_log_send_helpers_write_text_widget."""
     gui = _mk_gui()
-    log_text = cast(Any, _DummyText())
-    setattr(gui, "log_text", log_text)
+    log_text = cast("Any", _DummyText())
+    gui.log_text = log_text
 
     gui._log_send_result("127.0.0.1", 162, "coldStart", {"trap_oid": [1, 3, 6, 1]})
     gui._log_send_failure("127.0.0.1", 162, "coldStart", Exception("net down"))
@@ -314,7 +314,7 @@ def test_interface_indices_probe_fallback(monkeypatch: Any) -> None:
     gui = _mk_gui()
 
     class _ProbeResp:
-        def __init__(self, status_code: int):
+        def __init__(self, status_code: int) -> None:
             self.status_code = status_code
 
         def json(self) -> dict[str, Any]:

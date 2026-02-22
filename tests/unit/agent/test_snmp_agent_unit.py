@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import sys
 import types
-import pytest
 from types import SimpleNamespace
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+import pytest
 
 from app.snmp_agent import SNMPAgent
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_snmp_agent_init() -> None:
@@ -90,7 +93,6 @@ def test_snmp_agent_default_host_port() -> None:
 
 def test_register_scalars_defaults_and_sysuptime_deprecated() -> None:
     """NOTE: Tests for _register_scalars are deprecated - this method is internal."""
-    pass
 
 
 def test_shutdown_closes_dispatcher_and_exits(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -140,15 +142,16 @@ def test_setup_signal_handlers_registers_signals(
     agent._setup_signal_handlers()
 
     # Ensure SIGTERM and SIGINT are registered
-    assert any(r == getattr(__import__("signal"), "SIGTERM") for r in registrations)
-    assert any(r == getattr(__import__("signal"), "SIGINT") for r in registrations)
+    assert any(r == __import__("signal").SIGTERM for r in registrations)
+    assert any(r == __import__("signal").SIGINT for r in registrations)
     # SIGHUP may or may not exist; if it does, it should be registered
     if hasattr(__import__("signal"), "SIGHUP"):
-        assert any(r == getattr(__import__("signal"), "SIGHUP") for r in registrations)
+        assert any(r == __import__("signal").SIGHUP for r in registrations)
 
 
 def test_run_aborts_when_type_registry_validation_fails(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_run_aborts_when_type_registry_validation_fails."""
     agent = SNMPAgent(preloaded_model={})
@@ -196,7 +199,7 @@ def test_register_mib_objects_creates_registrar_and_calls_register_all() -> None
             self.registered = True
             self._mib_jsons = mib_jsons
 
-    setattr(mod, "MibRegistrar", DummyRegistrar)
+    mod.MibRegistrar = DummyRegistrar  # type: ignore[attr-defined]
 
     # Insert into sys.modules so the import inside the method picks it up
     sys.modules["app.mib_registrar"] = mod
@@ -229,7 +232,7 @@ def test_decode_value_delegates_and_fallback(monkeypatch: pytest.MonkeyPatch) ->
             return f"decoded:{value}"
 
     mod = types.ModuleType("app.mib_registrar")
-    setattr(mod, "MibRegistrar", DummyReg)
+    mod.MibRegistrar = DummyReg  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "app.mib_registrar", mod)
 
     agent = SNMPAgent(preloaded_model={})
@@ -244,10 +247,11 @@ def test_decode_value_delegates_and_fallback(monkeypatch: pytest.MonkeyPatch) ->
             """Test helper class for MibRegistrar."""
 
             def __init__(self, *_args: Any, **_kwargs: Any) -> None:
-                raise RuntimeError("bad")
+                msg = "bad"
+                raise RuntimeError(msg)
 
     mod_bad = types.ModuleType("app.mib_registrar")
-    setattr(mod_bad, "MibRegistrar", BadMod.MibRegistrar)
+    mod_bad.MibRegistrar = BadMod.MibRegistrar  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "app.mib_registrar", mod_bad)
 
     agent2 = SNMPAgent(preloaded_model={})
@@ -256,7 +260,9 @@ def test_decode_value_delegates_and_fallback(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_setup_snmpEngine_loads_compiled_modules(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_setup_snmpEngine_loads_compiled_modules."""
     # Prepare a fake compiled-mibs directory with one module
@@ -337,8 +343,8 @@ def test_setup_snmpEngine_loads_compiled_modules(
         "pysnmp.entity.rfc3413.context",
         types.SimpleNamespace(
             SnmpContext=lambda eng: types.SimpleNamespace(
-                get_mib_instrum=lambda: types.SimpleNamespace(get_mib_builder=fake_get_mib_builder)
-            )
+                get_mib_instrum=lambda: types.SimpleNamespace(get_mib_builder=fake_get_mib_builder),
+            ),
         ),
     )
 
@@ -358,7 +364,9 @@ def test_setup_snmpEngine_loads_compiled_modules(
 
 
 def test_setup_snmpEngine_handles_no_compiled_modules(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_setup_snmpEngine_handles_no_compiled_modules."""
     compiled_dir = tmp_path / "compiled-mibs-absent"
@@ -373,7 +381,6 @@ def test_setup_snmpEngine_handles_no_compiled_modules(
 
         def register_transport_dispatcher(self, dispatcher: Any) -> None:
             """Test case for register_transport_dispatcher."""
-            pass
 
     monkeypatch.setitem(
         sys.modules,
@@ -429,9 +436,9 @@ def test_setup_snmpEngine_handles_no_compiled_modules(
         types.SimpleNamespace(
             SnmpContext=lambda eng: types.SimpleNamespace(
                 get_mib_instrum=lambda: types.SimpleNamespace(
-                    get_mib_builder=lambda: FakeMibBuilder()
-                )
-            )
+                    get_mib_builder=FakeMibBuilder,
+                ),
+            ),
         ),
     )
     monkeypatch.setitem(
@@ -468,7 +475,9 @@ def test_setup_transport_adds_transport(monkeypatch: pytest.MonkeyPatch) -> None
         calls["transport"] = transport
 
     monkeypatch.setitem(
-        sys.modules, "pysnmp.carrier.asyncio.dgram", types.SimpleNamespace(udp=FakeUdp)
+        sys.modules,
+        "pysnmp.carrier.asyncio.dgram",
+        types.SimpleNamespace(udp=FakeUdp),
     )
     # Ensure the pysnmp config.add_transport used in the function is our fake
     try:
@@ -477,7 +486,7 @@ def test_setup_transport_adds_transport(monkeypatch: pytest.MonkeyPatch) -> None
         cfg_mod = importlib.import_module("pysnmp.entity.config")
         monkeypatch.setattr(cfg_mod, "add_transport", fake_add_transport, raising=False)
         monkeypatch.setattr(cfg_mod, "SNMP_UDP_DOMAIN", "udp", raising=False)
-    except Exception:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         monkeypatch.setitem(
             sys.modules,
             "pysnmp.entity.config",
@@ -521,13 +530,13 @@ def test_setup_responders_registers_responders(monkeypatch: pytest.MonkeyPatch) 
         monkeypatch.setattr(real_cmdrsp, "NextCommandResponder", Dummy, raising=False)
         monkeypatch.setattr(real_cmdrsp, "BulkCommandResponder", Dummy, raising=False)
         monkeypatch.setattr(real_cmdrsp, "SetCommandResponder", Dummy, raising=False)
-    except Exception:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         monkeypatch.setitem(sys.modules, "pysnmp.entity.rfc3413.cmdrsp", cmdrsp_mod)
 
     agent = SNMPAgent(preloaded_model={})
     # Provide lightweight objects compatible with pysnmp cmdrsp expectations
     engine_obj = types.SimpleNamespace(
-        message_dispatcher=types.SimpleNamespace(register_context_engine_id=lambda *_a, **_k: None)
+        message_dispatcher=types.SimpleNamespace(register_context_engine_id=lambda *_a, **_k: None),
     )
     context_obj = types.SimpleNamespace(contextEngineId="ctxid")
     agent.snmpEngine = engine_obj

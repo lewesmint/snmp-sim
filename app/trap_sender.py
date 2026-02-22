@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Literal, Optional, Sequence, Tuple, Union, cast
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any, Literal, Union, cast
 
 from pysnmp.hlapi.v3arch.asyncio import (
     CommunityData,
@@ -17,14 +18,14 @@ from pysnmp.hlapi.v3arch.asyncio import (
     UdpTransportTarget,
     send_notification,
 )
-from pysnmp.smi import error as snmp_error
 from pysnmp.smi import builder as snmp_builder
+from pysnmp.smi import error as snmp_error
 
-OidIndex = Union[int, str, Tuple[int, ...]]
+OidIndex = Union[int, str, tuple[int, ...]]
 VarBindSpec = Union[
     ObjectType,
-    Tuple[str, str, Any],  # (mib, symbol, value) for scalars
-    Tuple[str, str, Any, OidIndex],  # (mib, symbol, value, index) for table columns
+    tuple[str, str, object],  # (mib, symbol, value) for scalars
+    tuple[str, str, object, OidIndex],  # (mib, symbol, value, index) for table columns
 ]
 
 
@@ -56,7 +57,7 @@ class TrapSender:
     def _configure_mib_sources(self, engine: Any) -> None:
         try:
             mib_builder = engine.getMibBuilder()
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             return
 
         compiled_dir = Path(__file__).resolve().parent.parent / "compiled-mibs"
@@ -70,14 +71,14 @@ class TrapSender:
             try:
                 add_sources(mib_source)
                 return
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 pass
 
         add_sources_alt = getattr(mib_builder, "addMibSources", None)
         if callable(add_sources_alt):
             try:
                 add_sources_alt(mib_source)
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 pass
 
     @staticmethod
@@ -90,7 +91,7 @@ class TrapSender:
             and spec.__class__.__module__.startswith("pysnmp")
             and hasattr(spec, "resolveWithMib")
         ):
-            return cast(ObjectType, spec)
+            return cast("ObjectType", spec)
 
         if not isinstance(spec, tuple):
             raise TypeError(
@@ -120,7 +121,7 @@ class TrapSender:
         mib: str,
         notification: str,
         trap_type: Literal["trap", "inform"] = "inform",
-        extra_varbinds: Optional[Sequence[VarBindSpec]] = None,
+        extra_varbinds: Sequence[VarBindSpec] | None = None,
     ) -> None:
         """Send a MIB-defined notification to the configured destination.
 
@@ -129,6 +130,7 @@ class TrapSender:
             notification: NOTIFICATION-TYPE symbol name.
             trap_type: Either unconfirmed `trap` or confirmed `inform`.
             extra_varbinds: Optional additional varbinds to include.
+
         """
         engine = self.snmp_engine
 
@@ -140,7 +142,7 @@ class TrapSender:
             coerced = [self._coerce_varbind(vb) for vb in extra_varbinds]
             notif = notif.add_var_binds(*coerced)
 
-        async def _send_with(target_engine: Any) -> tuple[Any, Any, Any, Any]:
+        async def _send_with(target_engine: object) -> tuple[object, object, object, object]:
             result = await send_notification(
                 target_engine,
                 CommunityData(self.community),
@@ -149,7 +151,7 @@ class TrapSender:
                 trap_type,
                 notif,
             )
-            return cast(tuple[Any, Any, Any, Any], result)
+            return cast("tuple[object, object, object, object]", result)
 
         try:
             error_indication, error_status, error_index, _ = await _send_with(engine)
@@ -189,10 +191,9 @@ class TrapSender:
         mib: str,
         notification: str,
         trap_type: Literal["trap", "inform"] = "inform",
-        extra_varbinds: Optional[Sequence[VarBindSpec]] = None,
+        extra_varbinds: Sequence[VarBindSpec] | None = None,
     ) -> None:
-        """
-        Synchronous wrapper.
+        """Synchronous wrapper.
 
         If called from within a running event loop, this schedules the send and returns.
         """

@@ -3,22 +3,28 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
-from typing import Iterable
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from app.generator import BehaviourGenerator
 from app.app_config import AppConfig
+from app.generator import BehaviourGenerator
 from app.model_paths import AGENT_MODEL_DIR, COMPILED_MIBS_DIR
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+# Magic number: expected length of split result for FROM parsing
+_EXPECTED_FROM_PARTS = 2
 
 
 def check_imported_mibs(mib_txt_path: str, compiled_dir: str) -> None:
     """Parse IMPORTS in a MIB text file and warn about missing compiled MIBs."""
-    if not os.path.exists(mib_txt_path):
-        print(f"WARNING: MIB source file {mib_txt_path} not found for import check.")
+    if not Path(mib_txt_path).exists():
+        print(f"WARNING: MIB source file {mib_txt_path} not found for import check.")  # noqa: T201
         return
 
-    with open(mib_txt_path, "r", encoding="utf-8") as f:
+    with Path(mib_txt_path).open(encoding="utf-8") as f:
         lines = f.readlines()
 
     in_imports = False
@@ -35,17 +41,15 @@ def check_imported_mibs(mib_txt_path: str, compiled_dir: str) -> None:
             else:
                 line_part = stripped_line
             parts = line_part.split("FROM")
-            if len(parts) == 2:
+            if len(parts) == _EXPECTED_FROM_PARTS:
                 mib_name = parts[1].strip().rstrip(";")
                 mib_name = mib_name.split()[0]
                 imported_mibs.add(mib_name)
 
     for mib in imported_mibs:
-        from pathlib import Path
-
         py_path = Path(compiled_dir) / f"{mib}.py"
         if not py_path.exists():
-            print(
+            print(  # noqa: T201
                 f"WARNING: MIB imports {mib}, but {py_path} is missing. "
                 "Compile this MIB to avoid runtime errors."
             )
@@ -93,30 +97,38 @@ def main(argv: Iterable[str] | None = None) -> int:
         try:
             config = AppConfig()
         except FileNotFoundError:
-            print("Error: Config file not found, and no MIB specified", file=sys.stderr)
+            print(  # noqa: T201
+                "Error: Config file not found, and no MIB specified",
+                file=sys.stderr,
+            )
             return 1
-        mibs = config.get("mibs", [])
+        mibs_raw = config.get("mibs", [])
+        mibs = mibs_raw if isinstance(mibs_raw, list) else []
+        mibs = [str(mib) for mib in mibs]
         if not mibs:
-            print("No MIBs configured", file=sys.stderr)
+            print("No MIBs configured", file=sys.stderr)  # noqa: T201
             return 1
         for mib in mibs:
             compiled_path = COMPILED_MIBS_DIR / f"{mib}.py"
             if not compiled_path.exists():
-                print(f"Warning: Compiled MIB not found: {compiled_path}", file=sys.stderr)
+                print(  # noqa: T201
+                    f"Warning: Compiled MIB not found: {compiled_path}",
+                    file=sys.stderr,
+                )
                 continue
             json_path = generator.generate(str(compiled_path), mib_name=mib, force_regenerate=True)
-            print(f"Schema JSON written to {json_path}")
+            print(f"Schema JSON written to {json_path}")  # noqa: T201
     else:
         # Process single MIB
-        if not os.path.exists(args.compiled_mib_py):
-            print(
+        if not Path(args.compiled_mib_py).exists():
+            print(  # noqa: T201
                 f"Error: compiled MIB not found: {args.compiled_mib_py}",
                 file=sys.stderr,
             )
             return 1
 
         if args.mib_txt_path:
-            compiled_dir = os.path.dirname(args.compiled_mib_py)
+            compiled_dir = str(Path(args.compiled_mib_py).parent)
             check_imported_mibs(args.mib_txt_path, compiled_dir)
 
         json_path = generator.generate(
@@ -125,7 +137,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             force_regenerate=True,
         )
 
-        print(f"Schema JSON written to {json_path}")
+        print(f"Schema JSON written to {json_path}")  # noqa: T201
     return 0
 
 

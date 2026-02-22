@@ -1,5 +1,4 @@
-"""
-Value linking system for bidirectional OID synchronization.
+"""Value linking system for bidirectional OID synchronization.
 
 Allows linking multiple OIDs together so that when one is updated via SET,
 all linked OIDs are automatically updated with the same value.
@@ -9,7 +8,7 @@ Particularly useful for augmented tables where columns should stay synchronized
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +16,11 @@ logger = logging.getLogger(__name__)
 class ValueLinkEndpoint:
     """Represents a single link endpoint (table + column)."""
 
-    def __init__(self, table_oid: Optional[str], column_name: str) -> None:
+    def __init__(self, table_oid: str | None, column_name: str) -> None:
         self.table_oid = table_oid
         self.column_name = column_name
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize the endpoint to a JSON-compatible dictionary."""
         return {
             "table_oid": self.table_oid,
@@ -35,11 +34,11 @@ class ValueLink:
     def __init__(
         self,
         link_id: str,
-        endpoints: List[ValueLinkEndpoint],
+        endpoints: list[ValueLinkEndpoint],
         scope: str = "per-instance",
         match: str = "shared-index",
         source: str = "schema",
-        description: Optional[str] = None,
+        description: str | None = None,
         create_missing: bool = False,
     ) -> None:
         self.link_id = link_id
@@ -62,25 +61,25 @@ class ValueLinkManager:
     """Manages bidirectional value links between OIDs."""
 
     def __init__(self) -> None:
-        self._links: List[ValueLink] = []
+        self._links: list[ValueLink] = []
         # Map: column_name -> List[ValueLink] for fast lookup
-        self._column_to_links: Dict[str, List[ValueLink]] = {}
+        self._column_to_links: dict[str, list[ValueLink]] = {}
         # Track in-progress updates to prevent infinite loops
-        self._updating: Set[str] = set()
+        self._updating: set[str] = set()
 
     def add_link(
         self,
         link_id: str,
-        endpoints: List[ValueLinkEndpoint],
+        endpoints: list[ValueLinkEndpoint],
         scope: str = "per-instance",
         match: str = "shared-index",
         source: str = "schema",
-        description: Optional[str] = None,
+        description: str | None = None,
         create_missing: bool = False,
     ) -> None:
         """Add a new value link."""
         if len(endpoints) < 2:
-            logger.warning(f"Link {link_id} has fewer than 2 endpoints, skipping")
+            logger.warning("Link %s has fewer than 2 endpoints, skipping", link_id)
             return
 
         link = ValueLink(
@@ -100,12 +99,12 @@ class ValueLinkManager:
                 self._column_to_links[col_name] = []
             self._column_to_links[col_name].append(link)
 
-        logger.info(f"Added value link: {link}")
+        logger.info("Added value link: %s", link)
 
-    def remove_link(self, link_id: str, source: Optional[str] = None) -> bool:
+    def remove_link(self, link_id: str, source: str | None = None) -> bool:
         """Remove a link by id. Returns True if removed."""
         removed = False
-        remaining: List[ValueLink] = []
+        remaining: list[ValueLink] = []
         for link in self._links:
             if link.link_id == link_id and (source is None or link.source == source):
                 removed = True
@@ -126,17 +125,17 @@ class ValueLinkManager:
 
     def _build_endpoints_from_columns(
         self,
-        column_names: List[str],
-        table_oid: Optional[str],
-    ) -> List[ValueLinkEndpoint]:
+        column_names: list[str],
+        table_oid: str | None,
+    ) -> list[ValueLinkEndpoint]:
         """Create endpoint objects from a list of column names."""
         return [ValueLinkEndpoint(table_oid, col) for col in column_names]
 
     def _table_oid_from_columns(
         self,
-        columns: List[str],
-        objects: Dict[str, Any],
-    ) -> Optional[str]:
+        columns: list[str],
+        objects: dict[str, Any],
+    ) -> str | None:
         """Infer table OID from object metadata for the given columns."""
         for col_name in columns:
             if col_name in objects:
@@ -148,9 +147,9 @@ class ValueLinkManager:
 
     def _parse_link_config(
         self,
-        link_config: Dict[str, Any],
-        objects: Optional[Dict[str, Any]],
-    ) -> Tuple[str, List[ValueLinkEndpoint], str, str, str, Optional[str], bool]:
+        link_config: dict[str, Any],
+        objects: dict[str, Any] | None,
+    ) -> tuple[str, list[ValueLinkEndpoint], str, str, str, str | None, bool]:
         """Parse one link config entry into normalized link construction fields."""
         link_id = link_config.get("id") or ""
         scope = link_config.get("scope", "per-instance")
@@ -159,7 +158,7 @@ class ValueLinkManager:
         description = link_config.get("description")
         create_missing = bool(link_config.get("create_missing", False))
 
-        endpoints: List[ValueLinkEndpoint] = []
+        endpoints: list[ValueLinkEndpoint] = []
         if "endpoints" in link_config:
             for entry in link_config.get("endpoints", []):
                 if not isinstance(entry, dict):
@@ -175,9 +174,8 @@ class ValueLinkManager:
         endpoints = [e for e in endpoints if e.column_name]
         return link_id, endpoints, scope, match, source, description, create_missing
 
-    def load_links_from_schema(self, schema: Dict[str, Any]) -> None:
+    def load_links_from_schema(self, schema: dict[str, Any]) -> None:
         """Load value links from schema JSON."""
-
         links_config = schema.get("links", [])
         if not links_config:
             return
@@ -188,7 +186,7 @@ class ValueLinkManager:
 
         for i, link_config in enumerate(links_config):
             if not isinstance(link_config, dict):
-                logger.warning(f"Link config #{i} is not a dict, skipping")
+                logger.warning("Link config #%s is not a dict, skipping", i)
                 continue
 
             link_id, endpoints, scope, match, _, description, create_missing = (
@@ -207,7 +205,7 @@ class ValueLinkManager:
                 create_missing=create_missing,
             )
 
-    def load_links_from_state(self, link_configs: List[Dict[str, Any]]) -> None:
+    def load_links_from_state(self, link_configs: list[dict[str, Any]]) -> None:
         """Load persisted runtime links from state JSON records."""
         if not link_configs:
             return
@@ -229,13 +227,14 @@ class ValueLinkManager:
                 create_missing=create_missing,
             )
 
-    def export_links(self, include_schema: bool = True) -> List[Dict[str, Any]]:
+    def export_links(self, include_schema: bool = True) -> list[dict[str, Any]]:
         """Export links as JSON-serializable records.
 
         Args:
             include_schema: When False, include only state-origin links.
+
         """
-        links: List[Dict[str, Any]] = []
+        links: list[dict[str, Any]] = []
         for link in self._links:
             if not include_schema and link.source != "state":
                 continue
@@ -253,21 +252,21 @@ class ValueLinkManager:
             )
         return links
 
-    def export_state_links(self) -> List[Dict[str, Any]]:
+    def export_state_links(self) -> list[dict[str, Any]]:
         """Export only links that should be persisted in runtime state."""
         return self.export_links(include_schema=False)
 
     def get_linked_targets(
         self,
         column_name: str,
-        table_oid: Optional[str] = None,
-    ) -> List[ValueLinkEndpoint]:
+        table_oid: str | None = None,
+    ) -> list[ValueLinkEndpoint]:
         """Get list of endpoints linked to the given source endpoint."""
         if column_name not in self._column_to_links:
             return []
 
-        linked: List[ValueLinkEndpoint] = []
-        seen: Set[Tuple[Optional[str], str]] = set()
+        linked: list[ValueLinkEndpoint] = []
+        seen: set[tuple[str | None, str]] = set()
         for link in self._column_to_links[column_name]:
             source_matches = False
             for endpoint in link.endpoints:
@@ -295,7 +294,7 @@ class ValueLinkManager:
     def should_propagate(
         self,
         column_name: str,
-        instance_key: Optional[str] = None,
+        instance_key: str | None = None,
     ) -> bool:
         """Check whether a propagation update is not already in progress."""
         update_key = f"{column_name}:{instance_key}" if instance_key else column_name
@@ -304,7 +303,7 @@ class ValueLinkManager:
     def begin_update(
         self,
         column_name: str,
-        instance_key: Optional[str] = None,
+        instance_key: str | None = None,
     ) -> None:
         """Mark a column/instance pair as actively being propagated."""
         update_key = f"{column_name}:{instance_key}" if instance_key else column_name
@@ -313,7 +312,7 @@ class ValueLinkManager:
     def end_update(
         self,
         column_name: str,
-        instance_key: Optional[str] = None,
+        instance_key: str | None = None,
     ) -> None:
         """Clear the in-progress marker for a propagated update."""
         update_key = f"{column_name}:{instance_key}" if instance_key else column_name

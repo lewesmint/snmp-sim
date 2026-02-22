@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.mib_dependency_resolver import MibDependencyResolver
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _write_mib(path: Path, content: str) -> None:
@@ -26,8 +29,10 @@ def test_find_mib_source_direct_and_recursive(tmp_path: Path) -> None:
     p2 = resolver._find_mib_source("SNMPv2-MIB")
     p3 = resolver._find_mib_source("MISSING-MIB")
 
-    assert p1 is not None and p1.endswith("IF-MIB.txt")
-    assert p2 is not None and p2.endswith("SNMPv2-MIB.mib")
+    assert p1 is not None
+    assert p1.endswith("IF-MIB.txt")
+    assert p2 is not None
+    assert p2.endswith("SNMPv2-MIB.mib")
     assert p3 is None
 
 
@@ -110,7 +115,8 @@ def test_build_tree_and_configured_summary(tmp_path: Path) -> None:
     info = resolver.get_configured_mibs_with_deps(["ROOT-MIB"])
 
     assert tree["ROOT-MIB"]["is_configured"] is True
-    assert "DEP1-MIB" in tree and tree["DEP1-MIB"]["is_configured"] is False
+    assert "DEP1-MIB" in tree
+    assert tree["DEP1-MIB"]["is_configured"] is False
     assert info["summary"]["configured_count"] == 1
     assert info["summary"]["total_count"] >= 3
 
@@ -129,6 +135,7 @@ def test_mermaid_outputs(tmp_path: Path) -> None:
     payload = resolver.generate_mermaid_diagram_json(["A-MIB"])
 
     assert "graph TD" in code
-    assert "A_MIB" in code and "B_MIB" in code
+    assert "A_MIB" in code
+    assert "B_MIB" in code
     assert payload["mermaid_code"].startswith("graph TD")
     assert payload["configured_mibs"] == ["A-MIB"]

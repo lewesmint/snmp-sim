@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app import api
 from app.app_config import AppConfig
-from app.app_logger import AppLogger, LoggingConfig, ColoredFormatter
+from app.app_logger import AppLogger, ColoredFormatter, LoggingConfig
 from app.mib_object import MibObject
 from app.mib_registry import MibRegistry
 from app.mib_table import MibTable
@@ -25,7 +25,8 @@ def api_client() -> TestClient:
 
 
 def test_api_get_sysdescr_without_agent(
-    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    api_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Return 500 when getting sysDescr before SNMP agent is initialized."""
     monkeypatch.setattr(api, "snmp_agent", None)
@@ -35,7 +36,8 @@ def test_api_get_sysdescr_without_agent(
 
 
 def test_api_set_sysdescr_without_agent(
-    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    api_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Return 500 when setting sysDescr before SNMP agent is initialized."""
     monkeypatch.setattr(api, "snmp_agent", None)
@@ -45,7 +47,8 @@ def test_api_set_sysdescr_without_agent(
 
 
 def test_api_get_and_set_sysdescr_with_agent(
-    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    api_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Exercise GET and POST sysDescr paths with a fake in-memory agent."""
 
@@ -130,7 +133,7 @@ simple_key: simple_value
 system_mib_dir:
     darwin: /opt/test/mibs
     linux: /usr/share/snmp/mibs
-""".strip()
+""".strip(),
         )
 
         config = AppConfig(config_path=str(config_path))
@@ -224,7 +227,8 @@ def test_app_logger_configured_short_circuit(tmp_path: Path) -> None:
 
 
 def test_app_logger_configure_uses_test_log_file_under_pytest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Route AppLogger.configure output to test log file when running under pytest."""
 
@@ -250,7 +254,7 @@ def test_app_logger_configure_uses_test_log_file_under_pytest(
             "console": False,
             "rotate_on_startup": False,
             "level": "INFO",
-        }
+        },
     )
 
     root = logging.getLogger()
@@ -321,7 +325,7 @@ def test_validate_type_registry_missing_fields() -> None:
         "DisplayString": {
             "base_type": "OctetString",
             # Missing: used_by, defined_in, abstract
-        }
+        },
     }
     is_valid, errors = validate_type_registry(registry)
     assert is_valid is False
@@ -340,7 +344,7 @@ def test_log_rotation_archives_existing_log(tmp_path: Path) -> None:
     # Create an existing log file with a known timestamp
     log_path.write_text(
         "2026-02-07 10:30:45.123 INFO test.module [MainThread] Test message\n"
-        "2026-02-07 10:30:46.456 DEBUG test.module [MainThread] Another message\n"
+        "2026-02-07 10:30:46.456 DEBUG test.module [MainThread] Another message\n",
     )
 
     root = logging.getLogger()

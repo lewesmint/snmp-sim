@@ -2,11 +2,11 @@
 
 # pylint: disable=too-many-lines,missing-function-docstring,protected-access,missing-class-docstring,invalid-name,too-few-public-methods,import-outside-toplevel,import-error,unused-argument,broad-exception-raised,unused-variable
 
+import json
 import os
 import types
-import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -31,7 +31,8 @@ def test_get_default_value_legacy() -> None:
     assert g._get_default_value("ObjectIdentifier", "foo") == "0.0"
     assert g._get_default_value("Integer32", "foo") == 0
     assert g._get_default_value("UnknownType", "sysDescr") is None or isinstance(
-        g._get_default_value("UnknownType", "sysDescr"), str
+        g._get_default_value("UnknownType", "sysDescr"),
+        str,
     )
 
 
@@ -81,7 +82,7 @@ def test_generate_writes_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
             return "read-only"
 
     class FakeBuilder:
-        def __init__(self, symbols: dict[str, Any]):
+        def __init__(self, symbols: dict[str, Any]) -> None:
             self.mibSymbols = symbols
 
         def add_mib_sources(self, *args: Any) -> None:
@@ -95,7 +96,7 @@ def test_generate_writes_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
             "MyTable": MibTable(),
             "MyTableEntry": MibTableRow(),
             "col1": MibTableColumn([1, 3, 6, 1]),
-        }
+        },
     }
 
     def fake_mibbuilder_factory() -> "FakeBuilder":
@@ -125,7 +126,7 @@ def test_generate_writes_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
     schema_path = g.generate(str(compiled), mib_name="TESTMIB", force_regenerate=True)
     assert os.path.exists(schema_path)
-    with open(schema_path, "r", encoding="utf-8") as f:
+    with open(schema_path, encoding="utf-8") as f:
         data = json.load(f)
     # Ensure columns and table entry exist
     assert "col1" in data["objects"]
@@ -158,7 +159,8 @@ def test_extract_mib_info_non_dict(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
 
 
 def test_detect_inherited_indexes_through_extract(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     def identity_dir_source(path: str) -> str:
         return path
@@ -254,7 +256,8 @@ def test_generate_respects_force_regenerate_flag(tmp_path: Path) -> None:
 
 
 def test_generate_creates_default_table_row_with_index_extraction(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     # Test the code path that creates default rows for tables and extracts indexes
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
@@ -307,7 +310,8 @@ def test_generate_creates_default_table_row_with_index_extraction(
 
 
 def test_generate_handles_mib_builder_exception_in_index_extraction(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     # Test exception handling in index extraction
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
@@ -323,7 +327,8 @@ def test_generate_handles_mib_builder_exception_in_index_extraction(
     # Mock MibBuilder to raise exception
     class BadMibBuilder:
         def __init__(self) -> None:
-            raise RuntimeError("MibBuilder failed")
+            msg = "MibBuilder failed"
+            raise RuntimeError(msg)
 
         def add_mib_sources(self, *args: Any) -> None:
             pass
@@ -338,7 +343,8 @@ def test_generate_handles_mib_builder_exception_in_index_extraction(
 
 
 def test_generate_handles_dir_mib_source_exception(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     # Test the fallback when DirMibSource fails
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
@@ -357,7 +363,8 @@ def test_generate_handles_dir_mib_source_exception(
 
         def add_mib_sources(self, source: Any = None) -> None:
             if source is not None:
-                raise AttributeError("DirMibSource not available")
+                msg = "DirMibSource not available"
+                raise AttributeError(msg)
 
         def load_modules(self, *args: Any) -> None:
             pass
@@ -429,7 +436,8 @@ def test_extract_mib_info_handles_symbol_without_getname(
 
     class MockSymbol2:
         def getName(self) -> None:
-            raise TypeError("bad name")
+            msg = "bad name"
+            raise TypeError(msg)
 
         def getSyntax(self) -> None:
             return None
@@ -511,9 +519,9 @@ def test_extract_mib_info_base_type_mapping(monkeypatch: pytest.MonkeyPatch) -> 
     # Test the base_type_map fallback
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
 
-    mock_registry: Dict[str, Any] = {}  # Empty registry
+    mock_registry: dict[str, Any] = {}  # Empty registry
 
-    def load_type_registry() -> Dict[str, Any]:
+    def load_type_registry() -> dict[str, Any]:
         return mock_registry
 
     def extract_type_info(_syntax_obj: Any, _name: str) -> dict[str, str]:
@@ -649,7 +657,8 @@ def test_detect_inherited_indexes() -> None:
 
 
 def test_generate_force_regenerate_removes_existing_file(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Test that force_regenerate=True removes existing json file."""
     # Create a fake compiled MIB file
@@ -664,7 +673,7 @@ def test_generate_force_regenerate_removes_existing_file(
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
 
     # Mock _extract_mib_info to avoid full parsing
-    def mock_extract_mib_info(*_args: Any, **_kwargs: Any) -> Dict[str, Any]:
+    def mock_extract_mib_info(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
         return {
             "objects": {"testSymbol": {"oid": [1, 2, 3], "type": "Integer32"}},
             "traps": {},
@@ -677,13 +686,14 @@ def test_generate_force_regenerate_removes_existing_file(
 
     # File should have been recreated (content changed)
     assert json_path.exists()
-    with open(json_path, "r", encoding="utf-8") as f:
+    with open(json_path, encoding="utf-8") as f:
         content = json.load(f)
         assert "testSymbol" in content["objects"]  # Should have new content
 
 
 def test_generate_skips_existing_file_when_not_force(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Test that generate returns existing json path when force_regenerate=False."""
     # Create a fake compiled MIB file
@@ -704,7 +714,7 @@ def test_generate_skips_existing_file_when_not_force(
     assert result == str(json_path)
 
     # Content should remain unchanged
-    with open(json_path, "r", encoding="utf-8") as f:
+    with open(json_path, encoding="utf-8") as f:
         content = json.load(f)
         assert content == {"existing": "data"}
 
@@ -719,12 +729,13 @@ def test_extract_mib_info_add_mib_sources_exception_handling(
     class MockBuilder:
         class MibBuilder:
             def add_mib_sources(self, *args: Any) -> None:
-                raise Exception("Mock exception")
+                msg = "Mock exception"
+                raise Exception(msg)
 
             def load_modules(self, *args: Any) -> None:
                 pass
 
-            mibSymbols: Dict[str, Any] = {"TEST-MIB": {}}
+            mibSymbols: dict[str, Any] = {"TEST-MIB": {}}
 
     monkeypatch.setattr("app.generator.builder", MockBuilder)
 
@@ -741,7 +752,8 @@ def test_extract_mib_info_getIndexNames_exception(
 
     class MockEntry:
         def getIndexNames(self) -> Any:
-            raise Exception("Mock getIndexNames exception")
+            msg = "Mock getIndexNames exception"
+            raise Exception(msg)
 
     # Mock the mibBuilder and symbols
     class MockBuilder:
@@ -752,7 +764,7 @@ def test_extract_mib_info_getIndexNames_exception(
             def load_modules(self, *args: Any) -> None:
                 pass
 
-            mibSymbols: Dict[str, Any] = {"TEST-MIB": {"testEntry": MockEntry()}}
+            mibSymbols: dict[str, Any] = {"TEST-MIB": {"testEntry": MockEntry()}}
 
     monkeypatch.setattr("app.generator.builder", MockBuilder)
 
@@ -834,7 +846,7 @@ def test_extract_mib_info_symbol_info_missing_type(
         "testTable": {
             "type": "MibTable",
             # Missing "type" key that should be added
-        }
+        },
     }
 
     class MockBuilder:
@@ -854,7 +866,9 @@ def test_extract_mib_info_symbol_info_missing_type(
 
 
 def test_write_schema_debug_logging(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
 ) -> None:
     """Test debug logging for specific symbol names."""
     # Create a fake compiled MIB file
@@ -895,7 +909,9 @@ def test_write_schema_debug_logging(
     import app.generator as genmod
 
     monkeypatch.setattr(
-        genmod, "builder", types.SimpleNamespace(MibBuilder=fake_mibbuilder_factory)
+        genmod,
+        "builder",
+        types.SimpleNamespace(MibBuilder=fake_mibbuilder_factory),
     )
 
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
@@ -908,7 +924,8 @@ def test_write_schema_debug_logging(
 
 
 def test_write_schema_merge_extracted_enums(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Test merging extracted enums into type_info."""
     # Create a fake compiled MIB file
@@ -949,7 +966,9 @@ def test_write_schema_merge_extracted_enums(
     import app.generator as genmod
 
     monkeypatch.setattr(
-        genmod, "builder", types.SimpleNamespace(MibBuilder=fake_mibbuilder_factory)
+        genmod,
+        "builder",
+        types.SimpleNamespace(MibBuilder=fake_mibbuilder_factory),
     )
 
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
@@ -960,13 +979,14 @@ def test_write_schema_merge_extracted_enums(
 
     # Check the generated JSON has the enums
     json_path = tmp_path / "TEST-MIB" / "schema.json"
-    with open(json_path, "r", encoding="utf-8") as f:
+    with open(json_path, encoding="utf-8") as f:
         content = json.load(f)
         assert "enums" in content["objects"]["testSymbol"]
 
 
 def test_write_schema_include_enums_in_entry(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Test including enums in schema entry when type_info has enums."""
     # Create a fake compiled MIB file
@@ -1005,7 +1025,9 @@ def test_write_schema_include_enums_in_entry(
     import app.generator as genmod
 
     monkeypatch.setattr(
-        genmod, "builder", types.SimpleNamespace(MibBuilder=fake_mibbuilder_factory)
+        genmod,
+        "builder",
+        types.SimpleNamespace(MibBuilder=fake_mibbuilder_factory),
     )
 
     g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
@@ -1016,7 +1038,7 @@ def test_write_schema_include_enums_in_entry(
 
     # Check the generated JSON has the enums from registry
     json_path = tmp_path / "TEST-MIB" / "schema.json"
-    with open(json_path, "r", encoding="utf-8") as f:
+    with open(json_path, encoding="utf-8") as f:
         content = json.load(f)
         assert "enums" in content["objects"]["testSymbol"]
 

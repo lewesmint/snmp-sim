@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Minimal SNMP agent test for debugging."""
 
-from pysnmp.entity import engine, config
-from pysnmp.entity.rfc3413 import cmdrsp, context
 from pysnmp.carrier.asyncio.dgram import udp
 from pysnmp.carrier.asyncio.dispatch import AsyncioDispatcher
+from pysnmp.entity import config, engine
+from pysnmp.entity.rfc3413 import cmdrsp, context
 from pysnmp.proto.rfc1902 import OctetString
 
 
@@ -23,7 +23,6 @@ def test_snmp_agent_setup() -> None:
         config.SNMP_UDP_DOMAIN,
         udp.UdpAsyncioTransport().open_server_mode(("127.0.0.1", 11161)),
     )
-    print("Transport opened")
 
     # Set up community
     config.add_v1_system(snmpEngine, "public-read", "public")
@@ -61,5 +60,4 @@ def test_snmp_agent_setup() -> None:
     cmdrsp.GetCommandResponder(snmpEngine, snmpContext)
     cmdrsp.NextCommandResponder(snmpEngine, snmpContext)
 
-    print("Minimal SNMP agent setup successful")
     assert snmpEngine is not None

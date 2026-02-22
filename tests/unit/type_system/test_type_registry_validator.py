@@ -1,11 +1,11 @@
 """Tests for test type registry validator."""
 
 import json
-from pathlib import Path
-import pytest
 import subprocess
 import sys
+from pathlib import Path
 
+import pytest
 
 from app.type_registry_validator import (
     validate_type_registry,
@@ -21,7 +21,7 @@ def test_validate_type_registry_valid() -> None:
             "used_by": [],
             "defined_in": "MY-MIB",
             "abstract": False,
-        }
+        },
     }
 
     is_valid, errors = validate_type_registry(registry)
@@ -49,7 +49,7 @@ def test_validate_type_registry_wrong_types() -> None:
             "used_by": "not-a-list",
             "defined_in": 456,
             "abstract": "nope",
-        }
+        },
     }
 
     is_valid, errors = validate_type_registry(registry)
@@ -114,7 +114,7 @@ def test_validate_type_registry_file_valid(tmp_path: Path) -> None:
             "used_by": [],
             "defined_in": "MY-MIB",
             "abstract": False,
-        }
+        },
     }
     path = tmp_path / "valid.json"
     path.write_text(json.dumps(registry))
@@ -147,7 +147,7 @@ def test_main_with_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]
             "used_by": [],
             "defined_in": "MY-MIB",
             "abstract": False,
-        }
+        },
     }
     path = tmp_path / "types.json"
     path.write_text(json.dumps(registry))

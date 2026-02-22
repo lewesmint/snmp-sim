@@ -1,6 +1,7 @@
 """Tests for test mib registry more."""
 
 from pathlib import Path
+
 from app.mib_registry import MibRegistry
 
 

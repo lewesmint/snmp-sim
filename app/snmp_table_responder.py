@@ -1,5 +1,4 @@
-"""
-Custom SNMP table responder for dynamic table queries.
+"""Custom SNMP table responder for dynamic table queries.
 
 This module implements a responder that handles SNMP requests to table OIDs
 by returning data from the behavior JSON files, enabling full SNMP queryability
@@ -9,15 +8,15 @@ by returning data from the behavior JSON files, enabling full SNMP queryability
 # pylint: disable=logging-fstring-interpolation,unused-variable
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
 from pysnmp.smi import builder
 
 logger = logging.getLogger(__name__)
 
 
 class SNMPTableResponder:
-    """
-    Handles SNMP requests for table data from JSON behavior files.
+    """Handles SNMP requests for table data from JSON behavior files.
 
     Implements SNMP variable binding responses for GET and GETNEXT operations
     on table OIDs by traversing JSON table structures and returning appropriate values.
@@ -25,22 +24,22 @@ class SNMPTableResponder:
 
     def __init__(
         self,
-        behavior_jsons: Dict[str, Dict[str, Any]],
-        mib_builder: Optional[builder.MibBuilder],
+        behavior_jsons: dict[str, dict[str, Any]],
+        mib_builder: builder.MibBuilder | None,
     ) -> None:
-        """
-        Initialize the table responder.
+        """Initialize the table responder.
 
         Args:
             behavior_jsons: Dict of MIB name -> behavior JSON structure
             mib_builder: Optional pysnmp MibBuilder instance for type resolution (can be None)
+
         """
         self.behavior_jsons = behavior_jsons
         self.mib_builder = mib_builder
         self.logger = logging.getLogger(__name__)
 
         # Build a map of table OIDs to table info for fast lookup
-        self.table_oid_map: Dict[Tuple[int, ...], Tuple[str, str, Dict[str, Any]]] = {}
+        self.table_oid_map: dict[tuple[int, ...], tuple[str, str, dict[str, Any]]] = {}
         self._build_table_oid_map()
 
     def _build_table_oid_map(self) -> None:
@@ -54,15 +53,15 @@ class SNMPTableResponder:
                     table_oid = tuple(obj_data["oid"])
                     self.table_oid_map[table_oid] = (mib_name, obj_name, obj_data)
                     self.logger.debug(
-                        f"Registered table responder for {mib_name}.{obj_name} OID={table_oid}"
+                        "Registered table responder for %s.%s OID=%s", mib_name, obj_name, table_oid
                     )
 
     def _find_entry_for_table(
         self,
-        objects: Dict[str, Any],
-        table_oid: Tuple[int, ...],
+        objects: dict[str, Any],
+        table_oid: tuple[int, ...],
         table_name: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Find table entry metadata for a table OID.
 
         Supports canonical tableEntry naming and OID-prefix matching.
@@ -72,7 +71,7 @@ class SNMPTableResponder:
         if isinstance(candidate, dict) and candidate.get("type") == "MibTableRow":
             return candidate
 
-        matches: List[Tuple[Tuple[int, ...], Dict[str, Any]]] = []
+        matches: list[tuple[tuple[int, ...], dict[str, Any]]] = []
         for _, other_data in objects.items():
             if not isinstance(other_data, dict):
                 continue
@@ -91,7 +90,7 @@ class SNMPTableResponder:
         matches.sort(key=lambda item: (len(item[0]), item[0]))
         return matches[0][1]
 
-    def is_table_oid(self, oid: Tuple[int, ...]) -> bool:
+    def is_table_oid(self, oid: tuple[int, ...]) -> bool:
         """Check if an OID is a table or within a table."""
         # Check if it's a direct table OID
         if oid in self.table_oid_map:
@@ -104,10 +103,9 @@ class SNMPTableResponder:
         )
 
     def get_table_info(
-        self, oid: Tuple[int, ...]
-    ) -> Optional[Tuple[str, str, Dict[str, Any], Tuple[int, ...]]]:
-        """
-        Get table info for an OID.
+        self, oid: tuple[int, ...]
+    ) -> tuple[str, str, dict[str, Any], tuple[int, ...]] | None:
+        """Get table info for an OID.
 
         Returns: (mib_name, table_name, table_data, table_oid) or None
         """
@@ -123,9 +121,8 @@ class SNMPTableResponder:
 
         return None
 
-    def get_next_oid(self, requested_oid: Tuple[int, ...]) -> Optional[Tuple[Tuple[int, ...], Any]]:
-        """
-        Find the next OID after the requested one in lexicographic order.
+    def get_next_oid(self, requested_oid: tuple[int, ...]) -> tuple[tuple[int, ...], Any] | None:
+        """Find the next OID after the requested one in lexicographic order.
 
         This supports SNMP GETNEXT operations.
 
@@ -143,7 +140,7 @@ class SNMPTableResponder:
 
         return None
 
-    def _get_all_table_oids(self) -> List[Tuple[int, ...]]:
+    def _get_all_table_oids(self) -> list[tuple[int, ...]]:
         """Get all OIDs in tables, sorted lexicographically."""
         oids = []
 
@@ -225,8 +222,8 @@ class SNMPTableResponder:
 
     @staticmethod
     def _collect_entry_columns(
-        objects: Dict[str, Any],
-        entry_oid: Tuple[int, ...],
+        objects: dict[str, Any],
+        entry_oid: tuple[int, ...],
     ) -> dict[str, dict[str, Any]]:
         columns: dict[str, dict[str, Any]] = {}
         for col_name, col_info in objects.items():
@@ -242,18 +239,18 @@ class SNMPTableResponder:
         return columns
 
     @staticmethod
-    def _build_instance_str(instance_parts: Tuple[int, ...]) -> str:
+    def _build_instance_str(instance_parts: tuple[int, ...]) -> str:
         return ".".join(str(x) for x in instance_parts) if instance_parts else "1"
 
     @staticmethod
-    def _build_row_index_string(row: Dict[str, Any], index_columns: List[str]) -> Optional[str]:
+    def _build_row_index_string(row: dict[str, Any], index_columns: list[str]) -> str | None:
         if not index_columns:
             return "1"
         if len(index_columns) == 1:
             row_idx_val = row.get(index_columns[0])
             return str(row_idx_val) if row_idx_val is not None else ""
 
-        row_parts: List[str] = []
+        row_parts: list[str] = []
         for idx_col in index_columns:
             row_val = row.get(idx_col)
             if row_val is None:
@@ -266,11 +263,11 @@ class SNMPTableResponder:
 
     def _lookup_single_column_value(
         self,
-        rows: List[Any],
+        rows: list[Any],
         col_name: str,
-        index_columns: List[str],
+        index_columns: list[str],
         instance_str: str,
-    ) -> Optional[Any]:
+    ) -> Any | None:
         if not index_columns:
             if instance_str != "1":
                 return None
@@ -292,11 +289,11 @@ class SNMPTableResponder:
     def _lookup_multi_column_value(
         self,
         columns: dict[str, dict[str, Any]],
-        rows: List[Any],
-        index_columns: List[str],
+        rows: list[Any],
+        index_columns: list[str],
         col_id: int,
         instance_str: str,
-    ) -> Optional[Any]:
+    ) -> Any | None:
         for col_name, col_info in columns.items():
             if col_info.get("oid", [])[-1] != col_id:
                 continue
@@ -312,7 +309,7 @@ class SNMPTableResponder:
             return None
         return None
 
-    def _get_oid_value(self, oid: Tuple[int, ...]) -> Optional[Any]:
+    def _get_oid_value(self, oid: tuple[int, ...]) -> Any | None:
         """Get the value for a specific OID."""
         table_info = self.get_table_info(oid)
         if not table_info:
@@ -375,10 +372,10 @@ class SNMPTableResponder:
             instance_str=instance_str,
         )
 
-    def handle_get_request(self, oid: Tuple[int, ...]) -> Optional[Any]:
+    def handle_get_request(self, oid: tuple[int, ...]) -> Any | None:
         """Handle SNMP GET request for an OID."""
         return self._get_oid_value(oid)
 
-    def handle_getnext_request(self, oid: Tuple[int, ...]) -> Optional[Tuple[Tuple[int, ...], Any]]:
+    def handle_getnext_request(self, oid: tuple[int, ...]) -> tuple[tuple[int, ...], Any] | None:
         """Handle SNMP GETNEXT request for an OID."""
         return self.get_next_oid(oid)

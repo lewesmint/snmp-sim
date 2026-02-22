@@ -1,12 +1,12 @@
-"""
-Tests for the plugin_loader module.
-"""
+"""Tests for the plugin_loader module."""
 
-from pathlib import Path
 import logging
+from pathlib import Path
 from typing import Any
+
 import pytest
-from app.plugin_loader import load_plugins_from_directory, load_plugins
+
+from app.plugin_loader import load_plugins, load_plugins_from_directory
 
 
 class TestPluginLoader:
@@ -35,7 +35,8 @@ class TestPluginLoader:
         return mock_spec_from_file, mock_loader
 
     def test_load_plugins_from_directory_nonexistent_dir(
-        self, caplog: pytest.LogCaptureFixture
+        self,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test loading plugins from a nonexistent directory."""
         with caplog.at_level(logging.WARNING):
@@ -45,7 +46,9 @@ class TestPluginLoader:
         assert "Plugin directory 'nonexistent_dir' does not exist" in caplog.text
 
     def test_load_plugins_from_directory_not_a_dir(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test loading plugins from a path that's not a directory."""
         file_path = tmp_path / "not_a_dir"
@@ -72,7 +75,10 @@ class TestPluginLoader:
         assert not result
 
     def test_load_plugins_from_directory_bad_spec(
-        self, mocker: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self,
+        mocker: Any,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test handling of bad plugin spec."""
         mock_spec_from_file = mocker.patch("importlib.util.spec_from_file_location")
@@ -87,7 +93,10 @@ class TestPluginLoader:
         assert "Could not load plugin spec" in caplog.text
 
     def test_load_plugins_from_directory_bad_loader(
-        self, mocker: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self,
+        mocker: Any,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test handling of spec with no loader."""
         mock_spec_from_file = mocker.patch("importlib.util.spec_from_file_location")
@@ -104,7 +113,10 @@ class TestPluginLoader:
         assert "Could not load plugin spec" in caplog.text
 
     def test_load_plugins_from_directory_exec_error(
-        self, mocker: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self,
+        mocker: Any,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test handling of execution errors during plugin loading."""
         plugin_dir = self._make_plugin_dir(tmp_path, ["test_plugin.py"])
@@ -121,7 +133,10 @@ class TestPluginLoader:
         assert "Exec error" in caplog.text
 
     def test_load_plugins_from_directory_success(
-        self, mocker: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self,
+        mocker: Any,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test successful plugin loading."""
         plugin_dir = self._make_plugin_dir(tmp_path, ["test_plugin.py"])
@@ -143,7 +158,9 @@ class TestPluginLoader:
         assert result == ["plugins.test"]
 
     def test_load_plugins_from_directory_multiple_plugins(
-        self, mocker: Any, tmp_path: Path
+        self,
+        mocker: Any,
+        tmp_path: Path,
     ) -> None:
         """Test loading multiple plugins."""
         plugin_dir = self._make_plugin_dir(

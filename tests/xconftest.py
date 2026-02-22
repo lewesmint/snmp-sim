@@ -2,8 +2,9 @@
 
 import json
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Dict, Generator
+from typing import Any
 
 import pytest
 
@@ -16,7 +17,7 @@ def temp_dir() -> Generator[Path, None, None]:
 
 
 @pytest.fixture
-def sample_type_registry() -> Dict[str, Any]:
+def sample_type_registry() -> dict[str, Any]:
     """Sample type registry for testing."""
     return {
         "Integer32": {
@@ -47,7 +48,7 @@ def sample_type_registry() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_mib_schema() -> Dict[str, Any]:
+def sample_mib_schema() -> dict[str, Any]:
     """Sample MIB schema for testing."""
     return {
         "sysDescr": {
@@ -72,7 +73,7 @@ def sample_mib_schema() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def type_registry_file(temp_dir: Path, sample_type_registry: Dict[str, Any]) -> Path:
+def type_registry_file(temp_dir: Path, sample_type_registry: dict[str, Any]) -> Path:
     """Create a temporary type registry JSON file."""
     registry_path = temp_dir / "types.json"
     with open(registry_path, "w") as f:
@@ -81,7 +82,7 @@ def type_registry_file(temp_dir: Path, sample_type_registry: Dict[str, Any]) -> 
 
 
 @pytest.fixture
-def mib_schema_dir(temp_dir: Path, sample_mib_schema: Dict[str, Any]) -> Path:
+def mib_schema_dir(temp_dir: Path, sample_mib_schema: dict[str, Any]) -> Path:
     """Create a temporary MIB schema directory structure."""
     schema_dir = temp_dir / "agent-model"
     mib_dir = schema_dir / "SNMPv2-MIB"

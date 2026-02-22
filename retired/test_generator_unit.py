@@ -878,7 +878,7 @@ class TestGeneratorErrorHandling:
         )
 
         # MibTableRow without type key should get type assigned
-        info = {
+        info: dict[str, dict[str, Any]] = {
             "testEntry": {"oid": [1, 2, 3, 1], "indexes": []},
         }
 
@@ -902,7 +902,7 @@ class TestGeneratorErrorHandling:
             output_dir=str(output_dir), load_default_plugins=False
         )
 
-        info = {
+        info: dict[str, dict[str, Any]] = {
             "testTable": {"oid": [1, 2, 3], "rows": []},
         }
 
@@ -1019,7 +1019,7 @@ class TestGeneratorErrorHandling:
         """Test _extract_type_info when namedValues is empty (line 276)"""
 
         class SyntaxObj:
-            namedValues = {}
+            namedValues: dict[Any, Any] = {}
 
         gen = BehaviourGenerator(load_default_plugins=False)
         result = gen._extract_type_info(SyntaxObj(), "TestType")
@@ -1053,10 +1053,8 @@ class TestGeneratorErrorHandling:
         monkeypatch.setattr(generator, "_parse_mib_name_from_py", lambda _p: "TEST-MIB")
         monkeypatch.setattr(generator, "_extract_mib_info", lambda _p, _n: info)
 
-        # Manually set type to MibTableRow (matches condition but 'type' key will be missing initially)
-        info["testEntry"] = {"type": "MibTableRow", "oid": [1, 2, 3, 1]}
-        # Don't set type on testEntry initially
-        del info["testEntry"]["type"]
+        # Manually set entry without type key (simulates MibTableRow without 'type' key)
+        info["testEntry"] = {"oid": [1, 2, 3, 1]}
 
         output = generator.generate(
             str(tmp_path / "TEST-MIB.py"), force_regenerate=True

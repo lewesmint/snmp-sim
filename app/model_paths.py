@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AGENT_MODEL_DIR = PROJECT_ROOT / "agent-model"
 MIB_STATE_FILE = AGENT_MODEL_DIR / "mib_state.json"
@@ -20,12 +19,15 @@ def _resolve_project_root(module_file: str | Path | None = None) -> Path:
 
 
 def agent_model_dir(module_file: str | Path | None = None) -> Path:
+    """Return the `agent-model` directory for the current project root."""
     return _resolve_project_root(module_file) / "agent-model"
 
 
 def mib_state_file(module_file: str | Path | None = None) -> Path:
+    """Return the canonical path to `mib_state.json` in the model directory."""
     return agent_model_dir(module_file) / "mib_state.json"
 
 
 def compiled_mibs_dir(module_file: str | Path | None = None) -> Path:
+    """Return the `compiled-mibs` directory for the current project root."""
     return _resolve_project_root(module_file) / "compiled-mibs"

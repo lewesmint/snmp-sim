@@ -17,10 +17,10 @@ import re
 import shutil
 import sys
 import tkinter as tk
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Any, Dict, Optional
+from typing import Any
 
 import customtkinter as ctk
 from pysnmp.hlapi.v3arch.asyncio import (
@@ -44,14 +44,14 @@ from ui.common import Logger, format_snmp_value
 
 def _ensure_default_tk_root() -> None:
     """Ensure tkinter has a default root for variable creation in headless contexts."""
-    if tk._default_root is not None:  # type: ignore[attr-defined]
+    if getattr(tk, "_default_root", None) is not None:
         return
     is_test_context = "pytest" in sys.modules or bool(os.environ.get("PYTEST_CURRENT_TEST"))
     if not is_test_context:
         return
     try:
-        tk._default_root = tk.Tcl()  # type: ignore[attr-defined]
-    except Exception:
+        tk._default_root = tk.Tcl()  # type: ignore[attr-defined]  # noqa: SLF001
+    except (AttributeError, LookupError, OSError, TypeError, ValueError):
         return
 
 
@@ -61,15 +61,15 @@ _ensure_default_tk_root()
 class MIBBrowserWindow:
     """Standalone MIB Browser window for SNMP operations."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
-        parent: Optional[tk.Widget] = None,
-        logger: Optional[Logger] = None,
+        parent: tk.Widget | None = None,
+        logger: Logger | None = None,
         default_host: str = "127.0.0.1",
         default_port: int = 161,
         default_community: str = "public",
-        oid_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
-    ):
+        oid_metadata: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         """Initialize MIB Browser.
 
         Args:
@@ -79,9 +79,10 @@ class MIBBrowserWindow:
             default_port: Default SNMP port
             default_community: Default SNMP community string
             oid_metadata: Optional OID metadata for name resolution (DEPRECATED - use MIB loading)
+
         """
         self.parent = parent
-        self.logger = logger if logger else Logger()
+        self.logger = logger or Logger()
         self.default_host = default_host
         self.default_port = default_port
         self.default_community = default_community
@@ -100,12 +101,12 @@ class MIBBrowserWindow:
         self._setup_mib_paths()
 
         # Icons for tree display (matching OID tree)
-        self.icons: Dict[str, Any] = {}
+        self.icons: dict[str, tk.PhotoImage] = {}
         self._load_icons()
 
         # Track agent results separately
-        self.agent_results: Dict[str, Dict[str, Any]] = {}  # host:port -> {operations, etc.}
-        self.agent_tree_items: Dict[str, str] = {}  # host:port -> tree_item_id
+        self.agent_results: dict[str, dict[str, Any]] = {}  # host:port -> {operations, etc.}
+        self.agent_tree_items: dict[str, str] = {}  # host:port -> tree_item_id
 
         # Create window
         if parent is None:
@@ -122,7 +123,7 @@ class MIBBrowserWindow:
         self._setup_ui()
 
     def _setup_mib_paths(self) -> None:
-        """Setup MIB search paths for pysnmp."""
+        """Set up MIB search paths for pysnmp."""
         # Create and add cache directory for user-loaded MIBs
         self.mib_cache_dir = Path.home() / ".mib-browser-cache"
         self.mib_cache_dir.mkdir(parents=True, exist_ok=True)
@@ -151,7 +152,7 @@ class MIBBrowserWindow:
         """Load icons for the results tree (same as OID tree)."""
         icons_dir = Path(__file__).parent / "icons"
 
-        def make_generated(color: str, inner: Optional[str]) -> tk.PhotoImage:
+        def make_generated(color: str, inner: str | None) -> tk.PhotoImage:
             """Create a simple colored square icon."""
             # Create a 16x16 colored square
             img = tk.PhotoImage(width=16, height=16)
@@ -182,12 +183,12 @@ class MIBBrowserWindow:
                     self.icons[name] = tk.PhotoImage(file=str(png_path))
                 else:
                     self.icons[name] = make_generated(color, inner)
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):  # noqa: PERF203
                 # On any error fall back to generated icon
                 self.icons[name] = make_generated(color, inner)
 
     def _setup_ui(self) -> None:
-        """Setup the UI components."""
+        """Set up the UI components."""
         # Main container
         if isinstance(self.window, ctk.CTk):
             container = self.window
@@ -215,8 +216,8 @@ class MIBBrowserWindow:
         status_label = ctk.CTkLabel(status_frame, textvariable=self.status_var, anchor="w")
         status_label.pack(fill="x", padx=10, pady=(0, 5))
 
-    def _setup_browser_tab(self) -> None:
-        """Setup the SNMP browser tab."""
+    def _setup_browser_tab(self) -> None:  # noqa: PLR0915
+        """Set up the SNMP browser tab."""
         browser_tab = self.tabview.tab("Browser")
 
         # Connection settings panel
@@ -277,7 +278,10 @@ class MIBBrowserWindow:
         get_btn.pack(side="left", padx=5)
 
         getnext_btn = ctk.CTkButton(
-            buttons_frame, text="GET NEXT", command=self._snmp_getnext, width=100
+            buttons_frame,
+            text="GET NEXT",
+            command=self._snmp_getnext,
+            width=100,
         )
         getnext_btn.pack(side="left", padx=5)
 
@@ -288,7 +292,10 @@ class MIBBrowserWindow:
         set_btn.pack(side="left", padx=5)
 
         clear_btn = ctk.CTkButton(
-            buttons_frame, text="Clear Results", command=self._clear_results, width=120
+            buttons_frame,
+            text="Clear Results",
+            command=self._clear_results,
+            width=120,
         )
         clear_btn.pack(side="right", padx=5)
 
@@ -297,12 +304,18 @@ class MIBBrowserWindow:
         toolbar_frame.pack(fill="x", padx=10, pady=(0, 10))
 
         expand_btn = ctk.CTkButton(
-            toolbar_frame, text="Expand All", command=self._expand_all, width=100
+            toolbar_frame,
+            text="Expand All",
+            command=self._expand_all,
+            width=100,
         )
         expand_btn.pack(side="left", padx=(0, 6))
 
         collapse_btn = ctk.CTkButton(
-            toolbar_frame, text="Collapse All", command=self._collapse_all, width=100
+            toolbar_frame,
+            text="Collapse All",
+            command=self._collapse_all,
+            width=100,
         )
         collapse_btn.pack(side="left", padx=(0, 10))
 
@@ -377,7 +390,7 @@ class MIBBrowserWindow:
         self.results_tree.bind("<<TreeviewOpen>>", self._on_node_open)
 
     def _setup_mib_manager_tab(self) -> None:
-        """Setup the MIB Manager tab for browsing and caching MIBs."""
+        """Set up the MIB Manager tab for browsing and caching MIBs."""
         mib_tab = self.tabview.tab("MIB Manager")
 
         # Instructions
@@ -449,7 +462,7 @@ class MIBBrowserWindow:
         # Refresh the list
         self._refresh_cached_mibs()
 
-    def _extract_mib_imports(self, mib_file_path: Path) -> list[str]:
+    def _extract_mib_imports(self, mib_file_path: Path) -> list[str]:  # noqa: C901, PLR0912
         """Extract IMPORTS from a MIB file.
 
         Args:
@@ -457,6 +470,7 @@ class MIBBrowserWindow:
 
         Returns:
             List of imported MIB names
+
         """
         imports = []
         try:
@@ -492,16 +506,19 @@ class MIBBrowserWindow:
                     for part in import_block.split("FROM"):
                         if part.strip():
                             mib_name = part.strip().split()[0]
-                            if mib_name and mib_name.replace("-", "").replace("_", "").isalnum():
-                                if mib_name not in imports:
-                                    imports.append(mib_name)
+                            if (
+                                mib_name
+                                and mib_name.replace("-", "").replace("_", "").isalnum()
+                                and mib_name not in imports
+                            ):
+                                imports.append(mib_name)
 
-        except Exception as e:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
             self.logger.log(f"Error extracting imports from {mib_file_path.name}: {e}", "WARNING")
 
         return imports
 
-    def _find_mib_file_in_cache(self, mib_name: str) -> Optional[Path]:
+    def _find_mib_file_in_cache(self, mib_name: str) -> Path | None:
         """Find a MIB file by name in cache ONLY.
 
         Args:
@@ -509,6 +526,7 @@ class MIBBrowserWindow:
 
         Returns:
             Path to MIB file in cache or None if not found
+
         """
         # Check cache only for original MIB source files
         for ext in [".mib", ".txt", ".my", ".asn", ".asn1"]:
@@ -517,7 +535,7 @@ class MIBBrowserWindow:
                 return cache_file
         return None
 
-    def _find_mib_file(self, mib_name: str) -> Optional[Path]:
+    def _find_mib_file(self, mib_name: str) -> Path | None:
         """Find a MIB file by name in cache and system paths.
 
         Args:
@@ -525,6 +543,7 @@ class MIBBrowserWindow:
 
         Returns:
             Path to MIB file or None if not found
+
         """
         # Check cache first
         cache_py = self.mib_cache_dir / f"{mib_name}.py"
@@ -576,6 +595,7 @@ class MIBBrowserWindow:
 
         Returns:
             Tuple of (resolved_deps, missing_deps)
+
         """
         resolved = []
         missing = []
@@ -604,7 +624,7 @@ class MIBBrowserWindow:
         _recurse(mib_name)
         return resolved, missing
 
-    def load_mib(self, mib_names: list[str] | str) -> tuple[list[str], list[str]]:
+    def load_mib(self, mib_names: list[str] | str) -> tuple[list[str], list[str]]:  # noqa: PLR0912
         """Load MIB module(s) into the MIB browser.
 
         Args:
@@ -612,6 +632,7 @@ class MIBBrowserWindow:
 
         Returns:
             Tuple of (successfully_loaded, failed)
+
         """
         if isinstance(mib_names, str):
             mib_names = [mib_names]
@@ -641,7 +662,13 @@ class MIBBrowserWindow:
                             if dep not in self.loaded_mibs:
                                 self.loaded_mibs.append(dep)
                             self.logger.log(f"Loaded dependency: {dep}", "DEBUG")
-                        except Exception as e:
+                        except (  # noqa: PERF203
+                            AttributeError,
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError,
+                        ) as e:
                             failed_deps.append(dep)
                             self.logger.log(f"Failed to load dependency {dep}: {e}", "ERROR")
 
@@ -672,12 +699,27 @@ class MIBBrowserWindow:
                                 f"Loaded MIB: {mib_name} (with {len(resolved_deps)} dependencies)",
                                 "INFO",
                             )
-                        except Exception as e:
+                        except (
+                            AttributeError,
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError,
+                        ) as e:
                             # Main MIB failed to load
                             self.unsatisfied_mibs[mib_name] = [f"Failed to load: {e}"]
                             failed.append(mib_name)
-                            self.logger.log(f"Failed to load main MIB {mib_name}: {e}", "ERROR")
-            except Exception as e:
+                            self.logger.log(
+                                f"Failed to load main MIB {mib_name}: {e}",
+                                "ERROR",
+                            )
+            except (  # noqa: PERF203
+                AttributeError,
+                LookupError,
+                OSError,
+                TypeError,
+                ValueError,
+            ) as e:
                 failed.append(mib_name)
                 self.logger.log(f"Failed to load MIB {mib_name}: {e}", "WARNING")
 
@@ -691,6 +733,7 @@ class MIBBrowserWindow:
 
         Returns:
             True if successfully unloaded
+
         """
         if mib_name in self.loaded_mibs:
             self.loaded_mibs.remove(mib_name)
@@ -703,7 +746,7 @@ class MIBBrowserWindow:
         """Get list of currently loaded MIBs."""
         return self.loaded_mibs.copy()
 
-    def _get_oid_metadata_from_mib(self, oid_str: str) -> Dict[str, Any]:
+    def _get_oid_metadata_from_mib(self, oid_str: str) -> dict[str, Any]:
         """Extract metadata for an OID from loaded MIBs.
 
         Args:
@@ -711,8 +754,9 @@ class MIBBrowserWindow:
 
         Returns:
             Dictionary with keys: name, mib, type, access, description
+
         """
-        metadata: Dict[str, Any] = {}
+        metadata: dict[str, Any] = {}
 
         try:
             # Try to resolve OID to MIB symbol
@@ -739,14 +783,23 @@ class MIBBrowserWindow:
                                     metadata["description"] = str(symbol_obj.getDescription())
 
                                 return metadata
-                except Exception:
+                except (  # noqa: PERF203
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                ):
                     continue
-        except Exception as e:
-            self.logger.log(f"Error extracting metadata for {oid_str}: {e}", "DEBUG")
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+            self.logger.log(
+                f"Error extracting metadata for {oid_str}: {e}",
+                "DEBUG",
+            )
 
         return metadata
 
-    def _get_icon_for_oid(self, oid_str: str) -> Optional[Any]:
+    def _get_icon_for_oid(self, oid_str: str) -> tk.PhotoImage | None:
         """Get appropriate icon for an OID based on its metadata.
 
         Args:
@@ -754,18 +807,18 @@ class MIBBrowserWindow:
 
         Returns:
             PhotoImage icon or None
+
         """
         metadata = self._get_oid_metadata_from_mib(oid_str)
         access = metadata.get("access", "").lower()
 
         if "write" in access:
             return self.icons.get("edit")
-        elif "read" in access:
+        if "read" in access:
             return self.icons.get("lock")
-        elif metadata.get("name", "").endswith("Table"):
+        if metadata.get("name", "").endswith("Table"):
             return self.icons.get("table")
-        else:
-            return self.icons.get("doc")
+        return self.icons.get("doc")
 
     @staticmethod
     def _normalize_oid(oid: str) -> str:
@@ -780,6 +833,7 @@ class MIBBrowserWindow:
 
         Returns:
             Normalized OID string with at least 2 components
+
         """
         # Remove leading/trailing whitespace
         oid = oid.strip()
@@ -810,6 +864,7 @@ class MIBBrowserWindow:
 
         Returns:
             Tuple of OID components or None if name cannot be resolved
+
         """
         oid_input = oid_input.strip()
 
@@ -825,27 +880,31 @@ class MIBBrowserWindow:
         # This requires MIBs to be loaded, just like snmpget/snmpwalk
         try:
             # Create ObjectIdentity with the name
-            # pysnmp will use loaded MIBs to resolve it
             if "::" in oid_input:
-                # Format: "MIB::name"
                 _mib_name, _obj_name = oid_input.split("::", 1)
-                # We can't pre-resolve here - return None and let ObjectIdentity handle it
-                # This signals caller to use ObjectIdentity(mib_name, obj_name) directly
                 return None
-            else:
-                # Try resolving as short name from loaded MIBs
-                for mod_name in self.loaded_mibs:
-                    try:
-                        mib_symbols = self.mib_builder.mibSymbols.get(mod_name, {})
-                        if oid_input in mib_symbols:
-                            symbol_obj = mib_symbols[oid_input]
-                            if hasattr(symbol_obj, "getName"):
-                                oid_tuple = symbol_obj.getName()
-                                return tuple(oid_tuple)  # Ensure it's a tuple of ints
-                    except Exception:
-                        continue
-        except Exception as e:
-            self.logger.log(f"Failed to resolve {oid_input}: {e}", "DEBUG")
+            # Try resolving as short name from loaded MIBs
+            for mod_name in self.loaded_mibs:
+                try:
+                    mib_symbols = self.mib_builder.mibSymbols.get(mod_name, {})
+                    if oid_input in mib_symbols:
+                        symbol_obj = mib_symbols[oid_input]
+                        if hasattr(symbol_obj, "getName"):
+                            oid_tuple = symbol_obj.getName()
+                            return tuple(oid_tuple)  # Ensure it's a tuple of ints
+                except (  # noqa: PERF203
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                ):
+                    continue
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+            self.logger.log(
+                f"Failed to resolve {oid_input}: {e}",
+                "DEBUG",
+            )
 
         return None
 
@@ -892,6 +951,7 @@ class MIBBrowserWindow:
 
         Raises:
             ValueError: If OID cannot be parsed or resolved
+
         """
         oid_input = oid_input.strip()
 
@@ -902,7 +962,8 @@ class MIBBrowserWindow:
                 oid_tuple = tuple(int(p) for p in normalized.split(".") if p)
                 return ObjectIdentity(oid_tuple), normalized
             except (ValueError, AttributeError) as e:
-                raise ValueError(f"Invalid numerical OID: {oid_input}") from e
+                msg = f"Invalid numerical OID: {oid_input}"
+                raise ValueError(msg) from e
 
         # Handle MIB::name format
         if "::" in oid_input:
@@ -921,17 +982,23 @@ class MIBBrowserWindow:
         # This will fail at runtime if MIB isn't loaded (as it should)
         # Provide helpful error message
         if not self.loaded_mibs:
-            raise ValueError(
+            msg = (
                 f"Cannot resolve '{oid_input}' - no MIBs loaded.\n\n"
                 f"Load a MIB first (e.g., SNMPv2-MIB) or use numerical OID."
             )
+            raise ValueError(
+                msg,
+            )
 
-        raise ValueError(
+        msg = (
             f"Cannot resolve '{oid_input}' in loaded MIBs: {', '.join(self.loaded_mibs)}\n\n"
             f"Try:\n"
             f"  • Load the MIB containing this object\n"
             f"  • Use full format: MIB::objectName\n"
             f"  • Use numerical OID instead"
+        )
+        raise ValueError(
+            msg,
         )
 
     def _clear_results(self) -> None:
@@ -967,7 +1034,9 @@ class MIBBrowserWindow:
         ]
 
         files = filedialog.askopenfilenames(
-            parent=self.window, title="Select MIB Files to Cache", filetypes=filetypes
+            parent=self.window,
+            title="Select MIB Files to Cache",
+            filetypes=filetypes,
         )
 
         if not files:
@@ -982,7 +1051,7 @@ class MIBBrowserWindow:
                 shutil.copy2(source, dest)
                 copied_count += 1
                 self.logger.log(f"Copied MIB file to cache: {source.name}", "INFO")
-            except Exception as e:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
                 source_name = source.name if source else file_path
                 self.logger.log(f"Failed to copy {source_name}: {e}", "ERROR")
                 messagebox.showerror(
@@ -999,7 +1068,7 @@ class MIBBrowserWindow:
             )
             self._refresh_cached_mibs()
 
-    def _refresh_cached_mibs(self) -> None:
+    def _refresh_cached_mibs(self) -> None:  # noqa: C901, PLR0912, PLR0915
         """Refresh the list of cached MIBs with dependency status."""
         # Clear existing listbox items
         for widget in self.mib_listbox_frame.winfo_children():
@@ -1214,7 +1283,7 @@ class MIBBrowserWindow:
                 msg += f"\n• {mib}:\n  {reason}\n"
             messagebox.showerror("Load Failed", msg, parent=self.window)
 
-    def _show_mib_dependencies(self) -> None:
+    def _show_mib_dependencies(self) -> None:  # noqa: C901, PLR0912
         """Show dependency information for selected MIBs."""
         selected_files = [
             Path(file_path) for file_path, var in self.cached_mib_checkbuttons.items() if var.get()
@@ -1319,7 +1388,7 @@ class MIBBrowserWindow:
                 mib_file.unlink()
                 removed_count += 1
                 self.logger.log(f"Removed cached MIB: {mib_name}", "INFO")
-            except Exception as e:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
                 mib_name = mib_file.name if mib_file else file_path
                 self.logger.log(f"Failed to remove {mib_name}: {e}", "ERROR")
                 messagebox.showerror(
@@ -1336,7 +1405,7 @@ class MIBBrowserWindow:
             )
             self._refresh_cached_mibs()
 
-    def _on_node_open(self, event: Any) -> None:
+    def _on_node_open(self, event: tk.Event[tk.Misc]) -> None:
         """Handle node open events (for future lazy loading if needed)."""
         _ = event
 
@@ -1397,7 +1466,7 @@ class MIBBrowserWindow:
                 return child
 
         # Create new operation node
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
         op_label = f"→ {operation} {oid} [{timestamp}]"
         op_item = self.results_tree.insert(agent_item, "end", text=op_label, values=("", "", ""))
         self.results_tree.item(op_item, open=True)
@@ -1453,7 +1522,9 @@ class MIBBrowserWindow:
                 self.status_var.set(f"Error: {error_status.prettyPrint()}")
                 self.logger.log(f"MIB Browser GET error: {error_status.prettyPrint()}", "ERROR")
                 messagebox.showerror(
-                    "SNMP GET Error", error_status.prettyPrint(), parent=self.window
+                    "SNMP GET Error",
+                    error_status.prettyPrint(),
+                    parent=self.window,
                 )
                 return
 
@@ -1475,14 +1546,14 @@ class MIBBrowserWindow:
                     op_item,
                     "end",
                     text=name,
-                    image=icon if icon else "",
+                    image=icon or "",
                     values=(oid_str, type_str, value),
                 )
 
             self.status_var.set(f"GET completed: {len(var_binds)} result(s)")
             self.logger.log(f"MIB Browser: GET {display_oid} returned {len(var_binds)} result(s)")
 
-        except Exception as e:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
             error_msg = self._format_mib_error(e)
             self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
             self.logger.log(f"MIB Browser GET error: {e}", "ERROR")
@@ -1533,14 +1604,18 @@ class MIBBrowserWindow:
                 self.status_var.set(f"Error: {error_indication}")
                 self.logger.log(f"MIB Browser GETNEXT error: {error_indication}", "ERROR")
                 messagebox.showerror(
-                    "SNMP GETNEXT Error", str(error_indication), parent=self.window
+                    "SNMP GETNEXT Error",
+                    str(error_indication),
+                    parent=self.window,
                 )
                 return
             if error_status:
                 self.status_var.set(f"Error: {error_status.prettyPrint()}")
                 self.logger.log(f"MIB Browser GETNEXT error: {error_status.prettyPrint()}", "ERROR")
                 messagebox.showerror(
-                    "SNMP GETNEXT Error", error_status.prettyPrint(), parent=self.window
+                    "SNMP GETNEXT Error",
+                    error_status.prettyPrint(),
+                    parent=self.window,
                 )
                 return
 
@@ -1562,7 +1637,7 @@ class MIBBrowserWindow:
                     op_item,
                     "end",
                     text=name,
-                    image=icon if icon else "",
+                    image=icon or "",
                     values=(oid_str, type_str, value),
                 )
 
@@ -1574,10 +1649,10 @@ class MIBBrowserWindow:
 
             self.status_var.set(f"GETNEXT completed: {len(var_binds)} result(s)")
             self.logger.log(
-                f"MIB Browser: GETNEXT {display_oid} returned {len(var_binds)} result(s)"
+                f"MIB Browser: GETNEXT {display_oid} returned {len(var_binds)} result(s)",
             )
 
-        except Exception as e:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
             error_msg = self._format_mib_error(e)
             self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
             self.logger.log(f"MIB Browser GETNEXT error: {e}", "ERROR")
@@ -1624,7 +1699,7 @@ class MIBBrowserWindow:
                         var_binds,
                     ) in iterator:
                         walk_results.append(
-                            (error_indication, error_status, error_index, var_binds)
+                            (error_indication, error_status, error_index, var_binds),
                         )
                 except StatusInformation as e:
                     # Handle any serialization errors
@@ -1648,7 +1723,9 @@ class MIBBrowserWindow:
                     self.status_var.set(f"Error: {error_indication}")
                     self.logger.log(f"MIB Browser WALK error: {error_indication}", "ERROR")
                     messagebox.showerror(
-                        "SNMP WALK Error", str(error_indication), parent=self.window
+                        "SNMP WALK Error",
+                        str(error_indication),
+                        parent=self.window,
                     )
                     return
                 if error_status:
@@ -1669,7 +1746,7 @@ class MIBBrowserWindow:
                         op_item,
                         "end",
                         text=name,
-                        image=icon if icon else "",
+                        image=icon or "",
                         values=(oid_str, type_str, value),
                     )
                     result_count += 1
@@ -1677,7 +1754,7 @@ class MIBBrowserWindow:
             self.status_var.set(f"WALK completed: {result_count} result(s)")
             self.logger.log(f"MIB Browser: WALK {display_oid} returned {result_count} result(s)")
 
-        except Exception as e:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
             error_msg = self._format_mib_error(e)
             self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
             self.logger.log(f"MIB Browser WALK error: {e}", "ERROR")
@@ -1736,7 +1813,9 @@ class MIBBrowserWindow:
                 self.status_var.set(f"Error: {error_status.prettyPrint()}")
                 self.logger.log(f"MIB Browser SET error: {error_status.prettyPrint()}", "ERROR")
                 messagebox.showerror(
-                    "SNMP SET Error", error_status.prettyPrint(), parent=self.window
+                    "SNMP SET Error",
+                    error_status.prettyPrint(),
+                    parent=self.window,
                 )
                 return
 
@@ -1753,14 +1832,14 @@ class MIBBrowserWindow:
                 op_item,
                 "end",
                 text=result_text,
-                image=icon if icon else "",
+                image=icon or "",
                 values=(display_oid, "OctetString", value),
             )
 
             self.status_var.set("SET completed successfully")
             self.logger.log(f"MIB Browser: SET {display_oid} = {value} successful")
 
-        except Exception as e:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
             error_msg = self._format_mib_error(e)
             self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
             self.logger.log(f"MIB Browser SET error: {e}", "ERROR")
@@ -1788,7 +1867,7 @@ class MIBBrowserWindow:
     def _build_hierarchical_tree(self, results: list[tuple[str, str, str]]) -> None:
         """Build a hierarchical tree from WALK results."""
         # Create a mapping of OID -> item
-        oid_to_item: Dict[str, str] = {}
+        oid_to_item: dict[str, str] = {}
 
         for oid_str, type_str, value in results:
             parts = oid_str.split(".")
@@ -1804,7 +1883,10 @@ class MIBBrowserWindow:
 
             # Insert into tree
             item = self.results_tree.insert(
-                parent_item, "end", text=name, values=(oid_str, type_str, value)
+                parent_item,
+                "end",
+                text=name,
+                values=(oid_str, type_str, value),
             )
 
             oid_to_item[oid_str] = item
@@ -1818,7 +1900,7 @@ class MIBBrowserWindow:
         if isinstance(self.window, ctk.CTk):
             self.window.mainloop()
 
-    def set_oid_metadata(self, metadata: Dict[str, Dict[str, Any]]) -> None:
+    def set_oid_metadata(self, metadata: dict[str, dict[str, Any]]) -> None:
         """Update OID metadata for name resolution."""
         self.oid_metadata = metadata
 
@@ -1833,7 +1915,9 @@ def main() -> None:
     args = parser.parse_args()
 
     browser = MIBBrowserWindow(
-        default_host=args.host, default_port=args.port, default_community=args.community
+        default_host=args.host,
+        default_port=args.port,
+        default_community=args.community,
     )
     browser.run()
 

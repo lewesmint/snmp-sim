@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from app.model_paths import AGENT_MODEL_DIR
 
@@ -57,7 +57,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 with schema_file.open("w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2)
                 updated += 1
-        except Exception as exc:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
             print(f"Failed to update {schema_file}: {exc}")
 
     print(f"Updated {updated} schema file(s) to version {args.set_version}.")

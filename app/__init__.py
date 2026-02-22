@@ -1,20 +1,21 @@
 """SNMP Agent Application Package."""
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Dict, Any, Optional, Callable
+from typing import Any
+
+from app.compiler import MibCompilationError, MibCompiler
+from app.generator import BehaviourGenerator
 from app.snmp_agent import SNMPAgent
 from app.type_registry import TypeRegistry
-from app.compiler import MibCompiler, MibCompilationError
-from app.generator import BehaviourGenerator
 
 
 def build_type_registry(
     compiled_mibs_dir: str | Path = "compiled-mibs",
     output_path: str = "data/types.json",
-    progress_callback: Optional[Callable[[str], None]] = None,
-) -> Dict[str, Any]:
-    """
-    Build the type registry from compiled MIBs and export to JSON.
+    progress_callback: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    """Build the type registry from compiled MIBs and export to JSON.
 
     This is a convenience function that handles the complete type registration process:
     1. Discovers SNMP types from compiled MIBs
@@ -34,6 +35,7 @@ def build_type_registry(
         >>> from app import build_type_registry
         >>> registry = build_type_registry()
         >>> print(f"Built registry with {len(registry)} types")
+
     """
     compiled_dir = Path(compiled_mibs_dir)
 
@@ -49,10 +51,10 @@ def build_type_registry(
 
 
 __all__ = [
-    "SNMPAgent",
-    "MibCompiler",
-    "MibCompilationError",
     "BehaviourGenerator",
+    "MibCompilationError",
+    "MibCompiler",
+    "SNMPAgent",
     "TypeRegistry",
     "build_type_registry",
 ]

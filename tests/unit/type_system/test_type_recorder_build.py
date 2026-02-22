@@ -15,30 +15,27 @@ def make_fake_builder(mib_symbols: dict[str, dict[str, object]]) -> Any:
     class FakeBuilder:
         """Test helper class for FakeBuilder."""
 
-        def __init__(self, symbols: dict[str, dict[str, object]]):
+        def __init__(self, symbols: dict[str, dict[str, object]]) -> None:
             self.mibSymbols = symbols
 
         def add_mib_sources(self, src: object) -> None:
             """Test case for add_mib_sources."""
-            pass
 
         def load_modules(self, *args: object) -> None:
             """Test case for load_modules."""
-            pass
 
     return FakeBuilder(mib_symbols)
 
 
 def test_build_with_textual_convention_and_scalar(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Test case for test_build_with_textual_convention_and_scalar."""
 
     # Prepare fake TextualConvention base class so _is_textual_convention_symbol detects it
     class TextualConvention:
         """Test helper class for TextualConvention."""
-
-        pass
 
     class MyTC(TextualConvention):
         """Test helper class for MyTC."""
@@ -88,7 +85,7 @@ def test_build_with_textual_convention_and_scalar(
         "TEST-MIB": {
             "MyTC": MyTC,
             "myScalar": ScalarObj(),
-        }
+        },
     }
 
     fake_builder = make_fake_builder(mib_symbols)
@@ -101,7 +98,7 @@ def test_build_with_textual_convention_and_scalar(
             """Test case for get_mib_builder."""
             return fake_builder
 
-    monkeypatch.setattr("app.type_recorder._engine.SnmpEngine", lambda: FakeEngine())
+    monkeypatch.setattr("app.type_recorder._engine.SnmpEngine", FakeEngine)
 
     # Monkeypatch seed to avoid heavy rfc1902 usage
     monkeypatch.setattr(
@@ -113,8 +110,8 @@ def test_build_with_textual_convention_and_scalar(
                     "base_type": "INTEGER",
                     "constraints": [],
                     "defined_in": None,
-                }
-            }
+                },
+            },
         ),
     )
 

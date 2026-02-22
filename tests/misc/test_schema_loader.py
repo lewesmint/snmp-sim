@@ -1,8 +1,9 @@
 """Tests for MIB schema loading functionality."""
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import pytest
 
@@ -11,7 +12,9 @@ class TestSchemaLoading:
     """Test MIB schema loading from files."""
 
     def test_load_single_mib_schema(
-        self, mib_schema_dir: Path, sample_mib_schema: Mapping[str, Any]
+        self,
+        mib_schema_dir: Path,
+        sample_mib_schema: Mapping[str, Any],
     ) -> None:
         """Test loading a single MIB schema from directory."""
         # This tests the current implementation in snmp_agent.py
@@ -20,7 +23,7 @@ class TestSchemaLoading:
 
         assert schema_path.exists()
 
-        with open(schema_path, "r") as f:
+        with open(schema_path) as f:
             loaded_schema = json.load(f)
 
         # Accept either a direct object map or a top-level MIB->objects map
@@ -56,10 +59,10 @@ class TestSchemaLoading:
 
         # Load all schemas (simulating snmp_agent.py logic)
         loaded_schemas = {}
-        for mib_name in mibs.keys():
+        for mib_name in mibs:
             schema_path = schema_dir / mib_name / "schema.json"
             if schema_path.exists():
-                with open(schema_path, "r") as f:
+                with open(schema_path) as f:
                     loaded_schemas[mib_name] = json.load(f)
 
         assert len(loaded_schemas) == 2
@@ -77,9 +80,8 @@ class TestSchemaLoading:
             f.write("{ invalid json }")
 
         # Should raise JSONDecodeError
-        with pytest.raises(json.JSONDecodeError):
-            with open(schema_path, "r") as f:
-                json.load(f)
+        with pytest.raises(json.JSONDecodeError), open(schema_path) as f:
+            json.load(f)
 
     def test_schema_directory_structure(self, mib_schema_dir: Path) -> None:
         """Test that schema directory has correct structure."""
@@ -114,7 +116,7 @@ class TestBuildInternalModel:
         for mib in test_mibs:
             schema_path = schema_dir / mib / "schema.json"
             if schema_path.exists():
-                with open(schema_path, "r") as f:
+                with open(schema_path) as f:
                     model[mib] = json.load(f)
 
         assert len(model) == 3
@@ -137,7 +139,7 @@ class TestBuildInternalModel:
         for mib in test_mibs:
             schema_path = schema_dir / mib / "schema.json"
             if schema_path.exists():
-                with open(schema_path, "r") as f:
+                with open(schema_path) as f:
                     model[mib] = json.load(f)
 
         # Should only load the existing one

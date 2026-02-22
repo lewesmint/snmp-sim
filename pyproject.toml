@@ -5,13 +5,29 @@ warn_unused_ignores = true
 warn_return_any = true
 warn_unreachable = true
 show_error_codes = true
+ignore_missing_imports = false
+
+exclude = '(^|/)(retired|compiled-mibs-test|compiled-mibs|minimal-for-reference|manual-tests|logs|tests)/'
+
+[[tool.mypy.overrides]]
+module = ["pysnmp", "pysnmp.*"]
 ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 
-# mypy requires ONE regex string, not a list
-exclude = '(^|/)(retired|compiled-mibs-test|compiled-mibs|minimal-for-reference|manual-tests|logs|ui|tests|ui/logs)/'
+[[tool.mypy.overrides]]
+module = ["pysmi", "pysmi.*"]
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
 
+[[tool.mypy.overrides]]
+module = ["dynaconf", "dynaconf.*"]
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
 
+[[tool.mypy.overrides]]
+module = ["customtkinter", "customtkinter.*"]
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
 [tool.coverage.run]
 source = ["app", "plugins", "ui"]
 branch = true
@@ -24,8 +40,6 @@ omit = [
     "retired/**",
     "logs/**",
     "ui/logs/**",
-    ".venv/**",
-    ".pyenv/**",
     "**/.venv/**",
     "**/.pyenv/**",
 ]
@@ -34,10 +48,11 @@ omit = [
 skip_empty = true
 show_missing = true
 
-
 [tool.ruff]
+target-version = "py310"
 line-length = 100
 exclude = [
+    "tests/**",
     "retired/**",
     "compiled-mibs/**",
     "compiled-mibs-test/**",
@@ -45,29 +60,22 @@ exclude = [
     "manual-tests/**",
     "logs/**",
     "ui/logs/**",
-    ".venv/**",
-    ".pyenv/**",
+    "build/**",
+    "dist/**",
     "**/.venv/**",
     "**/.pyenv/**",
 ]
 
+[tool.ruff.format]
+quote-style = "double"
+
 [tool.ruff.lint]
-select = ["E", "F"]
-extend-select = ["E501", "C90", "PLR"]
+select = ["ALL"]
 ignore = [
-    "E501",
-    "E741",
-    "C901",
-    "PLR0402",
-    "PLR0911",
-    "PLR0912",
-    "PLR0913",
-    "PLR0915",
-    "PLR1711",
-    "PLR1714",
-    "PLR1730",
-    "PLR2004",
-    "PLR5501",
+    "D203",  # incompatible with D211
+    "D213",  # incompatible with D212
+    "COM812",  # conflicts with ruff formatter
+    "TC003",  # false positive: logging/Iterator used at runtime with from __future__ import annotations
 ]
 
 [tool.ruff.lint.mccabe]
@@ -86,35 +94,31 @@ disable = [
 ]
 
 [tool.pylint.main]
-ignore = ["retired", "compiled-mibs", "compiled-mibs-test", "manual-tests"]
+ignore = ["retired", "compiled-mibs", "compiled-mibs-test", "manual-tests", "tests"]
 ignore-paths = [
     "(^|.*/)retired/.*",
     "(^|.*/)compiled-mibs/.*",
     "(^|.*/)compiled-mibs-test/.*",
     "(^|.*/)manual-tests/.*",
+    "(^|.*/)tests/.*",
 ]
-
-[tool.ruff.format]
-quote-style = "double"
-
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = [
+    "--ignore=tests",
     "--ignore=minimal-for-reference",
     "--ignore=compiled-mibs",
     "--ignore=compiled-mibs-test",
     "--ignore=retired",
     "--ignore=manual-tests",
     "--ignore=logs",
-    "--ignore=snmp-wrapper",
-    "--ignore=tests/integration",
+    "--ignore=snmp-wrapper"
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
-
 
 [tool.pyright]
 pythonVersion = "3.10"
@@ -122,17 +126,16 @@ exclude = [
     "**/node_modules",
     "**/__pycache__",
     "**/.*",
-    ".venv",
-    ".pyenv",
+    "**/.venv/**",
+    "**/.pyenv/**",
+    "tests",
     "compiled-mibs",
     "compiled-mibs-test",
     "retired",
     "minimal-for-reference",
     "manual-tests",
-    "tests",
-    "ui",
     "logs",
-    "ui/logs",
+    "ui/logs"
 ]
 
 [[tool.pyright.executionEnvironments]]

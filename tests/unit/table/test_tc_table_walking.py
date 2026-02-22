@@ -1,5 +1,4 @@
-"""
-Integration test for SNMP tree walking with TEXTUAL-CONVENTION types in tables.
+"""Integration test for SNMP tree walking with TEXTUAL-CONVENTION types in tables.
 
 Tests that:
 1. A MIB with custom TEXTUAL-CONVENTIONS can be compiled successfully
@@ -9,11 +8,12 @@ Tests that:
 """
 
 import os
-import pytest
 from pathlib import Path
 
-from app.compiler import MibCompiler, MibCompilationError
+import pytest
+
 from app.app_config import AppConfig
+from app.compiler import MibCompilationError, MibCompiler
 from app.generator import BehaviourGenerator
 
 
@@ -83,7 +83,7 @@ testDeviceLoad = object()
 testSensorIndex = object()
 testSensorName = object()
 testSensorStatus = object()
-""".strip()
+""".strip(),
         )
         return str(compiled_path)
 
@@ -92,7 +92,10 @@ class TestTCTableCompilation:
     """Test that MIBs with TEXTUAL-CONVENTIONS compile correctly."""
 
     def test_compile_tc_table_mib(
-        self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
+        self,
+        test_mib_path: str,
+        compiled_dir: str,
+        app_config: AppConfig,
     ) -> None:
         """Test compilation of MIB with TC-based tables."""
         compiler = MibCompiler(compiled_dir, app_config)
@@ -103,14 +106,17 @@ class TestTCTableCompilation:
         assert py_path.endswith(".py"), f"Expected .py file, got: {py_path}"
 
     def test_compiled_mib_has_textual_convention_classes(
-        self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
+        self,
+        test_mib_path: str,
+        compiled_dir: str,
+        app_config: AppConfig,
     ) -> None:
         """Test that compiled MIB includes TEXTUAL-CONVENTION class definitions."""
         compiler = MibCompiler(compiled_dir, app_config)
         py_path = _compile_or_skip(compiler, test_mib_path)
 
         # Read the compiled Python file directly
-        with open(py_path, "r") as f:
+        with open(py_path) as f:
             content = f.read()
 
         # Check for TextualConvention class definitions
@@ -120,14 +126,17 @@ class TestTCTableCompilation:
         assert "DeviceName" in content, "DeviceName TC should be in compiled MIB"
 
     def test_compiled_mib_has_table_definitions(
-        self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
+        self,
+        test_mib_path: str,
+        compiled_dir: str,
+        app_config: AppConfig,
     ) -> None:
         """Test that compiled MIB includes table and column definitions."""
         compiler = MibCompiler(compiled_dir, app_config)
         py_path = _compile_or_skip(compiler, test_mib_path)
 
         # Read the compiled Python file
-        with open(py_path, "r") as f:
+        with open(py_path) as f:
             content = f.read()
 
         # Check for table structures
@@ -137,14 +146,17 @@ class TestTCTableCompilation:
         assert "testSensorEntry" in content, "testSensorEntry should be in compiled MIB"
 
     def test_table_columns_reference_tc_types(
-        self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
+        self,
+        test_mib_path: str,
+        compiled_dir: str,
+        app_config: AppConfig,
     ) -> None:
         """Test that table columns properly reference custom TC types."""
         compiler = MibCompiler(compiled_dir, app_config)
         py_path = _compile_or_skip(compiler, test_mib_path)
 
         # Read the compiled Python file
-        with open(py_path, "r") as f:
+        with open(py_path) as f:
             content = f.read()
 
         # Verify columns use TC types
@@ -159,14 +171,17 @@ class TestTCTypeRecognition:
     """Test that TEXTUAL-CONVENTION types are properly recognized and handled in compiled code."""
 
     def test_compiled_code_has_tc_class_definitions(
-        self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
+        self,
+        test_mib_path: str,
+        compiled_dir: str,
+        app_config: AppConfig,
     ) -> None:
         """Test that the compiled code has proper TC class definitions."""
         compiler = MibCompiler(compiled_dir, app_config)
         py_path = _compile_or_skip(compiler, test_mib_path)
 
         # Read the compiled Python file directly
-        with open(py_path, "r") as f:
+        with open(py_path) as f:
             content = f.read()
 
         # Verify TC classes with inheritance
@@ -179,14 +194,17 @@ class TestTCTypeRecognition:
         assert "TextualConvention" in content, "TextualConvention should appear in TC definitions"
 
     def test_compiled_tc_types_have_base_types(
-        self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
+        self,
+        test_mib_path: str,
+        compiled_dir: str,
+        app_config: AppConfig,
     ) -> None:
         """Test that compiled TC types show inheritance from base SNMP types."""
         compiler = MibCompiler(compiled_dir, app_config)
         py_path = _compile_or_skip(compiler, test_mib_path)
 
         # Read the compiled code
-        with open(py_path, "r") as f:
+        with open(py_path) as f:
             content = f.read()
 
         # Check that StatusType has Integer or similar base
@@ -211,14 +229,17 @@ class TestTCTableWalking:
     """Test tree walking simulation with TC columns."""
 
     def test_compiled_mib_has_proper_table_structure(
-        self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
+        self,
+        test_mib_path: str,
+        compiled_dir: str,
+        app_config: AppConfig,
     ) -> None:
         """Test that compiled MIB has proper table and column structure."""
         compiler = MibCompiler(compiled_dir, app_config)
         py_path = _compile_or_skip(compiler, test_mib_path)
 
         # Read the compiled code
-        with open(py_path, "r") as f:
+        with open(py_path) as f:
             content = f.read()
 
         # Check for table and column objects (pysmi uses variable declarations, not classes)
@@ -241,14 +262,17 @@ class TestTCTableWalking:
             assert col in content, f"Column {col} should be in compiled MIB"
 
     def test_tc_columns_properly_typed_in_compiled_code(
-        self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
+        self,
+        test_mib_path: str,
+        compiled_dir: str,
+        app_config: AppConfig,
     ) -> None:
         """Test that TC-typed columns are properly typed in compiled code."""
         compiler = MibCompiler(compiled_dir, app_config)
         py_path = _compile_or_skip(compiler, test_mib_path)
 
         # Read the compiled code
-        with open(py_path, "r") as f:
+        with open(py_path) as f:
             content = f.read()
 
         # Check that TC types appear in the column definitions
@@ -271,14 +295,17 @@ class TestTCTableWalking:
         ), "testDevicePriority should use PriorityLevel TC"
 
     def test_compiled_mib_structure_supports_tree_walk(
-        self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
+        self,
+        test_mib_path: str,
+        compiled_dir: str,
+        app_config: AppConfig,
     ) -> None:
         """Test that compiled MIB structure supports SNMP tree walking."""
         compiler = MibCompiler(compiled_dir, app_config)
         py_path = _compile_or_skip(compiler, test_mib_path)
 
         # Read the compiled code
-        with open(py_path, "r") as f:
+        with open(py_path) as f:
             content = f.read()
 
         # Check for MIB module structure
@@ -315,7 +342,7 @@ class TestTCTableWalking:
         # Verify the compiled MIB file exists and has correct structure
         assert os.path.exists(py_path), f"Compiled MIB should exist at {py_path}"
 
-        with open(py_path, "r") as f:
+        with open(py_path) as f:
             content = f.read()
 
         # Verify TC-based table structure is present
@@ -335,7 +362,10 @@ class TestTCTableWalking:
         assert generator is not None, "BehaviourGenerator should be instantiable"
 
     def test_tc_table_columns_extracted_correctly(
-        self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
+        self,
+        test_mib_path: str,
+        compiled_dir: str,
+        app_config: AppConfig,
     ) -> None:
         """Test that TC table columns are properly structured in compiled code.
 
@@ -348,7 +378,7 @@ class TestTCTableWalking:
         py_path = _compile_or_skip(compiler, test_mib_path)
 
         # Verify the compiled MIB has the expected TC table structure
-        with open(py_path, "r") as f:
+        with open(py_path) as f:
             content = f.read()
 
         # Check that table entries with TC columns are defined
@@ -372,7 +402,10 @@ class TestTCTableWalking:
         assert "class DeviceName" in content, "DeviceName TC class should be recognizable"
 
     def test_tree_walk_simulation_on_tc_tables(
-        self, test_mib_path: str, compiled_dir: str, app_config: AppConfig
+        self,
+        test_mib_path: str,
+        compiled_dir: str,
+        app_config: AppConfig,
     ) -> None:
         """Test that compiled MIB structure supports SNMP tree walking.
 
@@ -385,7 +418,7 @@ class TestTCTableWalking:
         py_path = _compile_or_skip(compiler, test_mib_path)
 
         # Load and analyze the compiled MIB structure
-        with open(py_path, "r") as f:
+        with open(py_path) as f:
             content = f.read()
 
         # Verify OID definitions exist (required for tree walking)

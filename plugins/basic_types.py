@@ -1,6 +1,7 @@
 """Basic type default value plugin."""
 
 from typing import Any
+
 from app.default_value_plugins import register_plugin
 from app.types import TypeInfo
 
@@ -19,6 +20,7 @@ def _get_first_enum_value(enums: Any) -> Any:
 
     Returns:
         The first valid enum value, or None if no valid enums found
+
     """
     if not enums:
         return None
@@ -32,14 +34,13 @@ def _get_first_enum_value(enums: Any) -> Any:
             return values[0]
 
     # Handle list format (from type registry)
-    elif isinstance(enums, list):
-        if enums:
-            # List of dicts with 'value' key
-            first_enum = enums[0]
-            if isinstance(first_enum, dict):
-                return first_enum.get("value")
-            # Or list of values
-            return enums[0]
+    elif isinstance(enums, list) and enums:
+        # List of dicts with 'value' key
+        first_enum = enums[0]
+        if isinstance(first_enum, dict):
+            return first_enum.get("value")
+        # Or list of values
+        return enums[0]
 
     return None
 
@@ -52,20 +53,20 @@ def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
     # Handle specific symbols first
     if symbol_name == "sysDescr":
         return "Simple Python SNMP Agent"
-    elif symbol_name == "sysObjectID":
+    if symbol_name == "sysObjectID":
         return [1, 3, 6, 1, 4, 1, 99999]
-    elif symbol_name == "sysContact":
+    if symbol_name == "sysContact":
         return "Admin <admin@example.com>"
-    elif symbol_name == "sysName":
+    if symbol_name == "sysName":
         return "snmp-agent"
-    elif symbol_name == "sysLocation":
+    if symbol_name == "sysLocation":
         return "Server Room"
-    elif symbol_name == "sysUpTime":
+    if symbol_name == "sysUpTime":
         return 0  # Will be dynamic
-    elif symbol_name == "sysServices":
+    if symbol_name == "sysServices":
         return 72  # Application + End-to-end
     # MAC address fields should have proper null MAC
-    elif (
+    if (
         "PhysAddress" in symbol_name
         or "MacAddress" in symbol_name
         or symbol_name in ("ifPhysAddress", "ipNetMediaPhysAddress", "atPhysAddress")
@@ -84,9 +85,9 @@ def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
         ):
             return [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         return "unset"
-    elif base_type in ("ObjectIdentifier", "AutonomousType", "OBJECT IDENTIFIER"):
+    if base_type in ("ObjectIdentifier", "AutonomousType", "OBJECT IDENTIFIER"):
         return [0, 0]
-    elif base_type in ("Integer32", "Integer", "Gauge32", "Unsigned32", "INTEGER"):
+    if base_type in ("Integer32", "Integer", "Gauge32", "Unsigned32", "INTEGER"):
         # Check for enums first - CRITICAL: must check before returning 0
         enums = type_info.get("enums")
         if enums:
@@ -95,27 +96,23 @@ def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
                 return first_value
         # No enums, return 0 as default integer
         return 0
-    elif base_type in ("Counter32", "Counter64"):
+    if base_type in ("Counter32", "Counter64"):
         return 0
-    elif base_type == "IpAddress":
+    if base_type == "IpAddress":
         return [0, 0, 0, 0]
-    elif base_type == "TimeTicks":
+    if base_type == "TimeTicks":
         return 0
-    elif base_type == "Bits":
+    if base_type in {"Bits", "Opaque"}:
         return []
-    elif base_type == "Opaque":
-        return []
-    elif base_type == "PhysAddress":
+    if base_type in {"PhysAddress", "MacAddress"}:
         return [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-    elif base_type == "MacAddress":
-        return [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
-    elif base_type == "DateAndTime":
+    if base_type == "DateAndTime":
         return "2026-01-01,00:00:00.0"
-    elif base_type == "TruthValue":
+    if base_type == "TruthValue":
         return 1  # true(1)
-    elif base_type == "RowStatus":
+    if base_type == "RowStatus":
         return 1  # active(1)
-    elif base_type == "StorageType":
+    if base_type == "StorageType":
         return 3  # volatile(3)
 
     # Fallback for unknown types - return None to indicate no default

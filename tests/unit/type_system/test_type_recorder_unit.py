@@ -1,15 +1,17 @@
-"""
-Unit tests for TypeRecorder module.
-"""
+"""Unit tests for TypeRecorder module."""
 
 from pathlib import Path
-from typing import Any, List, TypedDict, Dict, cast
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, TypedDict, cast
+
 import pytest
 
 from app.type_recorder import TypeRecorder
 
-JsonDict = Dict[str, object]
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+JsonDict = dict[str, object]
 
 
 class ValueRangeConstraintDict(TypedDict, total=False):
@@ -31,7 +33,7 @@ class SingleValueConstraintDict(TypedDict, total=False):
     """Type definition for a single value constraint dictionary."""
 
     type: str
-    values: List[Any]
+    values: list[Any]
 
 
 class TypeEntryDict(TypedDict, total=False):
@@ -40,34 +42,34 @@ class TypeEntryDict(TypedDict, total=False):
     base_type: str | None
     display_hint: str | None
     size: int | None
-    constraints: List[
+    constraints: list[
         ValueRangeConstraintDict | ValueSizeConstraintDict | SingleValueConstraintDict
     ]
     constraints_repr: str | None
     enums: dict[str, int] | None
     defined_in: str | None
     abstract: bool | None
-    used_by: List[str]
+    used_by: list[str]
 
 
 class TestSafeCallZeroArg:
-    """Test safe_call_zero_arg static method"""
+    """Test safe_call_zero_arg static method."""
 
     def test_not_callable(self, mocker: Any) -> None:
-        """If attribute is not callable, return None"""
+        """If attribute is not callable, return None."""
         obj = mocker.Mock()
         obj.method = "not a function"
         result = TypeRecorder.safe_call_zero_arg(obj, "method")
         assert result is None
 
     def test_missing_attribute(self, mocker: Any) -> None:
-        """If attribute does not exist, return None"""
+        """If attribute does not exist, return None."""
         obj = mocker.Mock(spec=[])
         result = TypeRecorder.safe_call_zero_arg(obj, "missing")
         assert result is None
 
     def test_signature_inspection_fails(self, mocker: Any) -> None:
-        """If signature inspection fails, return None"""
+        """If signature inspection fails, return None."""
         obj = mocker.Mock()
         obj.method = mocker.Mock(side_effect=TypeError("inspection failed"))
 
@@ -77,7 +79,7 @@ class TestSafeCallZeroArg:
         assert result is None
 
     def test_required_parameters(self, mocker: Any) -> None:
-        """If method requires parameters, return None"""
+        """If method requires parameters, return None."""
         obj = mocker.Mock()
 
         def requires_param(x: Any) -> Any:
@@ -88,14 +90,14 @@ class TestSafeCallZeroArg:
         assert result is None
 
     def test_call_raises_type_error(self, mocker: Any) -> None:
-        """If call raises TypeError, return None"""
+        """If call raises TypeError, return None."""
         obj = mocker.Mock()
         obj.method = mocker.Mock(side_effect=TypeError("bad call"))
         result = TypeRecorder.safe_call_zero_arg(obj, "method")
         assert result is None
 
     def test_successful_zero_arg_call(self, mocker: Any) -> None:
-        """If method is callable with no args, return result"""
+        """If method is callable with no args, return result."""
         obj = mocker.Mock()
         obj.method = mocker.Mock(return_value="success")
         result = TypeRecorder.safe_call_zero_arg(obj, "method")
@@ -103,10 +105,10 @@ class TestSafeCallZeroArg:
 
 
 class TestInferBaseTypeFromMRO:
-    """Test infer_base_type_from_mro static method"""
+    """Test infer_base_type_from_mro static method."""
 
     def test_finds_known_base_type(self, mocker: Any) -> None:
-        """Should find ASN1 base type in MRO"""
+        """Should find ASN1 base type in MRO."""
         # Create a type dynamically with proper __name__
         OctetString = type("OctetString", (), {})
         CustomType = type("CustomType", (OctetString,), {})
@@ -116,7 +118,7 @@ class TestInferBaseTypeFromMRO:
         assert result == "OctetString"
 
     def test_no_known_base_type(self, mocker: Any) -> None:
-        """Should return None if no known base type in MRO"""
+        """Should return None if no known base type in MRO."""
         UnknownType = type("UnknownType", (), {})
 
         instance = UnknownType()
@@ -125,10 +127,10 @@ class TestInferBaseTypeFromMRO:
 
 
 class TestUnwrapSyntax:
-    """Test unwrap_syntax static method"""
+    """Test unwrap_syntax static method."""
 
     def test_with_get_syntax(self, mocker: Any) -> None:
-        """Should use getSyntax() if available"""
+        """Should use getSyntax() if available."""
         BaseType = type("Integer32", (), {})
 
         def get_syntax_impl(_self: Any) -> Any:
@@ -143,7 +145,7 @@ class TestUnwrapSyntax:
         assert isinstance(base_obj, BaseType)
 
     def test_without_get_syntax(self, mocker: Any) -> None:
-        """Should infer from MRO if getSyntax not available"""
+        """Should infer from MRO if getSyntax not available."""
         Counter32 = type("Counter32", (), {})
         CustomCounter = type("CustomCounter", (Counter32,), {})
 
@@ -154,7 +156,7 @@ class TestUnwrapSyntax:
         assert base_obj is syntax
 
     def test_no_base_type(self, mocker: Any) -> None:
-        """Should return syntax_type for both if no base found"""
+        """Should return syntax_type for both if no base found."""
 
         class UnknownType:
             """Test helper class for UnknownType."""
@@ -169,17 +171,17 @@ class TestUnwrapSyntax:
 
 
 class TestExtractDisplayHint:
-    """Test extract_display_hint static method"""
+    """Test extract_display_hint static method."""
 
     def test_from_get_display_hint_method(self, mocker: Any) -> None:
-        """Should extract from getDisplayHint() method"""
+        """Should extract from getDisplayHint() method."""
         syntax = mocker.Mock()
         syntax.getDisplayHint = mocker.Mock(return_value="1x:")
         result = TypeRecorder.extract_display_hint(syntax)
         assert result == "1x:"
 
     def test_from_instance_attribute(self, mocker: Any) -> None:
-        """Should extract from instance displayHint attribute"""
+        """Should extract from instance displayHint attribute."""
         syntax = mocker.Mock()
         syntax.getDisplayHint = mocker.Mock(return_value=None)
         syntax.displayHint = "2d-1d-1d,1d:1d:1d.1d,1a1d:1d"
@@ -187,7 +189,7 @@ class TestExtractDisplayHint:
         assert result == "2d-1d-1d,1d:1d:1d.1d,1a1d:1d"
 
     def test_from_class_attribute(self, mocker: Any) -> None:
-        """Should extract from class displayHint attribute"""
+        """Should extract from class displayHint attribute."""
 
         class CustomType:
             """Test helper class for CustomType."""
@@ -199,20 +201,20 @@ class TestExtractDisplayHint:
         assert result == "255a"
 
     def test_empty_string(self, mocker: Any) -> None:
-        """Should return None for empty display hint"""
+        """Should return None for empty display hint."""
         syntax = mocker.Mock()
         syntax.getDisplayHint = mocker.Mock(return_value="")
         result = TypeRecorder.extract_display_hint(syntax)
         assert result is None
 
     def test_no_display_hint(self, mocker: Any) -> None:
-        """Should return None if no display hint found"""
+        """Should return None if no display hint found."""
         syntax = mocker.Mock(spec=[])
         result = TypeRecorder.extract_display_hint(syntax)
         assert result is None
 
     def test_instance_blank_class_non_blank(self, mocker: Any) -> None:
-        """Should skip blank instance displayHint and use class value"""
+        """Should skip blank instance displayHint and use class value."""
 
         class CustomType:
             """Test helper class for CustomType."""
@@ -227,13 +229,13 @@ class TestExtractDisplayHint:
 
 
 class TestExtractEnumsList:
-    """Test extract_enums_list static method"""
+    """Test extract_enums_list static method."""
 
     def test_from_named_values(self, mocker: Any) -> None:
-        """Should extract enums from namedValues"""
+        """Should extract enums from namedValues."""
         named_values = mocker.Mock()
         named_values.items = mocker.Mock(
-            return_value=[("active", 1), ("notInService", 2), ("notReady", 3)]
+            return_value=[("active", 1), ("notInService", 2), ("notReady", 3)],
         )
 
         syntax = mocker.Mock()
@@ -247,7 +249,7 @@ class TestExtractEnumsList:
         ]
 
     def test_sorts_by_value(self, mocker: Any) -> None:
-        """Should sort enums by value"""
+        """Should sort enums by value."""
         named_values = mocker.Mock()
         named_values.items = mocker.Mock(return_value=[("down", 2), ("up", 1), ("testing", 3)])
 
@@ -259,13 +261,13 @@ class TestExtractEnumsList:
         assert [e["value"] for e in result] == [1, 2, 3]
 
     def test_no_named_values(self, mocker: Any) -> None:
-        """Should return None if no namedValues"""
+        """Should return None if no namedValues."""
         syntax = mocker.Mock(spec=[])
         result = TypeRecorder.extract_enums_list(syntax)
         assert result is None
 
     def test_named_values_not_callable(self, mocker: Any) -> None:
-        """Should return None if namedValues.items not callable"""
+        """Should return None if namedValues.items not callable."""
         syntax = mocker.Mock()
         syntax.namedValues = mocker.Mock()
         syntax.namedValues.items = "not callable"
@@ -273,7 +275,7 @@ class TestExtractEnumsList:
         assert result is None
 
     def test_items_raises_exception(self, mocker: Any) -> None:
-        """Should return None if items() raises exception"""
+        """Should return None if items() raises exception."""
         named_values = mocker.Mock()
         named_values.items = mocker.Mock(side_effect=Exception("error"))
 
@@ -284,10 +286,10 @@ class TestExtractEnumsList:
         assert result is None
 
     def test_invalid_types_in_pairs(self, mocker: Any) -> None:
-        """Should skip invalid pairs"""
+        """Should skip invalid pairs."""
         named_values = mocker.Mock()
         named_values.items = mocker.Mock(
-            return_value=[("valid", 1), (123, "invalid"), ("another", 2)]
+            return_value=[("valid", 1), (123, "invalid"), ("another", 2)],
         )
 
         syntax = mocker.Mock()
@@ -300,7 +302,7 @@ class TestExtractEnumsList:
         ]
 
     def test_from_class_named_values(self, mocker: Any) -> None:
-        """Should extract from class namedValues if instance has none"""
+        """Should extract from class namedValues if instance has none."""
 
         class CustomType:
             """Test helper class for CustomType."""
@@ -309,7 +311,7 @@ class TestExtractEnumsList:
                 """Test helper class for NamedValues."""
 
                 @staticmethod
-                def items() -> List[tuple[str, int]]:
+                def items() -> list[tuple[str, int]]:
                     """Test case for items."""
                     return [("true", 1), ("false", 2)]
 
@@ -322,37 +324,37 @@ class TestExtractEnumsList:
 
 
 class TestParseConstraintsFromRepr:
-    """Test parse_constraints_from_repr class method"""
+    """Test parse_constraints_from_repr class method."""
 
     def test_value_size_constraint(self) -> None:
-        """Should parse ValueSizeConstraint"""
+        """Should parse ValueSizeConstraint."""
         repr_text = "ValueSizeConstraint object, consts 0, 255"
         _size, constraints = TypeRecorder.parse_constraints_from_repr(repr_text)
         assert len(constraints) == 1
         assert constraints[0] == {"type": "ValueSizeConstraint", "min": 0, "max": 255}
 
     def test_value_range_constraint(self) -> None:
-        """Should parse ValueRangeConstraint"""
+        """Should parse ValueRangeConstraint."""
         repr_text = "ValueRangeConstraint object, consts 0, 127"
         _size, constraints = TypeRecorder.parse_constraints_from_repr(repr_text)
         assert len(constraints) == 1
         assert constraints[0] == {"type": "ValueRangeConstraint", "min": 0, "max": 127}
 
     def test_single_value_constraint(self) -> None:
-        """Should parse SingleValueConstraint"""
+        """Should parse SingleValueConstraint."""
         repr_text = "SingleValueConstraint object, consts 1, 2, 3"
         _size, constraints = TypeRecorder.parse_constraints_from_repr(repr_text)
         assert len(constraints) == 1
         assert constraints[0] == {"type": "SingleValueConstraint", "values": [1, 2, 3]}
 
     def test_exact_size_creates_size_set(self) -> None:
-        """Should create size set for exact sizes"""
+        """Should create size set for exact sizes."""
         repr_text = "ValueSizeConstraint object, consts 6, 6"
         size, _constraints = TypeRecorder.parse_constraints_from_repr(repr_text)
         assert size == {"type": "set", "allowed": [6]}
 
     def test_multiple_size_ranges_creates_size_range(self) -> None:
-        """Should create size range from multiple ranges"""
+        """Should create size range from multiple ranges."""
         repr_text = (
             "ValueSizeConstraint object, consts 1, 64 ValueSizeConstraint object, consts 0, 32"
         )
@@ -363,7 +365,7 @@ class TestParseConstraintsFromRepr:
         assert size["max"] == 32  # min of maxs
 
     def test_conflicting_ranges_creates_union(self) -> None:
-        """Should create union for conflicting ranges"""
+        """Should create union for conflicting ranges."""
         repr_text = (
             "ValueSizeConstraint object, consts 10, 20 ValueSizeConstraint object, consts 30, 40"
         )
@@ -373,7 +375,7 @@ class TestParseConstraintsFromRepr:
         assert size["type"] == "union"
 
     def test_deduplicates_constraints(self) -> None:
-        """Should deduplicate exact duplicates"""
+        """Should deduplicate exact duplicates."""
         repr_text = (
             "ValueRangeConstraint object, consts 0, 100 ValueRangeConstraint object, consts 0, 100"
         )
@@ -381,7 +383,7 @@ class TestParseConstraintsFromRepr:
         assert len(constraints) == 1
 
     def test_negative_range(self) -> None:
-        """Should handle negative ranges"""
+        """Should handle negative ranges."""
         repr_text = "ValueRangeConstraint object, consts -100, 100"
         _size, constraints = TypeRecorder.parse_constraints_from_repr(repr_text)
         assert constraints[0] == {
@@ -392,10 +394,10 @@ class TestParseConstraintsFromRepr:
 
 
 class TestExtractConstraints:
-    """Test extract_constraints class method"""
+    """Test extract_constraints class method."""
 
     def test_no_subtype_spec(self, mocker: Any) -> None:
-        """Should return empty if no subtypeSpec"""
+        """Should return empty if no subtypeSpec."""
         syntax = mocker.Mock(spec=[])
         size, constraints, repr_text = TypeRecorder.extract_constraints(syntax)
         assert size is None
@@ -403,7 +405,7 @@ class TestExtractConstraints:
         assert repr_text is None
 
     def test_with_constraints(self, mocker: Any) -> None:
-        """Should extract constraints from subtypeSpec"""
+        """Should extract constraints from subtypeSpec."""
 
         class FakeSubtypeSpec:
             """Test helper class for FakeSubtypeSpec."""
@@ -420,7 +422,7 @@ class TestExtractConstraints:
         assert repr_text == "ValueRangeConstraint object, consts 1, 100"
 
     def test_empty_constraints_intersection(self, mocker: Any) -> None:
-        """Should not set repr_text for empty constraint markers"""
+        """Should not set repr_text for empty constraint markers."""
 
         class FakeSubtypeSpec:
             """Test helper class for FakeSubtypeSpec."""
@@ -437,16 +439,16 @@ class TestExtractConstraints:
 
 
 class TestFilterConstraintsBySize:
-    """Test _filter_constraints_by_size static method"""
+    """Test _filter_constraints_by_size static method."""
 
     def test_no_size_returns_unchanged(self) -> None:
-        """Should return constraints unchanged if no size"""
+        """Should return constraints unchanged if no size."""
         constraints = [{"type": "ValueSizeConstraint", "min": 0, "max": 255}]
         result = TypeRecorder._filter_constraints_by_size(None, constraints)
         assert result == constraints
 
     def test_filters_by_range_size(self) -> None:
-        """Should filter constraints matching range size"""
+        """Should filter constraints matching range size."""
         size = {"type": "range", "min": 1, "max": 64}
         constraints = [
             {"type": "ValueSizeConstraint", "min": 1, "max": 64},
@@ -459,8 +461,8 @@ class TestFilterConstraintsBySize:
         assert constraints[2] in result  # non-size constraint kept
 
     def test_filters_by_set_size(self) -> None:
-        """Should filter constraints matching set size"""
-        size = cast(dict[str, object], {"type": "set", "allowed": [6, 8]})
+        """Should filter constraints matching set size."""
+        size = cast("dict[str, object]", {"type": "set", "allowed": [6, 8]})
         constraints = [
             {"type": "ValueSizeConstraint", "min": 6, "max": 6},
             {"type": "ValueSizeConstraint", "min": 10, "max": 10},
@@ -472,49 +474,49 @@ class TestFilterConstraintsBySize:
         assert constraints[2] in result  # non-size constraint kept
 
     def test_invalid_size_type_returns_unchanged(self) -> None:
-        """Should return constraints unchanged for invalid size format"""
-        size = cast(dict[str, object], {"type": "range", "min": "not an int", "max": "also not"})
+        """Should return constraints unchanged for invalid size format."""
+        size = cast("dict[str, object]", {"type": "range", "min": "not an int", "max": "also not"})
         constraints = [{"type": "ValueSizeConstraint", "min": 0, "max": 255}]
         result = TypeRecorder._filter_constraints_by_size(size, constraints)
         assert result == constraints
 
     def test_invalid_set_allowed_returns_unchanged(self) -> None:
-        """Should return constraints unchanged for invalid set"""
-        size = cast(dict[str, object], {"type": "set", "allowed": "not a list"})
+        """Should return constraints unchanged for invalid set."""
+        size = cast("dict[str, object]", {"type": "set", "allowed": "not a list"})
         constraints = [{"type": "ValueSizeConstraint", "min": 6, "max": 6}]
         result = TypeRecorder._filter_constraints_by_size(size, constraints)
         assert result == constraints
 
     def test_unknown_size_type_returns_unchanged(self) -> None:
-        """Should return constraints unchanged for unknown size type"""
-        size = cast(dict[str, object], {"type": "union", "ranges": [{"min": 1, "max": 2}]})
+        """Should return constraints unchanged for unknown size type."""
+        size = cast("dict[str, object]", {"type": "union", "ranges": [{"min": 1, "max": 2}]})
         constraints = [{"type": "ValueSizeConstraint", "min": 1, "max": 2}]
         result = TypeRecorder._filter_constraints_by_size(size, constraints)
         assert result == constraints
 
 
 class TestCompactSingleValueConstraintsIfEnumsPresent:
-    """Test _compact_single_value_constraints_if_enums_present static method"""
+    """Test _compact_single_value_constraints_if_enums_present static method."""
 
     def test_no_enums_returns_unchanged(self) -> None:
-        """Should return constraints unchanged if no enums"""
+        """Should return constraints unchanged if no enums."""
         constraints: list[dict[str, object]] = [
-            {"type": "SingleValueConstraint", "values": [1, 2, 3]}
+            {"type": "SingleValueConstraint", "values": [1, 2, 3]},
         ]
         result = TypeRecorder._compact_single_value_constraints_if_enums_present(constraints, None)
         assert result == constraints
 
     def test_compacts_single_value_with_enums(self) -> None:
-        """Should compact SingleValueConstraint when enums present"""
+        """Should compact SingleValueConstraint when enums present."""
         constraints: list[dict[str, object]] = [
-            {"type": "SingleValueConstraint", "values": [1, 2, 3, 4]}
+            {"type": "SingleValueConstraint", "values": [1, 2, 3, 4]},
         ]
         enums = [{"value": 1, "name": "a"}, {"value": 2, "name": "b"}]
         result = TypeRecorder._compact_single_value_constraints_if_enums_present(constraints, enums)
         assert result == [{"type": "SingleValueConstraint", "count": 4}]
 
     def test_keeps_non_single_value_constraints(self) -> None:
-        """Should keep non-SingleValueConstraint unchanged"""
+        """Should keep non-SingleValueConstraint unchanged."""
         constraints: list[dict[str, object]] = [
             {"type": "ValueRangeConstraint", "min": 0, "max": 100},
             {"type": "SingleValueConstraint", "values": [1, 2]},
@@ -525,7 +527,7 @@ class TestCompactSingleValueConstraintsIfEnumsPresent:
         assert result[1] == {"type": "SingleValueConstraint", "count": 2}
 
     def test_single_value_without_list_values(self) -> None:
-        """Should compact SingleValueConstraint when values is not a list"""
+        """Should compact SingleValueConstraint when values is not a list."""
         constraints: list[dict[str, object]] = [{"type": "SingleValueConstraint", "values": "1"}]
         enums = [{"value": 1, "name": "a"}]
         result = TypeRecorder._compact_single_value_constraints_if_enums_present(constraints, enums)
@@ -533,108 +535,113 @@ class TestCompactSingleValueConstraintsIfEnumsPresent:
 
 
 class TestIsTextualConventionSymbol:
-    """Test _is_textual_convention_symbol static method"""
+    """Test _is_textual_convention_symbol static method."""
 
     def test_not_a_class(self, mocker: Any) -> None:
-        """Should return False for non-class objects"""
+        """Should return False for non-class objects."""
         obj = mocker.Mock()
         result = TypeRecorder._is_textual_convention_symbol(obj)
         assert result is False
 
     def test_class_with_textual_convention(self) -> None:
-        """Should return True for class with TextualConvention in MRO"""
+        """Should return True for class with TextualConvention in MRO."""
 
         class TextualConvention:
             """Test helper class for TextualConvention."""
 
-            pass
-
         class DisplayString(TextualConvention):
             """Test helper class for DisplayString."""
-
-            pass
 
         result = TypeRecorder._is_textual_convention_symbol(DisplayString)
         assert result is True
 
     def test_class_without_textual_convention(self) -> None:
-        """Should return False for class without TextualConvention"""
+        """Should return False for class without TextualConvention."""
 
         class RegularClass:
             """Test helper class for RegularClass."""
-
-            pass
 
         result = TypeRecorder._is_textual_convention_symbol(RegularClass)
         assert result is False
 
     def test_class_mro_access_raises(self) -> None:
-        """Should return False if MRO access raises errors"""
+        """Should return False if MRO access raises errors."""
 
         class BadMeta(type):
             """Test helper class for BadMeta."""
 
-            def __getattribute__(self, name: str) -> Any:
+            def __getattribute__(cls, name: str) -> Any:
                 if name == "__mro__":
-                    raise AttributeError("boom")
+                    msg = "boom"
+                    raise AttributeError(msg)
                 return super().__getattribute__(name)
 
         class BadClass(metaclass=BadMeta):
             """Test helper class for BadClass."""
-
-            pass
 
         result = TypeRecorder._is_textual_convention_symbol(BadClass)
         assert result is False
 
 
 class TestCanonicaliseConstraints:
-    """Test _canonicalise_constraints static method"""
+    """Test _canonicalise_constraints static method."""
 
     def test_drops_repr_when_requested(self) -> None:
-        """Should drop constraints_repr when drop_repr=True"""
+        """Should drop constraints_repr when drop_repr=True."""
         size = None
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
         constraints_repr = "some repr"
 
         _result_size, _result_constraints, result_repr = TypeRecorder._canonicalise_constraints(
-            size, constraints, None, constraints_repr, drop_repr=True
+            size,
+            constraints,
+            None,
+            constraints_repr,
+            drop_repr=True,
         )
         assert result_repr is None
 
     def test_keeps_repr_when_unchanged(self) -> None:
-        """Should keep constraints_repr when constraints unchanged"""
+        """Should keep constraints_repr when constraints unchanged."""
         size = None
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
         constraints_repr = "original repr"
 
         _result_size, _result_constraints, result_repr = TypeRecorder._canonicalise_constraints(
-            size, constraints, None, constraints_repr, drop_repr=False
+            size,
+            constraints,
+            None,
+            constraints_repr,
+            drop_repr=False,
         )
         assert result_repr == "original repr"
 
     def test_drops_repr_when_constraints_changed(self) -> None:
-        """Should drop constraints_repr when constraints are modified"""
+        """Should drop constraints_repr when constraints are modified."""
         size = None
         constraints: list[dict[str, object]] = [
-            {"type": "SingleValueConstraint", "values": [1, 2, 3]}
+            {"type": "SingleValueConstraint", "values": [1, 2, 3]},
         ]
         enums = [{"value": 1, "name": "a"}]
         constraints_repr = "original"
 
         # The compact function will change constraints
         _result_size, _result_constraints, result_repr = TypeRecorder._canonicalise_constraints(
-            size, constraints, enums, constraints_repr, drop_repr=False
+            size,
+            constraints,
+            enums,
+            constraints_repr,
+            drop_repr=False,
         )
         # Should drop repr since constraints were compacted
         assert result_repr is None
 
 
 class TestSeedBaseTypes:
-    """Test _seed_base_types class method"""
+    """Test _seed_base_types class method."""
 
     def test_creates_entries_for_base_types(self, mocker: Any) -> None:
-        """Should create entries for all ASN1 base types"""
+        """Should create entries for all ASN1 base types."""
         mock_rfc = mocker.patch("app.type_recorder._rfc1902")
         # mocker.Mock constructors for base types
         for name in ["Integer32", "OctetString", "Counter32"]:
@@ -657,7 +664,7 @@ class TestSeedBaseTypes:
             assert "used_by" in entry
 
     def test_skips_unavailable_types(self, mocker: Any) -> None:
-        """Should skip base types that aren't available in rfc1902"""
+        """Should skip base types that aren't available in rfc1902."""
         mock_rfc = mocker.patch("app.type_recorder._rfc1902")
         # Only provide some base types
         mock_obj = mocker.Mock()
@@ -670,7 +677,7 @@ class TestSeedBaseTypes:
         assert isinstance(seeded, dict)
 
     def test_handles_constructor_exceptions(self, mocker: Any) -> None:
-        """Should skip types whose constructor raises exceptions"""
+        """Should skip types whose constructor raises exceptions."""
         mock_rfc = mocker.patch("app.type_recorder._rfc1902")
         mock_rfc.Integer32 = mocker.Mock(side_effect=Exception("construction failed"))
 
@@ -679,7 +686,7 @@ class TestSeedBaseTypes:
         assert isinstance(seeded, dict)
 
     def test_skips_non_callable_or_missing_constructor(self, mocker: Any) -> None:
-        """Should skip base types with no callable constructor"""
+        """Should skip base types with no callable constructor."""
         mock_obj = mocker.Mock()
         mock_obj.subtypeSpec = None
         fake_rfc = SimpleNamespace(Integer32=mocker.Mock(return_value=mock_obj))
@@ -692,10 +699,10 @@ class TestSeedBaseTypes:
 
 
 class TestDropDominatedValueRanges:
-    """Test _drop_dominated_value_ranges static method"""
+    """Test _drop_dominated_value_ranges static method."""
 
     def test_drops_dominated_range(self) -> None:
-        """Should drop ranges dominated by others"""
+        """Should drop ranges dominated by others."""
         constraints = [
             {"type": "ValueRangeConstraint", "min": 0, "max": 100},
             {"type": "ValueRangeConstraint", "min": 10, "max": 50},
@@ -706,7 +713,7 @@ class TestDropDominatedValueRanges:
         assert result[0]["min"] == 10
 
     def test_keeps_non_range_constraints(self) -> None:
-        """Should keep non-ValueRangeConstraint unchanged"""
+        """Should keep non-ValueRangeConstraint unchanged."""
         constraints = [
             {"type": "ValueSizeConstraint", "min": 0, "max": 255},
             {"type": "ValueRangeConstraint", "min": 0, "max": 100},
@@ -715,7 +722,7 @@ class TestDropDominatedValueRanges:
         assert constraints[0] in result
 
     def test_no_domination_keeps_all(self) -> None:
-        """Should keep all ranges if none dominated"""
+        """Should keep all ranges if none dominated."""
         constraints = [
             {"type": "ValueRangeConstraint", "min": 0, "max": 50},
             {"type": "ValueRangeConstraint", "min": 51, "max": 100},
@@ -724,7 +731,7 @@ class TestDropDominatedValueRanges:
         assert len(result) == 2
 
     def test_handles_string_min_max(self) -> None:
-        """Should handle string min/max values"""
+        """Should handle string min/max values."""
         constraints: list[dict[str, object]] = [
             {"type": "ValueRangeConstraint", "min": "0", "max": "100"},
             {"type": "ValueRangeConstraint", "min": "10", "max": "50"},
@@ -735,7 +742,7 @@ class TestDropDominatedValueRanges:
         assert result[0]["min"] == "10"
 
     def test_dominated_and_non_dominated_ranges(self) -> None:
-        """Should drop dominated range and keep non-dominated ranges"""
+        """Should drop dominated range and keep non-dominated ranges."""
         constraints = [
             {"type": "ValueRangeConstraint", "min": 0, "max": 100},
             {"type": "ValueRangeConstraint", "min": 10, "max": 50},
@@ -747,11 +754,10 @@ class TestDropDominatedValueRanges:
 
 
 class TestDropRedundantBaseValueRange:
-    """Test _drop_redundant_base_value_range static method"""
+    """Test _drop_redundant_base_value_range static method."""
 
     def test_no_base_type_returns_unchanged(self) -> None:
-        """Should return constraints unchanged if no base type"""
-        from typing import Mapping
+        """Should return constraints unchanged if no base type."""
         from app.type_recorder import TypeEntry
 
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
@@ -760,12 +766,11 @@ class TestDropRedundantBaseValueRange:
         assert result == constraints
 
     def test_drops_redundant_base_range(self) -> None:
-        """Should drop base range when stricter range exists"""
-        from typing import Mapping
+        """Should drop base range when stricter range exists."""
         from app.type_recorder import TypeEntry
 
         base_constraints: list[dict[str, object]] = [
-            {"type": "ValueRangeConstraint", "min": 0, "max": 100}
+            {"type": "ValueRangeConstraint", "min": 0, "max": 100},
         ]
         types: Mapping[str, TypeEntry] = {
             "Integer32": {
@@ -778,7 +783,7 @@ class TestDropRedundantBaseValueRange:
                 "defined_in": None,
                 "abstract": False,
                 "used_by": [],
-            }
+            },
         }
 
         constraints = [
@@ -792,8 +797,7 @@ class TestDropRedundantBaseValueRange:
         assert result[0]["max"] == 50
 
     def test_base_entry_missing_returns_unchanged(self) -> None:
-        """Should return constraints unchanged if base entry not found"""
-        from typing import Mapping
+        """Should return constraints unchanged if base entry not found."""
         from app.type_recorder import TypeEntry
 
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
@@ -802,12 +806,11 @@ class TestDropRedundantBaseValueRange:
         assert result == constraints
 
     def test_string_min_max_base_range_dropped(self) -> None:
-        """Should drop base range with string min/max when tighter range exists"""
-        from typing import Mapping
+        """Should drop base range with string min/max when tighter range exists."""
         from app.type_recorder import TypeEntry
 
         base_constraints: list[dict[str, object]] = [
-            {"type": "ValueRangeConstraint", "min": "0", "max": "100"}
+            {"type": "ValueRangeConstraint", "min": "0", "max": "100"},
         ]
         types: Mapping[str, TypeEntry] = {
             "Integer32": {
@@ -820,10 +823,10 @@ class TestDropRedundantBaseValueRange:
                 "defined_in": None,
                 "abstract": False,
                 "used_by": [],
-            }
+            },
         }
 
-        constraints: List[JsonDict] = [
+        constraints: list[JsonDict] = [
             {"type": "ValueRangeConstraint", "min": "0", "max": "100"},
             {"type": "ValueRangeConstraint", "min": 0, "max": 50},
         ]
@@ -834,11 +837,10 @@ class TestDropRedundantBaseValueRange:
 
 
 class TestDropRedundantBaseRangeForEnums:
-    """Test _drop_redundant_base_range_for_enums static method"""
+    """Test _drop_redundant_base_range_for_enums static method."""
 
     def test_no_base_type_returns_unchanged(self) -> None:
-        """Should return constraints unchanged if no base type"""
-        from typing import Mapping
+        """Should return constraints unchanged if no base type."""
         from app.type_recorder import TypeEntry
 
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
@@ -847,12 +849,11 @@ class TestDropRedundantBaseRangeForEnums:
         assert result == constraints
 
     def test_drops_base_range_with_enums(self) -> None:
-        """Should drop base range when enums present"""
-        from typing import Mapping
+        """Should drop base range when enums present."""
         from app.type_recorder import TypeEntry
 
         base_constraints: list[dict[str, object]] = [
-            {"type": "ValueRangeConstraint", "min": 0, "max": 100}
+            {"type": "ValueRangeConstraint", "min": 0, "max": 100},
         ]
         types: Mapping[str, TypeEntry] = {
             "Integer32": {
@@ -865,24 +866,26 @@ class TestDropRedundantBaseRangeForEnums:
                 "defined_in": None,
                 "abstract": False,
                 "used_by": [],
-            }
+            },
         }
 
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
         enums = [{"value": 1, "name": "a"}, {"value": 2, "name": "b"}]
 
         result = TypeRecorder._drop_redundant_base_range_for_enums(
-            "Integer32", constraints, enums, types
+            "Integer32",
+            constraints,
+            enums,
+            types,
         )
         assert len(result) == 0
 
     def test_drops_base_range_with_single_value_constraint(self) -> None:
-        """Should drop base range when SingleValueConstraint present"""
-        from typing import Mapping
+        """Should drop base range when SingleValueConstraint present."""
         from app.type_recorder import TypeEntry
 
         base_constraints: list[dict[str, object]] = [
-            {"type": "ValueRangeConstraint", "min": 0, "max": 100}
+            {"type": "ValueRangeConstraint", "min": 0, "max": 100},
         ]
         types: Mapping[str, TypeEntry] = {
             "Integer32": {
@@ -895,7 +898,7 @@ class TestDropRedundantBaseRangeForEnums:
                 "defined_in": None,
                 "abstract": False,
                 "used_by": [],
-            }
+            },
         }
 
         constraints: list[dict[str, object]] = [
@@ -904,28 +907,32 @@ class TestDropRedundantBaseRangeForEnums:
         ]
 
         result = TypeRecorder._drop_redundant_base_range_for_enums(
-            "Integer32", constraints, None, types
+            "Integer32",
+            constraints,
+            None,
+            types,
         )
         # Should drop the base range
         assert len(result) == 1
         assert result[0]["type"] == "SingleValueConstraint"
 
     def test_base_entry_missing_returns_unchanged(self) -> None:
-        """Should return constraints unchanged if base entry not found"""
-        from typing import Mapping
+        """Should return constraints unchanged if base entry not found."""
         from app.type_recorder import TypeEntry
 
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
         types: Mapping[str, TypeEntry] = {}
         enums = [{"value": 1, "name": "a"}]
         result = TypeRecorder._drop_redundant_base_range_for_enums(
-            "Missing", constraints, enums, types
+            "Missing",
+            constraints,
+            enums,
+            types,
         )
         assert result == constraints
 
     def test_base_ranges_empty_returns_unchanged(self) -> None:
-        """Should return constraints unchanged if base ranges empty"""
-        from typing import Mapping
+        """Should return constraints unchanged if base ranges empty."""
         from app.type_recorder import TypeEntry
 
         types: Mapping[str, TypeEntry] = {
@@ -939,18 +946,20 @@ class TestDropRedundantBaseRangeForEnums:
                 "defined_in": None,
                 "abstract": False,
                 "used_by": [],
-            }
+            },
         }
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
         enums = [{"value": 1, "name": "a"}]
         result = TypeRecorder._drop_redundant_base_range_for_enums(
-            "Integer32", constraints, enums, types
+            "Integer32",
+            constraints,
+            enums,
+            types,
         )
         assert result == constraints
 
     def test_string_min_max_base_range_dropped(self) -> None:
-        """Should drop base range with string min/max when enums present"""
-        from typing import Mapping
+        """Should drop base range with string min/max when enums present."""
         from app.type_recorder import TypeEntry
 
         types: Mapping[str, TypeEntry] = {
@@ -964,19 +973,21 @@ class TestDropRedundantBaseRangeForEnums:
                 "defined_in": None,
                 "abstract": False,
                 "used_by": [],
-            }
+            },
         }
-        constraints: List[JsonDict] = [{"type": "ValueRangeConstraint", "min": "0", "max": "100"}]
+        constraints: list[JsonDict] = [{"type": "ValueRangeConstraint", "min": "0", "max": "100"}]
         enums = [{"value": 1, "name": "a"}]
 
         result = TypeRecorder._drop_redundant_base_range_for_enums(
-            "Integer32", constraints, enums, types
+            "Integer32",
+            constraints,
+            enums,
+            types,
         )
         assert len(result) == 0
 
     def test_base_range_not_dropped_when_not_matching(self) -> None:
-        """Should keep ranges not in base ranges"""
-        from typing import Mapping
+        """Should keep ranges not in base ranges."""
         from app.type_recorder import TypeEntry
 
         types: Mapping[str, TypeEntry] = {
@@ -990,61 +1001,64 @@ class TestDropRedundantBaseRangeForEnums:
                 "defined_in": None,
                 "abstract": False,
                 "used_by": [],
-            }
+            },
         }
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 50}]
         enums = [{"value": 1, "name": "a"}]
 
         result = TypeRecorder._drop_redundant_base_range_for_enums(
-            "Integer32", constraints, enums, types
+            "Integer32",
+            constraints,
+            enums,
+            types,
         )
         assert result == constraints
 
 
 class TestHasSingleValueConstraint:
-    """Test _has_single_value_constraint static method"""
+    """Test _has_single_value_constraint static method."""
 
     def test_returns_true_when_present(self) -> None:
-        """Should return True when SingleValueConstraint present"""
+        """Should return True when SingleValueConstraint present."""
         constraints: list[dict[str, object]] = [
-            {"type": "SingleValueConstraint", "values": [1, 2, 3]}
+            {"type": "SingleValueConstraint", "values": [1, 2, 3]},
         ]
         result = TypeRecorder._has_single_value_constraint(constraints)
         assert result is True
 
     def test_returns_false_when_absent(self) -> None:
-        """Should return False when no SingleValueConstraint"""
+        """Should return False when no SingleValueConstraint."""
         constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]
         result = TypeRecorder._has_single_value_constraint(constraints)
         assert result is False
 
     def test_returns_false_for_empty(self) -> None:
-        """Should return False for empty constraints"""
+        """Should return False for empty constraints."""
         result = TypeRecorder._has_single_value_constraint([])
         assert result is False
 
 
 class TestIsValueRangeConstraint:
-    """Test _is_value_range_constraint static method"""
+    """Test _is_value_range_constraint static method."""
 
     def test_returns_true_for_value_range(self) -> None:
-        """Should return True for ValueRangeConstraint"""
+        """Should return True for ValueRangeConstraint."""
         c = {"type": "ValueRangeConstraint", "min": 0, "max": 100}
         result = TypeRecorder._is_value_range_constraint(c)
         assert result is True
 
     def test_returns_false_for_other_types(self) -> None:
-        """Should return False for other constraint types"""
+        """Should return False for other constraint types."""
         c = {"type": "ValueSizeConstraint", "min": 0, "max": 255}
         result = TypeRecorder._is_value_range_constraint(c)
         assert result is False
 
 
 class TestBuild:
-    """Test build method"""
+    """Test build method."""
 
     def test_build_processes_mibs(self, mocker: Any) -> None:
-        """Should process MIB files and build type registry"""
+        """Should process MIB files and build type registry."""
         compiled_dir = Path("/fake/compiled")
         recorder = TypeRecorder(compiled_dir)
 
@@ -1066,7 +1080,7 @@ class TestBuild:
         assert recorder._registry is not None
 
     def test_build_handles_load_failure(self, mocker: Any) -> None:
-        """Should handle MIB load failures gracefully"""
+        """Should handle MIB load failures gracefully."""
         compiled_dir = Path("/fake/compiled")
         recorder = TypeRecorder(compiled_dir)
 
@@ -1089,7 +1103,7 @@ class TestBuild:
         assert recorder._registry is not None
 
     def test_build_skips_init_py(self, tmp_path: Path, mocker: Any) -> None:
-        """Should skip __init__.py when loading MIBs"""
+        """Should skip __init__.py when loading MIBs."""
         compiled_dir = tmp_path
         (compiled_dir / "__init__.py").write_text("# init")
         (compiled_dir / "TEST-MIB.py").write_text("# mib")
@@ -1110,7 +1124,7 @@ class TestBuild:
         assert "TEST-MIB" in called
 
     def test_build_updates_metadata_fields(self, mocker: Any) -> None:
-        """Should update entry metadata fields when available"""
+        """Should update entry metadata fields when available."""
         compiled_dir = Path("/fake/compiled")
         recorder = TypeRecorder(compiled_dir)
 
@@ -1209,7 +1223,7 @@ class TestBuild:
         assert entry["constraints"]
 
     def test_build_base_obj_constraints_empty_falls_through(self, mocker: Any) -> None:
-        """Should fall through when base_obj constraints are empty"""
+        """Should fall through when base_obj constraints are empty."""
         compiled_dir = Path("/fake/compiled")
         recorder = TypeRecorder(compiled_dir)
 
@@ -1263,7 +1277,9 @@ class TestBuild:
         }
 
         mocker.patch.object(
-            TypeRecorder, "_seed_base_types", return_value={"CustomType": custom_entry}
+            TypeRecorder,
+            "_seed_base_types",
+            return_value={"CustomType": custom_entry},
         )
         mock_engine = mocker.patch("app.type_recorder._engine.SnmpEngine")
         mocker.patch("app.type_recorder._builder.DirMibSource")
@@ -1280,7 +1296,7 @@ class TestBuild:
         assert entry["constraints"] == []
 
     def test_build_base_type_out_none_keeps_constraints_repr(self, mocker: Any) -> None:
-        """Should keep constraints_repr when base_type_out is None"""
+        """Should keep constraints_repr when base_type_out is None."""
         compiled_dir = Path("/fake/compiled")
         recorder = TypeRecorder(compiled_dir)
 
@@ -1343,16 +1359,16 @@ class TestBuild:
 
 
 class TestRegistry:
-    """Test registry property"""
+    """Test registry property."""
 
     def test_raises_if_not_built(self) -> None:
-        """Should raise if build() not called"""
+        """Should raise if build() not called."""
         recorder = TypeRecorder(Path("/fake"))
         with pytest.raises(RuntimeError, match="build.*must be called"):
             _ = recorder.registry
 
     def test_returns_registry_after_build(self) -> None:
-        """Should return registry after build()"""
+        """Should return registry after build()."""
         from app.type_recorder import TypeEntry
 
         recorder = TypeRecorder(Path("/fake"))
@@ -1373,16 +1389,16 @@ class TestRegistry:
 
 
 class TestExportToJson:
-    """Test export_to_json method"""
+    """Test export_to_json method."""
 
     def test_raises_if_not_built(self) -> None:
-        """Should raise if build() not called"""
+        """Should raise if build() not called."""
         recorder = TypeRecorder(Path("/fake"))
         with pytest.raises(RuntimeError, match="build.*must be called"):
             recorder.export_to_json("out.json")
 
     def test_exports_registry(self, mocker: Any) -> None:
-        """Should export registry to JSON file"""
+        """Should export registry to JSON file."""
         from app.type_recorder import TypeEntry
 
         recorder = TypeRecorder(Path("/fake"))
@@ -1411,10 +1427,10 @@ class TestExportToJson:
 
 
 class TestMain:
-    """Test main function"""
+    """Test main function."""
 
     def test_main_function(self, mocker: Any) -> None:
-        """Should parse args and run recorder"""
+        """Should parse args and run recorder."""
         from app.type_recorder import main
 
         mocker.patch("sys.argv", ["type_recorder.py", "compiled-mibs", "-o", "out.json"])

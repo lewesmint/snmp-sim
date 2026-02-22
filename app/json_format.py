@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
 
 _OID_ARRAY_PATTERN = re.compile(
     r'"oid": \[\n(?P<body>(?:\s*-?\d+\s*,\n)+\s*-?\d+\s*\n)\s*\]',
@@ -20,7 +19,7 @@ def _collapse_oid_array(match: re.Match[str]) -> str:
 
 
 def dumps_with_horizontal_oid_lists(
-        payload: Any,
+        payload: object,
         *,
         indent: int = 2,
         sort_keys: bool = False
@@ -32,7 +31,7 @@ def dumps_with_horizontal_oid_lists(
 
 def write_json_with_horizontal_oid_lists(
     file_path: str | Path,
-    payload: Any,
+    payload: object,
     *,
     indent: int = 2,
     sort_keys: bool = False,

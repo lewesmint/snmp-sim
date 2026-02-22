@@ -8,17 +8,11 @@ import argparse
 import inspect
 import json
 import re
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
-    Mapping,
-    Optional,
     Protocol,
-    Sequence,
-    Tuple,
     TypedDict,
     cast,
 )
@@ -63,14 +57,14 @@ class HasGetSyntax(Protocol):
 class TypeEntry(TypedDict):
     """Normalized metadata schema for one type entry in the generated registry."""
 
-    base_type: Optional[str]
-    display_hint: Optional[str]
-    size: Optional[JsonDict]
-    constraints: List[JsonDict]
-    constraints_repr: Optional[str]
-    enums: Optional[List[JsonDict]]
-    used_by: List[str]
-    defined_in: Optional[str]
+    base_type: str | None
+    display_hint: str | None
+    size: JsonDict | None
+    constraints: list[JsonDict]
+    constraints_repr: str | None
+    enums: list[JsonDict] | None
+    used_by: list[str]
+    defined_in: str | None
     # True for abstract/structural types (CHOICE, aliases)
     # not used directly in OBJECT-TYPEs.
     abstract: bool
@@ -87,18 +81,17 @@ class TypeRecorder:
     def __init__(
         self,
         compiled_dir: Path,
-        progress_callback: Optional[Callable[[str], None]] = None,
+        progress_callback: Callable[[str], None] | None = None,
     ):
         """Create a recorder configured for a compiled-MIB directory."""
         self.compiled_dir = compiled_dir
-        self._registry: Optional[Dict[str, TypeEntry]] = None
-        self._snmpv2_smi_types: Optional[set[str]] = None
+        self._registry: dict[str, TypeEntry] | None = None
+        self._snmpv2_smi_types: set[str] | None = None
         self._progress_callback = progress_callback
 
     @staticmethod
     def _discover_snmpv2_smi_types() -> set[str]:
-        """
-        Dynamically discover SNMP application types from SNMPv2-SMI.
+        """Dynamically discover SNMP application types from SNMPv2-SMI.
 
         Returns a set of type names that are classes (not instances) exported from SNMPv2-SMI.
         Falls back to expected types if discovery fails.
@@ -127,7 +120,7 @@ class TypeRecorder:
             # Ensure we at least have the ASN.1 base types and expected SNMP types
             result = discovered | TRUE_ASN1_BASE_TYPES | _EXPECTED_SNMPV2_SMI_TYPES
             return result
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             # Fallback to expected types if discovery fails
             return TRUE_ASN1_BASE_TYPES | _EXPECTED_SNMPV2_SMI_TYPES
 
@@ -138,12 +131,12 @@ class TypeRecorder:
         return self._snmpv2_smi_types
 
     @staticmethod
-    def safe_call_zero_arg(obj: object, name: str) -> Optional[object]:
+    def safe_call_zero_arg(obj: object, name: str) -> object | None:
         """Call a named zero-argument callable on an object if available and safe."""
         fn_obj = getattr(obj, name, None)
         if not callable(fn_obj):
             return None
-        fn = cast(Callable[..., object], fn_obj)
+        fn = cast("Callable[..., object]", fn_obj)
         try:
             sig = inspect.signature(fn)
         except (TypeError, ValueError):
@@ -161,9 +154,8 @@ class TypeRecorder:
             return None
 
     @staticmethod
-    def infer_base_type_from_mro(syntax: object) -> Optional[str]:
-        """
-        Infer the underlying SNMP application type from the class MRO.
+    def infer_base_type_from_mro(syntax: object) -> str | None:
+        """Infer the underlying SNMP application type from the class MRO.
 
         This is a static helper so it can be used without instantiating a TypeRecorder
         (useful in unit tests and simple type inspection).
@@ -177,13 +169,13 @@ class TypeRecorder:
         return None
 
     @staticmethod
-    def unwrap_syntax(syntax: object) -> Tuple[str, str, object]:
-        """
-        Returns:
+    def unwrap_syntax(syntax: object) -> tuple[str, str, object]:
+        """Returns:
           (syntax_type_name, base_type_name, base_syntax_obj)
 
         - If syntax.getSyntax() exists and returns something, use that as base.
         - Otherwise infer base type from class inheritance (MRO).
+
         """
         syntax_type = syntax.__class__.__name__
 
@@ -198,7 +190,7 @@ class TypeRecorder:
         return syntax_type, syntax_type, syntax
 
     @staticmethod
-    def extract_display_hint(syntax: object) -> Optional[str]:
+    def extract_display_hint(syntax: object) -> str | None:
         """Extract a display hint string from syntax metadata when present."""
         hint = TypeRecorder.safe_call_zero_arg(syntax, "getDisplayHint")
         if hint is not None:
@@ -217,10 +209,9 @@ class TypeRecorder:
         return None
 
     @staticmethod
-    def extract_enums_list(syntax: object) -> Optional[List[JsonDict]]:
-        """
-        Return enums as a numerically ordered list:
-          [{"value": 1, "name": "true"}, {"value": 2, "name": "false"}]
+    def extract_enums_list(syntax: object) -> list[JsonDict] | None:
+        """Return enums as a numerically ordered list:
+        [{"value": 1, "name": "true"}, {"value": 2, "name": "false"}]
         """
         candidates = (
             getattr(syntax, "namedValues", None),
@@ -236,17 +227,17 @@ class TypeRecorder:
                 continue
 
             try:
-                pairs = cast(Sequence[Tuple[object, object]], items())
-            except Exception:
+                pairs = list(items())
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 continue
 
-            rows: List[JsonDict] = []
+            rows: list[JsonDict] = []
             for name, value in pairs:
                 if isinstance(name, str) and isinstance(value, int):
                     rows.append({"value": value, "name": name})
 
             if rows:
-                rows.sort(key=lambda r: cast(int, r["value"]))
+                rows.sort(key=lambda r: cast("int", r["value"]))
                 return rows
 
         return None
@@ -254,11 +245,11 @@ class TypeRecorder:
     @classmethod
     def parse_constraints_from_repr(
         cls, subtype_repr: str
-    ) -> Tuple[Optional[JsonDict], List[JsonDict]]:
+    ) -> tuple[JsonDict | None, list[JsonDict]]:
         """Parse subtypeSpec repr text into normalized size/constraint structures."""
-        constraints: List[JsonDict] = []
-        size_ranges: List[Tuple[int, int]] = []
-        exact_sizes: List[int] = []
+        constraints: list[JsonDict] = []
+        size_ranges: list[tuple[int, int]] = []
+        exact_sizes: list[int] = []
         for m in cls._SIZE_RE.finditer(subtype_repr):
             c_min = int(m.group(1))
             c_max = int(m.group(2))
@@ -275,20 +266,20 @@ class TypeRecorder:
             vals = [int(x.strip()) for x in raw.split(",") if x.strip()]
             constraints.append({"type": "SingleValueConstraint", "values": vals})
         # Deduplicate exact duplicates
-        seen: set[Tuple[object, ...]] = set()
-        deduped: List[JsonDict] = []
+        seen: set[tuple[object, ...]] = set()
+        deduped: list[JsonDict] = []
         for c in constraints:
-            key: Tuple[object, ...] = (
+            key: tuple[object, ...] = (
                 c.get("type"),
                 c.get("min"),
                 c.get("max"),
-                tuple(cast(List[int], c.get("values", []))) if "values" in c else None,
+                tuple(cast("list[int]", c.get("values", []))) if "values" in c else None,
             )
             if key in seen:
                 continue
             seen.add(key)
             deduped.append(c)
-        size: Optional[JsonDict] = None
+        size: JsonDict | None = None
         if exact_sizes:
             size = {"type": "set", "allowed": sorted(set(exact_sizes))}
             return size, deduped
@@ -309,14 +300,14 @@ class TypeRecorder:
     @classmethod
     def extract_constraints(
         cls, syntax: object
-    ) -> Tuple[Optional[JsonDict], List[JsonDict], Optional[str]]:
+    ) -> tuple[JsonDict | None, list[JsonDict], str | None]:
         """Extract normalized size/range constraints and optional repr text."""
         subtype_spec = getattr(syntax, "subtypeSpec", None)
         if subtype_spec is None:
             return None, [], None
         repr_text = repr(subtype_spec)
         size, constraints = cls.parse_constraints_from_repr(repr_text)
-        constraints_repr: Optional[str] = None
+        constraints_repr: str | None = None
         empty_markers = {
             "<ConstraintsIntersection object>",
             "<ConstraintsIntersection object, consts >",
@@ -327,9 +318,9 @@ class TypeRecorder:
 
     @staticmethod
     def _filter_constraints_by_size(
-        size: Optional[JsonDict],
-        constraints: List[JsonDict],
-    ) -> List[JsonDict]:
+        size: JsonDict | None,
+        constraints: list[JsonDict],
+    ) -> list[JsonDict]:
         if size is None:
             return constraints
 
@@ -340,7 +331,7 @@ class TypeRecorder:
             if not isinstance(s_min, int) or not isinstance(s_max, int):
                 return constraints
 
-            filtered: List[JsonDict] = []
+            filtered: list[JsonDict] = []
             for c in constraints:
                 if c.get("type") != "ValueSizeConstraint":
                     filtered.append(c)
@@ -356,7 +347,7 @@ class TypeRecorder:
             if not isinstance(allowed, list) or not all(isinstance(x, int) for x in allowed):
                 return constraints
 
-            allowed_set = set(cast(List[int], allowed))
+            allowed_set = set(cast("list[int]", allowed))
             filtered = []
             for c in constraints:
                 if c.get("type") != "ValueSizeConstraint":
@@ -372,13 +363,13 @@ class TypeRecorder:
 
     @staticmethod
     def _compact_single_value_constraints_if_enums_present(
-        constraints: List[JsonDict],
-        enums: Optional[List[JsonDict]],
-    ) -> List[JsonDict]:
+        constraints: list[JsonDict],
+        enums: list[JsonDict] | None,
+    ) -> list[JsonDict]:
         if not enums:
             return constraints
 
-        out: List[JsonDict] = []
+        out: list[JsonDict] = []
         for c in constraints:
             if c.get("type") != "SingleValueConstraint":
                 out.append(c)
@@ -393,8 +384,7 @@ class TypeRecorder:
 
     @staticmethod
     def _is_textual_convention_symbol(sym_obj: object) -> bool:
-        """
-        Compiled MIB textual conventions appear in mibSymbols as classes
+        """Compiled MIB textual conventions appear in mibSymbols as classes
         (eg class DisplayString(TextualConvention, OctetString): ...)
 
         OBJECT-TYPEs appear as instances (eg MibScalar/MibTableColumn/etc).
@@ -405,15 +395,14 @@ class TypeRecorder:
         try:
             # TextualConvention is not in pysnmp.proto.rfc1902, it's defined in compiled MIBs.
             # Check if 'TextualConvention' appears in the class's MRO by name.
-            cls = cast(type, sym_obj)
+            cls = cast("type", sym_obj)
             return any(base.__name__ == "TextualConvention" for base in cls.__mro__)
         except (TypeError, AttributeError):
             return False
 
     @staticmethod
     def _is_abstract_type(type_name: str, sym_obj: object = None) -> bool:
-        """
-        Determine if a type is abstract (structural/not used directly in OBJECT-TYPEs).
+        """Determine if a type is abstract (structural/not used directly in OBJECT-TYPEs).
 
         Abstract types include:
         - CHOICE types (ObjectSyntax, SimpleSyntax, ApplicationSyntax)
@@ -426,6 +415,7 @@ class TypeRecorder:
 
         Returns:
             True if the type is abstract
+
         """
         # Check by name for known abstract types
         known_abstract = {
@@ -445,7 +435,7 @@ class TypeRecorder:
         if sym_obj is not None:
             try:
                 if inspect.isclass(sym_obj):
-                    cls = cast(type, sym_obj)
+                    cls = cast("type", sym_obj)
                     mro_names = [base.__name__ for base in cls.__mro__]
                     if "Choice" in mro_names:
                         return True
@@ -456,15 +446,14 @@ class TypeRecorder:
 
     @staticmethod
     def _canonicalise_constraints(
-        size: Optional[JsonDict],
-        constraints: List[JsonDict],
-        enums: Optional[List[JsonDict]],
-        constraints_repr: Optional[str],
+        size: JsonDict | None,
+        constraints: list[JsonDict],
+        enums: list[JsonDict] | None,
+        constraints_repr: str | None,
         *,
         drop_repr: bool,
-    ) -> Tuple[Optional[JsonDict], List[JsonDict], Optional[str]]:
-        """
-        Applies your post-processing rules and drops constraints_repr if it could
+    ) -> tuple[JsonDict | None, list[JsonDict], str | None]:
+        """Applies your post-processing rules and drops constraints_repr if it could
         be misleading relative to the structured constraints.
         """
         raw_constraints = list(constraints)
@@ -484,8 +473,7 @@ class TypeRecorder:
 
     @staticmethod
     def _infer_asn1_base_type(type_name: str, type_class: type) -> str:
-        """
-        Infer the ASN.1 base type from a type's MRO.
+        """Infer the ASN.1 base type from a type's MRO.
 
         Returns one of: 'INTEGER', 'OCTET STRING', 'OBJECT IDENTIFIER'
         """
@@ -495,9 +483,9 @@ class TypeRecorder:
         # Map based on what we find in the MRO
         if "OctetString" in mro_names:
             return "OCTET STRING"
-        elif "Integer" in mro_names or "Integer32" in mro_names:
+        if "Integer" in mro_names or "Integer32" in mro_names:
             return "INTEGER"
-        elif "ObjectIdentifier" in mro_names:
+        if "ObjectIdentifier" in mro_names:
             return "OBJECT IDENTIFIER"
 
         # Fallback: try to guess from type name
@@ -509,20 +497,18 @@ class TypeRecorder:
             or "address" in type_lower
         ):
             return "OCTET STRING"
-        elif "object" in type_lower or "oid" in type_lower:
+        if "object" in type_lower or "oid" in type_lower:
             return "OBJECT IDENTIFIER"
-        else:
-            return "INTEGER"  # Default fallback
+        return "INTEGER"  # Default fallback
 
-    def _seed_base_types_impl(self) -> Dict[str, TypeEntry]:
-        """
-        Implementation that creates canonical entries for SNMP application types
+    def _seed_base_types_impl(self) -> dict[str, TypeEntry]:
+        """Implementation that creates canonical entries for SNMP application types
         from SNMPv2-SMI so later OBJECT-TYPE instances cannot accidentally tighten them
         (eg sysServices constraining Integer32 to 0..127).
 
         Set base_type to the actual ASN.1 base type (INTEGER, OCTET STRING, OBJECT IDENTIFIER).
         """
-        seeded: Dict[str, TypeEntry] = {}
+        seeded: dict[str, TypeEntry] = {}
         snmp_types = self.get_snmpv2_smi_types()
 
         for name in sorted(snmp_types):
@@ -531,7 +517,7 @@ class TypeRecorder:
                 continue
             try:
                 syntax_obj = ctor()
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 continue
 
             size, constraints, constraints_repr = self.extract_constraints(syntax_obj)
@@ -567,17 +553,17 @@ class TypeRecorder:
         return seeded
 
     @classmethod
-    def _seed_base_types(cls) -> Dict[str, TypeEntry]:
+    def _seed_base_types(cls) -> dict[str, TypeEntry]:
         """Class-level entry point for seeding base types for tests and callers.
 
         This creates a temporary TypeRecorder instance to perform seeding so callers
         can invoke _seed_base_types() without constructing an instance themselves.
         """
-        tr = cls(Path("."))
+        tr = cls(Path())
         return tr._seed_base_types_impl()
 
     @staticmethod
-    def _has_single_value_constraint(constraints: List[JsonDict]) -> bool:
+    def _has_single_value_constraint(constraints: list[JsonDict]) -> bool:
         for c in constraints:
             if c.get("type") == "SingleValueConstraint":
                 return True
@@ -588,8 +574,8 @@ class TypeRecorder:
         return c.get("type") == "ValueRangeConstraint"
 
     @staticmethod
-    def _drop_dominated_value_ranges(constraints: List[JsonDict]) -> List[JsonDict]:
-        ranges: List[Tuple[int, int]] = []
+    def _drop_dominated_value_ranges(constraints: list[JsonDict]) -> list[JsonDict]:
+        ranges: list[tuple[int, int]] = []
         for c in constraints:
             if TypeRecorder._is_value_range_constraint(c):
                 min_val = c["min"]
@@ -600,7 +586,7 @@ class TypeRecorder:
                     ranges.append((int(str(min_val)), int(str(max_val))))
         if len(ranges) < 2:
             return constraints
-        dominated: set[Tuple[int, int]] = set()
+        dominated: set[tuple[int, int]] = set()
         for a_min, a_max in ranges:
             for b_min, b_max in ranges:
                 if (a_min, a_max) == (b_min, b_max):
@@ -609,7 +595,7 @@ class TypeRecorder:
                     dominated.add((a_min, a_max))
         if not dominated:
             return constraints
-        out: List[JsonDict] = []
+        out: list[JsonDict] = []
         for c in constraints:
             if TypeRecorder._is_value_range_constraint(c):
                 min_val = c["min"]
@@ -625,12 +611,11 @@ class TypeRecorder:
 
     @staticmethod
     def _drop_redundant_base_value_range(
-        base_type: Optional[str],
-        constraints: List[JsonDict],
+        base_type: str | None,
+        constraints: list[JsonDict],
         types: Mapping[str, TypeEntry],
-    ) -> List[JsonDict]:
-        """
-        Drop inherited ValueRangeConstraint if a stricter range exists in constraints.
+    ) -> list[JsonDict]:
+        """Drop inherited ValueRangeConstraint if a stricter range exists in constraints.
         Only applies if base_type is known and both have ValueRangeConstraint.
         """
         if base_type is None:
@@ -678,11 +663,11 @@ class TypeRecorder:
 
     @staticmethod
     def _drop_redundant_base_range_for_enums(
-        base_type: Optional[str],
-        constraints: List[JsonDict],
-        enums: Optional[List[JsonDict]],
+        base_type: str | None,
+        constraints: list[JsonDict],
+        enums: list[JsonDict] | None,
         types: Mapping[str, TypeEntry],
-    ) -> List[JsonDict]:
+    ) -> list[JsonDict]:
         if base_type is None:
             return constraints
         if not enums and not TypeRecorder._has_single_value_constraint(constraints):
@@ -724,14 +709,14 @@ class TypeRecorder:
                 continue
             try:
                 mib_builder.load_modules(path.stem)
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 continue
 
-        return cast(Mapping[str, Mapping[str, object]], mib_builder.mibSymbols)
+        return cast("Mapping[str, Mapping[str, object]]", mib_builder.mibSymbols)
 
     def _process_textual_convention_symbol(
         self,
-        types: Dict[str, TypeEntry],
+        types: dict[str, TypeEntry],
         mib_name: str,
         sym_name: str,
         sym_obj: object,
@@ -739,9 +724,9 @@ class TypeRecorder:
         if not self._is_textual_convention_symbol(sym_obj):
             return False
 
-        tc_class = cast(type, sym_obj)
+        tc_class = cast("type", sym_obj)
 
-        base_type_name: Optional[str] = None
+        base_type_name: str | None = None
         snmp_types = self.get_snmpv2_smi_types()
         for base in tc_class.__mro__[1:]:
             if base.__name__ in snmp_types:
@@ -753,9 +738,9 @@ class TypeRecorder:
             display_hint = None
 
         subtype_spec = getattr(tc_class, "subtypeSpec", None)
-        tc_size: Optional[JsonDict] = None
-        tc_constraints: List[JsonDict] = []
-        tc_constraints_repr: Optional[str] = None
+        tc_size: JsonDict | None = None
+        tc_constraints: list[JsonDict] = []
+        tc_constraints_repr: str | None = None
         if subtype_spec is not None:
             subtype_repr = repr(subtype_spec)
             tc_size, tc_constraints = self.parse_constraints_from_repr(subtype_repr)
@@ -765,7 +750,7 @@ class TypeRecorder:
         if sym_name not in types:
             types[sym_name] = {
                 "base_type": base_type_name,
-                "display_hint": cast(Optional[str], display_hint),
+                "display_hint": cast("str | None", display_hint),
                 "size": tc_size,
                 "constraints": tc_constraints,
                 "constraints_repr": tc_constraints_repr,
@@ -785,14 +770,14 @@ class TypeRecorder:
         self,
         syntax: object,
         base_obj: object,
-        base_type_out: Optional[str],
+        base_type_out: str | None,
         allow_metadata: bool,
     ) -> tuple[
-        Optional[str],
-        Optional[List[JsonDict]],
-        Optional[JsonDict],
-        List[JsonDict],
-        Optional[str],
+        str | None,
+        list[JsonDict] | None,
+        JsonDict | None,
+        list[JsonDict],
+        str | None,
     ]:
         if not allow_metadata:
             return None, None, None, [], None
@@ -821,7 +806,7 @@ class TypeRecorder:
 
     def _process_object_type_symbol(
         self,
-        types: Dict[str, TypeEntry],
+        types: dict[str, TypeEntry],
         mib_name: str,
         sym_name: str,
         sym_obj: object,
@@ -829,17 +814,17 @@ class TypeRecorder:
         if not hasattr(sym_obj, "getSyntax"):
             return
 
-        snmp_obj = cast(HasGetSyntax, sym_obj)
+        snmp_obj = cast("HasGetSyntax", sym_obj)
         try:
             syntax = snmp_obj.getSyntax()
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             return
 
         if syntax is None:
             return
 
         t_name, base_type_raw, base_obj = self.unwrap_syntax(syntax)
-        base_type_out: Optional[str] = base_type_raw if base_type_raw else None
+        base_type_out: str | None = base_type_raw or None
         if (
             base_type_out is not None
             and base_type_out in types
@@ -912,7 +897,7 @@ class TypeRecorder:
 
     def build(self) -> None:
         """Build the full type registry by scanning all loaded compiled MIB symbols."""
-        types: Dict[str, TypeEntry] = self._seed_base_types()
+        types: dict[str, TypeEntry] = self._seed_base_types()
 
         mib_symbols = self._load_mib_symbols()
 
@@ -939,7 +924,7 @@ class TypeRecorder:
         self._registry = types
 
     @property
-    def registry(self) -> Dict[str, TypeEntry]:
+    def registry(self) -> dict[str, TypeEntry]:
         """Return the built registry, raising if build has not run yet."""
         if self._registry is None:
             raise RuntimeError("TypeRecorder: build() must be called before accessing registry.")

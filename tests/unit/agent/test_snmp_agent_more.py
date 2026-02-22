@@ -8,7 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-
 from app.snmp_agent import SNMPAgent
 
 
@@ -75,7 +74,8 @@ def test_shutdown_closes_dispatcher(monkeypatch: Any, caplog: Any, mocker: Any) 
 
 
 def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(
-    monkeypatch: Any, caplog: Any
+    monkeypatch: Any,
+    caplog: Any,
 ) -> None:
     """Test case for test_run_with_preloaded_model_uses_preloaded_and_skips_generation."""
     data_dir = Path("data")
@@ -135,7 +135,8 @@ def test_decode_value_fallback_returns_value_on_exception(monkeypatch: Any) -> N
         """Test helper class for FailingRegistrar."""
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
-            raise RuntimeError("boom")
+            msg = "boom"
+            raise RuntimeError(msg)
 
     monkeypatch.setattr("app.mib_registrar.MibRegistrar", FailingRegistrar)
 

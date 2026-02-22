@@ -5,10 +5,10 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from typing import Iterable
+from collections.abc import Iterable
 
 from app.app_config import AppConfig
-from app.compiler import MibCompiler, MibCompilationError
+from app.compiler import MibCompilationError, MibCompiler
 
 
 def _print_results(results: dict[str, str]) -> None:

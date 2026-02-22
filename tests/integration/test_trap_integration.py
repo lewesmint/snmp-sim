@@ -2,8 +2,9 @@
 
 import time
 from typing import Any
-from app.trap_sender import TrapSender
+
 from app.trap_receiver import TrapReceiver
+from app.trap_sender import TrapSender
 
 
 def test_send_and_receive_test_trap() -> None:

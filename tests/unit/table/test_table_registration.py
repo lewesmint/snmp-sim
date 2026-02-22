@@ -1,6 +1,6 @@
 """Tests for table registration in SNMPAgent."""
 
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from pytest_mock import MockerFixture
@@ -8,7 +8,7 @@ from pytest_mock import MockerFixture
 from app.snmp_agent import SNMPAgent
 
 
-def _if_table_data() -> Dict[str, Any]:
+def _if_table_data() -> dict[str, Any]:
     """Return canonical IF-MIB-like single-index table data used by multiple tests."""
     return {
         "table": {"oid": [1, 3, 6, 1, 2, 1, 2, 2]},
@@ -29,7 +29,7 @@ def _if_table_data() -> Dict[str, Any]:
     }
 
 
-def _assert_basic_table_data(table_data: Dict[str, Any]) -> None:
+def _assert_basic_table_data(table_data: dict[str, Any]) -> None:
     """Assert table data has required top-level and per-column fields."""
     assert "table" in table_data
     assert "entry" in table_data
@@ -49,11 +49,12 @@ def agent(mocker: MockerFixture) -> Any:
     agent.snmpEngine = mocker.MagicMock()
     agent.logger = mocker.MagicMock()
     # Patch SNMPAgent dependencies for table registration (use setattr to satisfy mypy)
-    setattr(agent, "MibTable", mocker.MagicMock())
-    setattr(agent, "MibTableRow", mocker.MagicMock())
-    setattr(agent, "MibTableColumn", mocker.MagicMock())
-    setattr(agent, "MibScalar", mocker.MagicMock())
+    agent.MibTable = mocker.MagicMock()  # type: ignore[attr-defined]
+    agent.MibTableRow = mocker.MagicMock()  # type: ignore[attr-defined]
+    agent.MibTableColumn = mocker.MagicMock()  # type: ignore[attr-defined]
+    agent.MibScalar = mocker.MagicMock()  # type: ignore[attr-defined]
     return agent
+
 
 def test_single_column_index() -> None:
     """Test table structure data with a single column index."""
@@ -64,7 +65,7 @@ def test_single_column_index() -> None:
 
 def test_augments_inherited_index(agent: Any) -> None:
     """Test table structure with AUGMENTS inherited index."""
-    table_data: Dict[str, Any] = {
+    table_data: dict[str, Any] = {
         "table": {"oid": [1, 3, 6, 1, 2, 1, 31, 1, 1]},
         "entry": {
             "oid": [1, 3, 6, 1, 2, 1, 31, 1, 1, 1],
@@ -104,7 +105,7 @@ def test_augments_inherited_index(agent: Any) -> None:
 
 def test_multi_column_index_inherited_and_local(agent: Any) -> None:
     """Test table structure with multi-column index (inherited + local)."""
-    table_data: Dict[str, Any] = {
+    table_data: dict[str, Any] = {
         "table": {"oid": [1, 3, 6, 1, 2, 1, 31, 4]},
         "entry": {
             "oid": [1, 3, 6, 1, 2, 1, 31, 4, 1],
@@ -191,12 +192,18 @@ def test_agent_mib_builder_mock_interaction(agent: Any, mocker: MockerFixture) -
 
     # Call import_symbols
     result = agent.mib_builder.import_symbols(
-        "SNMPv2-SMI", "MibTable", "MibTableRow", "MibTableColumn"
+        "SNMPv2-SMI",
+        "MibTable",
+        "MibTableRow",
+        "MibTableColumn",
     )
 
     # Verify import_symbols was called with correct arguments
     agent.mib_builder.import_symbols.assert_called_once_with(
-        "SNMPv2-SMI", "MibTable", "MibTableRow", "MibTableColumn"
+        "SNMPv2-SMI",
+        "MibTable",
+        "MibTableRow",
+        "MibTableColumn",
     )
 
     # Verify result contains the mocked classes
@@ -214,7 +221,7 @@ def test_find_table_related_objects_integration(agent: Any, mocker: MockerFixtur
 
     # Simulate a MIB JSON with table structures
     table_data = _if_table_data()
-    mib_json: Dict[str, Any] = {
+    mib_json: dict[str, Any] = {
         "ifTable": {
             "oid": table_data["table"]["oid"],
             "access": "not-accessible",
@@ -260,7 +267,7 @@ def test_table_column_type_resolution_in_registration(agent: Any, mocker: Mocker
     """Test registration resolves DisplayString through its OctetString base type."""
     from app.table_registrar import TableRegistrar
 
-    type_registry: Dict[str, Dict[str, Any]] = {
+    type_registry: dict[str, dict[str, Any]] = {
         "Integer32": {"base_type": "Integer32"},
         "OctetString": {"base_type": "OctetString"},
         "DisplayString": {
@@ -274,7 +281,7 @@ def test_table_column_type_resolution_in_registration(agent: Any, mocker: Mocker
     table_data["entry"]["indexes"] = ["ifIndex"]
     table_data["columns"]["ifDescr"]["type"] = "DisplayString"
 
-    mib_jsons: Dict[str, Dict[str, Any]] = {"TEST-MIB": {"ifTable": {"rows": []}}}
+    mib_jsons: dict[str, dict[str, Any]] = {"TEST-MIB": {"ifTable": {"rows": []}}}
     registrar = TableRegistrar(
         mib_builder=agent.mib_builder,
         mib_scalar_instance=agent.MibScalar,
@@ -289,5 +296,6 @@ def test_table_column_type_resolution_in_registration(agent: Any, mocker: Mocker
     registrar.register_single_table("TEST-MIB", "ifTable", table_data, type_registry, mib_jsons)
 
     rows = mib_jsons["TEST-MIB"]["ifTable"]["rows"]
-    assert rows and rows[0]["ifIndex"] == 1
+    assert rows
+    assert rows[0]["ifIndex"] == 1
     assert rows[0]["ifDescr"] == "Unset"

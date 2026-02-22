@@ -1,9 +1,10 @@
 """Tests for test cli run agent."""
 
 from typing import Any
-import pytest
-import app.cli_run_agent as cli
 
+import pytest
+
+import app.cli_run_agent as cli
 
 
 def test_main_missing_config(monkeypatch: Any, capsys: Any) -> None:
@@ -14,7 +15,7 @@ def test_main_missing_config(monkeypatch: Any, capsys: Any) -> None:
         """Test helper class for BadConfig."""
 
         def __init__(self, path: str) -> None:
-            raise FileNotFoundError()
+            raise FileNotFoundError
 
     monkeypatch.setattr(cli, "AppConfig", BadConfig)
 
@@ -68,7 +69,7 @@ def test_main_no_schemas_loaded(monkeypatch: Any, capsys: Any) -> None:
 
 
 @pytest.mark.parametrize(
-    "agent_outcome,argv,expected_rc,expected_stream,expected_text",
+    ("agent_outcome", "argv", "expected_rc", "expected_stream", "expected_text"),
     [
         (
             KeyboardInterrupt(),

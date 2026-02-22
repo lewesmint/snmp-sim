@@ -12,27 +12,17 @@ def test_date_and_time() -> None:
     # Add UTC timezone: '+' (0x2B) for UTC+0:0
     octets += bytes([0x2B, 0, 0])
 
-    print(f"Length: {len(octets)} octets (should be 11)")
-    print(f"Hex: {octets.hex()}")
-
     # Decode to verify
-    year = int.from_bytes(octets[0:2], "big")
-    month = octets[2]
-    day = octets[3]
-    hour = octets[4]
-    minute = octets[5]
-    second = octets[6]
-    deciseconds = octets[7]
-    sign_byte = octets[8]
-    tz_hour = octets[9]
-    tz_min = octets[10]
-
-    sign = "+" if sign_byte == 0x2B else "-"
-    formatted = (
-        f"{year}-{month}-{day},{hour}:{minute}:{second}.{deciseconds}{sign}{tz_hour}:{tz_min}"
-    )
-    print(f"Formatted: {formatted}")
-    print("Expected:  2026-2-5,19:xx:xx.0+0:0")
+    int.from_bytes(octets[0:2], "big")
+    octets[2]
+    octets[3]
+    octets[4]
+    octets[5]
+    octets[6]
+    octets[7]
+    octets[8]
+    octets[9]
+    octets[10]
 
 
 if __name__ == "__main__":

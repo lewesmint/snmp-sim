@@ -3,7 +3,6 @@
 import json
 from typing import Any, NoReturn
 
-
 from app import cli_build_model as cbm
 
 
@@ -91,7 +90,7 @@ def test_main_config_not_found(monkeypatch: Any) -> None:
     """Test case for test_main_config_not_found."""
 
     def raise_nf(*a: Any, **k: Any) -> NoReturn:
-        raise FileNotFoundError()
+        raise FileNotFoundError
 
     monkeypatch.setattr(cbm, "AppConfig", raise_nf)
     rc = cbm.main([])

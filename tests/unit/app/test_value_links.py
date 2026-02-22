@@ -107,7 +107,7 @@ def test_load_links_from_schema_and_state_and_export() -> None:
                 {"table_oid": "1.2.3", "column": "ifDescr"},
                 {"table_oid": "1.2.3", "column": "ifName"},
             ],
-        }
+        },
     ]
     manager.load_links_from_state(state_links)
 
@@ -151,7 +151,8 @@ def test_update_tracking_and_clear() -> None:
     assert manager.should_propagate("ifDescr", "1") is True
 
     manager.add_link(
-        "link", [ValueLinkEndpoint(None, "ifDescr"), ValueLinkEndpoint(None, "ifName")]
+        "link",
+        [ValueLinkEndpoint(None, "ifDescr"), ValueLinkEndpoint(None, "ifName")],
     )
     manager.clear()
     assert manager.export_links() == []

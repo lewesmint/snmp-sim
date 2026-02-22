@@ -1,5 +1,4 @@
-"""
-Default Value Plugin System for SNMP Behaviour Generation
+"""Default Value Plugin System for SNMP Behaviour Generation
 
 This module provides a plugin system for determining default values when generating
 SNMP behavior JSON files. Plugins are called during MIB-to-JSON generation to provide
@@ -9,8 +8,9 @@ Each plugin is a simple function that takes type_info and symbol_name and return
 either a default value or None if it doesn't handle that type.
 """
 
-from typing import Any, Dict, Optional, Callable, List
 import logging
+from collections.abc import Callable
+from typing import cast
 
 from app.types import DefaultValuePlugin, TypeInfo
 
@@ -21,8 +21,8 @@ class DefaultValuePluginRegistry:
     """Registry for default value plugins used during JSON generation."""
 
     def __init__(self) -> None:
-        self._plugins: List[DefaultValuePlugin] = []
-        self._plugin_names: Dict[str, DefaultValuePlugin] = {}
+        self._plugins: list[DefaultValuePlugin] = []
+        self._plugin_names: dict[str, DefaultValuePlugin] = {}
 
     def register(self, name: str, plugin: DefaultValuePlugin) -> None:
         """Register a plugin function with a name.
@@ -30,20 +30,21 @@ class DefaultValuePluginRegistry:
         Args:
             name: Descriptive name for the plugin (e.g., 'ip_address', 'system_objects')
             plugin: Function that takes (type_info, symbol_name) and returns a value or None
+
         """
         if name in self._plugin_names:
             old_plugin = self._plugin_names[name]
             if old_plugin != plugin and old_plugin in self._plugins:
                 self._plugins.remove(old_plugin)
-            logger.warning(f"Plugin '{name}' already registered, replacing")
+            logger.warning("Plugin '%s' already registered, replacing", name)
 
         self._plugin_names[name] = plugin
         if plugin not in self._plugins:
             self._plugins.append(plugin)
 
-        logger.debug(f"Registered default value plugin: {name}")
+        logger.debug("Registered default value plugin: %s", name)
 
-    def get_default_value(self, type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
+    def get_default_value(self, type_info: TypeInfo, symbol_name: str) -> object | None:
         """Get default value by calling all registered plugins in order.
 
         Args:
@@ -52,18 +53,19 @@ class DefaultValuePluginRegistry:
 
         Returns:
             The first non-None value returned by any plugin, or None if no plugin handles it
+
         """
         for plugin in self._plugins:
             try:
                 value = plugin(type_info, symbol_name)
                 if value is not None:
-                    return value
-            except Exception as e:
-                logger.error(f"Plugin {plugin.__name__} failed: {e}", exc_info=True)
+                    return cast("object", value)
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                logger.exception("%s", f"Plugin {plugin.__name__} failed: {e}")
 
         return None
 
-    def list_plugins(self) -> List[str]:
+    def list_plugins(self) -> list[str]:
         """Return list of registered plugin names."""
         return list(self._plugin_names.keys())
 
@@ -77,7 +79,7 @@ def register_plugin(name: str) -> Callable[[DefaultValuePlugin], DefaultValuePlu
 
     Usage:
         @register_plugin('my_plugin')
-        def my_plugin(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
+        def my_plugin(type_info: TypeInfo, symbol_name: str) -> Optional[object]:
             if type_info.get('base_type') == 'IpAddress':
                 return '192.168.1.1'
             return None
@@ -90,7 +92,7 @@ def register_plugin(name: str) -> Callable[[DefaultValuePlugin], DefaultValuePlu
     return decorator
 
 
-def get_default_value(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
+def get_default_value(type_info: TypeInfo, symbol_name: str) -> object | None:
     """Get default value using registered plugins.
 
     This is the main entry point for the generator to get default values.

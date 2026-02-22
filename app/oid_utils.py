@@ -5,10 +5,9 @@ code and ensure consistent OID representation. OIDs are represented as tuples
 of integers throughout the application.
 """
 
-from typing import Tuple, Union, List
 
 
-def oid_str_to_tuple(oid_str: str) -> Tuple[int, ...]:
+def oid_str_to_tuple(oid_str: str) -> tuple[int, ...]:
     """Convert OID string to tuple of integers.
 
     Handles various OID string formats:
@@ -29,16 +28,16 @@ def oid_str_to_tuple(oid_str: str) -> Tuple[int, ...]:
         (1, 3, 6, 1, 2, 1, 1, 1, 0)
         >>> oid_str_to_tuple("")
         ()
+
     """
     oid_str = oid_str.strip()
-    if oid_str.startswith("."):
-        oid_str = oid_str[1:]
+    oid_str = oid_str.removeprefix(".")
     if not oid_str:
-        return tuple()
+        return ()
     return tuple(int(x) for x in oid_str.split("."))
 
 
-def oid_tuple_to_str(oid_tuple: Tuple[int, ...]) -> str:
+def oid_tuple_to_str(oid_tuple: tuple[int, ...]) -> str:
     """Convert OID tuple to dot-separated string.
 
     Args:
@@ -52,11 +51,12 @@ def oid_tuple_to_str(oid_tuple: Tuple[int, ...]) -> str:
         "1.3.6.1.2.1.1.1.0"
         >>> oid_tuple_to_str(())
         ""
+
     """
     return ".".join(str(x) for x in oid_tuple)
 
 
-def normalize_oid(oid: Union[str, Tuple[int, ...], List[int]]) -> Tuple[int, ...]:
+def normalize_oid(oid: object) -> tuple[int, ...]:
     """Normalize OID to tuple format regardless of input type.
 
     Accepts OIDs in various formats and returns a consistent tuple representation.
@@ -74,6 +74,7 @@ def normalize_oid(oid: Union[str, Tuple[int, ...], List[int]]) -> Tuple[int, ...
         (1, 3, 6, 1, 2, 1, 1, 1, 0)
         >>> normalize_oid((1, 3, 6, 1, 2, 1, 1, 1, 0))
         (1, 3, 6, 1, 2, 1, 1, 1, 0)
+
     """
     if isinstance(oid, str):
         return oid_str_to_tuple(oid)
@@ -81,4 +82,5 @@ def normalize_oid(oid: Union[str, Tuple[int, ...], List[int]]) -> Tuple[int, ...
         return tuple(oid)
     if isinstance(oid, tuple):
         return oid
-    raise TypeError(f"OID must be string, tuple, or list, got {type(oid)}")
+    msg = f"OID must be string, tuple, or list, got {type(oid)}"
+    raise TypeError(msg)

@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-import tkinter as tk
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional, Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import tkinter as tk
+    from collections.abc import Callable
 
 
 class Logger:
     """Simple logger that outputs to both console and optional text widget with color coding."""
 
-    def __init__(self, log_widget: Optional[tk.Text] = None):
+    def __init__(self, log_widget: tk.Text | None = None) -> None:
         self.log_widget = log_widget
         self._tags_configured = False
 
@@ -27,7 +30,7 @@ class Logger:
             self.log_widget.tag_config("INFO", foreground="")  # Default color
             self.log_widget.tag_config("DEBUG", foreground="#888888")  # Gray
             self._tags_configured = True
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             pass
 
     def log(self, message: str, level: str = "INFO") -> None:
@@ -36,7 +39,6 @@ class Logger:
         log_entry = f"[{timestamp}] {level}: {message}\n"
 
         # Print to stdout
-        print(log_entry, end="")
 
         # Append to GUI log area if available
         if self.log_widget:
@@ -49,7 +51,7 @@ class Logger:
 
                 self.log_widget.see("end")
                 self.log_widget.configure(state="disabled")
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 # If log area not available, just print
                 pass
 
@@ -69,10 +71,10 @@ def save_gui_log(log_widget: tk.Text, filename: str = "gui.log") -> None:
             try:
                 text = log_widget.get("1.0", "end")
                 f.write(text)
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 pass
-    except Exception as e:
-        print(f"Error saving log: {e}")
+    except (AttributeError, LookupError, OSError, TypeError, ValueError):
+        pass
 
 
 def format_snmp_value(value: Any) -> str:
@@ -83,17 +85,19 @@ def format_snmp_value(value: Any) -> str:
             result = value.prettyPrint()
             return str(result)
         return str(value)
-    except Exception:
+    except (AttributeError, LookupError, OSError, TypeError, ValueError):
         return str(value)
 
 
 def safe_call(
-    func: Callable[..., Any], default: Any = None, logger: Optional[Logger] = None
+    func: Callable[..., Any],
+    default: Any = None,
+    logger: Logger | None = None,
 ) -> Any:
     """Safely call a function and log errors if logger is provided."""
     try:
         return func()
-    except Exception as e:
+    except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         if logger:
             logger.log(f"Error in {func.__name__}: {e}", "ERROR")
         return default

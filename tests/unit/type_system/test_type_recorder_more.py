@@ -1,7 +1,11 @@
 """Tests for test type recorder more."""
 
-from typing import Mapping, cast
-from app.type_recorder import TypeRecorder, TypeEntry
+from typing import TYPE_CHECKING, cast
+
+from app.type_recorder import TypeEntry, TypeRecorder
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 def test_parse_constraints_from_repr_size_range_and_single() -> None:
@@ -92,7 +96,9 @@ def test_drop_redundant_base_value_range() -> None:
         {"type": "ValueRangeConstraint", "min": 10, "max": 90},
     ]
     out = TypeRecorder._drop_redundant_base_value_range(
-        base, constraints, cast(Mapping[str, TypeEntry], types)
+        base,
+        constraints,
+        cast("Mapping[str, TypeEntry]", types),
     )
     # the broader base range should be dropped because a tighter range exists
     assert not any(c["min"] == 0 and c["max"] == 100 for c in out)
@@ -105,7 +111,10 @@ def test_drop_redundant_base_range_for_enums() -> None:
     constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 5}]
     enums = [{"value": 1, "name": "one"}]
     out = TypeRecorder._drop_redundant_base_range_for_enums(
-        base, constraints, enums, cast(Mapping[str, TypeEntry], types)
+        base,
+        constraints,
+        enums,
+        cast("Mapping[str, TypeEntry]", types),
     )
     # since enums present, identical base range should be dropped
     assert out == []
@@ -117,24 +126,16 @@ def test_is_textual_convention_and_abstract_type_checks() -> None:
     class TextualConvention:
         """Test helper class for TextualConvention."""
 
-        pass
-
     class DisplayString(TextualConvention):
         """Test helper class for DisplayString."""
-
-        pass
 
     assert TypeRecorder._is_textual_convention_symbol(DisplayString)
 
     class Choice:
         """Test helper class for Choice."""
 
-        pass
-
     class SomeChoice(Choice):
         """Test helper class for SomeChoice."""
-
-        pass
 
     assert TypeRecorder._is_abstract_type("ObjectName")
     assert TypeRecorder._is_abstract_type("SomeChoice", SomeChoice)
@@ -146,11 +147,7 @@ def test_infer_asn1_base_type() -> None:
     class OctetString:
         """Test helper class for OctetString."""
 
-        pass
-
     class MyType(OctetString):
         """Test helper class for MyType."""
-
-        pass
 
     assert TypeRecorder._infer_asn1_base_type("MyType", MyType) == "OCTET STRING"

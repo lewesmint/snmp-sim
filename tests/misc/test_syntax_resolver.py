@@ -1,5 +1,4 @@
-"""
-Tests for SNMP type syntax resolution and base type inference.
+"""Tests for SNMP type syntax resolution and base type inference.
 
 This test module covers functionality that maps TEXTUAL-CONVENTIONS and
 syntax names to their base SNMP types. In the old codebase, this was handled
@@ -10,6 +9,7 @@ by OLD_APP/syntax_resolver.py. Now it's distributed across:
 """
 
 from pathlib import Path
+
 from app.type_registry import TypeRegistry
 
 
@@ -103,7 +103,7 @@ def test_type_info_extraction_from_registry() -> None:
         try:
             with open(types_json) as f:
                 types_dict = json.load(f)
-        except Exception:
+        except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
             types_dict = None
 
     # If types.json is missing or appears to be a placeholder, try to generate

@@ -1,9 +1,13 @@
 """Tests for test base type handler."""
 
+from typing import TYPE_CHECKING, Any
+
 import pytest
+
 from app.base_type_handler import BaseTypeHandler
-from typing import Any
-from app.types import TypeRegistry, TypeInfo
+
+if TYPE_CHECKING:
+    from app.types import TypeInfo, TypeRegistry
 
 
 @pytest.fixture
@@ -83,7 +87,8 @@ def test_octet_ip_and_mac_and_bits_and_default_bytes(handler: BaseTypeHandler) -
 
     # Mac-like name
     val = handler.get_default_value(
-        "EthernetMacAddress", {"type_info": {"base_type": "OctetString"}}
+        "EthernetMacAddress",
+        {"type_info": {"base_type": "OctetString"}},
     )
     assert val == "00:00:00:00:00:00"
 
@@ -129,7 +134,8 @@ def test_create_pysnmp_value_uses_mib_builder_class(handler: BaseTypeHandler) ->
     dummy = DummyClass
     mb = DummyBuilder(dummy)
     out = handler.create_pysnmp_value("SomeType", 123, mib_builder=mb)
-    assert isinstance(out, DummyClass) and out.v == 123
+    assert isinstance(out, DummyClass)
+    assert out.v == 123
 
 
 def test_create_pysnmp_value_returns_raw_when_no_builder(

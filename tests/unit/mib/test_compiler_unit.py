@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from app.compiler import MibCompiler, MibCompilationError
+from app.compiler import MibCompilationError, MibCompiler
 
 
 class _FakePysmiCompiler:
@@ -16,11 +16,11 @@ class _FakePysmiCompiler:
         self.searchers: list[Any] = []
 
     def addSources(self, source: Any) -> None:
-        """Mimic pysmi API (camelCase)"""
+        """Mimic pysmi API (camelCase)."""
         self.sources.append(source)
 
     def addSearchers(self, searcher: Any) -> None:
-        """Mimic pysmi API (camelCase)"""
+        """Mimic pysmi API (camelCase)."""
         self.searchers.append(searcher)
 
     def compile(self, _mib_filename: str) -> dict[str, str]:

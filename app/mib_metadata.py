@@ -34,6 +34,7 @@ def get_sysor_table_rows(mib_names: list[str]) -> list[dict[str, object]]:
 
     Returns:
         List of sysORTable rows with index, OID, description, and uptime
+
     """
     rows = []
     index = 1

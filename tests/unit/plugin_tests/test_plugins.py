@@ -1,16 +1,16 @@
-"""
-Tests for the plugins module.
-"""
+"""Tests for the plugins module."""
 
 from typing import Any
 
 from plugins.basic_types import (
-    get_default_value as basic_get_default_value,
     _get_first_enum_value,
+)
+from plugins.basic_types import (
+    get_default_value as basic_get_default_value,
 )
 from plugins.date_and_time import _format_date_and_time
 from plugins.snmp_framework import get_default_value as framework_get_default_value
-from plugins.type_encoders import register_type_encoder, get_type_encoder, encode_value
+from plugins.type_encoders import encode_value, get_type_encoder, register_type_encoder
 
 
 class TestBasicTypesPlugin:

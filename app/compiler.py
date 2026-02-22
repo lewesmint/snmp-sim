@@ -2,7 +2,7 @@
 
 import os
 import re
-from typing import Any, List, cast
+from typing import cast
 
 from pysmi.codegen.pysnmp import PySnmpCodeGen
 from pysmi.compiler import MibCompiler as PysmiMibCompiler
@@ -20,7 +20,7 @@ logger = AppLogger.get(__name__)
 class MibCompilationError(Exception):
     """Raised when MIB compilation fails."""
 
-    def __init__(self, message: str, missing_dependencies: List[str] | None = None) -> None:
+    def __init__(self, message: str, missing_dependencies: list[str] | None = None) -> None:
         super().__init__(message)
         self.missing_dependencies = missing_dependencies or []
 
@@ -47,6 +47,7 @@ class MibCompiler:
 
         Raises:
             RuntimeError: If compilation fails
+
         """
         # Get the directory containing the MIB file
         mib_dir = os.path.dirname(os.path.abspath(mib_txt_path))
@@ -87,18 +88,18 @@ class MibCompiler:
 
         # Store results for caller to access
         self.last_compile_results = {
-            str(cast(Any, mib)): str(cast(Any, status)) for mib, status in results.items()
+            str(cast("object", mib)): str(cast("object", status)) for mib, status in results.items()
         }
 
         # Collect all missing dependencies
-        missing_deps: List[str] = []
-        failed_mibs: List[tuple[str, str]] = []
+        missing_deps: list[str] = []
+        failed_mibs: list[tuple[str, str]] = []
         actual_mib_name: str | None = None
 
         # Check results (don't print here - let caller handle printing)
         for mib, status in results.items():
-            mib_name_str: str = str(cast(Any, mib))
-            status_str = str(cast(Any, status))
+            mib_name_str: str = str(cast("object", mib))
+            status_str = str(cast("object", status))
             # Don't print status here - caller will handle it to avoid duplicates
 
             # Store the actual MIB module name (from inside the file)
@@ -148,7 +149,7 @@ class MibCompiler:
 
         return compiled_py
 
-    def _parse_missing_from_status(self, status: str) -> List[str]:
+    def _parse_missing_from_status(self, status: str) -> list[str]:
         """Parse missing dependencies from compilation status message."""
         missing: set[str] = set()
         # Look for patterns like "MIB-NAME is missing" or similar

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Iterable
+from collections.abc import Iterable
 
 from pysnmp.proto import rfc1902
 
@@ -104,11 +104,11 @@ def main(argv: Iterable[str] | None = None) -> int:
             mib=args.mib,
             notification=args.notification,
             trap_type=args.trap_type,
-            extra_varbinds=extra_varbinds if extra_varbinds else None,
+            extra_varbinds=extra_varbinds or None,
         )
         print(f"✓ Sent {args.trap_type} {args.mib}::{args.notification} to {args.host}:{args.port}")
         return 0
-    except Exception as e:
+    except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         print(f"Error sending notification: {e}", file=sys.stderr)
         return 1
 

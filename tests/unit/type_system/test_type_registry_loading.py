@@ -2,20 +2,22 @@
 
 import json
 import os
+from pathlib import Path
+from typing import Any
 
 import pytest
-from pathlib import Path
-from typing import Any, Dict
 
 
 class TestTypeRegistryLoading:
     """Test type registry loading from JSON files."""
 
     def test_load_type_registry_from_file(
-        self, type_registry_file: Path, sample_type_registry: Dict[str, Dict[str, Any]]
+        self,
+        type_registry_file: Path,
+        sample_type_registry: dict[str, dict[str, Any]],
     ) -> None:
         """Test loading type registry from JSON file."""
-        with open(type_registry_file, "r") as f:
+        with open(type_registry_file) as f:
             loaded_registry = json.load(f)
 
         assert loaded_registry == sample_type_registry
@@ -25,11 +27,11 @@ class TestTypeRegistryLoading:
 
     def test_type_registry_structure(self, type_registry_file: Path) -> None:
         """Test that type registry has correct structure."""
-        with open(type_registry_file, "r") as f:
+        with open(type_registry_file) as f:
             registry = json.load(f)
 
         # Each type should have required fields
-        for type_name, type_info in registry.items():
+        for type_info in registry.values():
             assert isinstance(type_info, dict)
             assert "base_type" in type_info
             # Other fields are optional
@@ -40,9 +42,8 @@ class TestTypeRegistryLoading:
 
         assert not registry_path.exists()
 
-        with pytest.raises(FileNotFoundError):
-            with open(registry_path, "r") as f:
-                json.load(f)
+        with pytest.raises(FileNotFoundError), open(registry_path) as f:
+            json.load(f)
 
     def test_load_invalid_json_registry(self, temp_dir: Path) -> None:
         """Test loading a registry with invalid JSON."""
@@ -50,9 +51,8 @@ class TestTypeRegistryLoading:
         with open(registry_path, "w") as f:
             f.write("{ invalid json content }")
 
-        with pytest.raises(json.JSONDecodeError):
-            with open(registry_path, "r") as f:
-                json.load(f)
+        with pytest.raises(json.JSONDecodeError), open(registry_path) as f:
+            json.load(f)
 
     def test_type_registry_path_construction(self, temp_dir: Path) -> None:
         """Test different ways of constructing type registry path."""
@@ -84,9 +84,9 @@ class TestTypeRegistryLoading:
 
         # Simulate the pattern used in mib_registrar.py
         try:
-            with open(registry_path, "r") as f:
+            with open(registry_path) as f:
                 type_registry = json.load(f)
-        except Exception:
+        except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
             # Should fall back to empty dict
             type_registry = {}
 
@@ -96,7 +96,7 @@ class TestTypeRegistryLoading:
 class TestTypeRegistryUsage:
     """Test how type registry is used in the codebase."""
 
-    def test_get_type_info(self, sample_type_registry: Dict[str, Dict[str, Any]]) -> None:
+    def test_get_type_info(self, sample_type_registry: dict[str, dict[str, Any]]) -> None:
         """Test retrieving type info from registry."""
         type_name = "Integer32"
         type_info = sample_type_registry.get(type_name, {})
@@ -104,7 +104,7 @@ class TestTypeRegistryUsage:
         assert type_info is not None
         assert type_info["base_type"] == "INTEGER"
 
-    def test_get_base_type(self, sample_type_registry: Dict[str, Dict[str, Any]]) -> None:
+    def test_get_base_type(self, sample_type_registry: dict[str, dict[str, Any]]) -> None:
         """Test getting base type from type info."""
         type_name = "DisplayString"
         type_info = sample_type_registry.get(type_name, {})
@@ -112,7 +112,7 @@ class TestTypeRegistryUsage:
 
         assert base_type == "OCTET STRING"
 
-    def test_missing_type_fallback(self, sample_type_registry: Dict[str, Dict[str, Any]]) -> None:
+    def test_missing_type_fallback(self, sample_type_registry: dict[str, dict[str, Any]]) -> None:
         """Test fallback when type is not in registry."""
         type_name = "NonexistentType"
         type_info = sample_type_registry.get(type_name, {})
@@ -123,7 +123,7 @@ class TestTypeRegistryUsage:
         base_type = type_info.get("base_type")
         assert base_type is None
 
-    def test_type_with_constraints(self, sample_type_registry: Dict[str, Dict[str, Any]]) -> None:
+    def test_type_with_constraints(self, sample_type_registry: dict[str, dict[str, Any]]) -> None:
         """Test accessing type constraints."""
         type_info = sample_type_registry["Integer32"]
         constraints = type_info.get("constraints")
@@ -132,7 +132,7 @@ class TestTypeRegistryUsage:
         assert isinstance(constraints, list)
         assert len(constraints) > 0
 
-    def test_type_with_enums(self, sample_type_registry: Dict[str, Dict[str, Any]]) -> None:
+    def test_type_with_enums(self, sample_type_registry: dict[str, dict[str, Any]]) -> None:
         """Test accessing type enumerations."""
         # Add a type with enums for testing
         sample_type_registry["TestEnum"] = {

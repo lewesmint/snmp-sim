@@ -1,14 +1,17 @@
 """Tests for test base type handler more."""
 
 import importlib
-import types
 import logging
+import types
+from typing import TYPE_CHECKING, Any
+
 import pytest
-from typing import Any, Tuple
+from pytest_mock import MockerFixture
 
 from app.base_type_handler import BaseTypeHandler
-from app.types import TypeRegistry
-from pytest_mock import MockerFixture
+
+if TYPE_CHECKING:
+    from app.types import TypeRegistry
 
 
 @pytest.fixture
@@ -35,7 +38,8 @@ def test_resolve_to_base_type_recursive_lookup() -> None:
 
 
 def test_resolve_to_base_type_fallback_logs(
-    caplog: pytest.LogCaptureFixture, handler: BaseTypeHandler
+    caplog: pytest.LogCaptureFixture,
+    handler: BaseTypeHandler,
 ) -> None:
     """Test case for test_resolve_to_base_type_fallback_logs."""
     caplog.set_level(logging.WARNING)
@@ -55,12 +59,13 @@ def test_create_pysnmp_value_handles_type_class_exception(
         """Test helper class for BadCls."""
 
         def __init__(self, _v: Any) -> None:
-            raise ValueError("boom")
+            msg = "boom"
+            raise ValueError(msg)
 
     class BadBuilder:
         """Test helper class for BadBuilder."""
 
-        def import_symbols(self, module: str, name: str) -> Tuple[Any, ...]:
+        def import_symbols(self, module: str, name: str) -> tuple[Any, ...]:
             """Test case for import_symbols."""
             return (BadCls,)
 
@@ -72,7 +77,8 @@ def test_create_pysnmp_value_handles_type_class_exception(
 
 
 def test_create_pysnmp_value_fallback_to_rfc1902(
-    monkeypatch: pytest.MonkeyPatch, handler: BaseTypeHandler
+    monkeypatch: pytest.MonkeyPatch,
+    handler: BaseTypeHandler,
 ) -> None:
     """Test case for test_create_pysnmp_value_fallback_to_rfc1902."""
 
@@ -86,7 +92,7 @@ def test_create_pysnmp_value_fallback_to_rfc1902(
     fake_rfc = types.SimpleNamespace(
         Integer32=FakeInt,
         OctetString=lambda x: x if isinstance(x, bytes) else x.encode("utf-8"),
-        ObjectIdentifier=lambda x: tuple(x),
+        ObjectIdentifier=tuple,
     )
     # Ensure we patch the already-imported pysnmp.proto package (if present)
     proto_mod = importlib.import_module("pysnmp.proto")
@@ -96,12 +102,14 @@ def test_create_pysnmp_value_fallback_to_rfc1902(
     class RaisingBuilder:
         """Test helper class for RaisingBuilder."""
 
-        def import_symbols(self, module: str, name: str) -> Tuple[Any, ...]:
+        def import_symbols(self, module: str, name: str) -> tuple[Any, ...]:
             """Test case for import_symbols."""
-            raise RuntimeError("nope")
+            msg = "nope"
+            raise RuntimeError(msg)
 
     out = handler.create_pysnmp_value("Integer32", 42, mib_builder=RaisingBuilder())
-    assert hasattr(out, "v") and out.v == 42
+    assert hasattr(out, "v")
+    assert out.v == 42
 
     out2 = handler.create_pysnmp_value("OctetString", "foo", mib_builder=RaisingBuilder())
     assert isinstance(out2, bytes)
@@ -111,19 +119,18 @@ def test_create_pysnmp_value_fallback_to_rfc1902(
 
 
 def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
-    monkeypatch: pytest.MonkeyPatch, handler: BaseTypeHandler
+    monkeypatch: pytest.MonkeyPatch,
+    handler: BaseTypeHandler,
 ) -> None:
     """Test case for test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902."""
 
     class MyClass:
         """Test helper class for MyClass."""
 
-        pass
-
     class Builder:
         """Test helper class for Builder."""
 
-        def import_symbols(self, module: str, name: str) -> Tuple[Any, ...]:
+        def import_symbols(self, module: str, name: str) -> tuple[Any, ...]:
             """Test case for import_symbols."""
             if module == "SNMPv2-SMI":
                 return (MyClass,)
@@ -137,14 +144,12 @@ def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
     class FailBuilder:
         """Test helper class for FailBuilder."""
 
-        def import_symbols(self, module: str, name: str) -> Tuple[Any, ...]:
+        def import_symbols(self, module: str, name: str) -> tuple[Any, ...]:
             """Test case for import_symbols."""
             raise RuntimeError
 
     class RfcCls:
         """Test helper class for RfcCls."""
-
-        pass
 
     # Patch the existing pysnmp.proto.rfc1902 if the package is loaded
     proto_mod = importlib.import_module("pysnmp.proto")
@@ -198,7 +203,9 @@ def test_get_default_value_integer_no_constraints_returns_zero(
 
 
 def test_get_default_value_unexpected_base_type_logs_warning(
-    caplog: pytest.LogCaptureFixture, handler: BaseTypeHandler, mocker: MockerFixture
+    caplog: pytest.LogCaptureFixture,
+    handler: BaseTypeHandler,
+    mocker: MockerFixture,
 ) -> None:
     """Test that unexpected base types log a warning and return 0."""
     caplog.set_level(logging.WARNING)
@@ -215,7 +222,9 @@ def test_get_default_value_unexpected_base_type_logs_warning(
 
 
 def test_create_pysnmp_value_rfc1902_fallback_exception(
-    caplog: pytest.LogCaptureFixture, handler: BaseTypeHandler, mocker: MockerFixture
+    caplog: pytest.LogCaptureFixture,
+    handler: BaseTypeHandler,
+    mocker: MockerFixture,
 ) -> None:
     """Test that rfc1902 fallback logs errors on exception."""
     caplog.set_level(logging.ERROR)
@@ -235,7 +244,8 @@ def test_create_pysnmp_value_rfc1902_fallback_exception(
 
 
 def test_get_pysnmp_type_class_rfc1902_exception(
-    caplog: pytest.LogCaptureFixture, handler: BaseTypeHandler
+    caplog: pytest.LogCaptureFixture,
+    handler: BaseTypeHandler,
 ) -> None:
     """Test that _get_pysnmp_type_class handles rfc1902 exceptions gracefully."""
     caplog.set_level(logging.ERROR)
@@ -245,7 +255,8 @@ def test_get_pysnmp_type_class_rfc1902_exception(
         """Test helper class for FakeRfc."""
 
         def __getattr__(self, name: str) -> Any:
-            raise AttributeError(f"no such type: {name}")
+            msg = f"no such type: {name}"
+            raise AttributeError(msg)
 
     fake_rfc = FakeRfc()
 
@@ -254,20 +265,21 @@ def test_get_pysnmp_type_class_rfc1902_exception(
 
     proto_mod = importlib.import_module("pysnmp.proto")
     original_rfc1902 = getattr(proto_mod, "rfc1902", None)
-    setattr(proto_mod, "rfc1902", fake_rfc)
+    proto_mod.rfc1902 = fake_rfc  # type: ignore[attr-defined]
 
     try:
         # Test with a builder that fails
         class FailingBuilder:
             """Test helper class for FailingBuilder."""
 
-            def import_symbols(self, module: str, name: str) -> Tuple[Any, ...]:
+            def import_symbols(self, module: str, name: str) -> tuple[Any, ...]:
                 """Test case for import_symbols."""
-                raise RuntimeError("builder failed")
+                msg = "builder failed"
+                raise RuntimeError(msg)
 
         result = handler._get_pysnmp_type_class("SomeType", FailingBuilder())
         assert result is None  # Should return None on exception
     finally:
         # Restore original
         if original_rfc1902 is not None:
-            setattr(proto_mod, "rfc1902", original_rfc1902)
+            proto_mod.rfc1902 = original_rfc1902  # type: ignore[attr-defined]

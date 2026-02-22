@@ -6,7 +6,6 @@ import sys
 
 from ui.snmp_gui import main
 
-
 if __name__ == "__main__":
     try:
         main()

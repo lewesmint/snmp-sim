@@ -1,11 +1,11 @@
 """DateAndTime TEXTUAL-CONVENTION plugin for proper SNMP octet encoding."""
 
-from typing import Union
 from datetime import datetime
+
 from plugins.type_encoders import register_type_encoder
 
 
-def _format_date_and_time(value: Union[str, bytes, None]) -> bytes:
+def _format_date_and_time(value: str | bytes | None) -> bytes:
     """Convert a value to DateAndTime octets.
 
     DateAndTime is an OCTET STRING of 8 or 11 octets representing:
@@ -31,11 +31,11 @@ def _format_date_and_time(value: Union[str, bytes, None]) -> bytes:
 
     Returns:
         11-byte DateAndTime octet string (year, month, day, hour, minute, second, deciseconds, +, 0, 0)
+
     """
     # If already bytes with valid length, return as-is
-    if isinstance(value, bytes):
-        if len(value) >= 8:
-            return value
+    if isinstance(value, bytes) and len(value) >= 8:
+        return value
 
     # Default to current time if unset/None/empty
     if value in [None, "unset", "", "unknown"]:

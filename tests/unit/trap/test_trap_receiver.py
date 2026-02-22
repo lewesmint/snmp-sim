@@ -2,6 +2,7 @@
 
 import time
 from typing import Any
+
 from app.trap_receiver import TrapReceiver
 
 

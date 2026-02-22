@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-CLI tool to bake current MIB state into agent-model schema files.
+"""CLI tool to bake current MIB state into agent-model schema files.
 
 This tool:
 1. Backs up existing agent-model directory to agent-model-backups/{timestamp}/
@@ -43,14 +42,13 @@ def load_mib_state(state_file: Path) -> dict[str, Any]:
         print(f"Warning: State file {state_file} does not exist")
         return {"scalars": {}, "tables": {}, "deleted_instances": []}
 
-    with open(state_file, "r", encoding="utf-8") as f:
+    with open(state_file, encoding="utf-8") as f:
         state: dict[str, Any] = json.load(f)
         return state
 
 
 def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
-    """
-    Bake state values into schema files as initial values.
+    """Bake state values into schema files as initial values.
 
     Returns the number of values baked.
     """
@@ -61,7 +59,7 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
     # Process all schema files
     for schema_file in schema_dir.rglob("schema.json"):
         try:
-            with open(schema_file, "r", encoding="utf-8") as f:
+            with open(schema_file, encoding="utf-8") as f:
                 schema = json.load(f)
 
             modified = False
@@ -198,7 +196,7 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                 write_json_with_horizontal_oid_lists(schema_file, schema)
                 print(f"✓ Updated {schema_file.relative_to(schema_dir.parent)}")
 
-        except Exception as e:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
             print(f"Error processing {schema_file}: {e}", file=sys.stderr)
             traceback.print_exc()
 

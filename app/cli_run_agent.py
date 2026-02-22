@@ -50,7 +50,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error: Config file not found: {args.config}", file=sys.stderr)
         return 1
 
-    mibs = config.get("mibs", [])
+    mibs_raw = config.get("mibs", [])
+    mibs = mibs_raw if isinstance(mibs_raw, list) else []
+    mibs = [str(mib) for mib in mibs]
     if not mibs:
         print("No MIBs configured", file=sys.stderr)
         return 1
@@ -74,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         agent.run()
     except KeyboardInterrupt:
         print("\nAgent stopped by user.")
-    except Exception as e:
+    except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         print(f"Error running agent: {e}", file=sys.stderr)
         return 1
 

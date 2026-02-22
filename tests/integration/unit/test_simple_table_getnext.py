@@ -1,15 +1,15 @@
-"""
-Test GETNEXT on a simple 2x2 table of Integer32 values.
+"""Test GETNEXT on a simple 2x2 table of Integer32 values.
 
 This test validates whether we can actually respond to GET/GETNEXT on table OIDs
 when table export is disabled.
 """
 
 import logging
+from typing import Any
+
 import pytest
-from pysnmp.smi import builder, view
 from pysnmp.entity import engine
-from typing import Dict, Any
+from pysnmp.smi import builder, view
 
 from app.table_registrar import TableRegistrar
 
@@ -45,8 +45,7 @@ def test_simple_2x2_table_with_getnext(
     mib_view: view.MibViewController,
     logger: logging.Logger,
 ) -> None:
-    """
-    Test GETNEXT on a simple 2x2 table of Integer32 values.
+    """Test GETNEXT on a simple 2x2 table of Integer32 values.
 
     Table structure:
     - testTable (.1.3.6.1.99.1.1)
@@ -58,7 +57,6 @@ def test_simple_2x2_table_with_getnext(
     - Row 1: index=1, value=100
     - Row 2: index=2, value=200
     """
-
     # Import MIB classes
     MibTable = mib_builder.importSymbols("SNMPv2-SMI", "MibTable")[0]
     MibTableRow = mib_builder.importSymbols("SNMPv2-SMI", "MibTableRow")[0]
@@ -77,7 +75,7 @@ def test_simple_2x2_table_with_getnext(
     )
 
     # Define a simple 2x2 table
-    table_data: Dict[str, Any] = {
+    table_data: dict[str, Any] = {
         "table": {"oid": [1, 3, 6, 1, 99, 1, 1]},
         "entry": {
             "oid": [1, 3, 6, 1, 99, 1, 1, 1],
@@ -109,7 +107,7 @@ def test_simple_2x2_table_with_getnext(
             "testEntry": table_data["entry"],
             "testIndex": table_data["columns"]["testIndex"],
             "testValue": table_data["columns"]["testValue"],
-        }
+        },
     }
 
     # Register the table (should NOT export to pysnmp, just track in JSON)
@@ -128,21 +126,21 @@ def test_simple_2x2_table_with_getnext(
         # Test getting the table entry
         modName, symName, indices = mib_view.getNodeName((table_oid,))
         logger.info(f"Table OID lookup: modName={modName}, symName={symName}, indices={indices}")
-    except Exception as e:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError) as e:
         logger.info(f"Cannot lookup table OID (expected): {e}")
 
     try:
         # Test getting the entry
         modName, symName, indices = mib_view.getNodeName((entry_oid,))
         logger.info(f"Entry OID lookup: modName={modName}, symName={symName}, indices={indices}")
-    except Exception as e:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError) as e:
         logger.info(f"Cannot lookup entry OID (expected): {e}")
 
     try:
         # Test getting a column
         modName, symName, indices = mib_view.getNodeName((col1_oid,))
         logger.info(f"Column OID lookup: modName={modName}, symName={symName}, indices={indices}")
-    except Exception as e:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError) as e:
         logger.info(f"Cannot lookup column OID (expected): {e}")
 
     # The main assertion: the table registration shouldn't crash
@@ -150,8 +148,7 @@ def test_simple_2x2_table_with_getnext(
 
 
 def test_table_oid_hierarchy(mib_builder: builder.MibBuilder, logger: logging.Logger) -> None:
-    """
-    Test OID hierarchy for a simple table.
+    """Test OID hierarchy for a simple table.
 
     Verifies that OID structure is correct:
     - .1.3.6.1.99.1.1 = testTable (MibTable)
@@ -163,7 +160,6 @@ def test_table_oid_hierarchy(mib_builder: builder.MibBuilder, logger: logging.Lo
     - .1.3.6.1.99.1.1.1.1.2 = testIndex.2 (instance for row 2)
     - .1.3.6.1.99.1.1.1.2.2 = testValue.2 (instance for row 2)
     """
-
     # Just verify that OID tuples can be created correctly
     table_oid = (1, 3, 6, 1, 99, 1, 1)
     entry_oid = (1, 3, 6, 1, 99, 1, 1, 1)
@@ -189,25 +185,23 @@ def test_table_oid_hierarchy(mib_builder: builder.MibBuilder, logger: logging.Lo
 
     # Verify structure
     assert table_oid == (1, 3, 6, 1, 99, 1, 1)
-    assert entry_oid == table_oid + (1,)
-    assert col1_oid == entry_oid + (1,)
-    assert col2_oid == entry_oid + (2,)
-    assert row1_col1 == col1_oid + (1,)
-    assert row1_col2 == col2_oid + (1,)
-    assert row2_col1 == col1_oid + (2,)
-    assert row2_col2 == col2_oid + (2,)
+    assert entry_oid == (*table_oid, 1)
+    assert col1_oid == (*entry_oid, 1)
+    assert col2_oid == (*entry_oid, 2)
+    assert row1_col1 == (*col1_oid, 1)
+    assert row1_col2 == (*col2_oid, 1)
+    assert row2_col1 == (*col1_oid, 2)
+    assert row2_col2 == (*col2_oid, 2)
 
 
 def test_table_row_instance_oid_generation() -> None:
-    """
-    Test that we can correctly generate OIDs for table row instances.
+    """Test that we can correctly generate OIDs for table row instances.
 
     This simulates what GETNEXT would need to do:
     1. Start with a table OID
     2. Find the next instance in the table
     3. Return the OID for that instance
     """
-
     # Table structure
     col1_oid = (1, 3, 6, 1, 99, 1, 1, 1, 1)
     col2_oid = (1, 3, 6, 1, 99, 1, 1, 1, 2)
@@ -219,17 +213,17 @@ def test_table_row_instance_oid_generation() -> None:
     # Expected response: first column, first row instance
     # OID: .1.3.6.1.99.1.1.1.1.1 with value 1
 
-    expected_oid = col1_oid + (rows[0]["index"],)
+    expected_oid = (*col1_oid, rows[0]["index"])
     assert expected_oid == (1, 3, 6, 1, 99, 1, 1, 1, 1, 1)
 
     # Simulate GETNEXT from first instance
     # Expected: second column, first row
-    expected_oid = col2_oid + (rows[0]["index"],)
+    expected_oid = (*col2_oid, rows[0]["index"])
     assert expected_oid == (1, 3, 6, 1, 99, 1, 1, 1, 2, 1)
 
     # Simulate GETNEXT from end of first row
     # Expected: first column, second row
-    expected_oid = col1_oid + (rows[1]["index"],)
+    expected_oid = (*col1_oid, rows[1]["index"])
     assert expected_oid == (1, 3, 6, 1, 99, 1, 1, 1, 1, 2)
 
 
@@ -238,8 +232,7 @@ def test_table_without_export_responds_to_mib_lookup(
     mib_view: view.MibViewController,
     logger: logging.Logger,
 ) -> None:
-    """
-    Test what happens when we query the MIB view for a table that wasn't exported.
+    """Test what happens when we query the MIB view for a table that wasn't exported.
 
     Key question: Can pysnmp's MIB view respond to OID lookups for a table
     that wasn't explicitly registered via export_symbols?
@@ -247,7 +240,6 @@ def test_table_without_export_responds_to_mib_lookup(
     Expected: Probably not - we'll get "no such object" or similar, because
     the table was never added to the MIB's symbol table.
     """
-
     # OIDs for our non-registered table
     table_oid = (1, 3, 6, 1, 99, 1, 1)
 
@@ -257,9 +249,9 @@ def test_table_without_export_responds_to_mib_lookup(
         # For a non-registered table, it will skip over it
         modName, symName, indices = mib_view.getNextMibNode(table_oid)
         logger.info(
-            f"getNextMibNode from table: modName={modName}, symName={symName}, indices={indices}"
+            f"getNextMibNode from table: modName={modName}, symName={symName}, indices={indices}",
         )
-    except Exception as e:
+    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError) as e:
         logger.info(f"getNextMibNode from table failed (expected): {type(e).__name__}: {e}")
 
     # This test documents the expected behavior when table export is disabled

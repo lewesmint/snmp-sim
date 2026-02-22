@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-CLI tool to manage agent-model presets (scenarios).
+"""CLI tool to manage agent-model presets (scenarios).
 
 This tool allows you to:
 - Save current agent-model as a preset

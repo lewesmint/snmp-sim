@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import logging.handlers
+import os
 import re
 import shutil
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 
 @dataclass(frozen=True)
@@ -34,16 +36,17 @@ class ColoredFormatter(logging.Formatter):
     """Custom formatter that adds color to log levels for console output."""
 
     # ANSI color codes
-    COLORS = {
+    COLORS: ClassVar[dict[str, str]] = {
         "DEBUG": "\033[36m",  # Cyan
         "INFO": "\033[32m",  # Green
         "WARNING": "\033[33m",  # Yellow
         "ERROR": "\033[31m",  # Red
         "CRITICAL": "\033[35m",  # Magenta
     }
-    RESET = "\033[0m"
+    RESET: ClassVar[str] = "\033[0m"
 
     def format(self, record: logging.LogRecord) -> str:
+        """Format the log record with colors."""
         # Save the original levelname
         original_levelname = record.levelname
 
@@ -64,10 +67,11 @@ class FlushingStreamHandler(logging.StreamHandler):  # type: ignore[type-arg]
     """Stream handler that flushes after every emit."""
 
     def emit(self, record: logging.LogRecord) -> None:
+        """Emit the log record and flush the stream."""
         try:
             super().emit(record)
             self.flush()
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             self.handleError(record)
 
 
@@ -75,16 +79,16 @@ class FlushingRotatingFileHandler(logging.handlers.RotatingFileHandler):
     """Rotating file handler that flushes after every emit."""
 
     def emit(self, record: logging.LogRecord) -> None:
+        """Emit the log record and flush the file."""
         try:
             super().emit(record)
             self.flush()
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             self.handleError(record)
 
 
 def _archive_log_file(log_path: Path) -> None:
-    """
-    Archive an existing log file by moving it to the archive subdirectory with a timestamp.
+    """Archive an existing log file by moving it to the archive subdirectory with a timestamp.
 
     If the log file exists, reads the first line to extract the timestamp and moves
     the file to logs/archive/ with the timestamp in the filename. If no timestamp can
@@ -92,6 +96,7 @@ def _archive_log_file(log_path: Path) -> None:
 
     Args:
         log_path: Path to the log file to archive
+
     """
     if not log_path.exists():
         return
@@ -99,20 +104,20 @@ def _archive_log_file(log_path: Path) -> None:
     # Try to read the first line to get the timestamp
     timestamp_str = None
     try:
-        with open(log_path, "r", encoding="utf-8") as f:
+        with log_path.open(encoding="utf-8") as f:
             first_line = f.readline().strip()
             # Match timestamp format: YYYY-MM-DD HH:MM:SS.mmm
             match = re.match(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\.\d{3}", first_line)
             if match:
                 timestamp_str = match.group(1)
-    except Exception:
+    except (AttributeError, LookupError, OSError, TypeError, ValueError):
         # If we can't read the file, we'll use the modification time
         pass
 
     # If we couldn't extract timestamp from first line, use file modification time
     if timestamp_str is None:
         mtime = log_path.stat().st_mtime
-        dt = datetime.fromtimestamp(mtime)
+        dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
         timestamp_str = dt.strftime("%Y-%m-%d %H:%M:%S")
 
     # Convert timestamp to filename-safe format: YYYY-MM-DD_HH-MM-SS
@@ -137,11 +142,8 @@ def _archive_log_file(log_path: Path) -> None:
         counter += 1
 
     # Move the file
-    try:
+    with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
         shutil.move(str(log_path), str(archived_path))
-    except Exception:
-        # If move fails, just continue - we'll append to the existing file
-        pass
 
 
 class AppLogger:
@@ -150,14 +152,9 @@ class AppLogger:
     _configured: bool = False
 
     @staticmethod
-    def configure(app_config: "AppConfig") -> None:
-        """
-        Configure logging from an AppConfig instance.
-        """
-        from typing import cast
-
-        logger_cfg = cast(dict[str, Any], app_config.get("logger", {}))
-        import os
+    def configure(app_config: AppConfig) -> None:
+        """Configure logging from an AppConfig instance."""
+        logger_cfg = cast("dict[str, Any]", app_config.get("logger", {}))
 
         log_dir = logger_cfg.get("log_dir", "logs")
         log_file = logger_cfg.get("log_file", "snmp-agent.log")
@@ -174,7 +171,7 @@ class AppLogger:
 
         config = LoggingConfig(
             level=level,
-            log_dir=Path(os.path.abspath(log_dir)),
+            log_dir=Path(log_dir).resolve(),
             log_file=log_file,
             console=console,
             max_bytes=max_bytes,
@@ -196,24 +193,25 @@ class AppLogger:
         return logging.getLogger(name)
 
     @staticmethod
-    def warning(msg: str, *args: Any, **kwargs: Any) -> None:
+    def warning(msg: str, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
         """Log a warning message."""
         logging.getLogger().warning(msg, *args, **kwargs)
 
     @staticmethod
-    def error(msg: str, *args: Any, **kwargs: Any) -> None:
+    def error(msg: str, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
         """Log an error message."""
         logging.getLogger().error(msg, *args, **kwargs)
 
     @staticmethod
-    def info(msg: str, *args: Any, **kwargs: Any) -> None:
+    def info(msg: str, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
         """Log an info message."""
         logging.getLogger().info(msg, *args, **kwargs)
 
     @staticmethod
     def _configure(config: LoggingConfig) -> None:
         level_name = config.level.upper()
-        level = logging._nameToLevel.get(level_name, logging.INFO)
+        level_value = logging.getLevelName(level_name)
+        level = level_value if isinstance(level_value, int) else logging.INFO
 
         config.log_dir.mkdir(parents=True, exist_ok=True)
         log_path = config.log_dir / config.log_file

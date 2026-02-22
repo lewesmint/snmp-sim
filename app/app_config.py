@@ -1,11 +1,19 @@
 """Application configuration management using Dynaconf."""
 
-import os
 import sys
+from pathlib import Path
 from threading import Lock
-from typing import Any
 
 from dynaconf import Dynaconf
+from typing_extensions import Self
+
+
+class ConfigFileNotFoundError(FileNotFoundError):
+    """Raised when the configuration file is missing."""
+
+    def __init__(self, config_path: str) -> None:
+        """Initialize the exception with the missing config path."""
+        super().__init__(f"Config file {config_path} not found")
 
 
 class AppConfig:
@@ -13,9 +21,9 @@ class AppConfig:
 
     _instance = None
     _lock = Lock()
-    _initialized = False
+    initialized = False
 
-    def get_platform_setting(self, key: str, default: Any = None) -> Any:
+    def get_platform_setting(self, key: str, default: object = None) -> object:
         """Get a platform-specific setting value."""
         platform_key = sys.platform  # e.g. 'linux', 'darwin', 'win32'
         value = self.get(key, {})
@@ -23,40 +31,38 @@ class AppConfig:
             return value.get(platform_key, default)
         return default
 
-    def __new__(cls, config_path: str = "agent_config.yaml") -> "AppConfig":
+    def __new__(cls, *_args: object, **_kwargs: object) -> Self:
         """Create or return the singleton instance of AppConfig."""
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
-                cls._initialized = False
+                cls.initialized = False
             return cls._instance
 
     def __init__(self, config_path: str = "agent_config.yaml") -> None:
         """Initialize singleton settings once from the specified config path."""
-        if self.__class__._initialized and hasattr(self, "settings"):
+        if self.__class__.initialized and hasattr(self, "settings"):
             return
         self._init_config(config_path)
 
     def _init_config(self, config_path: str) -> None:
         """Initialize the configuration from the specified file."""
-        if self.__class__._initialized:
+        if self.__class__.initialized:
             return
 
         # If caller passed the default name, prefer data/agent_config.yaml if present
         if config_path == "agent_config.yaml":
-            from pathlib import Path
-
             data_path = Path("data") / "agent_config.yaml"
             if data_path.exists():
                 config_path = str(data_path)
 
-        if not os.path.exists(config_path):
-            raise FileNotFoundError(f"Config file {config_path} not found")
+        if not Path(config_path).exists():
+            raise ConfigFileNotFoundError(config_path)
 
         self.settings = Dynaconf(settings_files=[config_path], environments=False)
-        self.__class__._initialized = True
+        self.__class__.initialized = True
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: object = None) -> object:
         """Get a configuration value by key."""
         return self.settings.get(key, default)
 

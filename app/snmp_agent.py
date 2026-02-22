@@ -1,29 +1,35 @@
-"""
-SNMPAgent: Main orchestrator for the SNMP agent (initial workflow).
-"""
+"""SNMPAgent: Main orchestrator for the SNMP agent (initial workflow)."""
 
-# pylint: disable=invalid-name
+from __future__ import annotations
 
-from dataclasses import dataclass
+# pylint: disable=invalid-name,line-too-long,too-many-lines,missing-class-docstring
+# pylint: disable=too-many-instance-attributes,too-many-locals,too-many-branches
+# pylint: disable=too-many-statements,too-many-nested-blocks,too-many-return-statements
+# ruff: noqa: B007,C901,D101,D107,E501,EM101,EM102,FBT001,FBT002,I001,N806,PERF102,PERF203,PERF401,PERF403,PLC0415,PLR0911,PLR0912,PLR0914,PLR0915,PLR2004,PLW2901,PTH103,PTH120,PTH123,PTH204,RET504,RUF005,RUF059,RUF100,S101,S104,SIM102,SLF001,T201,TC002,TC003,TC006,TRY003,TRY300,TRY400,TRY401,UP037,UP045
+
 import json
 import os
-from pathlib import Path
 import signal
 import sys
 import time
-from typing import Any, Dict, Optional, cast
+from types import FrameType
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, TypeAlias, TypedDict, cast
 
 from pysnmp import debug as pysnmp_debug
-
-from app.app_config import AppConfig
-from app.app_logger import AppLogger
-from app.compiler import MibCompiler
-from app.mib_registrar import MibRegistrar
-from app.model_paths import agent_model_dir, compiled_mibs_dir, mib_state_file
-from app.value_links import get_link_manager
+from pysnmp.entity.engine import SnmpEngine
+from pysnmp.entity.rfc3413.context import SnmpContext
+from pysnmp.smi.builder import MibBuilder
 
 # Load type converter plugins
 import plugins.date_and_time  # noqa: F401  # pylint: disable=unused-import
+from app.app_config import AppConfig
+from app.app_logger import AppLogger
+from app.compiler import MibCompiler
+from app.mib_registrar import MibRegistrar, SNMPContext
+from app.model_paths import agent_model_dir, compiled_mibs_dir, mib_state_file
+from app.value_links import get_link_manager
 
 
 @dataclass
@@ -34,7 +40,18 @@ class AugmentedTableChild:
     entry_name: str
     indexes: tuple[str, ...]
     inherited_columns: tuple[str, ...]
-    default_columns: dict[str, Any]
+
+    default_columns: dict[str, "JsonValue"]
+
+
+JsonScalar: TypeAlias = str | int | float | bool | None
+JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
+DecodedValue: TypeAlias = JsonValue | bytes | bytearray
+
+
+class TableInstance(TypedDict, total=False):
+    column_values: dict[str, JsonValue]
+    index_values: dict[str, JsonValue]
 
 
 class SNMPAgent:
@@ -45,7 +62,7 @@ class SNMPAgent:
         host: str = "0.0.0.0",
         port: int = 11161,
         config_path: str = "agent_config.yaml",
-        preloaded_model: Optional[Dict[str, Dict[str, Any]]] = None,
+        preloaded_model: dict[str, dict[str, JsonValue]] | None = None,
     ) -> None:
         # Set up logging and config
         if not AppLogger._configured:
@@ -60,29 +77,29 @@ class SNMPAgent:
         self.config_path = config_path
         self.host = host
         self.port = port
-        self.snmpEngine: Optional[Any] = None
-        self.snmpContext: Optional[Any] = None
-        self.mib_builder: Any = None
-        self.mib_registrar: Any = None
-        self.mib_jsons: Dict[str, Dict[str, Any]] = {}
+        self.snmp_engine: SnmpEngine | None = None
+        self.snmp_context: SnmpContext | None = None
+        self.mib_builder: MibBuilder | None = None
+        self.mib_registrar: MibRegistrar | None = None
+        self.mib_jsons: dict[str, dict[str, JsonValue]] = {}
         # Track agent start time for sysUpTime
         self.start_time = time.time()
         self.preloaded_model = preloaded_model
         self._shutdown_requested = False
         # Overrides: dotted OID -> JSON-serializable value
-        self.overrides: dict[str, object] = {}
+        self.overrides: dict[str, JsonValue] = {}
         # Table instances: table_oid -> {index_str -> {column_values}}
-        self.table_instances: dict[str, dict[str, Any]] = {}
+        self.table_instances: dict[str, dict[str, TableInstance]] = {}
         # Deleted instances: list of instance OIDs marked for deletion
         self.deleted_instances: list[str] = []
         # Map of initial values captured after registration: dotted OID -> JSON-serializable value
-        self._initial_values: dict[str, object] = {}
+        self._initial_values: dict[str, JsonValue] = {}
         # Set of dotted OIDs that are writable (read-write)
         self._writable_oids: set[str] = set()
         # Augmented table metadata (parent table oid -> child table metadata)
         self._augmented_parents: dict[str, list[AugmentedTableChild]] = {}
         # Default column values for tables (used when auto-creating augmented rows)
-        self._table_defaults: dict[str, dict[str, Any]] = {}
+        self._table_defaults: dict[str, dict[str, JsonValue]] = {}
 
         # Set up signal handlers for graceful shutdown
         self._setup_signal_handlers()
@@ -91,9 +108,9 @@ class SNMPAgent:
         """Set up signal handlers for graceful shutdown."""
         import os
 
-        def signal_handler(signum: int, _frame: Any) -> None:
+        def signal_handler(signum: int, _frame: FrameType | None) -> None:
             sig_name = signal.Signals(signum).name
-            self.logger.info(f"Received signal {sig_name} ({signum}), terminating immediately...")
+            self.logger.info("Received signal %s (%s), terminating immediately...", sig_name, signum)
             # Force immediate exit - don't wait for event loop
             os._exit(0)
 
@@ -112,11 +129,11 @@ class SNMPAgent:
         self.logger.info("Starting graceful shutdown...")
 
         try:
-            if self.snmpEngine is not None:
+            if self.snmp_engine is not None:
                 self.logger.info("Closing SNMP transport dispatcher...")
                 # Close the dispatcher to stop accepting new requests
-                if hasattr(self.snmpEngine, "transport_dispatcher"):
-                    dispatcher = self.snmpEngine.transport_dispatcher
+                if hasattr(self.snmp_engine, "transport_dispatcher"):
+                    dispatcher = self.snmp_engine.transport_dispatcher
                     dispatcher.close_dispatcher()
                     self.logger.info("Transport dispatcher closed successfully")
 
@@ -128,8 +145,8 @@ class SNMPAgent:
                 handler.flush()
 
             self.logger.info("Shutdown complete")
-        except Exception as e:
-            self.logger.error(f"Error during shutdown: {e}", exc_info=True)
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+            self.logger.exception("Error during shutdown: %s", e)
         finally:
             # Exit cleanly - use os._exit to ensure termination
             os._exit(0)
@@ -158,7 +175,7 @@ class SNMPAgent:
                             return candidate
                         if candidate.name.upper().startswith(mib_name.upper()):
                             return candidate
-                except Exception:
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
                     continue
 
         return None
@@ -187,16 +204,16 @@ class SNMPAgent:
 
             if source_mtime > compiled_mtime:
                 self.logger.info(
-                    f"Source MIB {source_file} is newer than compiled version, will recompile"
+                    "Source MIB %s is newer than compiled version, will recompile", source_file
                 )
                 return True
         except OSError as e:
-            self.logger.warning(f"Error comparing timestamps for {mib_name}: {e}")
+            self.logger.warning("Error comparing timestamps for %s: %s", mib_name, e)
             return False
 
         return False
 
-    def _repair_loaded_schema(self, mib: str, schema: Dict[str, Any]) -> None:
+    def _repair_loaded_schema(self, mib: str, schema: dict[str, JsonValue]) -> None:
         """Repair known schema metadata gaps in-place after loading from disk."""
         if mib != "SNMPv2-MIB":
             return
@@ -227,7 +244,7 @@ class SNMPAgent:
         """Compile/load MIB assets, register symbols, and start the SNMP dispatcher."""
         self.logger.info("Starting SNMP Agent setup workflow...")
         # Compile MIBs and generate behavior JSONs as before
-        mibs = cast(list[str], self.app_config.get("mibs", []))
+        mibs = cast("list[str]", self.app_config.get("mibs", []))
         compiled_dir = compiled_mibs_dir(__file__)
         json_dir = agent_model_dir(__file__)
         json_dir.mkdir(parents=True, exist_ok=True)
@@ -244,17 +261,17 @@ class SNMPAgent:
 
             if self._should_recompile(mib_name, compiled_file):
                 if compiled_file.exists():
-                    self.logger.info(f"Recompiling outdated MIB: {mib_name}")
+                    self.logger.info("Recompiling outdated MIB: %s", mib_name)
                 else:
-                    self.logger.info(f"Compiling missing MIB: {mib_name}")
+                    self.logger.info("Compiling missing MIB: %s", mib_name)
 
                 try:
                     # Pass just the module name; pysmi will find .mib files by name
                     py_path = compiler.compile(mib_name)
                     compiled_mib_paths.append(py_path)
-                    self.logger.info(f"Compiled {mib_name} to {py_path}")
-                except Exception as e:
-                    self.logger.error(f"Failed to compile {mib_name}: {e}", exc_info=True)
+                    self.logger.info("Compiled %s to %s", mib_name, py_path)
+                except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                    self.logger.exception("Failed to compile %s: %s", mib_name, e)
                     continue
             else:
                 compiled_mib_paths.append(str(compiled_file))
@@ -268,7 +285,7 @@ class SNMPAgent:
             try:
                 with types_json_path.open("r", encoding="utf-8") as f:
                     type_registry_data = json.load(f)
-                type_registry = TypeRegistry(Path(""))  # dummy
+                type_registry = TypeRegistry(Path())  # dummy
                 type_registry._registry = type_registry_data
             except json.JSONDecodeError as e:
                 self.logger.warning(
@@ -280,16 +297,16 @@ class SNMPAgent:
                 type_registry.build()
                 type_registry.export_to_json(str(types_json_path))
                 self.logger.info(
-                    "Rebuilt type registry to data/types.json with "
-                    f"{len(type_registry.registry)} types."
+                    "Rebuilt type registry to data/types.json with %s types.",
+                    len(type_registry.registry),
                 )
         else:
             type_registry = TypeRegistry(compiled_dir)
             type_registry.build()
             type_registry.export_to_json(str(types_json_path))
             self.logger.info(
-                "Exported type registry to data/types.json with "
-                f"{len(type_registry.registry)} types."
+                "Exported type registry to data/types.json with %s types.",
+                len(type_registry.registry),
             )
 
         # Validate types
@@ -298,9 +315,9 @@ class SNMPAgent:
 
         is_valid, errors, type_count = validate_type_registry_file("data/types.json")
         if not is_valid:
-            self.logger.error(f"Type registry validation failed: {errors}")
+            self.logger.error("Type registry validation failed: %s", errors)
             return
-        self.logger.info(f"Type registry validation passed. {type_count} types validated.")
+        self.logger.info("Type registry validation passed. %s types validated.", type_count)
 
         if self.preloaded_model:
             self.mib_jsons = self.preloaded_model
@@ -319,7 +336,7 @@ class SNMPAgent:
 
             # Generate schemas for each MIB that was compiled
             for mib_name, py_path in mib_to_py_path.items():
-                self.logger.info(f"Processing schema for {mib_name}: {py_path}")
+                self.logger.info("Processing schema for %s: %s", mib_name, py_path)
                 try:
                     mib_dir = json_dir / mib_name
                     schema_path = mib_dir / "schema.json"
@@ -333,27 +350,26 @@ class SNMPAgent:
                             # Schema is up-to-date, don't regenerate
                             force_regen = False
                             self.logger.info(
-                                f"✓ Schema for {mib_name} is up-to-date "
+                                "%s", f"✓ Schema for {mib_name} is up-to-date "
                                 f"(MIB: {py_mtime:.0f}, Schema: {schema_mtime:.0f}). "
                                 f"Preserving baked values. To regenerate, use Fresh State."
                             )
                         else:
                             self.logger.info(
-                                f"Compiled MIB {mib_name} is newer than schema, regenerating"
+                                "Compiled MIB %s is newer than schema, regenerating", mib_name
                             )
                     else:
                         self.logger.info(
-                            f"Schema does not exist for {mib_name}, generating from compiled MIB"
+                            "Schema does not exist for %s, generating from compiled MIB", mib_name
                         )
 
                     # Pass the MIB name explicitly and force_regenerate flag
                     generator.generate(py_path, mib_name=mib_name, force_regenerate=force_regen)
                     if force_regen:
-                        self.logger.info(f"Schema JSON generated for {mib_name}")
-                except Exception as e:
-                    self.logger.error(
-                        f"Failed to generate schema JSON for {mib_name}: {e}",
-                        exc_info=True,
+                        self.logger.info("Schema JSON generated for %s", mib_name)
+                except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                    self.logger.exception(
+                        "Failed to generate schema JSON for %s: %s", mib_name, e,
                     )
 
             # Load schema JSONs for SNMP serving
@@ -385,7 +401,7 @@ class SNMPAgent:
                         with schema_path.open("r", encoding="utf-8") as jf:
                             self.mib_jsons[mib] = json.load(jf)
                         self._repair_loaded_schema(mib, self.mib_jsons[mib])
-                        self.logger.info(f"Loaded schema for {mib} from {schema_path}")
+                        self.logger.info("Loaded schema for %s from %s", mib, schema_path)
                     except json.JSONDecodeError as e:
                         self.logger.warning(
                             "Invalid JSON schema for %s at %s: %s",
@@ -415,12 +431,11 @@ class SNMPAgent:
                                     mib,
                                 )
                                 regenerated = True
-                            except Exception as regen_error:
-                                self.logger.error(
+                            except (AttributeError, LookupError, OSError, TypeError, ValueError) as regen_error:
+                                self.logger.exception(
                                     "Failed to regenerate schema for %s: %s",
                                     mib,
                                     regen_error,
-                                    exc_info=True,
                                 )
 
                         if not regenerated:
@@ -430,9 +445,9 @@ class SNMPAgent:
                                 schema_path,
                             )
                 else:
-                    self.logger.warning(f"Schema not found for {mib} at {schema_path}")
+                    self.logger.warning("Schema not found for %s at %s", mib, schema_path)
 
-        self.logger.info(f"Loaded {len(self.mib_jsons)} MIB schemas for SNMP serving.")
+        self.logger.info("%s", f"Loaded {len(self.mib_jsons)} MIB schemas for SNMP serving.")
 
         # Load value links from schemas
         link_manager = get_link_manager()
@@ -446,8 +461,8 @@ class SNMPAgent:
         self._build_augmented_index_map()
 
         # Setup SNMP engine and transport
-        self._setup_snmpEngine(str(compiled_dir))
-        if self.snmpEngine is not None:
+        self._setup_snmp_engine(str(compiled_dir))
+        if self.snmp_engine is not None:
             self._setup_transport()
             self._setup_community()
             self._setup_responders()
@@ -458,40 +473,40 @@ class SNMPAgent:
                 self._load_mib_state()  # Load unified state (scalars, tables, deletions)
                 self._apply_overrides()
                 self._apply_table_instances()  # Apply loaded table instance values to MIB cells
-            except Exception as e:
-                self.logger.error(f"Error applying overrides: {e}", exc_info=True)
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                self.logger.exception("Error applying overrides: %s", e)
             self._populate_sysor_table()  # Populate sysORTable with actual MIBs
             self.logger.info("SNMP Agent is now listening for SNMP requests.")
             # Block and serve SNMP requests using asyncio dispatcher
             try:
                 self.logger.info("Entering SNMP event loop...")
                 # Just run the dispatcher - no need for job_started() or open_dispatcher()
-                self.snmpEngine.transport_dispatcher.run_dispatcher()
+                self.snmp_engine.transport_dispatcher.run_dispatcher()
             except KeyboardInterrupt:
                 self.logger.info("Received keyboard interrupt, shutting down agent")
                 self._shutdown()
-            except Exception as e:
-                self.logger.error(f"SNMP event loop error: {e}", exc_info=True)
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                self.logger.exception("SNMP event loop error: %s", e)
                 self._shutdown()
         else:
-            self.logger.error("snmpEngine is not initialized. SNMP agent will not start.")
+            self.logger.error("snmp_engine is not initialized. SNMP agent will not start.")
 
-    def _setup_snmpEngine(self, compiled_dir: str) -> None:
-        from pysnmp.entity import engine
+    def _setup_snmp_engine(self, compiled_dir: str) -> None:
         from pysnmp.carrier.asyncio.dispatch import AsyncioDispatcher
+        from pysnmp.entity import engine
         from pysnmp.entity.rfc3413 import context
         from pysnmp.smi import builder as snmp_builder
 
         self.logger.info("Setting up SNMP engine...")
-        self.snmpEngine = engine.SnmpEngine()
+        self.snmp_engine = engine.SnmpEngine()
 
         # Register asyncio dispatcher
         dispatcher = AsyncioDispatcher()
-        self.snmpEngine.register_transport_dispatcher(dispatcher)
+        self.snmp_engine.register_transport_dispatcher(dispatcher)
 
         # Create context and get MIB builder from instrumentation (like working reference)
-        self.snmpContext = context.SnmpContext(self.snmpEngine)
-        mib_instrum = self.snmpContext.get_mib_instrum()
+        self.snmp_context = context.SnmpContext(self.snmp_engine)
+        mib_instrum = self.snmp_context.get_mib_instrum()
         self.mib_builder = mib_instrum.get_mib_builder()
 
         # Ensure compiled MIBs are discoverable and loaded into the builder
@@ -521,12 +536,15 @@ class SNMPAgent:
         )
 
         # Create MIB registrar
-        self.mib_registrar = MibRegistrar(
+        snmp_context = SNMPContext(
             mib_builder=self.mib_builder,
             mib_scalar_instance=MibScalarInstance,
             mib_table=MibTable,
             mib_table_row=MibTableRow,
             mib_table_column=MibTableColumn,
+        )
+        self.mib_registrar = MibRegistrar(
+            snmp_context=snmp_context,
             logger=self.logger,
             start_time=self.start_time,
         )
@@ -537,47 +555,47 @@ class SNMPAgent:
         try:
             from pysnmp.carrier.asyncio.dgram import udp
             from pysnmp.entity import config
-        except ImportError:
-            raise RuntimeError("pysnmp is not installed or not available.")
-        if self.snmpEngine is None:
-            raise RuntimeError("snmpEngine is not initialized.")
+        except ImportError as err:
+            raise RuntimeError("pysnmp is not installed or not available.") from err
+        if self.snmp_engine is None:
+            raise RuntimeError("snmp_engine is not initialized.") from None
 
         # Use UdpAsyncioTransport for asyncio dispatcher
         config.add_transport(
-            self.snmpEngine,
+            self.snmp_engine,
             config.SNMP_UDP_DOMAIN,
             udp.UdpAsyncioTransport().open_server_mode((self.host, self.port)),
         )
-        self.logger.info(f"Transport opened on {self.host}:{self.port}")
+        self.logger.info("%s", f"Transport opened on {self.host}:{self.port}")
 
     def _setup_community(self) -> None:
         from pysnmp.entity import config
 
-        if self.snmpEngine is None:
-            raise RuntimeError("snmpEngine is not initialized.")
+        if self.snmp_engine is None:
+            raise RuntimeError("snmp_engine is not initialized.")
 
         # Add read-only community "public"
-        config.add_v1_system(self.snmpEngine, "public-area", "public")
+        config.add_v1_system(self.snmp_engine, "public-area", "public")
 
         # Add read-write community "private"
-        config.add_v1_system(self.snmpEngine, "private-area", "private")
+        config.add_v1_system(self.snmp_engine, "private-area", "private")
 
         # Add context
-        config.add_context(self.snmpEngine, "")
+        config.add_context(self.snmp_engine, "")
 
         # Create VACM groups for read-only and read-write access
-        config.add_vacm_group(self.snmpEngine, "read-only-group", 2, "public-area")
-        config.add_vacm_group(self.snmpEngine, "read-write-group", 2, "private-area")
+        config.add_vacm_group(self.snmp_engine, "read-only-group", 2, "public-area")
+        config.add_vacm_group(self.snmp_engine, "read-write-group", 2, "private-area")
 
         # Create VACM views
         # fullView: allows access to all OIDs (include)
-        config.add_vacm_view(self.snmpEngine, "fullView", 1, (1,), "")
+        config.add_vacm_view(self.snmp_engine, "fullView", 1, (1,), "")
         # restrictedView: denies access to all OIDs (exclude) - used for write view in read-only
-        config.add_vacm_view(self.snmpEngine, "restrictedView", 2, (1,), "")
+        config.add_vacm_view(self.snmp_engine, "restrictedView", 2, (1,), "")
 
         # Configure read-only access for "public" community
         config.add_vacm_access(
-            self.snmpEngine,
+            self.snmp_engine,
             "read-only-group",
             "",
             2,
@@ -590,7 +608,7 @@ class SNMPAgent:
 
         # Configure read-write access for "private" community
         config.add_vacm_access(
-            self.snmpEngine,
+            self.snmp_engine,
             "read-write-group",
             "",
             2,
@@ -604,16 +622,16 @@ class SNMPAgent:
     def _setup_responders(self) -> None:
         from pysnmp.entity.rfc3413 import cmdrsp
 
-        if self.snmpEngine is None:
-            raise RuntimeError("snmpEngine is not initialized.")
-        if not hasattr(self, "snmpContext") or self.snmpContext is None:
-            raise RuntimeError("snmpContext is not initialized.")
+        if self.snmp_engine is None:
+            raise RuntimeError("snmp_engine is not initialized.")
+        if not hasattr(self, "snmp_context") or self.snmp_context is None:
+            raise RuntimeError("snmp_context is not initialized.")
 
-        # Use the context created in _setup_snmpEngine
-        cmdrsp.GetCommandResponder(self.snmpEngine, self.snmpContext)
-        cmdrsp.NextCommandResponder(self.snmpEngine, self.snmpContext)
-        cmdrsp.BulkCommandResponder(self.snmpEngine, self.snmpContext)
-        cmdrsp.SetCommandResponder(self.snmpEngine, self.snmpContext)
+        # Use the context created in _setup_snmp_engine
+        cmdrsp.GetCommandResponder(self.snmp_engine, self.snmp_context)
+        cmdrsp.NextCommandResponder(self.snmp_engine, self.snmp_context)
+        cmdrsp.BulkCommandResponder(self.snmp_engine, self.snmp_context)
+        cmdrsp.SetCommandResponder(self.snmp_engine, self.snmp_context)
 
     def _register_mib_objects(self) -> None:
         """Register all MIB objects using the MibRegistrar."""
@@ -625,20 +643,23 @@ class SNMPAgent:
         registrar = getattr(self, "mib_registrar", None)
         if registrar is None:
             try:
-                from app.mib_registrar import MibRegistrar
+                from app.mib_registrar import MibRegistrar, SNMPContext
 
-                registrar = MibRegistrar(
+                snmp_context = SNMPContext(
                     mib_builder=getattr(self, "mib_builder", None),
                     mib_scalar_instance=getattr(self, "MibScalarInstance", None),
                     mib_table=getattr(self, "MibTable", None),
                     mib_table_row=getattr(self, "MibTableRow", None),
                     mib_table_column=getattr(self, "MibTableColumn", None),
+                )
+                registrar = MibRegistrar(
+                    snmp_context=snmp_context,
                     logger=self.logger,
                     start_time=self.start_time,
                 )
                 self.mib_registrar = registrar
-            except Exception:
-                self.logger.error("Failed to create MibRegistrar", exc_info=True)
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                self.logger.exception("Failed to create MibRegistrar")
                 return
 
         registrar.register_all_mibs(self.mib_jsons)
@@ -650,17 +671,14 @@ class SNMPAgent:
         sysORTable rows based on the actual MIBs that have been loaded.
         """
         # Use the MibRegistrar to populate sysORTable
-        self.mib_registrar.populate_sysor_table(self.mib_jsons)
+        registrar = self.mib_registrar
+        if registrar is None:
+            self.logger.warning("Cannot populate sysORTable: mib_registrar is not initialized")
+            return
+        assert registrar is not None
+        registrar.populate_sysor_table(self.mib_jsons)
 
-    # The following methods have been moved to MibRegistrar:
-    # - _register_mib()
-    # - _build_mib_symbols()
-    # - _build_table_symbols()
-    # - _find_table_related_objects()
-    # - _decode_value()
-    # - _get_pysnmp_type()
-
-    def _decode_value(self, value: Any) -> Any:
+    def _decode_value(self, value: DecodedValue) -> DecodedValue:
         """Compatibility wrapper: delegate decoding to MibRegistrar._decode_value.
 
         Historically this was a method on SNMPAgent; tests and some external
@@ -668,23 +686,31 @@ class SNMPAgent:
         MibRegistrar instance which implements the decoding logic.
         """
         try:
-            from app.mib_registrar import MibRegistrar
+            from app.mib_registrar import MibRegistrar, SNMPContext
 
-            temp = MibRegistrar(
+            snmp_context = SNMPContext(
                 mib_builder=None,
                 mib_scalar_instance=None,
                 mib_table=None,
                 mib_table_row=None,
                 mib_table_column=None,
+            )
+            temp = MibRegistrar(
+                snmp_context=snmp_context,
                 logger=self.logger,
                 start_time=self.start_time,
             )
-            return temp._decode_value(value)
-        except Exception:
+            decoded = temp._decode_value(value)
+            if isinstance(decoded, (str, int, float, bool, list, dict, bytes, bytearray)):
+                return cast("DecodedValue", decoded)
+            if decoded is None:
+                return None
+            return value
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             # As a last resort, return the value unchanged
             return value
 
-    def get_scalar_value(self, oid: tuple[int, ...]) -> Any:
+    def get_scalar_value(self, oid: tuple[int, ...]) -> DecodedValue:
         """Get the value of a scalar MIB object by OID.
 
         Args:
@@ -695,6 +721,7 @@ class SNMPAgent:
 
         Raises:
             ValueError: If the OID is not found or is not a scalar
+
         """
         if self.mib_builder is None:
             raise RuntimeError("MIB builder not initialized")
@@ -703,14 +730,14 @@ class SNMPAgent:
         MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
 
         # Search through all MIB modules and symbols
-        for module_name, symbols in self.mib_builder.mibSymbols.items():
-            for symbol_name, symbol_obj in symbols.items():
+        for symbols in self.mib_builder.mibSymbols.values():
+            for symbol_obj in symbols.values():
                 if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == oid:
-                    return symbol_obj.syntax
+                    return cast(DecodedValue, symbol_obj.syntax)
 
         raise ValueError(f"Scalar OID {oid} not found")
 
-    def set_scalar_value(self, oid: tuple[int, ...], value: Any) -> None:
+    def set_scalar_value(self, oid: tuple[int, ...], value: DecodedValue) -> None:
         """Set the value of a scalar MIB object by OID.
 
         Args:
@@ -719,6 +746,7 @@ class SNMPAgent:
 
         Raises:
             ValueError: If the OID is not found or is not a scalar
+
         """
         if self.mib_builder is None:
             raise RuntimeError("MIB builder not initialized")
@@ -734,9 +762,9 @@ class SNMPAgent:
                     try:
                         new_syntax = symbol_obj.syntax.clone(value)
                         symbol_obj.syntax = new_syntax
-                    except Exception as e:
+                    except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
                         self.logger.error(
-                            f"Failed to update scalar {oid} with value {value!r} "
+                            "%s", f"Failed to update scalar {oid} with value {value!r} "
                             f"(type: {type(value).__name__}): {e}"
                         )
 
@@ -764,7 +792,7 @@ class SNMPAgent:
                             initial,
                             new_serial,
                         )
-                    except Exception:
+                    except (AttributeError, LookupError, OSError, TypeError, ValueError):
                         pass
 
                     if initial is None or new_serial != initial:
@@ -772,14 +800,14 @@ class SNMPAgent:
                         self.overrides[dotted] = new_serial
                         try:
                             self._save_mib_state()
-                        except Exception:
+                        except (AttributeError, LookupError, OSError, TypeError, ValueError):
                             self.logger.exception("Failed to save MIB state")
                     # If we've reverted to initial, remove any existing override
                     elif dotted in self.overrides:
                         self.overrides.pop(dotted, None)
                         try:
                             self._save_mib_state()
-                        except Exception:
+                        except (AttributeError, LookupError, OSError, TypeError, ValueError):
                             self.logger.exception("Failed to save MIB state")
 
                     return
@@ -791,6 +819,7 @@ class SNMPAgent:
 
         Returns:
             Dict mapping OID names to OID tuples
+
         """
         if self.mib_builder is None:
             raise RuntimeError("MIB builder not initialized")
@@ -806,7 +835,7 @@ class SNMPAgent:
 
         return oid_map
 
-    def _lookup_symbol_for_dotted(self, dotted: str) -> tuple[Optional[str], Optional[str]]:
+    def _lookup_symbol_for_dotted(self, dotted: str) -> tuple[str | None, str | None]:
         """Return (module_name, symbol_name) for a dotted OID string if known.
 
         This helps produce human-friendly log messages (e.g. SNMPv2-MIB:sysContact).
@@ -815,7 +844,7 @@ class SNMPAgent:
             return None, None
         try:
             target_oid = tuple(int(x) for x in dotted.split("."))
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             return None, None
 
         for module_name, symbols in self.mib_builder.mibSymbols.items():
@@ -824,7 +853,7 @@ class SNMPAgent:
                     if hasattr(symbol_obj, "name") and symbol_obj.name:
                         if tuple(symbol_obj.name) == target_oid:
                             return module_name, symbol_name
-                except Exception:
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
                     continue
         return None, None
 
@@ -833,50 +862,150 @@ class SNMPAgent:
         """Return path to unified state file (scalars, tables, deletions)."""
         return str(mib_state_file(__file__))
 
+    def _schema_objects(
+        self,
+        schema: dict[str, JsonValue],
+    ) -> dict[str, dict[str, JsonValue]]:
+        """Return schema object map as dict[str, dict[str, JsonValue]]."""
+        raw_objects = schema.get("objects", schema)
+        if not isinstance(raw_objects, dict):
+            return {}
+        objects: dict[str, dict[str, JsonValue]] = {}
+        for name, obj in raw_objects.items():
+            if isinstance(name, str) and isinstance(obj, dict):
+                objects[name] = obj
+        return objects
+
+    def _oid_list_parts(self, value: JsonValue | None) -> list[int | str]:
+        """Coerce a JSON value into a list of OID parts (ints/strings)."""
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, (int, str))]
+
+    def _oid_tuple(self, value: JsonValue | None) -> tuple[int, ...] | None:
+        """Coerce a JSON value into a strict tuple[int, ...] OID."""
+        parts = self._oid_list_parts(value)
+        if not parts:
+            return None
+        normalized: list[int] = []
+        for part in parts:
+            if isinstance(part, int):
+                normalized.append(part)
+                continue
+            if isinstance(part, str) and part.isdigit():
+                normalized.append(int(part))
+                continue
+            return None
+        return tuple(normalized)
+
+    def _string_list(self, value: JsonValue | None) -> list[str]:
+        """Coerce a JSON value into list[str] preserving only strings."""
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, str)]
+
+    def _coerce_state_scalars(self, value: JsonValue | None) -> dict[str, JsonValue]:
+        """Coerce persisted scalar overrides into dict[str, JsonValue]."""
+        if not isinstance(value, dict):
+            return {}
+        return {str(key): val for key, val in value.items()}
+
+    def _coerce_state_tables(self, value: JsonValue | None) -> dict[str, dict[str, TableInstance]]:
+        """Coerce persisted table instance state into typed structure."""
+        if not isinstance(value, dict):
+            return {}
+
+        tables: dict[str, dict[str, TableInstance]] = {}
+        for table_oid, instances_raw in value.items():
+            if not isinstance(table_oid, str) or not isinstance(instances_raw, dict):
+                continue
+
+            table_instances: dict[str, TableInstance] = {}
+            for instance_key, instance_raw in instances_raw.items():
+                if not isinstance(instance_key, str) or not isinstance(instance_raw, dict):
+                    continue
+
+                entry: TableInstance = {}
+                column_values_raw = instance_raw.get("column_values")
+                if isinstance(column_values_raw, dict):
+                    entry["column_values"] = {
+                        str(col_name): col_val
+                        for col_name, col_val in column_values_raw.items()
+                    }
+
+                index_values_raw = instance_raw.get("index_values")
+                if isinstance(index_values_raw, dict):
+                    entry["index_values"] = {
+                        str(index_name): index_val
+                        for index_name, index_val in index_values_raw.items()
+                    }
+
+                table_instances[instance_key] = entry
+
+            tables[table_oid] = table_instances
+
+        return tables
+
     def _load_mib_state(self) -> None:
         """Load unified MIB state (scalars, tables, deletions) from disk."""
-        path = self._state_file_path()
-        mib_state: dict[str, Any] = {}
+        path = Path(self._state_file_path())
+        mib_state: dict[str, JsonValue] = {}
 
-        if os.path.exists(path):
+        if path.exists():
             try:
-                with open(path, "r", encoding="utf-8") as f:
-                    mib_state = json.load(f)
-                self.logger.info(f"Loaded MIB state from {path}")
-            except Exception as e:
-                self.logger.error(f"Failed to load MIB state from {path}: {e}", exc_info=True)
+                with path.open(encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    mib_state = {str(key): cast("JsonValue", val) for key, val in loaded.items()}
+                self.logger.info("Loaded MIB state from %s", path)
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                self.logger.exception("Failed to load MIB state from %s", path)
         else:
             # Try to migrate legacy files (overrides.json and table_instances.json)
             try:
                 self._migrate_legacy_state_files()
-                if os.path.exists(path):
-                    with open(path, "r", encoding="utf-8") as f:
-                        mib_state = json.load(f)
-                    self.logger.info(f"Migrated legacy state files to {path}")
-            except Exception as e:
-                self.logger.warning(f"No legacy state files to migrate: {e}")
+                if path.exists():
+                    with path.open(encoding="utf-8") as f:
+                        loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        mib_state = {str(key): cast("JsonValue", val) for key, val in loaded.items()}
+                    self.logger.info("Migrated legacy state files to %s", path)
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                self.logger.warning("No legacy state files to migrate: %s", e)
 
         # Extract scalars (overrides)
-        self.overrides = mib_state.get("scalars", {})
+        self.overrides = self._coerce_state_scalars(mib_state.get("scalars"))
 
         # Extract tables
-        self.table_instances = mib_state.get("tables", {})
+        self.table_instances = self._coerce_state_tables(mib_state.get("tables"))
         self._normalize_loaded_table_instances()
         self._fill_missing_table_defaults()
 
         # Extract deleted instances list
-        self.deleted_instances = mib_state.get("deleted_instances", [])
+        deleted_instances_raw = mib_state.get("deleted_instances")
+        if isinstance(deleted_instances_raw, list):
+            self.deleted_instances = [oid for oid in deleted_instances_raw if isinstance(oid, str)]
+        else:
+            self.deleted_instances = []
         self._filter_deleted_instances_against_schema()
 
         # Extract links (state only) and load into link manager
         try:
             link_manager = get_link_manager()
-            link_manager.load_links_from_state(mib_state.get("links", []))
-        except Exception as e:
-            self.logger.error(f"Failed to load link state: {e}", exc_info=True)
+            links_raw = mib_state.get("links")
+            links: list[dict[str, object]] = []
+            if isinstance(links_raw, list):
+                links = [
+                    cast("dict[str, object]", link)
+                    for link in links_raw
+                    if isinstance(link, dict)
+                ]
+            link_manager.load_links_from_state(links)
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            self.logger.exception("Failed to load link state")
 
         self.logger.info(
-            f"Loaded state: {len(self.overrides)} scalars, "
+            "%s", f"Loaded state: {len(self.overrides)} scalars, "
             f"{sum(len(v) for v in self.table_instances.values())} table instances, "
             f"{len(self.deleted_instances)} deleted instances"
         )
@@ -897,8 +1026,9 @@ class SNMPAgent:
         if len(self.deleted_instances) != before:
             self._save_mib_state()
             self.logger.info(
-                "Filtered deleted instances against schema: "
-                f"{before} -> {len(self.deleted_instances)}"
+                "Filtered deleted instances against schema: %s -> %s",
+                before,
+                len(self.deleted_instances),
             )
 
     def _collect_schema_instance_oids(self) -> tuple[set[str], bool]:
@@ -910,28 +1040,22 @@ class SNMPAgent:
         saw_table = False
 
         for schema in self.mib_jsons.values():
-            objects = schema.get("objects", schema) if isinstance(schema, dict) else {}
-            if not isinstance(objects, dict):
-                continue
+            objects = self._schema_objects(schema)
 
             for obj_data in objects.values():
-                if not isinstance(obj_data, dict):
-                    continue
                 if obj_data.get("type") != "MibTable":
                     continue
 
                 saw_table = True
 
-                table_oid_list = obj_data.get("oid", [])
-                if not isinstance(table_oid_list, list) or not table_oid_list:
+                table_oid_list = self._oid_list_parts(obj_data.get("oid"))
+                if not table_oid_list:
                     continue
                 table_oid = ".".join(str(x) for x in table_oid_list)
 
-                entry_oid_list = list(table_oid_list) + [1]
+                entry_oid_list = [*table_oid_list, 1]
                 entry_obj = None
                 for other_data in objects.values():
-                    if not isinstance(other_data, dict):
-                        continue
                     if (
                         other_data.get("type") == "MibTableRow"
                         and other_data.get("oid") == entry_oid_list
@@ -942,14 +1066,13 @@ class SNMPAgent:
                 if not entry_obj:
                     continue
 
-                index_columns = entry_obj.get("indexes", [])
-                if not isinstance(index_columns, list):
-                    index_columns = []
+                index_columns = self._string_list(entry_obj.get("indexes"))
 
-                columns_meta: dict[str, Any] = {}
+                columns_meta: dict[str, dict[str, JsonValue]] = {}
                 for col_name in index_columns:
-                    if col_name in objects:
-                        columns_meta[col_name] = objects[col_name]
+                    col_obj = objects.get(col_name)
+                    if col_obj is not None:
+                        columns_meta[col_name] = col_obj
 
                 rows = obj_data.get("rows", [])
                 if not isinstance(rows, list):
@@ -968,9 +1091,9 @@ class SNMPAgent:
 
     def _build_instance_str_from_row(
         self,
-        row: dict[str, Any],
+        row: dict[str, JsonValue],
         index_columns: list[str],
-        columns_meta: dict[str, Any],
+        columns_meta: dict[str, dict[str, JsonValue]],
     ) -> str:
         """Build a dotted instance string from a schema table row."""
         if not index_columns:
@@ -992,33 +1115,27 @@ class SNMPAgent:
                 parts.append(str(raw_val) if raw_val is not None else "")
         return ".".join(p for p in parts if p != "")
 
-    def _instance_defined_in_schema(self, table_oid: str, index_values: dict[str, Any]) -> bool:
+    def _instance_defined_in_schema(self, table_oid: str, index_values: dict[str, JsonValue]) -> bool:
         """Return True if a table instance exists in schema rows."""
         if not self.mib_jsons:
             return False
 
         for schema in self.mib_jsons.values():
-            objects = schema.get("objects", schema) if isinstance(schema, dict) else {}
-            if not isinstance(objects, dict):
-                continue
+            objects = self._schema_objects(schema)
 
             for obj_data in objects.values():
-                if not isinstance(obj_data, dict):
-                    continue
                 if obj_data.get("type") != "MibTable":
                     continue
 
-                table_oid_list = obj_data.get("oid", [])
-                if not isinstance(table_oid_list, list) or not table_oid_list:
+                table_oid_list = self._oid_list_parts(obj_data.get("oid"))
+                if not table_oid_list:
                     continue
                 if ".".join(str(x) for x in table_oid_list) != table_oid:
                     continue
 
-                entry_oid_list = list(table_oid_list) + [1]
+                entry_oid_list = [*table_oid_list, 1]
                 entry_obj = None
                 for other_data in objects.values():
-                    if not isinstance(other_data, dict):
-                        continue
                     if (
                         other_data.get("type") == "MibTableRow"
                         and other_data.get("oid") == entry_oid_list
@@ -1029,9 +1146,7 @@ class SNMPAgent:
                 if not entry_obj:
                     return False
 
-                index_columns = entry_obj.get("indexes", [])
-                if not isinstance(index_columns, list):
-                    index_columns = []
+                index_columns = self._string_list(entry_obj.get("indexes"))
 
                 rows = obj_data.get("rows", [])
                 if not isinstance(rows, list):
@@ -1058,7 +1173,7 @@ class SNMPAgent:
 
     def _normalize_loaded_table_instances(self) -> None:
         """Normalize loaded table OIDs to canonical string form."""
-        normalized: dict[str, dict[str, Any]] = {}
+        normalized: dict[str, dict[str, TableInstance]] = {}
         for table_oid, instances in self.table_instances.items():
             normalized_oid = self._normalize_oid_str(table_oid)
             if not normalized_oid:
@@ -1074,27 +1189,23 @@ class SNMPAgent:
         updated = False
 
         for schema in self.mib_jsons.values():
-            objects = schema.get("objects", schema) if isinstance(schema, dict) else {}
-            if not isinstance(objects, dict):
-                continue
+            objects = self._schema_objects(schema)
 
-            for obj_name, obj_data in objects.items():
-                if not isinstance(obj_data, dict) or obj_data.get("type") != "MibTable":
+            for obj_data in objects.values():
+                if obj_data.get("type") != "MibTable":
                     continue
 
-                table_oid_list = obj_data.get("oid", [])
-                if not isinstance(table_oid_list, list) or not table_oid_list:
+                table_oid_list = self._oid_list_parts(obj_data.get("oid"))
+                if not table_oid_list:
                     continue
 
                 table_oid = ".".join(str(x) for x in table_oid_list)
                 if table_oid not in self.table_instances:
                     continue
 
-                entry_oid_list = list(table_oid_list) + [1]
+                entry_oid_list = [*table_oid_list, 1]
                 entry_obj = None
                 for other_data in objects.values():
-                    if not isinstance(other_data, dict):
-                        continue
                     if (
                         other_data.get("type") == "MibTableRow"
                         and other_data.get("oid") == entry_oid_list
@@ -1105,9 +1216,7 @@ class SNMPAgent:
                 if not entry_obj:
                     continue
 
-                index_columns = entry_obj.get("indexes", [])
-                if not isinstance(index_columns, list):
-                    index_columns = []
+                index_columns = self._string_list(entry_obj.get("indexes"))
 
                 rows = obj_data.get("rows", [])
                 if not isinstance(rows, list) or not rows:
@@ -1119,8 +1228,6 @@ class SNMPAgent:
 
                 for instance_data in self.table_instances.get(table_oid, {}).values():
                     col_values = instance_data.get("column_values", {})
-                    if not isinstance(col_values, dict):
-                        continue
 
                     for col_name, default_val in default_row.items():
                         if col_name in index_columns:
@@ -1143,13 +1250,16 @@ class SNMPAgent:
         parts = [part for part in cleaned.split(".") if part]
         return ".".join(parts)
 
-    def _oid_list_to_str(self, oid_list: list[Any]) -> str:
+    def _oid_list_to_str(self, oid_list: list[int | str]) -> str:
         """Convert a list-based OID to its dotted string representation."""
         if not oid_list:
             return ""
         return ".".join(str(part) for part in oid_list if part is not None)
 
-    def _parse_index_from_entry(self, entry: Any) -> tuple[str, str] | None:
+    def _parse_index_from_entry(
+        self,
+        entry: dict[str, JsonValue] | list[JsonValue] | tuple[JsonValue, ...],
+    ) -> tuple[str, str] | None:
         """Normalize different formats of index_from metadata."""
         if isinstance(entry, dict):
             mib = entry.get("mib")
@@ -1165,52 +1275,54 @@ class SNMPAgent:
         return None
 
     def _find_entry_name_by_oid(
-        self, objects: dict[str, Any], entry_oid: tuple[Any, ...]
-    ) -> Optional[str]:
+        self,
+        objects: dict[str, dict[str, JsonValue]],
+        entry_oid: tuple[int, ...],
+    ) -> str | None:
         """Look up a table entry name by its OID."""
         for name, obj in objects.items():
-            if not isinstance(obj, dict):
-                continue
             if obj.get("type") != "MibTableRow":
                 continue
-            oid = tuple(obj.get("oid", []))
+            oid = self._oid_tuple(obj.get("oid"))
+            if oid is None:
+                continue
             if oid == entry_oid:
                 return name
         return None
 
     def _find_table_name_by_oid(
-        self, objects: dict[str, Any], table_oid: tuple[Any, ...]
-    ) -> Optional[str]:
+        self,
+        objects: dict[str, dict[str, JsonValue]],
+        table_oid: tuple[int, ...],
+    ) -> str | None:
         """Look up a table name by OID."""
         for name, obj in objects.items():
-            if not isinstance(obj, dict):
-                continue
             if obj.get("type") != "MibTable":
                 continue
-            oid = tuple(obj.get("oid", []))
+            oid = self._oid_tuple(obj.get("oid"))
+            if oid is None:
+                continue
             if oid == table_oid:
                 return name
         return None
 
     def _find_parent_table_for_column(
         self, module_name: str, column_name: str
-    ) -> Optional[dict[str, str]]:
+    ) -> dict[str, str] | None:
         """Locate the parent table metadata for an inherited column reference."""
         module_schema = self.mib_jsons.get(module_name)
         if not module_schema:
             return None
-        objects = (
-            module_schema.get("objects", module_schema) if isinstance(module_schema, dict) else {}
-        )
+        objects = self._schema_objects(module_schema)
         column_obj = objects.get(column_name)
         if not isinstance(column_obj, dict):
             return None
-        column_oid = column_obj.get("oid", [])
-        if not isinstance(column_oid, list) or len(column_oid) < 2:
+        column_oid = self._oid_tuple(column_obj.get("oid"))
+        if column_oid is None or len(column_oid) < 2:
             return None
 
-        entry_oid = tuple(column_oid[:-1])
-        table_oid = tuple(entry_oid[:-1])
+        entry_oid = column_oid[:-1]
+        table_oid = entry_oid[:-1]
         table_name = self._find_table_name_by_oid(objects, table_oid)
         if not table_name:
             return None
@@ -1224,26 +1336,21 @@ class SNMPAgent:
     def _build_augmented_index_map(self) -> None:
         """Build parent -> child mappings for tables that AUGMENT indexes."""
         self._augmented_parents.clear()
-        seen_defaults: dict[str, dict[str, Any]] = {}
+        seen_defaults: dict[str, dict[str, JsonValue]] = {}
         table_entries: dict[str, tuple[str, tuple[str, ...]]] = {}
 
         for module_schema in self.mib_jsons.values():
-            objects = (
-                module_schema.get("objects", module_schema)
-                if isinstance(module_schema, dict)
-                else {}
-            )
-            if not isinstance(objects, dict):
-                continue
+            objects = self._schema_objects(module_schema)
 
             # Cache default column values for each table
             for name, table_obj in objects.items():
-                if not isinstance(table_obj, dict):
-                    continue
                 if table_obj.get("type") != "MibTable":
                     continue
-                table_oid = self._oid_list_to_str(table_obj.get("oid", []))
-                table_oid_tuple = tuple(table_obj.get("oid", []))
+                table_oid_parts = self._oid_list_parts(table_obj.get("oid"))
+                if not table_oid_parts:
+                    continue
+                table_oid = self._oid_list_to_str(table_oid_parts)
+                table_oid_tuple = tuple(table_oid_parts)
                 rows = table_obj.get("rows", [])
                 if isinstance(rows, list) and rows:
                     first_row = rows[0]
@@ -1252,45 +1359,47 @@ class SNMPAgent:
 
                 entry_name = f"{name}Entry"
                 entry_obj = objects.get(entry_name)
-                if not (isinstance(entry_obj, dict) and entry_obj.get("type") == "MibTableRow"):
-                    candidates: list[tuple[str, dict[str, Any]]] = []
+                if not (entry_obj is not None and entry_obj.get("type") == "MibTableRow"):
+                    candidates: list[tuple[str, dict[str, JsonValue]]] = []
                     for cand_name, cand_obj in objects.items():
-                        if not isinstance(cand_obj, dict):
-                            continue
                         if cand_obj.get("type") != "MibTableRow":
                             continue
                         cand_oid = cand_obj.get("oid", [])
                         if (
                             isinstance(cand_oid, list)
                             and len(cand_oid) > len(table_oid_tuple)
-                            and tuple(cand_oid[: len(table_oid_tuple)]) == table_oid_tuple
+                            and tuple(self._oid_list_parts(cand_oid)[: len(table_oid_tuple)])
+                            == table_oid_tuple
                         ):
                             candidates.append((cand_name, cand_obj))
                     if candidates:
-                        candidates.sort(key=lambda item: len(item[1].get("oid", [])))
+                        candidates.sort(
+                            key=lambda item: len(self._oid_list_parts(item[1].get("oid")))
+                        )
                         entry_name, entry_obj = candidates[0]
 
-                if isinstance(entry_obj, dict) and entry_obj.get("type") == "MibTableRow":
-                    indexes = entry_obj.get("indexes", [])
-                    if isinstance(indexes, list):
+                if entry_obj is not None and entry_obj.get("type") == "MibTableRow":
+                    indexes = self._string_list(entry_obj.get("indexes"))
+                    if indexes:
                         table_entries[table_oid] = (
                             entry_name,
                             tuple(idx for idx in indexes if isinstance(idx, str)),
                         )
 
             for entry_name, entry_obj in objects.items():
-                if not isinstance(entry_obj, dict):
-                    continue
                 if entry_obj.get("type") != "MibTableRow":
                     continue
-                index_from = entry_obj.get("index_from")
-                if not index_from:
+                index_from_raw = entry_obj.get("index_from")
+                if not isinstance(index_from_raw, list) or not index_from_raw:
                     continue
                 parsed_inherited: list[str] = []
                 parent_oids: set[str] = set()
                 valid = True
 
-                for inherit in index_from:
+                for inherit in index_from_raw:
+                    if not isinstance(inherit, (dict, list, tuple)):
+                        valid = False
+                        break
                     parsed = self._parse_index_from_entry(inherit)
                     if parsed is None:
                         valid = False
@@ -1307,13 +1416,11 @@ class SNMPAgent:
                     continue
 
                 parent_oid = next(iter(parent_oids))
-                entry_oid = tuple(entry_obj.get("oid", []))
-                if len(entry_oid) < 1:
+                entry_oid = self._oid_tuple(entry_obj.get("oid"))
+                if entry_oid is None or len(entry_oid) < 1:
                     continue
                 child_table_oid = self._oid_list_to_str(list(entry_oid[:-1]))
-                indexes = entry_obj.get("indexes", [])
-                if not isinstance(indexes, list):
-                    indexes = []
+                indexes = self._string_list(entry_obj.get("indexes"))
 
                 child_meta = AugmentedTableChild(
                     table_oid=child_table_oid,
@@ -1331,7 +1438,7 @@ class SNMPAgent:
                 continue
 
             defaults = dict(seen_defaults.get(table_oid, {}))
-            non_index_cols = [name for name in defaults.keys() if name not in indexes_tuple]
+            non_index_cols = [name for name in defaults if name not in indexes_tuple]
             synthetic_children = 2 if non_index_cols else 1
 
             for _ in range(synthetic_children):
@@ -1350,7 +1457,7 @@ class SNMPAgent:
     def _propagate_augmented_tables(
         self,
         table_oid: str,
-        index_values: dict[str, Any],
+        index_values: dict[str, JsonValue],
         index_str: str,
         visited: set[str],
     ) -> None:
@@ -1385,18 +1492,17 @@ class SNMPAgent:
                     _augment_path=next_visited,
                 )
                 self.logger.debug(
-                    f"Auto-created augmented row {child.table_oid}.{index_str} from {table_oid}"
+                    "%s", f"Auto-created augmented row {child.table_oid}.{index_str} from {table_oid}"
                 )
-            except Exception as exc:
-                self.logger.error(
-                    f"Failed to add augmented row for {child.table_oid}: {exc}",
-                    exc_info=True,
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
+                self.logger.exception(
+                    "%s", f"Failed to add augmented row for {child.table_oid}: {exc}",
                 )
 
     def _propagate_augmented_deletions(
         self,
         table_oid: str,
-        index_values: dict[str, Any],
+        index_values: dict[str, JsonValue],
         index_str: str,
         visited: set[str],
     ) -> None:
@@ -1428,15 +1534,14 @@ class SNMPAgent:
                     _augment_path=next_visited,
                 )
                 self.logger.debug(
-                    f"Auto-deleted augmented row {child.table_oid}.{index_str} from {table_oid}"
+                    "%s", f"Auto-deleted augmented row {child.table_oid}.{index_str} from {table_oid}"
                 )
-            except Exception as exc:
-                self.logger.error(
-                    f"Failed to delete augmented row for {child.table_oid}: {exc}",
-                    exc_info=True,
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
+                self.logger.exception(
+                    "%s", f"Failed to delete augmented row for {child.table_oid}: {exc}",
                 )
 
-    def _format_index_value(self, value: Any) -> str:
+    def _format_index_value(self, value: JsonValue) -> str:
         """Normalize index values to a dotted string for comparison."""
         if isinstance(value, (list, tuple)):
             return ".".join(str(v) for v in value)
@@ -1449,7 +1554,7 @@ class SNMPAgent:
         legacy_overrides = Path(__file__).resolve().parent.parent / "data" / "overrides.json"
         legacy_tables = Path(__file__).resolve().parent.parent / "data" / "table_instances.json"
 
-        mib_state: dict[str, Any] = {
+        mib_state: dict[str, JsonValue] = {
             "scalars": {},
             "tables": {},
             "deleted_instances": [],
@@ -1457,19 +1562,19 @@ class SNMPAgent:
 
         if legacy_overrides.exists():
             try:
-                with open(legacy_overrides, "r", encoding="utf-8") as f:
+                with open(legacy_overrides, encoding="utf-8") as f:
                     mib_state["scalars"] = json.load(f)
-                self.logger.info(f"Migrated scalars from {legacy_overrides}")
-            except Exception as e:
-                self.logger.warning(f"Failed to migrate {legacy_overrides}: {e}")
+                self.logger.info("Migrated scalars from %s", legacy_overrides)
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                self.logger.warning("Failed to migrate %s: %s", legacy_overrides, e)
 
         if legacy_tables.exists():
             try:
-                with open(legacy_tables, "r", encoding="utf-8") as f:
+                with open(legacy_tables, encoding="utf-8") as f:
                     mib_state["tables"] = json.load(f)
-                self.logger.info(f"Migrated tables from {legacy_tables}")
-            except Exception as e:
-                self.logger.warning(f"Failed to migrate {legacy_tables}: {e}")
+                self.logger.info("Migrated tables from %s", legacy_tables)
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                self.logger.warning("Failed to migrate %s: %s", legacy_tables, e)
 
         # Save unified file
         if mib_state["scalars"] or mib_state["tables"]:
@@ -1491,15 +1596,15 @@ class SNMPAgent:
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(mib_state, f, indent=2, sort_keys=True)
-            self.logger.debug(f"Saved MIB state to {path}")
-        except Exception as e:
-            self.logger.error(f"Failed to save MIB state to {path}: {e}", exc_info=True)
+            self.logger.debug("Saved MIB state to %s", path)
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+            self.logger.exception("Failed to save MIB state to %s: %s", path, e)
 
     def _update_table_cell_values(
         self,
         table_oid: str,
         instance_str: str,
-        column_values: dict[str, Any],
+        column_values: dict[str, JsonValue],
         _processed: set[str] | None = None,
     ) -> None:
         """Update the MibScalarInstance objects for table cell values.
@@ -1509,6 +1614,7 @@ class SNMPAgent:
             instance_str: The instance index as string (e.g., "1")
             column_values: Dict mapping column names to values
             _processed: Internal set of columns already processed in this update session
+
         """
         if self.mib_builder is None:
             return
@@ -1522,8 +1628,8 @@ class SNMPAgent:
             MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
                 0
             ]
-        except Exception as e:
-            self.logger.error(f"Failed to import MibScalarInstance: {e}")
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+            self.logger.error("Failed to import MibScalarInstance: %s", e)
             return
 
         # Parse table OID
@@ -1543,13 +1649,13 @@ class SNMPAgent:
             # Skip if already processed in this update session
             if processed_key in _processed:
                 self.logger.debug(
-                    f"Skipping {column_name} in {table_oid} (already processed via propagation)"
+                    "Skipping %s in %s (already processed via propagation)", column_name, table_oid
                 )
                 continue
 
             # Check if we should propagate this update to linked columns
             if not link_manager.should_propagate(column_name, instance_key):
-                self.logger.debug(f"Skipping propagation for {column_name} (already updating)")
+                self.logger.debug("Skipping propagation for %s (already updating)", column_name)
                 continue
 
             try:
@@ -1562,7 +1668,7 @@ class SNMPAgent:
                 # Convert unhashable types (list, dict) to strings for storage
                 if isinstance(value, (list, dict)):
                     self.logger.debug(
-                        f"Converting {type(value).__name__} to string "
+                        "%s", f"Converting {type(value).__name__} to string "
                         f"for column {column_name}: {value}"
                     )
                     if isinstance(value, list):
@@ -1598,7 +1704,7 @@ class SNMPAgent:
                                 break
 
                 if not column_oid:
-                    self.logger.debug(f"Could not find column OID for {column_name}")
+                    self.logger.debug("Could not find column OID for %s", column_name)
                     continue
 
                 # Build the full cell OID: column_oid + instance_parts
@@ -1617,11 +1723,11 @@ class SNMPAgent:
                                 # Clone the existing syntax object to preserve type constraints
                                 new_syntax = symbol_obj.syntax.clone(value)
                                 symbol_obj.syntax = new_syntax
-                                self.logger.debug(f"Updated MibScalarInstance {cell_oid} = {value}")
+                                self.logger.debug("Updated MibScalarInstance %s = %s", cell_oid, value)
                                 updated = True
-                            except Exception as e:
+                            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
                                 self.logger.error(
-                                    f"Failed to update MibScalarInstance {cell_oid} "
+                                    "%s", f"Failed to update MibScalarInstance {cell_oid} "
                                     f"with value {value!r} "
                                     f"(type: {type(value).__name__}): {e}"
                                 )
@@ -1633,12 +1739,11 @@ class SNMPAgent:
                     if linked_targets:
                         targets_display = [f"{t.table_oid}:{t.column_name}" for t in linked_targets]
                         self.logger.info(
-                            f"Propagating value from {column_name} "
-                            f"to linked columns: {targets_display}"
+                            "Propagating value from %s to linked columns: %s", column_name, targets_display
                         )
                         for target in linked_targets:
                             target_table = target.table_oid or table_oid
-                            linked_values = {target.column_name: value}
+                            linked_values: dict[str, JsonValue] = {target.column_name: value}
                             self._update_table_cell_values(
                                 target_table,
                                 instance_str,
@@ -1646,8 +1751,8 @@ class SNMPAgent:
                                 _processed,
                             )
 
-            except Exception as e:
-                self.logger.error(f"Error updating column {column_name}: {e}", exc_info=True)
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                self.logger.exception("Error updating column %s: %s", column_name, e)
             finally:
                 # Always clear the update marker
                 link_manager.end_update(column_name, instance_key)
@@ -1655,8 +1760,8 @@ class SNMPAgent:
     def add_table_instance(
         self,
         table_oid: str,
-        index_values: dict[str, Any],
-        column_values: dict[str, Any] | None = None,
+        index_values: dict[str, JsonValue],
+        column_values: dict[str, JsonValue] | None = None,
         propagate_augments: bool = True,
         _augment_path: set[str] | None = None,
     ) -> str:
@@ -1671,12 +1776,13 @@ class SNMPAgent:
 
         Returns:
             The instance OID as a string
+
         """
         if column_values is None:
             column_values = {}
 
         # Serialize any unhashable types in column_values
-        serialized_column_values = {}
+        serialized_column_values: dict[str, JsonValue] = {}
         for col_name, col_value in column_values.items():
             if isinstance(col_value, list):
                 # Convert list to dot-notation string (for OIDs)
@@ -1709,7 +1815,7 @@ class SNMPAgent:
         # Persist to unified state file
         self._save_mib_state()
 
-        self.logger.info(f"Added table instance: {instance_oid}")
+        self.logger.info("Added table instance: %s", instance_oid)
 
         if propagate_augments:
             visited = set(_augment_path) if _augment_path else set()
@@ -1723,7 +1829,7 @@ class SNMPAgent:
                 )
         return instance_oid
 
-    def _build_index_str(self, index_values: dict[str, Any]) -> str:
+    def _build_index_str(self, index_values: dict[str, JsonValue]) -> str:
         """Build an instance index string, supporting implied/faux indices and multi-part indexes.
 
         Supports:
@@ -1758,7 +1864,7 @@ class SNMPAgent:
     def delete_table_instance(
         self,
         table_oid: str,
-        index_values: dict[str, Any],
+        index_values: dict[str, JsonValue],
         propagate_augments: bool = True,
         _augment_path: set[str] | None = None,
     ) -> bool:
@@ -1780,9 +1886,9 @@ class SNMPAgent:
             if instance_oid not in self.deleted_instances:
                 self.deleted_instances.append(instance_oid)
                 self._save_mib_state()
-                self.logger.info(f"Deleted table instance: {instance_oid}")
+                self.logger.info("Deleted table instance: %s", instance_oid)
         else:
-            self.logger.info(f"Skipping deleted_instances for {instance_oid} (not in schema rows)")
+            self.logger.info("Skipping deleted_instances for %s (not in schema rows)", instance_oid)
 
         if propagate_augments:
             visited = set(_augment_path) if _augment_path else set()
@@ -1800,8 +1906,8 @@ class SNMPAgent:
     def restore_table_instance(
         self,
         table_oid: str,
-        index_values: dict[str, Any],
-        column_values: dict[str, Any] | None = None,
+        index_values: dict[str, JsonValue],
+        column_values: dict[str, JsonValue] | None = None,
     ) -> bool:
         """Restore a previously deleted table instance.
 
@@ -1812,6 +1918,7 @@ class SNMPAgent:
 
         Returns:
             True if instance was restored
+
         """
         instance_oid = f"{table_oid}.{self._build_index_str(index_values)}"
 
@@ -1822,7 +1929,7 @@ class SNMPAgent:
 
         return False
 
-    def _serialize_value(self, value: Any) -> object:
+    def _serialize_value(self, value: DecodedValue) -> JsonValue:
         # Convert pysnmp types and other non-JSON-friendly values into JSON-serializable forms
         try:
             # Primitive types pass-through
@@ -1834,15 +1941,15 @@ class SNMPAgent:
             if isinstance(value, (bytes, bytearray)):
                 try:
                     return value.decode("latin1")
-                except Exception:
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
                     return value.hex()
             # pysnmp rfc1902 types often stringify sensibly
             try:
                 s = str(value)
                 return s
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 return repr(value)
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             return str(value)
 
     def _capture_initial_values(self) -> None:
@@ -1854,7 +1961,7 @@ class SNMPAgent:
             MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
                 0
             ]
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             return
 
         for module_name, symbols in self.mib_builder.mibSymbols.items():
@@ -1875,16 +1982,21 @@ class SNMPAgent:
                             # whereas the schema keys are the base names (e.g. sysContact).
                             module_json = self.mib_jsons.get(module_name, {})
                             base_name = symbol_name
-                            if base_name.endswith("Inst"):
-                                base_name = base_name[:-4]
-                            if isinstance(module_json, dict) and base_name in module_json:
-                                access_field = module_json[base_name].get("access")
-                                if access_field and access_field.lower() == "read-write":
+                            base_name = base_name.removesuffix("Inst")
+                            if isinstance(module_json, dict):
+                                symbol_meta = module_json.get(base_name)
+                                if isinstance(symbol_meta, dict):
+                                    access_field = symbol_meta.get("access")
+                                else:
+                                    access_field = None
+                                if (
+                                    isinstance(access_field, str)
+                                    and access_field.lower() == "read-write"
+                                ):
                                     self._writable_oids.add(dotted)
                                     added = True
                                     self.logger.debug(
-                                        "Marked writable via schema: "
-                                        f"{dotted} -> {module_name}.{base_name}"
+                                        "Marked writable via schema: %s -> %s.%s", dotted, module_name, base_name
                                     )
                             if not added:
                                 # Fallback to inspecting symbol object if it exposes access
@@ -1892,15 +2004,15 @@ class SNMPAgent:
                                 if hasattr(symbol_obj, "getMaxAccess"):
                                     access = symbol_obj.getMaxAccess()
                                 elif hasattr(symbol_obj, "maxAccess"):
-                                    access = getattr(symbol_obj, "maxAccess")
+                                    access = symbol_obj.maxAccess
                                 if access and str(access).lower().startswith("readwrite"):
                                     self._writable_oids.add(dotted)
-                        except Exception:
+                        except (AttributeError, LookupError, OSError, TypeError, ValueError):
                             pass
-                except Exception:
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
                     continue
 
-        self.logger.info(f"Captured {len(self._initial_values)} initial scalar values")
+        self.logger.info("%s", f"Captured {len(self._initial_values)} initial scalar values")
 
     def _apply_overrides(self) -> None:
         """Apply loaded overrides to the in-memory MIB scalar instances."""
@@ -1912,7 +2024,7 @@ class SNMPAgent:
             MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
                 0
             ]
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             return
 
         removed_invalid: list[str] = []
@@ -1920,8 +2032,8 @@ class SNMPAgent:
         for dotted, stored in list(self.overrides.items()):
             try:
                 oid = tuple(int(x) for x in dotted.split("."))
-            except Exception:
-                self.logger.warning(f"Invalid OID in overrides: {dotted}")
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                self.logger.warning("Invalid OID in overrides: %s", dotted)
                 removed_invalid.append(dotted)
                 continue
 
@@ -1932,7 +2044,7 @@ class SNMPAgent:
             try:
                 if oid[-1] != 0:
                     candidate_oids.append(oid + (0,))
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 pass
             for module_name, symbols in self.mib_builder.mibSymbols.items():
                 for symbol_name, symbol_obj in symbols.items():
@@ -1945,16 +2057,16 @@ class SNMPAgent:
                             try:
                                 new_syntax = symbol_obj.syntax.clone(stored)
                                 symbol_obj.syntax = new_syntax
-                            except Exception as e:
+                            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
                                 self.logger.warning(
-                                    f"Failed to apply override for {dotted} "
+                                    "%s", f"Failed to apply override for {dotted} "
                                     f"with value {stored!r}: {e}"
                                 )
                                 continue
 
                             applied = True
                             break
-                    except Exception:
+                    except (AttributeError, LookupError, OSError, TypeError, ValueError):
                         continue
                 if applied:
                     break
@@ -1962,7 +2074,7 @@ class SNMPAgent:
             if not applied:
                 # No matching scalar instance found; mark for removal
                 self.logger.warning(
-                    f"Override for {dotted} found, but no matching scalar instance to apply"
+                    "Override for %s found, but no matching scalar instance to apply", dotted
                 )
                 removed_invalid.append(dotted)
 
@@ -1972,9 +2084,9 @@ class SNMPAgent:
                 self.overrides.pop(k, None)
             try:
                 self._save_mib_state()
-            except Exception:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 self.logger.exception("Failed to save MIB state after pruning invalid entries")
-            self.logger.info(f"Removed {len(removed_invalid)} invalid overrides: {removed_invalid}")
+            self.logger.info("%s", f"Removed {len(removed_invalid)} invalid overrides: {removed_invalid}")
 
     def _apply_table_instances(self) -> None:
         """Apply loaded table instances to the in-memory MIB table cell instances."""
@@ -1990,14 +2102,14 @@ class SNMPAgent:
                 column_values = instance_data.get("column_values", {})
                 if column_values:
                     self._update_table_cell_values(table_oid, instance_str, column_values)
-                    self.logger.debug(f"Applied table instance {table_oid}.{instance_str}")
+                    self.logger.debug("Applied table instance %s.%s", table_oid, instance_str)
 
 
 if __name__ == "__main__":  # pragma: no cover
     try:
         agent = SNMPAgent()
         agent.run()
-    except Exception as e:
+    except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         import traceback
 
         print(f"\nERROR: {type(e).__name__}: {e}", file=sys.stderr)

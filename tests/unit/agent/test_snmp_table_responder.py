@@ -1,13 +1,13 @@
 """Tests for test snmp table responder."""
 
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
 from app.snmp_table_responder import SNMPTableResponder
 
 
-def make_basic_behavior() -> Dict[str, Dict[str, Any]]:
+def make_basic_behavior() -> dict[str, dict[str, Any]]:
     """Test case for make_basic_behavior."""
     # Simple MIB describing a table with one column and two rows
     return {
@@ -27,7 +27,7 @@ def make_basic_behavior() -> Dict[str, Dict[str, Any]]:
                 "columns": {"col1": {"oid": [1, 2, 3, 1]}},
             },
             "col1": {"oid": [1, 2, 3, 1], "type": "Integer32"},
-        }
+        },
     }
 
 
@@ -51,7 +51,7 @@ def test_get_table_info_direct_and_within() -> None:
 
     info_direct = r.get_table_info((1, 2))
     assert info_direct is not None
-    mib_name, table_name, table_data, table_oid = info_direct
+    mib_name, table_name, _table_data, table_oid = info_direct
     assert mib_name == "TEST-MIB"
     assert table_name == "MyTable"
     assert table_oid == (1, 2)
@@ -95,9 +95,9 @@ def test_short_oid_and_missing_entry_cases() -> None:
     # Table present but entry definition missing
     behavior = {
         "TEST-MIB": {
-            "BrokenTable": {"type": "MibTable", "oid": [10], "initial": {"1": {"c": 1}}}
+            "BrokenTable": {"type": "MibTable", "oid": [10], "initial": {"1": {"c": 1}}},
             # Note: no BrokenTableEntry
-        }
+        },
     }
     r = SNMPTableResponder(behavior, mib_builder=None)
 

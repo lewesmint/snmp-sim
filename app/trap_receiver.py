@@ -3,20 +3,25 @@
 from __future__ import annotations
 
 import asyncio
-import logging
-from typing import Any, Optional, Callable
-from datetime import datetime
+import contextlib
+from collections.abc import Iterable
+from datetime import datetime, timezone
 from threading import Thread
+from typing import TYPE_CHECKING
 
+from pysnmp.carrier.asyncio.dgram import udp
+from pysnmp.entity import config
+from pysnmp.entity.rfc3413 import ntfrcv
 from pysnmp.hlapi.v3arch.asyncio import (
     SnmpEngine,
 )
-from pysnmp.entity import config
-from pysnmp.carrier.asyncio.dgram import udp
-from pysnmp.entity.rfc3413 import ntfrcv
 
 from app.app_logger import AppLogger
 from app.oid_utils import oid_tuple_to_str
+
+if TYPE_CHECKING:
+    import logging
+    from collections.abc import Callable
 
 
 class TrapReceiver:
@@ -31,32 +36,35 @@ class TrapReceiver:
 
     def __init__(
         self,
+        host: str = "127.0.0.1",
         port: int = 16662,
         community: str = "public",
-        logger: Optional[logging.Logger] = None,
-        on_trap_callback: Optional[Callable[[dict[str, Any]], None]] = None,
+        logger: logging.Logger | None = None,
+        on_trap_callback: Callable[[dict[str, object]], None] | None = None,
     ) -> None:
-        """
-        Initialize the trap receiver.
+        """Initialize the trap receiver.
 
         Args:
+            host: IP/hostname interface to bind for trap listening
             port: UDP port to listen on (default: 16662 for GUI, not 162 for production)
             community: SNMPv2c community string to accept
             logger: Optional logger instance
             on_trap_callback: Optional callback function called when trap is received
+
         """
+        self.host = host
         self.port = port
         self.community = community
         self.logger = logger or AppLogger.get(__name__)
         self.on_trap_callback = on_trap_callback
 
-        self.snmp_engine: Optional[SnmpEngine] = None
+        self.snmp_engine: SnmpEngine | None = None
         self.running = False
-        self.thread: Optional[Thread] = None
-        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self.thread: Thread | None = None
+        self.loop: asyncio.AbstractEventLoop | None = None
 
         # Store received traps
-        self.received_traps: list[dict[str, Any]] = []
+        self.received_traps: list[dict[str, object]] = []
         self.max_traps = 100  # Keep last 100 traps
 
     def start(self) -> None:
@@ -68,7 +76,7 @@ class TrapReceiver:
         self.running = True
         self.thread = Thread(target=self._run_receiver, daemon=True)
         self.thread.start()
-        self.logger.info(f"Trap receiver started on port {self.port}")
+        self.logger.info("%s", f"Trap receiver started on port {self.port}")
 
     def stop(self) -> None:
         """Stop the trap receiver."""
@@ -93,8 +101,8 @@ class TrapReceiver:
 
         try:
             self.loop.run_until_complete(self._async_receiver())
-        except Exception as e:
-            self.logger.exception(f"Trap receiver error: {e}")
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            self.logger.exception("Trap receiver error")
         finally:
             self.loop.close()
 
@@ -107,7 +115,7 @@ class TrapReceiver:
         config.addTransport(
             self.snmp_engine,
             udp.domainName,
-            udp.UdpTransport().openServerMode(("0.0.0.0", self.port)),
+            udp.UdpTransport().openServerMode((self.host, self.port)),
         )
 
         # SNMPv2c community
@@ -116,7 +124,7 @@ class TrapReceiver:
         # Register callback for trap reception
         ntfrcv.NotificationReceiver(self.snmp_engine, self._trap_callback)
 
-        self.logger.info(f"Listening for traps on UDP port {self.port}")
+        self.logger.info("%s", f"Listening for traps on UDP port {self.port}")
         self.snmp_engine.transportDispatcher.jobStarted(1)
 
         # Run until stopped
@@ -127,10 +135,14 @@ class TrapReceiver:
                 self.snmp_engine.transportDispatcher.runDispatcher(timeout=0.1)
         finally:
             if self.snmp_engine:
-                try:
+                with contextlib.suppress(
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                ):
                     self.snmp_engine.transportDispatcher.jobFinished(1)
-                except Exception:
-                    pass
                 # Only close dispatcher if event loop is still running
                 try:
                     loop = asyncio.get_event_loop()
@@ -142,14 +154,14 @@ class TrapReceiver:
 
     def _trap_callback(
         self,
-        _snmp_engine: Any,
-        _state_reference: Any,
-        _context_engine_id: Any,
-        _context_name: Any,
-        var_binds: Any,
-        _cb_ctx: Any,
+        _snmp_engine: object,
+        _state_reference: object,
+        _context_engine_id: object,
+        _context_name: object,
+        var_binds: Iterable[tuple[object, object]],
+        _cb_ctx: object,
     ) -> None:
-        """Callback invoked when a trap is received."""
+        """Handle a received trap callback."""
         try:
             # Parse varbinds
             trap_data = self._parse_trap(var_binds)
@@ -161,7 +173,7 @@ class TrapReceiver:
 
             # Log trap
             self.logger.info(
-                f"Received trap: {trap_data['trap_oid_str']} "
+                "%s", f"Received trap: {trap_data['trap_oid_str']} "
                 f"from {trap_data.get('source', 'unknown')}"
             )
 
@@ -169,15 +181,15 @@ class TrapReceiver:
             if self.on_trap_callback:
                 try:
                     self.on_trap_callback(trap_data)
-                except Exception as e:
-                    self.logger.error(f"Error in trap callback: {e}")
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                    self.logger.exception("Error in trap callback")
 
-        except Exception as e:
-            self.logger.exception(f"Error processing trap: {e}")
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            self.logger.exception("Error processing trap")
 
-    def _parse_trap(self, var_binds: Any) -> dict[str, Any]:
+    def _parse_trap(self, var_binds: Iterable[tuple[object, object]]) -> dict[str, object]:
         """Parse trap varbinds into a structured dictionary."""
-        timestamp = datetime.now().isoformat()
+        timestamp = datetime.now(tz=timezone.utc).isoformat()
         uptime = None
         trap_oid = None
         trap_oid_str = "unknown"
@@ -185,23 +197,34 @@ class TrapReceiver:
         is_test_trap = False
 
         for oid, val in var_binds:
-            oid_tuple = tuple(oid)
+            if not isinstance(oid, Iterable) or isinstance(oid, (str, bytes, bytearray)):
+                continue
+            oid_tuple = tuple(part for part in oid if isinstance(part, int))
+            if not oid_tuple:
+                continue
             oid_str = oid_tuple_to_str(oid_tuple)
 
             # Extract value
             value_str = str(val)
-            if hasattr(val, "prettyPrint"):
-                value_str = val.prettyPrint()
+            pretty_print = getattr(val, "prettyPrint", None)
+            if callable(pretty_print):
+                try:
+                    value_str = str(pretty_print())
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                    value_str = str(val)
 
             # Check for standard trap OIDs
             if oid_tuple == self.SYS_UPTIME_OID:
                 uptime = value_str
             elif oid_tuple == self.SNMP_TRAP_OID:
-                trap_oid = tuple(val)  # The value is the trap OID
-                trap_oid_str = oid_tuple_to_str(trap_oid)
-                # Check if this is a test trap
-                if trap_oid == self.TEST_TRAP_OID:
-                    is_test_trap = True
+                if isinstance(val, Iterable) and not isinstance(val, (str, bytes, bytearray)):
+                    trap_oid = tuple(val)
+                else:
+                    trap_oid = None
+                if trap_oid is not None:
+                    trap_oid_str = oid_tuple_to_str(trap_oid)
+                    if trap_oid == self.TEST_TRAP_OID:
+                        is_test_trap = True
 
             varbinds.append(
                 {
@@ -222,7 +245,7 @@ class TrapReceiver:
             "source": "unknown",  # Could be extracted from transport info if needed
         }
 
-    def get_received_traps(self, limit: Optional[int] = None) -> list[dict[str, Any]]:
+    def get_received_traps(self, limit: int | None = None) -> list[dict[str, object]]:
         """Get list of received traps (most recent first)."""
         traps = list(reversed(self.received_traps))
         if limit:

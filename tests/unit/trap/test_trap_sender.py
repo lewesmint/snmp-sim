@@ -1,11 +1,11 @@
 """Tests for TrapSender using NotificationType API."""
 
 import logging
-import pytest
-from pytest_mock import MockerFixture
 
-from pysnmp.proto import rfc1902
+import pytest
 from pysnmp.hlapi.v3arch.asyncio import ObjectIdentity, ObjectType, SnmpEngine
+from pysnmp.proto import rfc1902
+from pytest_mock import MockerFixture
 
 from app.cli_trap_sender import main as cli_main
 from app.trap_sender import TrapSender
@@ -60,13 +60,16 @@ def test_coerce_varbind_invalid_type(trap_sender: TrapSender) -> None:
 def test_send_mib_notification_sync(trap_sender: TrapSender, mocker: MockerFixture) -> None:
     """Test synchronous send_mib_notification."""
     mock_async = mocker.patch.object(
-        trap_sender, "send_mib_notification_async", new_callable=mocker.AsyncMock
+        trap_sender,
+        "send_mib_notification_async",
+        new_callable=mocker.AsyncMock,
     )
     mock_async.return_value = None
 
     # Mock asyncio.run to execute the coroutine
     import asyncio
-    from typing import Any, Coroutine
+    from collections.abc import Coroutine
+    from typing import Any
 
     def mock_run(coro: Coroutine[Any, Any, Any]) -> Any:
         loop = asyncio.new_event_loop()
@@ -179,7 +182,7 @@ def test_cli_sends_notification(mocker: MockerFixture, capsys: pytest.CaptureFix
             "162",
             "--trap-type",
             "trap",
-        ]
+        ],
     )
     output = capsys.readouterr()
     assert exit_code == 0
@@ -193,7 +196,8 @@ def test_cli_sends_notification(mocker: MockerFixture, capsys: pytest.CaptureFix
 
 
 def test_cli_sends_notification_with_varbinds(
-    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test CLI sends notification with extra varbinds."""
     mock_sender = mocker.MagicMock()
@@ -217,7 +221,7 @@ def test_cli_sends_notification_with_varbinds(
             "2",
             "--trap-type",
             "inform",
-        ]
+        ],
     )
     output = capsys.readouterr()
     assert exit_code == 0
@@ -256,7 +260,7 @@ def test_cli_varbind_string_and_index_string_parsing(
             "ifOperStatus",
             "up",
             "eth0",
-        ]
+        ],
     )
     output = capsys.readouterr()
 
@@ -280,7 +284,8 @@ def test_cli_varbind_string_and_index_string_parsing(
 
 
 def test_cli_sender_exception_returns_error(
-    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """CLI should return 1 and print stderr when TrapSender raises."""
     mock_sender = mocker.MagicMock()
@@ -293,7 +298,7 @@ def test_cli_sender_exception_returns_error(
             "SNMPv2-MIB",
             "--notification",
             "coldStart",
-        ]
+        ],
     )
     output = capsys.readouterr()
 

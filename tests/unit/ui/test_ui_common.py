@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
-
-import pytest
+from typing import TYPE_CHECKING, Any
 
 from ui.common import Logger, format_snmp_value, safe_call, save_gui_log
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
 
 
 class FakeTextWidget:
@@ -35,7 +37,7 @@ class FakeTextWidget:
 
     def see(self, _index: str) -> None:
         """Test case for see."""
-        return None
+        return
 
     def get(self, _start: str, _end: str) -> str:
         """Test case for get."""
@@ -46,7 +48,8 @@ class BrokenTextWidget(FakeTextWidget):
     """Test helper class for BrokenTextWidget."""
 
     def insert(self, _index: str, text: str, tag: str) -> None:
-        raise RuntimeError("insert failed")
+        msg = "insert failed"
+        raise RuntimeError(msg)
 
 
 def test_logger_configure_and_log_with_widget(
@@ -54,7 +57,7 @@ def test_logger_configure_and_log_with_widget(
 ) -> None:
     """Test case for test_logger_configure_and_log_with_widget."""
     widget = FakeTextWidget()
-    logger = Logger(widget)
+    logger = Logger(widget)  # type: ignore[arg-type]
 
     logger.log("hello world", "WARNING")
     out = capsys.readouterr().out
@@ -68,7 +71,7 @@ def test_logger_configure_and_log_with_widget(
 
 def test_logger_log_handles_widget_errors(capsys: pytest.CaptureFixture[str]) -> None:
     """Test case for test_logger_log_handles_widget_errors."""
-    logger = Logger(BrokenTextWidget())
+    logger = Logger(BrokenTextWidget())  # type: ignore[arg-type]
     logger.log("should still print", "ERROR")
     out = capsys.readouterr().out
     assert "ERROR: should still print" in out
@@ -76,9 +79,9 @@ def test_logger_log_handles_widget_errors(capsys: pytest.CaptureFixture[str]) ->
 
 def test_logger_set_log_widget_resets_tags() -> None:
     """Test case for test_logger_set_log_widget_resets_tags."""
-    logger = Logger(FakeTextWidget())
+    logger = Logger(FakeTextWidget())  # type: ignore[arg-type]
     logger._tags_configured = True
-    logger.set_log_widget(FakeTextWidget())
+    logger.set_log_widget(FakeTextWidget())  # type: ignore[arg-type]
     assert logger._tags_configured is False
 
 
@@ -88,7 +91,7 @@ def test_save_gui_log_creates_file(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     widget = FakeTextWidget()
     widget.insert("end", "line1\n", "INFO")
 
-    save_gui_log(widget, "test.log")
+    save_gui_log(widget, "test.log")  # type: ignore[arg-type]
 
     log_file = tmp_path / "logs" / "test.log"
     assert log_file.exists()
@@ -96,7 +99,9 @@ def test_save_gui_log_creates_file(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 
 def test_save_gui_log_handles_exceptions(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test case for test_save_gui_log_handles_exceptions."""
     monkeypatch.chdir(tmp_path)
@@ -105,9 +110,10 @@ def test_save_gui_log_handles_exceptions(
         """Test helper class for BrokenGetWidget."""
 
         def get(self, _start: str, _end: str) -> str:
-            raise RuntimeError("get failed")
+            msg = "get failed"
+            raise RuntimeError(msg)
 
-    save_gui_log(BrokenGetWidget(), "test.log")
+    save_gui_log(BrokenGetWidget(), "test.log")  # type: ignore[arg-type]
     out = capsys.readouterr().out
     # No crash and outer function handles any errors gracefully
     assert "Error saving log" not in out
@@ -128,7 +134,8 @@ def test_format_snmp_value_paths() -> None:
 
         def prettyPrint(self) -> str:
             """Test case for prettyPrint."""
-            raise RuntimeError("boom")
+            msg = "boom"
+            raise RuntimeError(msg)
 
         def __str__(self) -> str:
             return "fallback"

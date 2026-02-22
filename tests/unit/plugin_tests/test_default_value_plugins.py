@@ -1,15 +1,14 @@
-"""
-Tests for the default value plugin system.
-"""
+"""Tests for the default value plugin system."""
+
+from typing import Any
 
 import pytest
-from typing import Any, Optional
 
 from app.default_value_plugins import (
     DefaultValuePluginRegistry,
-    register_plugin,
     get_default_value,
     get_registry,
+    register_plugin,
 )
 from app.types import TypeInfo
 
@@ -21,7 +20,7 @@ class TestDefaultValuePluginRegistry:
         """Test registering plugins and listing them."""
         registry = DefaultValuePluginRegistry()
 
-        def dummy_plugin(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
+        def dummy_plugin(type_info: TypeInfo, symbol_name: str) -> Any | None:
             return None
 
         registry.register("test_plugin", dummy_plugin)
@@ -32,10 +31,10 @@ class TestDefaultValuePluginRegistry:
         """Test that registering a plugin with the same name replaces the old one."""
         registry = DefaultValuePluginRegistry()
 
-        def plugin1(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
+        def plugin1(type_info: TypeInfo, symbol_name: str) -> Any | None:
             return "value1"
 
-        def plugin2(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
+        def plugin2(type_info: TypeInfo, symbol_name: str) -> Any | None:
             return "value2"
 
         registry.register("test_plugin", plugin1)
@@ -58,12 +57,12 @@ class TestDefaultValuePluginRegistry:
         """Test get_default_value calls plugins in order and returns first non-None value."""
         registry = DefaultValuePluginRegistry()
 
-        def plugin1(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
+        def plugin1(type_info: TypeInfo, symbol_name: str) -> Any | None:
             if type_info.get("base_type") == "IpAddress":
                 return "192.168.1.1"
             return None
 
-        def plugin2(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
+        def plugin2(type_info: TypeInfo, symbol_name: str) -> Any | None:
             if symbol_name == "sysDescr":
                 return "Test Description"
             return None
@@ -84,15 +83,17 @@ class TestDefaultValuePluginRegistry:
         assert result is None
 
     def test_get_default_value_plugin_exception_handled(
-        self, caplog: pytest.LogCaptureFixture
+        self,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test that plugin exceptions are caught and logged, allowing other plugins to run."""
         registry = DefaultValuePluginRegistry()
 
-        def failing_plugin(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
-            raise ValueError("Plugin failed")
+        def failing_plugin(type_info: TypeInfo, symbol_name: str) -> Any | None:
+            msg = "Plugin failed"
+            raise ValueError(msg)
 
-        def working_plugin(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
+        def working_plugin(type_info: TypeInfo, symbol_name: str) -> Any | None:
             return "success"
 
         registry.register("failing", failing_plugin)
@@ -123,7 +124,7 @@ class TestGlobalFunctions:
         try:
 
             @register_plugin("decorated_plugin")
-            def my_plugin(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
+            def my_plugin(type_info: TypeInfo, symbol_name: str) -> Any | None:
                 if type_info.get("base_type") == "Counter32":
                     return 42
                 return None
@@ -150,7 +151,7 @@ class TestGlobalFunctions:
 
         try:
 
-            def test_plugin(type_info: TypeInfo, symbol_name: str) -> Optional[Any]:
+            def test_plugin(type_info: TypeInfo, symbol_name: str) -> Any | None:
                 return "global_test"
 
             registry.register("global_test", test_plugin)
@@ -160,9 +161,9 @@ class TestGlobalFunctions:
         finally:
             # Restore original plugins
             registry._plugins = original_plugins
-            registry._plugin_names = {
-                name: plugin for name, plugin in zip(registry.list_plugins(), original_plugins)
-            }
+            registry._plugin_names = dict(
+                zip(registry.list_plugins(), original_plugins, strict=False)
+            )
 
     def test_get_registry_returns_global_instance(self) -> None:
         """Test that get_registry returns the global registry instance."""

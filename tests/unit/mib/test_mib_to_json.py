@@ -25,7 +25,8 @@ def test_cli_success_prints_path(mocker: MockerFixture, capsys: pytest.CaptureFi
 
 
 def test_cli_missing_compiled_mib(
-    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """CLI should error when compiled MIB path is missing."""
     mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=False)
@@ -38,7 +39,8 @@ def test_cli_missing_compiled_mib(
 
 
 def test_cli_checks_imports_when_txt_path_provided(
-    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """CLI should call import checks when a MIB text file is provided."""
     mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
@@ -72,7 +74,8 @@ def test_cli_no_plugins_flag(mocker: MockerFixture, capsys: pytest.CaptureFixtur
 
 
 def test_check_imported_mibs_warns_missing_compiled(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """check_imported_mibs should warn when compiled dependency is missing."""
     mibs_dir = tmp_path / "mibs"
@@ -131,7 +134,8 @@ def test_cli_mib_name_optional(mocker: MockerFixture, capsys: pytest.CaptureFixt
 
 
 def test_cli_no_args_config_not_found(
-    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """CLI should error when no MIB is passed and config file is missing."""
     mocker.patch("app.cli_mib_to_json.AppConfig", side_effect=FileNotFoundError)
@@ -144,7 +148,8 @@ def test_cli_no_args_config_not_found(
 
 
 def test_cli_no_args_with_empty_mib_list(
-    mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
+    mocker: MockerFixture,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """CLI should error when no configured MIBs are present."""
     mock_config = mocker.MagicMock()
