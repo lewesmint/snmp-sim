@@ -1,3 +1,5 @@
+"""Tests for test compiler unit."""
+
 import os
 from pathlib import Path
 from typing import Any
@@ -22,6 +24,7 @@ class _FakePysmiCompiler:
         self.searchers.append(searcher)
 
     def compile(self, _mib_filename: str) -> dict[str, str]:
+        """Test case for compile."""
         return self._results
 
 
@@ -38,6 +41,7 @@ def _patch_compiler(monkeypatch: pytest.MonkeyPatch, results: dict[str, str]) ->
 
 
 def test_compiler_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test case for test_compiler_success."""
     results = {"TEST-MIB": "compiled"}
     _patch_compiler(monkeypatch, results)
 
@@ -59,6 +63,7 @@ def test_compiler_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_compiler_missing_dependencies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test case for test_compiler_missing_dependencies."""
     results = {"TEST-MIB": "MISSING dependency"}
     _patch_compiler(monkeypatch, results)
 
@@ -72,6 +77,7 @@ def test_compiler_missing_dependencies(tmp_path: Path, monkeypatch: pytest.Monke
 
 
 def test_compiler_failed_mib(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test case for test_compiler_failed_mib."""
     results = {"TEST-MIB": "failed"}
     _patch_compiler(monkeypatch, results)
 
@@ -84,6 +90,7 @@ def test_compiler_failed_mib(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_compiler_no_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test case for test_compiler_no_results."""
     results: dict[str, str] = {}
     _patch_compiler(monkeypatch, results)
 
@@ -96,6 +103,7 @@ def test_compiler_no_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_compiler_output_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test case for test_compiler_output_missing."""
     results = {"TEST-MIB": "compiled"}
     _patch_compiler(monkeypatch, results)
 
@@ -108,6 +116,7 @@ def test_compiler_output_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 
 def test_parse_missing_from_status() -> None:
+    """Test case for test_parse_missing_from_status."""
     compiler = MibCompiler(output_dir="/tmp")
     status = "FOO is missing, BAR is missing, FOO is missing"
     missing = compiler._parse_missing_from_status(status)

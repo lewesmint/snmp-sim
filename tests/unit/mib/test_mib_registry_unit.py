@@ -1,7 +1,10 @@
+"""Tests for test mib registry unit."""
+
 from app.mib_registry import MibRegistry
 
 
 def test_mib_registry_get_type_and_load_noop() -> None:
+    """Test case for test_mib_registry_get_type_and_load_noop."""
     mr = MibRegistry()
     # Initially empty
     assert mr.get_type("1.2.3") == {}

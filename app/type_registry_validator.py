@@ -53,7 +53,7 @@ def validate_type_registry_file(json_path: str) -> Tuple[bool, List[str], int]:
         return False, [f"Type registry file not found: {json_path}"], 0
 
     try:
-        with open(path) as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         if not isinstance(data, dict):
@@ -72,6 +72,6 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print(f"Usage: {sys.argv[0]} <types.json>")
         sys.exit(2)
-    with open(sys.argv[1]) as f:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
         registry = json.load(f)
     validate_type_registry(registry)

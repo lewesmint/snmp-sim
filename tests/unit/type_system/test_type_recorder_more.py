@@ -1,8 +1,11 @@
+"""Tests for test type recorder more."""
+
 from typing import Mapping, cast
 from app.type_recorder import TypeRecorder, TypeEntry
 
 
 def test_parse_constraints_from_repr_size_range_and_single() -> None:
+    """Test case for test_parse_constraints_from_repr_size_range_and_single."""
     rep = (
         "ValueSizeConstraint object, consts 2, 4 "
         "ValueRangeConstraint object, consts 0, 10 "
@@ -20,11 +23,17 @@ def test_parse_constraints_from_repr_size_range_and_single() -> None:
 
 
 def test_extract_constraints_with_subtypeobj() -> None:
+    """Test case for test_extract_constraints_with_subtypeobj."""
+
     class S:
+        """Test helper class for S."""
+
         def __repr__(self) -> str:
             return "ValueSizeConstraint object, consts 3, 3"
 
     class Syntax:
+        """Test helper class for Syntax."""
+
         subtypeSpec = S()
 
     size, constraints, reprt = TypeRecorder.extract_constraints(Syntax())
@@ -34,6 +43,7 @@ def test_extract_constraints_with_subtypeobj() -> None:
 
 
 def test_filter_constraints_by_size_range_and_set() -> None:
+    """Test case for test_filter_constraints_by_size_range_and_set."""
     size_range = {"type": "range", "min": 1, "max": 5}
     constraints = [
         {"type": "ValueSizeConstraint", "min": 1, "max": 5},
@@ -54,6 +64,7 @@ def test_filter_constraints_by_size_range_and_set() -> None:
 
 
 def test_compact_single_value_constraints_if_enums_present() -> None:
+    """Test case for test_compact_single_value_constraints_if_enums_present."""
     constraints = [{"type": "SingleValueConstraint", "values": [1, 2, 3]}]
     enums = [{"value": 1, "name": "one"}]
     out = TypeRecorder._compact_single_value_constraints_if_enums_present(constraints, enums)
@@ -61,6 +72,7 @@ def test_compact_single_value_constraints_if_enums_present() -> None:
 
 
 def test_drop_dominated_value_ranges() -> None:
+    """Test case for test_drop_dominated_value_ranges."""
     constraints = [
         {"type": "ValueRangeConstraint", "min": 0, "max": 10},
         {"type": "ValueRangeConstraint", "min": 2, "max": 8},
@@ -72,6 +84,7 @@ def test_drop_dominated_value_ranges() -> None:
 
 
 def test_drop_redundant_base_value_range() -> None:
+    """Test case for test_drop_redundant_base_value_range."""
     base = "BaseType"
     types = {base: {"constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 100}]}}
     constraints = [
@@ -86,6 +99,7 @@ def test_drop_redundant_base_value_range() -> None:
 
 
 def test_drop_redundant_base_range_for_enums() -> None:
+    """Test case for test_drop_redundant_base_range_for_enums."""
     base = "BaseType"
     types = {base: {"constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 5}]}}
     constraints = [{"type": "ValueRangeConstraint", "min": 0, "max": 5}]
@@ -98,18 +112,28 @@ def test_drop_redundant_base_range_for_enums() -> None:
 
 
 def test_is_textual_convention_and_abstract_type_checks() -> None:
+    """Test case for test_is_textual_convention_and_abstract_type_checks."""
+
     class TextualConvention:
+        """Test helper class for TextualConvention."""
+
         pass
 
     class DisplayString(TextualConvention):
+        """Test helper class for DisplayString."""
+
         pass
 
     assert TypeRecorder._is_textual_convention_symbol(DisplayString)
 
     class Choice:
+        """Test helper class for Choice."""
+
         pass
 
     class SomeChoice(Choice):
+        """Test helper class for SomeChoice."""
+
         pass
 
     assert TypeRecorder._is_abstract_type("ObjectName")
@@ -117,10 +141,16 @@ def test_is_textual_convention_and_abstract_type_checks() -> None:
 
 
 def test_infer_asn1_base_type() -> None:
+    """Test case for test_infer_asn1_base_type."""
+
     class OctetString:
+        """Test helper class for OctetString."""
+
         pass
 
     class MyType(OctetString):
+        """Test helper class for MyType."""
+
         pass
 
     assert TypeRecorder._infer_asn1_base_type("MyType", MyType) == "OCTET STRING"

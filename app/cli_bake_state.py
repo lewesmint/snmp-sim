@@ -4,7 +4,7 @@ CLI tool to bake current MIB state into agent-model schema files.
 
 This tool:
 1. Backs up existing agent-model directory to agent-model-backups/{timestamp}/
-2. Reads current state from data/mib_state.json
+2. Reads current state from agent-model/mib_state.json
 3. Merges state values into schema files as initial values
 4. Updates schema files in-place
 """
@@ -17,6 +17,8 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from app.model_paths import AGENT_MODEL_BACKUPS_DIR, AGENT_MODEL_DIR, MIB_STATE_FILE
 
 
 def backup_schemas(schema_dir: Path, backup_base: Path) -> Path:
@@ -88,6 +90,7 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                                 baked_count += 1
                                 print(f"  Baked scalar {obj_name} ({oid}) = {value}")
 
+                            # pylint: disable=broad-exception-caught
             # Bake table instances
             # table_instances format: {table_oid: {instance_str: {column_values: {...}}}}
             for table_oid, instances_dict in tables.items():
@@ -122,7 +125,8 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                             # Convert instance dict to list of row dicts
                             rows: list[dict[str, Any]] = []
                             for instance_str, instance_data in instances_dict.items():
-                                # Reconstruct index values from instance_str and index_columns metadata
+                                # Reconstruct index values from instance_str
+                                # and index_columns metadata.
                                 row: dict[str, Any] = {}
 
                                 if index_columns == ["__index__"]:
@@ -154,17 +158,14 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                                             # Fallback: use remaining parts
                                             row[col_name] = ".".join(parts[pos:])
                                             pos = len(parts)
-                                    else:
-                                        # Single value
-                                        if pos < len(parts):
-                                            # Try to convert to int if it looks like a number
-                                            try:
-                                                row[col_name] = int(parts[pos])
-                                            except (ValueError, IndexError):
-                                                row[col_name] = (
-                                                    parts[pos] if pos < len(parts) else ""
-                                                )
-                                            pos += 1
+                                    # Single value
+                                    elif pos < len(parts):
+                                        # Try to convert to int if it looks like a number
+                                        try:
+                                            row[col_name] = int(parts[pos])
+                                        except (ValueError, IndexError):
+                                            row[col_name] = parts[pos] if pos < len(parts) else ""
+                                        pos += 1
 
                                 # Add column values
                                 if isinstance(instance_data, dict):
@@ -175,10 +176,9 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
                                         row.update(instance_data["index_values"])
                                         if "column_values" in instance_data:
                                             row.update(instance_data["column_values"])
-                                else:
-                                    # Old format: instance_data is the row dict directly
-                                    if isinstance(instance_data, dict):
-                                        row.update(instance_data)
+                                # Old format: instance_data is the row dict directly
+                                elif isinstance(instance_data, dict):
+                                    row.update(instance_data)
 
                                 if row:
                                     rows.append(row)
@@ -212,17 +212,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--schema-dir",
-        default="agent-model",
+        default=str(AGENT_MODEL_DIR),
         help="Directory containing MIB schema subdirectories (default: agent-model)",
     )
     parser.add_argument(
         "--state-file",
-        default="data/mib_state.json",
-        help="MIB state file to bake from (default: data/mib_state.json)",
+        default=str(MIB_STATE_FILE),
+        help="MIB state file to bake from (default: agent-model/mib_state.json)",
     )
     parser.add_argument(
         "--backup-dir",
-        default="agent-model-backups",
+        default=str(AGENT_MODEL_BACKUPS_DIR),
         help="Directory for backups (default: agent-model-backups)",
     )
     parser.add_argument(

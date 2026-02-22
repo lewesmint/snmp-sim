@@ -30,7 +30,6 @@ app/oid_utils.py                    18      0     10      0   100%
 app/plugin_loader.py                34      0     10      0   100%
 app/snmp_agent.py                 1070    276    518    112    71%
 app/snmp_table_responder.py        252    114    184     31    50%
-app/snmp_transport.py                7      0      0      0   100%
 app/table_registrar.py             198     14     88      6    92%
 app/trap_receiver.py               120     11     30     10    86%
 app/trap_sender.py                  89     34     26      6    58%

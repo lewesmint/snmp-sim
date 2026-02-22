@@ -77,9 +77,8 @@ def normalize_oid(oid: Union[str, Tuple[int, ...], List[int]]) -> Tuple[int, ...
     """
     if isinstance(oid, str):
         return oid_str_to_tuple(oid)
-    elif isinstance(oid, list):
+    if isinstance(oid, list):
         return tuple(oid)
-    elif isinstance(oid, tuple):
+    if isinstance(oid, tuple):
         return oid
-    else:
-        raise TypeError(f"OID must be string, tuple, or list, got {type(oid)}")
+    raise TypeError(f"OID must be string, tuple, or list, got {type(oid)}")

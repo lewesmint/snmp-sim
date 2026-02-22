@@ -1,6 +1,7 @@
 """
 SNMP Async Wrapper - Quick Reference Card
 """
+
 # pyright: reportAttributeAccessIssue=false, reportCallIssue=false, reportArgumentType=false
 
 from typing import Any
@@ -28,7 +29,11 @@ auth_v2c = CommunityData("public", mpModel=1)  # Read
 auth_v2c_write = CommunityData("private", mpModel=1)  # Write
 
 # SNMPv3 (requires pysnmp.hlapi.asyncio.UsmUserData)
-from pysnmp.hlapi.asyncio import UsmUserData, usmHMACMD5AuthProtocol, usmDESPrivProtocol  # noqa: E402
+from pysnmp.hlapi.asyncio import (
+    UsmUserData,
+    usmHMACMD5AuthProtocol,
+    usmDESPrivProtocol,
+)  # noqa: E402
 
 auth_v3 = UsmUserData(
     "username",

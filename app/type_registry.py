@@ -13,7 +13,10 @@ from app.type_recorder import TypeRecorder
 
 
 class TypeRegistry:
+    """Facade for building, accessing, and exporting the canonical type registry."""
+
     def __init__(self, compiled_mibs_dir: Optional[Path] = None):
+        """Initialize registry state and compiled-MIB source directory."""
         self.compiled_mibs_dir = compiled_mibs_dir or (
             Path(__file__).parent.parent / "compiled-mibs"
         )
@@ -27,6 +30,7 @@ class TypeRegistry:
 
     @property
     def registry(self) -> Dict[str, Any]:
+        """Return the built registry data."""
         if self._registry is None:
             raise RuntimeError(
                 "Type registry has not been built yet. Call build() after compiling MIBs."
@@ -38,5 +42,5 @@ class TypeRegistry:
         if self._registry is None:
             raise RuntimeError("Type registry has not been built yet. Call build() first.")
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(self._registry, f, indent=2)

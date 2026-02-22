@@ -21,6 +21,7 @@ def _has_failures(results: dict[str, str]) -> bool:
 
 
 def main(argv: Iterable[str] | None = None) -> int:
+    """Compile a MIB .txt file to Python using the app compiler."""
     parser = argparse.ArgumentParser(
         description="Compile a MIB .txt file to Python using the app compiler.",
     )

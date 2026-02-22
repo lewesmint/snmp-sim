@@ -18,6 +18,7 @@ from app.cli_bake_state import (
 def test_backup_schemas_existing_and_missing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """Test case for test_backup_schemas_existing_and_missing."""
     schema_dir = tmp_path / "agent-model"
     backup_base = tmp_path / "backups"
 
@@ -41,6 +42,7 @@ def test_backup_schemas_existing_and_missing(
 def test_load_mib_state_missing_and_present(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """Test case for test_load_mib_state_missing_and_present."""
     missing = tmp_path / "mib_state.json"
     state_missing = load_mib_state(missing)
     out_missing = capsys.readouterr()
@@ -58,6 +60,7 @@ def test_load_mib_state_missing_and_present(
 
 
 def test_bake_state_into_schemas_scalars_and_tables(tmp_path: Path) -> None:
+    """Test case for test_bake_state_into_schemas_scalars_and_tables."""
     schema_dir = tmp_path / "agent-model"
     mib_dir = schema_dir / "IF-MIB"
     mib_dir.mkdir(parents=True)
@@ -119,6 +122,7 @@ def test_bake_state_into_schemas_scalars_and_tables(tmp_path: Path) -> None:
 def test_bake_state_handles_index_sentinel_and_bad_schema(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """Test case for test_bake_state_handles_index_sentinel_and_bad_schema."""
     schema_dir = tmp_path / "agent-model"
     mib_dir = schema_dir / "TEST-MIB"
     bad_dir = schema_dir / "BAD-MIB"
@@ -161,6 +165,7 @@ def test_bake_state_handles_index_sentinel_and_bad_schema(
 
 
 def test_main_no_backup_bakes_and_clears_state(tmp_path: Path) -> None:
+    """Test case for test_main_no_backup_bakes_and_clears_state."""
     schema_dir = tmp_path / "agent-model"
     mib_dir = schema_dir / "SNMPv2-MIB"
     data_dir = tmp_path / "data"
@@ -203,6 +208,7 @@ def test_main_no_backup_bakes_and_clears_state(tmp_path: Path) -> None:
 
 
 def test_bake_state_legacy_index_values_format(tmp_path: Path) -> None:
+    """Test case for test_bake_state_legacy_index_values_format."""
     schema_dir = tmp_path / "agent-model"
     mib_dir = schema_dir / "LEGACY-MIB"
     mib_dir.mkdir(parents=True)
@@ -244,6 +250,7 @@ def test_bake_state_legacy_index_values_format(tmp_path: Path) -> None:
 def test_main_with_backup_enabled_creates_backup_and_clears_state(
     tmp_path: Path,
 ) -> None:
+    """Test case for test_main_with_backup_enabled_creates_backup_and_clears_state."""
     schema_dir = tmp_path / "agent-model"
     mib_dir = schema_dir / "TEST-MIB"
     backup_dir = tmp_path / "agent-model-backups"
@@ -285,6 +292,7 @@ def test_main_with_backup_enabled_creates_backup_and_clears_state(
 def test_bake_state_flat_schema_structure_and_non_dict_table_entries(
     tmp_path: Path,
 ) -> None:
+    """Test case for test_bake_state_flat_schema_structure_and_non_dict_table_entries."""
     schema_dir = tmp_path / "agent-model"
     mib_dir = schema_dir / "FLAT-MIB"
     mib_dir.mkdir(parents=True)

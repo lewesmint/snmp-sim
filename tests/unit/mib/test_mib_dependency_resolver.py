@@ -1,3 +1,5 @@
+"""Tests for test mib dependency resolver."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,6 +13,7 @@ def _write_mib(path: Path, content: str) -> None:
 
 
 def test_find_mib_source_direct_and_recursive(tmp_path: Path) -> None:
+    """Test case for test_find_mib_source_direct_and_recursive."""
     d1 = tmp_path / "mibs_reference"
     d2 = tmp_path / "mibs"
     d3 = tmp_path / "compiled-mibs"
@@ -29,6 +32,7 @@ def test_find_mib_source_direct_and_recursive(tmp_path: Path) -> None:
 
 
 def test_parse_imports_and_missing_file(tmp_path: Path) -> None:
+    """Test case for test_parse_imports_and_missing_file."""
     resolver = MibDependencyResolver([str(tmp_path)])
     mib = tmp_path / "TEST-MIB.txt"
     _write_mib(
@@ -48,6 +52,7 @@ END
 
 
 def test_get_direct_dependencies_uses_cache(tmp_path: Path) -> None:
+    """Test case for test_get_direct_dependencies_uses_cache."""
     mib_dir = tmp_path / "mibs"
     _write_mib(
         mib_dir / "A-MIB.txt",
@@ -64,6 +69,7 @@ def test_get_direct_dependencies_uses_cache(tmp_path: Path) -> None:
 
 
 def test_get_all_dependencies_transitive_and_cycle(tmp_path: Path) -> None:
+    """Test case for test_get_all_dependencies_transitive_and_cycle."""
     mib_dir = tmp_path / "mibs"
     _write_mib(
         mib_dir / "A-MIB.txt",
@@ -86,6 +92,7 @@ def test_get_all_dependencies_transitive_and_cycle(tmp_path: Path) -> None:
 
 
 def test_build_tree_and_configured_summary(tmp_path: Path) -> None:
+    """Test case for test_build_tree_and_configured_summary."""
     mib_dir = tmp_path / "mibs"
     _write_mib(
         mib_dir / "ROOT-MIB.txt",
@@ -109,6 +116,7 @@ def test_build_tree_and_configured_summary(tmp_path: Path) -> None:
 
 
 def test_mermaid_outputs(tmp_path: Path) -> None:
+    """Test case for test_mermaid_outputs."""
     mib_dir = tmp_path / "mibs"
     _write_mib(
         mib_dir / "A-MIB.txt",

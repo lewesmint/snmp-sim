@@ -1,11 +1,13 @@
 """Tests for TableRegistrar class."""
 
+import logging
+from typing import Any, Dict, Mapping
+
 import pytest
+from pytest_mock import MockerFixture
+
 from app.table_registrar import TableRegistrar
 from app.types import TypeRegistry
-from typing import Any, Dict
-from pytest_mock import MockerFixture
-import logging
 
 
 @pytest.fixture
@@ -232,6 +234,7 @@ def test_register_tables_creates_table_structure(
 def test_register_tables_skips_when_classes_missing(
     logger: logging.Logger, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_register_tables_skips_when_classes_missing."""
     type_registry: TypeRegistry = {}
     registrar = TableRegistrar(
         mib_builder=None,
@@ -250,6 +253,7 @@ def test_register_tables_skips_when_classes_missing(
 def test_register_single_table_missing_mib_json(
     table_registrar: TableRegistrar, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_register_single_table_missing_mib_json."""
     table_data = {
         "table": {"oid": [1, 2, 3]},
         "entry": {"oid": [1, 2, 3, 1], "indexes": []},
@@ -264,6 +268,7 @@ def test_register_single_table_missing_mib_json(
 def test_register_single_table_creates_row(
     table_registrar: TableRegistrar, mocker: MockerFixture
 ) -> None:
+    """Test case for test_register_single_table_creates_row."""
     mib_jsons: Dict[str, Any] = {"TEST-MIB": {"placeholder": {}}}
     table_data = {
         "table": {"oid": [1, 2, 3]},
@@ -291,6 +296,7 @@ def test_register_single_table_creates_row(
 
 
 def test_register_pysnmp_table_no_builder(logger: logging.Logger) -> None:
+    """Test case for test_register_pysnmp_table_no_builder."""
     type_registry: TypeRegistry = {}
     registrar = TableRegistrar(
         mib_builder=None,
@@ -319,6 +325,7 @@ def test_register_pysnmp_table_export_error(
     mocker: MockerFixture,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    """Test case for test_register_pysnmp_table_export_error."""
     table_registrar.mib_builder.export_symbols.side_effect = Exception("boom")
     table_data = {
         "table": {"oid": [1, 2, 3]},
@@ -345,6 +352,7 @@ def test_register_pysnmp_table_export_error(
 def test_register_row_instances_empty_columns(
     table_registrar: TableRegistrar, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_register_row_instances_empty_columns."""
     table_data = {
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {},
@@ -359,20 +367,21 @@ def test_resolve_snmp_type_import_error(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    """Test case for test_resolve_snmp_type_import_error."""
     table_registrar.mib_builder.import_symbols.side_effect = Exception("fail")
 
     original_import = __import__
 
     def fake_import(
         name: str,
-        globals: Dict[str, Any] | None = None,
-        locals: Dict[str, Any] | None = None,
+        globals_dict: Mapping[str, object] | None = None,
+        locals_dict: Mapping[str, object] | None = None,
         fromlist: tuple[str, ...] = (),
         level: int = 0,
     ) -> Any:
         if name == "pysnmp.proto":
             raise ImportError("boom")
-        return original_import(name, globals, locals, fromlist, level)
+        return original_import(name, globals_dict, locals_dict, fromlist, level)
 
     monkeypatch.setattr("builtins.__import__", fake_import)
     with caplog.at_level(logging.ERROR):
@@ -384,6 +393,7 @@ def test_resolve_snmp_type_import_error(
 def test_get_default_value_for_size_constraints(
     table_registrar: TableRegistrar,
 ) -> None:
+    """Test case for test_get_default_value_for_size_constraints."""
     col_info: Dict[str, Any] = {}
     type_info: Dict[str, Any] = {
         "constraints": [{"type": "ValueSizeConstraint", "min": 4, "max": 4}]
@@ -399,6 +409,7 @@ def test_get_default_value_for_size_constraints(
 def test_register_row_instances_handles_errors(
     table_registrar: TableRegistrar, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_register_row_instances_handles_errors."""
     table_registrar.mib_scalar_instance.side_effect = Exception("boom")
     table_data = {
         "entry": {"oid": [1, 2, 3, 1]},
@@ -418,6 +429,7 @@ def test_register_row_instances_handles_errors(
 
 
 def test_resolve_snmp_type_empty_base(table_registrar: TableRegistrar) -> None:
+    """Test case for test_resolve_snmp_type_empty_base."""
     result = table_registrar._resolve_snmp_type("", "col", "table")
     assert result is None
 

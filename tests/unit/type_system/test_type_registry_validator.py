@@ -1,3 +1,5 @@
+"""Tests for test type registry validator."""
+
 import json
 from pathlib import Path
 import pytest
@@ -12,6 +14,7 @@ from app.type_registry_validator import (
 
 
 def test_validate_type_registry_valid() -> None:
+    """Test case for test_validate_type_registry_valid."""
     registry = {
         "MyType": {
             "base_type": "Integer",
@@ -28,6 +31,7 @@ def test_validate_type_registry_valid() -> None:
 
 
 def test_validate_type_registry_missing_fields() -> None:
+    """Test case for test_validate_type_registry_missing_fields."""
     registry = {"T": {"base_type": "Integer"}}
 
     is_valid, errors = validate_type_registry(registry)
@@ -38,6 +42,7 @@ def test_validate_type_registry_missing_fields() -> None:
 
 
 def test_validate_type_registry_wrong_types() -> None:
+    """Test case for test_validate_type_registry_wrong_types."""
     registry = {
         "T": {
             "base_type": 123,
@@ -57,6 +62,7 @@ def test_validate_type_registry_wrong_types() -> None:
 
 
 def test_validate_type_registry_file_not_found(tmp_path: Path) -> None:
+    """Test case for test_validate_type_registry_file_not_found."""
     path = tmp_path / "does_not_exist.json"
 
     is_valid, errors, count = validate_type_registry_file(str(path))
@@ -67,6 +73,7 @@ def test_validate_type_registry_file_not_found(tmp_path: Path) -> None:
 
 
 def test_validate_type_registry_file_invalid_json(tmp_path: Path) -> None:
+    """Test case for test_validate_type_registry_file_invalid_json."""
     path = tmp_path / "bad.json"
     path.write_text("{ not valid json }")
 
@@ -78,6 +85,7 @@ def test_validate_type_registry_file_invalid_json(tmp_path: Path) -> None:
 
 
 def test_validate_type_registry_file_not_dict(tmp_path: Path) -> None:
+    """Test case for test_validate_type_registry_file_not_dict."""
     path = tmp_path / "list.json"
     path.write_text(json.dumps([1, 2, 3]))
 
@@ -89,6 +97,7 @@ def test_validate_type_registry_file_not_dict(tmp_path: Path) -> None:
 
 
 def test_validate_type_registry_file_open_error(tmp_path: Path) -> None:
+    """Test case for test_validate_type_registry_file_open_error."""
     # Pass a directory path to provoke an OSError when opening as a file
     is_valid, errors, count = validate_type_registry_file(str(tmp_path))
 
@@ -98,6 +107,7 @@ def test_validate_type_registry_file_open_error(tmp_path: Path) -> None:
 
 
 def test_validate_type_registry_file_valid(tmp_path: Path) -> None:
+    """Test case for test_validate_type_registry_file_valid."""
     registry = {
         "MyType": {
             "base_type": "Integer",
@@ -117,6 +127,7 @@ def test_validate_type_registry_file_valid(tmp_path: Path) -> None:
 
 
 def test_main_no_args(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test case for test_main_no_args."""
     # Test the main function with no arguments
     result = subprocess.run(
         [sys.executable, "-m", "app.type_registry_validator"],
@@ -128,6 +139,7 @@ def test_main_no_args(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_main_with_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Test case for test_main_with_valid_file."""
     # Create a valid registry file
     registry = {
         "MyType": {

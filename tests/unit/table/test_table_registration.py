@@ -1,9 +1,43 @@
 """Tests for table registration in SNMPAgent."""
 
+from typing import Any, Dict
+
 import pytest
-from app.snmp_agent import SNMPAgent
-from typing import Generator, Any, Dict
 from pytest_mock import MockerFixture
+
+from app.snmp_agent import SNMPAgent
+
+
+def _if_table_data() -> Dict[str, Any]:
+    """Return canonical IF-MIB-like single-index table data used by multiple tests."""
+    return {
+        "table": {"oid": [1, 3, 6, 1, 2, 1, 2, 2]},
+        "entry": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1]},
+        "columns": {
+            "ifIndex": {
+                "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 1],
+                "type": "Integer32",
+                "access": "not-accessible",
+            },
+            "ifDescr": {
+                "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2],
+                "type": "OctetString",
+                "access": "read-only",
+            },
+        },
+        "prefix": "ifTable",
+    }
+
+
+def _assert_basic_table_data(table_data: Dict[str, Any]) -> None:
+    """Assert table data has required top-level and per-column fields."""
+    assert "table" in table_data
+    assert "entry" in table_data
+    assert "columns" in table_data
+    for col_name, col_info in table_data["columns"].items():
+        assert "oid" in col_info, f"Column {col_name} missing OID"
+        assert "type" in col_info, f"Column {col_name} missing type"
+        assert "access" in col_info, f"Column {col_name} missing access"
 
 
 @pytest.fixture
@@ -21,43 +55,11 @@ def agent(mocker: MockerFixture) -> Any:
     setattr(agent, "MibScalar", mocker.MagicMock())
     return agent
 
-
-@pytest.fixture
-def mock_agent_methods(agent: Any, mocker: MockerFixture) -> Generator[None, None, None]:
-    """Mock internal agent methods using pytest-mock."""
-    # Only mock methods that actually exist on the agent
-    yield
-
-
 def test_single_column_index() -> None:
     """Test table structure data with a single column index."""
-    table_data: Dict[str, Any] = {
-        "table": {"oid": [1, 3, 6, 1, 2, 1, 2, 2]},
-        "entry": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1]},
-        "columns": {
-            "ifIndex": {
-                "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 1],
-                "type": "Integer32",
-                "access": "not-accessible",
-            },
-            "ifDescr": {
-                "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2],
-                "type": "OctetString",
-                "access": "read-only",
-            },
-        },
-        "prefix": "ifTable",
-    }
-    # Verify table structure is correct
-    assert "table" in table_data
-    assert "entry" in table_data
-    assert "columns" in table_data
+    table_data = _if_table_data()
+    _assert_basic_table_data(table_data)
     assert table_data["prefix"] == "ifTable"
-    # Verify columns have required fields
-    for col_name, col_info in table_data["columns"].items():
-        assert "oid" in col_info, f"Column {col_name} missing OID"
-        assert "type" in col_info, f"Column {col_name} missing type"
-        assert "access" in col_info, f"Column {col_name} missing access"
 
 
 def test_augments_inherited_index(agent: Any) -> None:
@@ -153,23 +155,8 @@ def test_multi_column_index_inherited_and_local(agent: Any) -> None:
 
 def test_table_structure_validation(agent: Any) -> None:
     """Test that table structures can be validated for proper registration."""
-    table_data: Dict[str, Any] = {
-        "table": {"oid": [1, 3, 6, 1, 2, 1, 2, 2]},
-        "entry": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1]},
-        "columns": {
-            "ifIndex": {
-                "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 1],
-                "type": "Integer32",
-                "access": "not-accessible",
-            },
-            "ifDescr": {
-                "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2],
-                "type": "OctetString",
-                "access": "read-only",
-            },
-        },
-        "prefix": "ifTable",
-    }
+    table_data = _if_table_data()
+    _assert_basic_table_data(table_data)
 
     # Validate entry OID is child of table OID
     table_oid = tuple(table_data["table"]["oid"])
@@ -226,19 +213,14 @@ def test_find_table_related_objects_integration(agent: Any, mocker: MockerFixtur
     from app.table_registrar import TableRegistrar
 
     # Simulate a MIB JSON with table structures
+    table_data = _if_table_data()
     mib_json: Dict[str, Any] = {
-        "ifTable": {"oid": [1, 3, 6, 1, 2, 1, 2, 2], "access": "not-accessible"},
-        "ifEntry": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1]},
-        "ifIndex": {
-            "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 1],
-            "type": "Integer32",
+        "ifTable": {
+            "oid": table_data["table"]["oid"],
             "access": "not-accessible",
         },
-        "ifDescr": {
-            "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2],
-            "type": "OctetString",
-            "access": "read-only",
-        },
+        "ifEntry": {"oid": table_data["entry"]["oid"]},
+        **table_data["columns"],
         "sysDescr": {
             "oid": [1, 3, 6, 1, 1, 1, 0],
             "type": "OctetString",
@@ -274,51 +256,13 @@ def test_find_table_related_objects_integration(agent: Any, mocker: MockerFixtur
     assert "sysObjectID" not in table_related, "Scalar should not be in table_related"
 
 
-def test_register_tables_workflow(agent: Any, mocker: MockerFixture) -> None:
-    """Test the table registration workflow orchestration."""
-    # Mock the type registry
+def test_table_column_type_resolution_in_registration(agent: Any, mocker: MockerFixture) -> None:
+    """Test registration resolves DisplayString through its OctetString base type."""
+    from app.table_registrar import TableRegistrar
 
-    # Mock MIB JSON with a complete table structure
-
-    # Note: _register_single_table was refactored to TableRegistrar
-    # This test validates the integration pattern works correctly
-
-    # Verify mib_builder is available for import_symbols
-    agent.mib_builder.import_symbols.assert_not_called()
-
-
-def test_register_mib_objects_orchestration(agent: Any, mocker: MockerFixture) -> None:
-    """Test that _register_mib_objects orchestrates the registration flow correctly."""
-    # Setup mocked MIB JSONs (simulating what would be loaded from files)
-    agent.mib_jsons = {
-        "SNMPv2-MIB": {
-            "sysDescr": {
-                "oid": [1, 3, 6, 1, 1, 1, 0],
-                "type": "OctetString",
-                "access": "read-only",
-            },
-            "ifTable": {"oid": [1, 3, 6, 1, 2, 1, 2, 2], "access": "not-accessible"},
-            "ifEntry": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1]},
-        }
-    }
-
-    # Verify the agent has the expected structure
-    assert agent.mib_jsons is not None
-    assert "SNMPv2-MIB" in agent.mib_jsons
-
-    # Verify mib_builder is ready
-    assert agent.mib_builder is not None
-
-    # Verify all registration helpers are available
-    assert agent.MibTable is not None
-    assert agent.MibScalar is not None
-
-
-def test_table_column_type_resolution_in_registration(agent: Any) -> None:
-    """Test that table registration resolves column types correctly."""
     type_registry: Dict[str, Dict[str, Any]] = {
-        "Integer32": {"base_type": "Integer", "display_hint": "d"},
-        "OctetString": {"base_type": "OctetString", "display_hint": "255a"},
+        "Integer32": {"base_type": "Integer32"},
+        "OctetString": {"base_type": "OctetString"},
         "DisplayString": {
             "base_type": "OctetString",
             "display_hint": "255a",
@@ -326,20 +270,24 @@ def test_table_column_type_resolution_in_registration(agent: Any) -> None:
         },
     }
 
-    # Table column that uses a TEXTUAL-CONVENTION
-    column_data: Dict[str, Dict[str, Any]] = {
-        "ifDescr": {
-            "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2],
-            "type": "DisplayString",
-            "access": "read-only",
-        }
-    }
+    table_data = _if_table_data()
+    table_data["entry"]["indexes"] = ["ifIndex"]
+    table_data["columns"]["ifDescr"]["type"] = "DisplayString"
 
-    col_type = column_data["ifDescr"]["type"]
-    assert col_type in type_registry, f"Column type {col_type} should be in type registry"
-
-    type_info = type_registry[col_type]
-    assert type_info["base_type"] == "OctetString", (
-        "DisplayString should resolve to OctetString base"
+    mib_jsons: Dict[str, Dict[str, Any]] = {"TEST-MIB": {"ifTable": {"rows": []}}}
+    registrar = TableRegistrar(
+        mib_builder=agent.mib_builder,
+        mib_scalar_instance=agent.MibScalar,
+        mib_table=agent.MibTable,
+        mib_table_row=agent.MibTableRow,
+        mib_table_column=agent.MibTableColumn,
+        logger=agent.logger,
+        type_registry=type_registry,
     )
-    assert "display_hint" in type_info, "Type info should include display_hint"
+
+    mocker.patch.object(registrar, "_register_pysnmp_table")
+    registrar.register_single_table("TEST-MIB", "ifTable", table_data, type_registry, mib_jsons)
+
+    rows = mib_jsons["TEST-MIB"]["ifTable"]["rows"]
+    assert rows and rows[0]["ifIndex"] == 1
+    assert rows[0]["ifDescr"] == "Unset"

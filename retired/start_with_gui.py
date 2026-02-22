@@ -23,7 +23,9 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8800)
     parser.add_argument("--agent-cmd", default="python run_agent_with_rest.py")
-    parser.add_argument("--gui-delay", type=int, default=5, help="Seconds to wait before launching GUI")
+    parser.add_argument(
+        "--gui-delay", type=int, default=5, help="Seconds to wait before launching GUI"
+    )
     args = parser.parse_args()
 
     # Start the agent
@@ -40,7 +42,9 @@ def main() -> None:
         except Exception:
             pass
 
-    subprocess.Popen(args.agent_cmd.split(), stdout=agent_log.open("w"), stderr=subprocess.STDOUT)
+    subprocess.Popen(
+        args.agent_cmd.split(), stdout=agent_log.open("w"), stderr=subprocess.STDOUT
+    )
 
     try:
         print(f"Waiting {args.gui_delay} seconds for agent to start initializing...")
@@ -48,16 +52,22 @@ def main() -> None:
 
         print("Launching GUI (will auto-connect after 5 seconds)...")
         gui_cmd = [
-            sys.executable, "ui/snmp_gui.py",
-            "--host", args.host,
-            "--port", str(args.port),
+            sys.executable,
+            "ui/snmp_gui.py",
+            "--host",
+            args.host,
+            "--port",
+            str(args.port),
             "--autoconnect",
-            "--connect-delay", "5",
-            "--silent-errors"
+            "--connect-delay",
+            "5",
+            "--silent-errors",
         ]
         subprocess.Popen(gui_cmd)
 
-        print("GUI launched. See logs/gui.log for GUI log output and logs/snmp-agent.log for agent logs.")
+        print(
+            "GUI launched. See logs/gui.log for GUI log output and logs/snmp-agent.log for agent logs."
+        )
     except KeyboardInterrupt:
         pass
 

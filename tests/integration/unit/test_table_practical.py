@@ -212,7 +212,16 @@ def test_table_oid_walkthrough() -> None:
     # Verify the OID structure is correct
     for oid, expected_value in getnext_walk:
         assert len(oid) == 10, f"OID {oid} should have 10 parts"
-        assert oid[:8] == (1, 3, 6, 1, 99, 1, 1, 1), f"OID {oid} should be in testEntry subtree"
+        assert oid[:8] == (
+            1,
+            3,
+            6,
+            1,
+            99,
+            1,
+            1,
+            1,
+        ), f"OID {oid} should be in testEntry subtree"
 
     print("Expected GETNEXT walk through table:")
     for oid, value in getnext_walk:

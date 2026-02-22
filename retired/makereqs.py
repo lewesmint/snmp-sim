@@ -46,7 +46,9 @@ def _is_excluded(path: Path, exclude_dirs: set[str]) -> bool:
     return bool(parts.intersection(exclude_dirs))
 
 
-def find_imported_top_level_modules(project_root: Path, exclude_dirs: set[str]) -> set[str]:
+def find_imported_top_level_modules(
+    project_root: Path, exclude_dirs: set[str]
+) -> set[str]:
     modules: set[str] = set()
 
     for py_file in project_root.rglob("*.py"):
@@ -126,7 +128,9 @@ def main() -> int:
             print(exc.stderr or str(exc), file=sys.stderr)
             return 1
 
-    imported_modules = find_imported_top_level_modules(cfg.project_root, cfg.exclude_dirs)
+    imported_modules = find_imported_top_level_modules(
+        cfg.project_root, cfg.exclude_dirs
+    )
     module_to_dist = build_module_to_distribution_map()
 
     required_dists: set[str] = set()
@@ -158,7 +162,9 @@ def main() -> int:
     if unresolved_modules:
         # Many of these will be stdlib (json, pathlib, typing, etc.) or local packages.
         # We print them so you can spot any third-party misses or odd imports.
-        print("\nImports not mapped to installed distributions (often stdlib or local code):")
+        print(
+            "\nImports not mapped to installed distributions (often stdlib or local code):"
+        )
         for mod in sorted(unresolved_modules):
             print(f"  {mod}")
 

@@ -52,7 +52,11 @@ OLD-mock-behaviour/
 # Test and temporary files
 .coverage
 /tmp/
+.tmp*/
 *.log.bak
 mock-behaviour/
 logs/
 data/
+walks/
+agent-model-backups/
+agent-model/*

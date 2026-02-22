@@ -94,10 +94,14 @@ def test_register_scalars_defaults_and_sysuptime_deprecated() -> None:
 
 
 def test_shutdown_closes_dispatcher_and_exits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test case for test_shutdown_closes_dispatcher_and_exits."""
     called: dict[str, object] = {}
 
     class DummyDispatcher:
+        """Test helper class for DummyDispatcher."""
+
         def close_dispatcher(self) -> None:
+            """Test case for close_dispatcher."""
             called["closed"] = True
 
     dispatcher = DummyDispatcher()
@@ -123,6 +127,7 @@ def test_shutdown_closes_dispatcher_and_exits(monkeypatch: pytest.MonkeyPatch) -
 def test_setup_signal_handlers_registers_signals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test case for test_setup_signal_handlers_registers_signals."""
     registrations: list[int] = []
 
     def fake_signal(sig: int, _handler: object) -> None:
@@ -145,6 +150,7 @@ def test_setup_signal_handlers_registers_signals(
 def test_run_aborts_when_type_registry_validation_fails(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_run_aborts_when_type_registry_validation_fails."""
     agent = SNMPAgent(preloaded_model={})
 
     # Make validate_type_registry_file return a failing result
@@ -169,6 +175,7 @@ def test_run_aborts_when_type_registry_validation_fails(
 
 
 def test_register_mib_objects_creates_registrar_and_calls_register_all() -> None:
+    """Test case for test_register_mib_objects_creates_registrar_and_calls_register_all."""
     agent = SNMPAgent(preloaded_model={})
     # Ensure there's no existing registrar
     if hasattr(agent, "mib_registrar"):
@@ -178,11 +185,14 @@ def test_register_mib_objects_creates_registrar_and_calls_register_all() -> None
     mod = types.ModuleType("app.mib_registrar")
 
     class DummyRegistrar:
+        """Test helper class for DummyRegistrar."""
+
         def __init__(self, **kwargs: Any) -> None:
             self.kwargs = kwargs
             self.registered = False
 
         def register_all_mibs(self, mib_jsons: dict[str, Any]) -> None:
+            """Test case for register_all_mibs."""
             self.registered = True
             self._mib_jsons = mib_jsons
 
@@ -206,8 +216,12 @@ def test_register_mib_objects_creates_registrar_and_calls_register_all() -> None
 
 
 def test_decode_value_delegates_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test case for test_decode_value_delegates_and_fallback."""
+
     # Case 1: delegation
     class DummyReg:
+        """Test helper class for DummyReg."""
+
         def __init__(self, **_kwargs: Any) -> None:
             pass
 
@@ -224,7 +238,11 @@ def test_decode_value_delegates_and_fallback(monkeypatch: pytest.MonkeyPatch) ->
 
     # Case 2: fallback when MibRegistrar cannot be instantiated
     class BadMod:
+        """Test helper class for BadMod."""
+
         class MibRegistrar:
+            """Test helper class for MibRegistrar."""
+
             def __init__(self, *_args: Any, **_kwargs: Any) -> None:
                 raise RuntimeError("bad")
 
@@ -240,6 +258,7 @@ def test_decode_value_delegates_and_fallback(monkeypatch: pytest.MonkeyPatch) ->
 def test_setup_snmpEngine_loads_compiled_modules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_setup_snmpEngine_loads_compiled_modules."""
     # Prepare a fake compiled-mibs directory with one module
     compiled_dir = tmp_path / "compiled-mibs"
     compiled_dir.mkdir()
@@ -247,10 +266,13 @@ def test_setup_snmpEngine_loads_compiled_modules(
 
     # Fake pysnmp.engine
     class FakeEngine:
+        """Test helper class for FakeEngine."""
+
         def __init__(self) -> None:
             self._dispatcher: Any = None
 
         def register_transport_dispatcher(self, dispatcher: Any) -> None:
+            """Test case for register_transport_dispatcher."""
             self._dispatcher = dispatcher
 
     monkeypatch.setitem(
@@ -261,11 +283,15 @@ def test_setup_snmpEngine_loads_compiled_modules(
 
     # Fake AsyncioDispatcher
     class FakeDispatcher:
+        """Test helper class for FakeDispatcher."""
+
         def register_recv_callback(self, cb: Any, recvId: Any = None) -> None:
+            """Test case for register_recv_callback."""
             # Engine will call this; just store a reference
             self._recv_cb = cb
 
         def register_timer_callback(self, cb: Any) -> None:
+            """Test case for register_timer_callback."""
             # Engine will call this too; store it for completeness
             self._timer_cb = cb
 
@@ -277,17 +303,22 @@ def test_setup_snmpEngine_loads_compiled_modules(
 
     # Fake context and mib builder
     class FakeMibBuilder:
+        """Test helper class for FakeMibBuilder."""
+
         def __init__(self) -> None:
             self.sources: list[Any] = []
             self.loaded: list[str] = []
 
         def add_mib_sources(self, src: Any) -> None:
+            """Test case for add_mib_sources."""
             self.sources.append(src)
 
         def load_modules(self, *mods: str) -> None:
+            """Test case for load_modules."""
             self.loaded.extend(mods)
 
         def import_symbols(self, *args: Any, **kwargs: Any) -> tuple[str, ...]:
+            """Test case for import_symbols."""
             return (
                 "MibScalar",
                 "MibScalarInstance",
@@ -329,15 +360,19 @@ def test_setup_snmpEngine_loads_compiled_modules(
 def test_setup_snmpEngine_handles_no_compiled_modules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_setup_snmpEngine_handles_no_compiled_modules."""
     compiled_dir = tmp_path / "compiled-mibs-absent"
     compiled_dir.mkdir()
 
     # Reuse fake engine and context but no compiled modules present
     class FakeEngine2:
+        """Test helper class for FakeEngine2."""
+
         def __init__(self) -> None:
             pass
 
         def register_transport_dispatcher(self, dispatcher: Any) -> None:
+            """Test case for register_transport_dispatcher."""
             pass
 
     monkeypatch.setitem(
@@ -347,10 +382,14 @@ def test_setup_snmpEngine_handles_no_compiled_modules(
     )
 
     class FakeDispatcher2:
+        """Test helper class for FakeDispatcher2."""
+
         def register_recv_callback(self, cb: Any, recvId: Any = None) -> None:
+            """Test case for register_recv_callback."""
             self._recv_cb = cb
 
         def register_timer_callback(self, cb: Any) -> None:
+            """Test case for register_timer_callback."""
             self._timer_cb = cb
 
     monkeypatch.setitem(
@@ -360,17 +399,22 @@ def test_setup_snmpEngine_handles_no_compiled_modules(
     )
 
     class FakeMibBuilder:
+        """Test helper class for FakeMibBuilder."""
+
         def __init__(self) -> None:
             self.sources: list[Any] = []
             self.loaded: list[str] = []
 
         def add_mib_sources(self, src: Any) -> None:
+            """Test case for add_mib_sources."""
             self.sources.append(src)
 
         def load_modules(self, *mods: str) -> None:
+            """Test case for load_modules."""
             self.loaded.extend(mods)
 
         def import_symbols(self, *args: Any, **kwargs: Any) -> tuple[str, ...]:
+            """Test case for import_symbols."""
             return (
                 "MibScalar",
                 "MibScalarInstance",
@@ -404,11 +448,17 @@ def test_setup_snmpEngine_handles_no_compiled_modules(
 
 
 def test_setup_transport_adds_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test case for test_setup_transport_adds_transport."""
     calls: dict[str, object] = {}
 
     class FakeUdp:
+        """Test helper class for FakeUdp."""
+
         class UdpAsyncioTransport:
+            """Test helper class for UdpAsyncioTransport."""
+
             def open_server_mode(self, addr: tuple[str, int]) -> str:
+                """Test case for open_server_mode."""
                 calls["addr"] = addr
                 return "socket"
 
@@ -446,9 +496,12 @@ def test_setup_transport_adds_transport(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_setup_responders_registers_responders(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test case for test_setup_responders_registers_responders."""
     calls = []
 
     class Dummy:
+        """Test helper class for Dummy."""
+
         def __init__(self, engine: Any, context: Any) -> None:
             calls.append((engine, context))
 

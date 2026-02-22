@@ -157,6 +157,8 @@ class TestUnwrapSyntax:
         """Should return syntax_type for both if no base found"""
 
         class UnknownType:
+            """Test helper class for UnknownType."""
+
             __name__ = "UnknownType"
 
         syntax = UnknownType()
@@ -188,6 +190,8 @@ class TestExtractDisplayHint:
         """Should extract from class displayHint attribute"""
 
         class CustomType:
+            """Test helper class for CustomType."""
+
             displayHint = "255a"
 
         syntax = CustomType()
@@ -211,6 +215,8 @@ class TestExtractDisplayHint:
         """Should skip blank instance displayHint and use class value"""
 
         class CustomType:
+            """Test helper class for CustomType."""
+
             displayHint = "1x:"
 
         syntax = CustomType()
@@ -297,9 +303,14 @@ class TestExtractEnumsList:
         """Should extract from class namedValues if instance has none"""
 
         class CustomType:
+            """Test helper class for CustomType."""
+
             class NamedValues:
+                """Test helper class for NamedValues."""
+
                 @staticmethod
                 def items() -> List[tuple[str, int]]:
+                    """Test case for items."""
                     return [("true", 1), ("false", 2)]
 
             namedValues = NamedValues()
@@ -395,6 +406,8 @@ class TestExtractConstraints:
         """Should extract constraints from subtypeSpec"""
 
         class FakeSubtypeSpec:
+            """Test helper class for FakeSubtypeSpec."""
+
             def __repr__(self) -> str:
                 return "ValueRangeConstraint object, consts 1, 100"
 
@@ -410,6 +423,8 @@ class TestExtractConstraints:
         """Should not set repr_text for empty constraint markers"""
 
         class FakeSubtypeSpec:
+            """Test helper class for FakeSubtypeSpec."""
+
             def __repr__(self) -> str:
                 return "<ConstraintsIntersection object>"
 
@@ -530,9 +545,13 @@ class TestIsTextualConventionSymbol:
         """Should return True for class with TextualConvention in MRO"""
 
         class TextualConvention:
+            """Test helper class for TextualConvention."""
+
             pass
 
         class DisplayString(TextualConvention):
+            """Test helper class for DisplayString."""
+
             pass
 
         result = TypeRecorder._is_textual_convention_symbol(DisplayString)
@@ -542,6 +561,8 @@ class TestIsTextualConventionSymbol:
         """Should return False for class without TextualConvention"""
 
         class RegularClass:
+            """Test helper class for RegularClass."""
+
             pass
 
         result = TypeRecorder._is_textual_convention_symbol(RegularClass)
@@ -551,12 +572,16 @@ class TestIsTextualConventionSymbol:
         """Should return False if MRO access raises errors"""
 
         class BadMeta(type):
+            """Test helper class for BadMeta."""
+
             def __getattribute__(self, name: str) -> Any:
                 if name == "__mro__":
                     raise AttributeError("boom")
                 return super().__getattribute__(name)
 
         class BadClass(metaclass=BadMeta):
+            """Test helper class for BadClass."""
+
             pass
 
         result = TypeRecorder._is_textual_convention_symbol(BadClass)
@@ -1090,6 +1115,8 @@ class TestBuild:
         recorder = TypeRecorder(compiled_dir)
 
         class DummySubtype:
+            """Test helper class for DummySubtype."""
+
             def __init__(self, text: str) -> None:
                 self._text = text
 
@@ -1097,31 +1124,43 @@ class TestBuild:
                 return self._text
 
         class NamedValues:
+            """Test helper class for NamedValues."""
+
             @staticmethod
             def items() -> list[tuple[str, int]]:
+                """Test case for items."""
                 return [("one", 1)]
 
         class Integer32:
+            """Test helper class for Integer32."""
+
             def __init__(self) -> None:
                 self.subtypeSpec = DummySubtype("ValueSizeConstraint object, consts 4, 4")
                 self.namedValues = NamedValues()
 
         class CustomType:
+            """Test helper class for CustomType."""
+
             def __init__(self) -> None:
                 self.subtypeSpec = DummySubtype("<ConstraintsIntersection object>")
                 self.namedValues = None
 
             def getSyntax(self) -> object:
+                """Test case for getSyntax."""
                 return Integer32()
 
             def getDisplayHint(self) -> str:
+                """Test case for getDisplayHint."""
                 return "1x:"
 
         class Symbol:
+            """Test helper class for Symbol."""
+
             def __init__(self) -> None:
                 self._syntax = CustomType()
 
             def getSyntax(self) -> object:
+                """Test case for getSyntax."""
                 return self._syntax
 
         base_entry: TypeEntryDict = {
@@ -1175,6 +1214,8 @@ class TestBuild:
         recorder = TypeRecorder(compiled_dir)
 
         class DummySubtype:
+            """Test helper class for DummySubtype."""
+
             def __init__(self, text: str) -> None:
                 self._text = text
 
@@ -1182,23 +1223,31 @@ class TestBuild:
                 return self._text
 
         class Integer32:
+            """Test helper class for Integer32."""
+
             def __init__(self) -> None:
                 self.subtypeSpec = DummySubtype("<ConstraintsIntersection object>")
                 self.namedValues = None
 
         class CustomType:
+            """Test helper class for CustomType."""
+
             def __init__(self) -> None:
                 self.subtypeSpec = DummySubtype("<ConstraintsIntersection object>")
                 self.namedValues = None
 
             def getSyntax(self) -> object:
+                """Test case for getSyntax."""
                 return Integer32()
 
         class Symbol:
+            """Test helper class for Symbol."""
+
             def __init__(self) -> None:
                 self._syntax = CustomType()
 
             def getSyntax(self) -> object:
+                """Test case for getSyntax."""
                 return self._syntax
 
         custom_entry: TypeEntryDict = {
@@ -1236,6 +1285,8 @@ class TestBuild:
         recorder = TypeRecorder(compiled_dir)
 
         class DummySubtype:
+            """Test helper class for DummySubtype."""
+
             def __init__(self, text: str) -> None:
                 self._text = text
 
@@ -1243,14 +1294,19 @@ class TestBuild:
                 return self._text
 
         class CustomNoBase:
+            """Test helper class for CustomNoBase."""
+
             def __init__(self) -> None:
                 self.subtypeSpec = DummySubtype("ValueRangeConstraint object, consts 0, 10")
 
         class Symbol:
+            """Test helper class for Symbol."""
+
             def __init__(self) -> None:
                 self._syntax = CustomNoBase()
 
             def getSyntax(self) -> object:
+                """Test case for getSyntax."""
                 return self._syntax
 
         custom_entry: TypeEntryDict = {

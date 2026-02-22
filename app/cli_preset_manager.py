@@ -15,6 +15,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from app.model_paths import AGENT_MODEL_BACKUPS_DIR, AGENT_MODEL_DIR, AGENT_MODEL_PRESETS_DIR
+
 
 def list_presets(preset_base: Path) -> list[str]:
     """List all available presets."""
@@ -135,17 +137,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--schema-dir",
-        default="agent-model",
+        default=str(AGENT_MODEL_DIR),
         help="Directory containing MIB schema subdirectories (default: agent-model)",
     )
     parser.add_argument(
         "--preset-dir",
-        default="agent-model-presets",
+        default=str(AGENT_MODEL_PRESETS_DIR),
         help="Directory for presets (default: agent-model-presets)",
     )
     parser.add_argument(
         "--backup-dir",
-        default="agent-model-backups",
+        default=str(AGENT_MODEL_BACKUPS_DIR),
         help="Directory for backups (default: agent-model-backups)",
     )
     parser.add_argument(
@@ -177,9 +179,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.action == "save":
         return save_preset(schema_dir, preset_base, args.preset_name)
-    elif args.action == "load":
+    if args.action == "load":
         return load_preset(schema_dir, preset_base, args.preset_name, backup_base, args.no_backup)
-    elif args.action == "delete":
+    if args.action == "delete":
         return delete_preset(preset_base, args.preset_name)
 
     return 0

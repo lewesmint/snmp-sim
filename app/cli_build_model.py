@@ -8,6 +8,9 @@ import sys
 from typing import Any, Dict, cast
 
 from app.app_config import AppConfig
+from app.cli_model_common import print_model_summary as _print_model_summary
+from app.cli_model_common import write_model_output
+from app.model_paths import AGENT_MODEL_DIR
 
 
 def load_mib_schema(mib_name: str, schema_dir: str) -> Dict[str, Any] | None:
@@ -38,35 +41,18 @@ def build_internal_model(mibs: list[str], schema_dir: str) -> Dict[str, Dict[str
 
 def print_model_summary(model: Dict[str, Dict[str, Any]]) -> None:
     """Print a summary of the loaded model."""
-    print(f"Loaded {len(model)} MIB schemas:")
-    for mib, schema in model.items():
-        # Handle both old flat structure and new {"objects": ..., "traps": ...} structure
-        if isinstance(schema, dict) and "objects" in schema:
-            objects = schema["objects"]
-        else:
-            objects = schema
-
-        object_count = len(objects) if isinstance(objects, dict) else 0
-        table_count = (
-            sum(
-                1
-                for obj in objects.values()
-                if isinstance(obj, dict) and obj.get("type") == "MibTable"
-            )
-            if isinstance(objects, dict)
-            else 0
-        )
-        print(f"  {mib}: {object_count} objects, {table_count} tables")
+    _print_model_summary(model)
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Build an internal model from configured MIB schemas."""
     parser = argparse.ArgumentParser(
         description="Build an internal model from configured MIB schemas. "
         "Loads schema.json files and creates a combined in-memory model."
     )
     parser.add_argument(
         "--schema-dir",
-        default="agent-model",
+        default=str(AGENT_MODEL_DIR),
         help="Directory containing MIB schema subdirectories (default: agent-model)",
     )
     parser.add_argument(
@@ -97,12 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     print_model_summary(model)
 
     if args.output:
-        try:
-            with open(args.output, "w", encoding="utf-8") as f:
-                json.dump(model, f, indent=2)
-            print(f"Model saved to {args.output}")
-        except IOError as e:
-            print(f"Error: Failed to save model: {e}", file=sys.stderr)
+        if not write_model_output(model, args.output):
             return 1
 
     print("Internal model built successfully.")

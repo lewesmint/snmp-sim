@@ -5,7 +5,11 @@ from typing import Any
 
 import pytest
 
-from app.default_value_plugins import DefaultValuePluginRegistry, get_registry, get_default_value
+from app.default_value_plugins import (
+    DefaultValuePluginRegistry,
+    get_registry,
+    get_default_value,
+)
 import importlib.util
 
 from app.plugin_loader import load_plugins_from_directory
@@ -24,7 +28,9 @@ class _FakeMibBuilder:
         raise Exception("not found")
 
 
-def test_default_value_registry_gets_first_non_none(caplog: pytest.LogCaptureFixture) -> None:
+def test_default_value_registry_gets_first_non_none(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     registry = DefaultValuePluginRegistry()
 
     def bad_plugin(_type_info: dict[str, Any], _symbol_name: str) -> Any:
@@ -45,7 +51,9 @@ def test_default_value_registry_gets_first_non_none(caplog: pytest.LogCaptureFix
     assert "good" in registry.list_plugins()
 
 
-def test_default_value_registry_duplicate_and_none(caplog: pytest.LogCaptureFixture) -> None:
+def test_default_value_registry_duplicate_and_none(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     registry = DefaultValuePluginRegistry()
 
     def none_plugin(_type_info: dict[str, Any], _symbol_name: str) -> Any:
@@ -67,8 +75,7 @@ def test_load_plugins_from_directory(tmp_path: Path) -> None:
     plugin_dir = tmp_path / "plugins"
     plugin_dir.mkdir()
     plugin_file = plugin_dir / "test_plugin.py"
-    plugin_file.write_text(
-        """
+    plugin_file.write_text("""
 from app.default_value_plugins import register_plugin
 
 @register_plugin('test_plugin')
@@ -76,8 +83,7 @@ def _plugin(type_info, symbol_name):
     if symbol_name == 'sysDescr':
         return 'plugin-value'
     return None
-""".strip()
-    )
+""".strip())
 
     loaded = load_plugins_from_directory(str(plugin_dir))
     assert "plugins.test_plugin" in loaded
@@ -90,13 +96,17 @@ def _plugin(type_info, symbol_name):
         del sys.modules[module_name]
 
 
-def test_load_plugins_from_directory_bad_spec(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_plugins_from_directory_bad_spec(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     plugin_dir = tmp_path / "plugins"
     plugin_dir.mkdir()
     plugin_file = plugin_dir / "bad_spec.py"
     plugin_file.write_text("x = 1")
 
-    monkeypatch.setattr(importlib.util, "spec_from_file_location", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        importlib.util, "spec_from_file_location", lambda *_args, **_kwargs: None
+    )
 
     with caplog.at_level(logging.WARNING):
         loaded = load_plugins_from_directory(str(plugin_dir))
@@ -104,7 +114,9 @@ def test_load_plugins_from_directory_bad_spec(tmp_path: Path, caplog: pytest.Log
     assert "Could not load plugin spec" in caplog.text
 
 
-def test_load_plugins_from_directory_exec_error(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_load_plugins_from_directory_exec_error(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     plugin_dir = tmp_path / "plugins"
     plugin_dir.mkdir()
     plugin_file = plugin_dir / "boom.py"
@@ -116,7 +128,9 @@ def test_load_plugins_from_directory_exec_error(tmp_path: Path, caplog: pytest.L
     assert "Failed to load plugin" in caplog.text
 
 
-def test_load_plugins_from_directory_missing_dir(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_load_plugins_from_directory_missing_dir(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     missing_dir = tmp_path / "does_not_exist"
     with caplog.at_level(logging.WARNING):
         loaded = load_plugins_from_directory(str(missing_dir))
@@ -124,7 +138,9 @@ def test_load_plugins_from_directory_missing_dir(tmp_path: Path, caplog: pytest.
     assert "does not exist" in caplog.text
 
 
-def test_load_plugins_from_directory_not_dir(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_load_plugins_from_directory_not_dir(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     file_path = tmp_path / "not_a_dir"
     file_path.write_text("noop")
     with caplog.at_level(logging.WARNING):
@@ -133,7 +149,9 @@ def test_load_plugins_from_directory_not_dir(tmp_path: Path, caplog: pytest.LogC
     assert "is not a directory" in caplog.text
 
 
-def test_type_registry_build_and_export(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_type_registry_build_and_export(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     class FakeRecorder:
         def __init__(self, _path: Path) -> None:
             self.registry = {"1.2.3": {"name": "sysDescr"}}
@@ -172,7 +190,9 @@ def test_snmp_type_initializer_default_and_custom() -> None:
     col_info = {"type": "Integer32"}
     assert initializer.initialize(col_info) == 0
 
-    def custom_init(_col_info: dict[str, Any], _initializer: SNMPTypeInitializer) -> Any:
+    def custom_init(
+        _col_info: dict[str, Any], _initializer: SNMPTypeInitializer
+    ) -> Any:
         return "custom"
 
     SNMPTypeInitializer.register_initializer("CustomType", custom_init)
@@ -196,13 +216,21 @@ def test_snmp_type_initializer_get_type_class_sources() -> None:
     assert initializer_none.get_type_class("") is None
 
 
-def test_snmp_type_initializer_get_type_class_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_snmp_type_initializer_get_type_class_import_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     mib_builder = _FakeMibBuilder()
     initializer = SNMPTypeInitializer(mib_builder, {})
 
     original_import = __import__
 
-    def fake_import(name: str, globals: Any = None, locals: Any = None, fromlist: tuple[str, ...] | list[str] = (), level: int = 0) -> Any:
+    def fake_import(
+        name: str,
+        globals: Any = None,
+        locals: Any = None,
+        fromlist: tuple[str, ...] | list[str] = (),
+        level: int = 0,
+    ) -> Any:
         if name == "pysnmp.proto":
             raise ImportError("boom")
         return original_import(name, globals, locals, fromlist, level)
@@ -236,7 +264,9 @@ def test_snmp_type_initializer_error_paths() -> None:
     logger = logging.getLogger("test")
     initializer = SNMPTypeInitializer(mib_builder, {}, logger=logger)
 
-    def failing_initializer(_col_info: dict[str, Any], _initializer: SNMPTypeInitializer) -> Any:
+    def failing_initializer(
+        _col_info: dict[str, Any], _initializer: SNMPTypeInitializer
+    ) -> Any:
         raise RuntimeError("boom")
 
     SNMPTypeInitializer.register_initializer("FailType", failing_initializer)

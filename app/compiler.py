@@ -1,14 +1,18 @@
+"""MIB compilation utilities using pysmi."""
+
 import os
-from app.app_logger import AppLogger
 import re
-from typing import List, Any, cast
+from typing import Any, List, cast
+
+from pysmi.codegen.pysnmp import PySnmpCodeGen
+from pysmi.compiler import MibCompiler as PysmiMibCompiler
+from pysmi.parser.smi import parserFactory
 from pysmi.reader.localfile import FileReader
 from pysmi.searcher import PyFileSearcher
 from pysmi.writer import PyFileWriter
-from pysmi.parser.smi import parserFactory
-from pysmi.codegen.pysnmp import PySnmpCodeGen
-from pysmi.compiler import MibCompiler as PysmiMibCompiler
+
 from app.app_config import AppConfig
+from app.app_logger import AppLogger
 
 logger = AppLogger.get(__name__)
 

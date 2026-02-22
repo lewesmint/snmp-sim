@@ -50,8 +50,6 @@ tests/
 - `test_snmp_agent_additional.py` - Extended agent tests
 - `test_agent_errors.py` - Error handling
 - `test_snmp_table_responder.py` - Table response handling
-- `test_snmp_transport_unit.py` - Transport layer
-- `test_snmp_transport_more.py` - Additional transport tests
 - `test_my_pysnmp_agent.py` - PySNMP agent integration
 
 #### CLI Tests (`unit/cli/`)

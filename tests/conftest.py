@@ -1,3 +1,5 @@
+"""Tests for conftest."""
+
 import sys
 import os
 import json

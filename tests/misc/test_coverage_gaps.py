@@ -12,7 +12,6 @@ from app.snmp_agent import SNMPAgent
 from app.type_recorder import TypeRecorder
 from app.generator import BehaviourGenerator
 
-
 # ============================================================================
 # table_registrar.py coverage gaps (86% -> 95%+)
 # ============================================================================
@@ -265,6 +264,8 @@ def test_type_recorder_build_handles_symbol_with_no_getsyntax(tmp_path: Path, mo
 
     # Create a symbol without getSyntax
     class BadSymbol:
+        """Test helper class for BadSymbol."""
+
         pass
 
     mock_mib_builder = mocker.MagicMock()
@@ -291,7 +292,10 @@ def test_type_recorder_build_getsyntax_raises_exception(tmp_path: Path, mocker: 
     mock_glob = mocker.patch.object(Path, "glob")
 
     class FailingSymbol:
+        """Test helper class for FailingSymbol."""
+
         def getSyntax(self) -> None:
+            """Test case for getSyntax."""
             raise Exception("getSyntax failed")
 
     mock_mib_builder = mocker.MagicMock()
@@ -318,7 +322,10 @@ def test_type_recorder_build_getsyntax_returns_none(tmp_path: Path, mocker: Any)
     mock_glob = mocker.patch.object(Path, "glob")
 
     class NoneSymbol:
+        """Test helper class for NoneSymbol."""
+
         def getSyntax(self) -> None:
+            """Test case for getSyntax."""
             return None
 
     mock_mib_builder = mocker.MagicMock()
@@ -348,15 +355,22 @@ def test_generator_extract_mib_info_handles_nonetype_syntax_name(
     generator = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
 
     class NoneTypeSymbol:
+        """Test helper class for NoneTypeSymbol."""
+
         def __init__(self) -> None:
             self.__class__.__name__ = "TestSymbol"
 
         def getName(self) -> tuple[int, ...]:
+            """Test case for getName."""
             return (1, 2, 3)
 
         def getSyntax(self) -> Any:
+            """Test case for getSyntax."""
+
             # Create a fake syntax class with __name__ == 'NoneType'
             class NoneTypeSyntax:
+                """Test helper class for NoneTypeSyntax."""
+
                 __name__ = "NoneType"
 
                 def __mro__(self) -> list[Any]:
@@ -365,15 +379,20 @@ def test_generator_extract_mib_info_handles_nonetype_syntax_name(
             return NoneTypeSyntax()
 
         def getMaxAccess(self) -> str:
+            """Test case for getMaxAccess."""
             return "read-only"
 
     class FakeBuilder:
+        """Test helper class for FakeBuilder."""
+
         mibSymbols = {"TEST-MIB": {"testSym": NoneTypeSymbol()}}
 
         def add_mib_sources(self, _source: Any) -> None:
+            """Test case for add_mib_sources."""
             pass
 
         def load_modules(self, _name: str) -> None:
+            """Test case for load_modules."""
             pass
 
     monkeypatch.setattr("app.generator.builder.MibBuilder", lambda: FakeBuilder())
@@ -407,10 +426,14 @@ def test_generator_table_index_extraction_exception(
 
     # Make MibBuilder raise exception
     class FailingBuilder:
+        """Test helper class for FailingBuilder."""
+
         def add_mib_sources(self, _source: Any) -> None:
+            """Test case for add_mib_sources."""
             pass
 
         def load_modules(self, _name: str) -> None:
+            """Test case for load_modules."""
             raise Exception("Load failed")
 
     monkeypatch.setattr("app.generator.builder.MibBuilder", lambda: FailingBuilder())

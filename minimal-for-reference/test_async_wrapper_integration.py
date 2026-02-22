@@ -8,6 +8,7 @@ To verify the agent is running:
 Note: These tests are separate from unit tests (test_async_wrapper.py)
 which use mocked PySNMP libraries.
 """
+
 # pyright: reportCallIssue=false
 
 import unittest

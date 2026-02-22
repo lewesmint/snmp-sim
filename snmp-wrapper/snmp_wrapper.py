@@ -32,7 +32,6 @@ from pysnmp.hlapi.asyncio import (
     next_cmd,
 )
 
-
 VarBinds = Sequence[ObjectType]
 GetResult = Tuple[Any, Any, Any, Tuple[ObjectType, ...]]
 

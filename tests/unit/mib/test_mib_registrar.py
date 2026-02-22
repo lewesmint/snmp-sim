@@ -30,10 +30,10 @@ class TestMibRegistrarInitialization:
         )
 
         assert registrar.mib_builder == mock_mib_builder
-        assert registrar.MibScalarInstance == mock_scalar_instance
-        assert registrar.MibTable == mock_table
-        assert registrar.MibTableRow == mock_table_row
-        assert registrar.MibTableColumn == mock_table_column
+        assert registrar.mib_scalar_instance_cls == mock_scalar_instance
+        assert registrar.mib_table_cls == mock_table
+        assert registrar.mib_table_row_cls == mock_table_row
+        assert registrar.mib_table_column_cls == mock_table_column
         assert registrar.logger == mock_logger
         assert registrar.start_time == start_time
 

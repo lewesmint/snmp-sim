@@ -24,7 +24,7 @@ Generated: 2026-02-07 (Updated 2026-02-07)
 | `app/plugin_loader.py` | **76%** | Loader error paths and plugin filtering | 3 | 🐎 |
 | `app/api.py`, `app/__init__.py`, and several `cli_*` modules | 0-62% | Small modules with missing unit tests for CLI behavior, API helpers | 4 | 🧪 |
 
-> Files already at or above 95%: `app/app_config.py`, `app/behaviour_store.py`, `app/compiler.py`, `app/mib_metadata.py`, `app/mib_object.py`, `app/mib_registry.py`, `app/mib_table.py`, `app/snmp_transport.py`, `app/table_registrar.py`, `app/trap_sender.py`, `app/type_recorder.py`, `app/types.py` — keep them green.
+> Files already at or above 95%: `app/app_config.py`, `app/behaviour_store.py`, `app/compiler.py`, `app/mib_metadata.py`, `app/mib_object.py`, `app/mib_registry.py`, `app/mib_table.py`, `app/table_registrar.py`, `app/trap_sender.py`, `app/type_recorder.py`, `app/types.py` — keep them green.
 
 ---
 

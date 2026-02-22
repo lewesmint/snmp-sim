@@ -16,9 +16,13 @@ from app.trap_sender import TrapSender, VarBindSpec
 
 
 def main(argv: Iterable[str] | None = None) -> int:
+    """Send a MIB-defined SNMP notification (trap or inform)."""
     parser = argparse.ArgumentParser(
         description="Send a MIB-defined SNMP notification (trap or inform)",
-        epilog="Example: %(prog)s --mib SNMPv2-MIB --notification coldStart --host localhost --port 162",
+        epilog=(
+            "Example: %(prog)s --mib SNMPv2-MIB --notification "
+            "coldStart --host localhost --port 162"
+        ),
     )
     parser.add_argument("--mib", required=True, help="MIB name, e.g. SNMPv2-MIB or IF-MIB")
     parser.add_argument(
@@ -26,7 +30,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         required=True,
         help="Notification name, e.g. coldStart or linkDown",
     )
-    parser.add_argument("--host", default="localhost", help="Destination host (default: localhost)")
+    parser.add_argument(
+        "--host",
+        default="localhost",
+        help="Destination host (default: localhost)",
+    )
     parser.add_argument("--port", type=int, default=162, help="Destination port (default: 162)")
     parser.add_argument(
         "--community", default="public", help="SNMP community string (default: public)"

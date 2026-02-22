@@ -87,10 +87,10 @@ def setup_fake_mib_classes(reg: MibRegistrar) -> None:
             self.max_access = access
             return self
 
-    reg.MibTable = FakeTable
-    reg.MibTableRow = FakeRow
-    reg.MibTableColumn = FakeColumn
-    reg.MibScalarInstance = FakeInstance
+    reg.mib_table_cls = FakeTable
+    reg.mib_table_row_cls = FakeRow
+    reg.mib_table_column_cls = FakeColumn
+    reg.mib_scalar_instance_cls = FakeInstance
 
 
 def test_find_table_related_objects() -> None:
@@ -150,10 +150,10 @@ def test_build_table_symbols_basic(monkeypatch: Any) -> None:
             return self
 
     # Monkeypatch registrar types and helpers
-    reg.MibTable = FakeTable
-    reg.MibTableRow = FakeRow
-    reg.MibTableColumn = FakeColumn
-    reg.MibScalarInstance = FakeInstance
+    reg.mib_table_cls = FakeTable
+    reg.mib_table_row_cls = FakeRow
+    reg.mib_table_column_cls = FakeColumn
+    reg.mib_scalar_instance_cls = FakeInstance
 
     # simplify _get_pysnmp_type to return int type for instantiation
     def fake_get_pysnmp_type(self: MibRegistrar, base_type: str) -> Any:
@@ -223,7 +223,7 @@ def test_build_mib_symbols_scalar_creation_with_none_value(monkeypatch: Any) -> 
 
     reg = make_registrar()
     reg.mib_builder = FakeBuilder()
-    reg.MibScalarInstance = DummyScalarInstance
+    reg.mib_scalar_instance_cls = DummyScalarInstance
 
     mib_json: dict[str, dict[str, Any]] = {
         "foo": {
@@ -256,7 +256,7 @@ def test_read_only_scalar_allows_internal_change(monkeypatch: Any) -> None:
             self.maxAccess = a
             return self
 
-    reg.MibScalarInstance = FakeScalarInstance
+    reg.mib_scalar_instance_cls = FakeScalarInstance
 
     def fake_get_pysnmp_type(self: MibRegistrar, _base_type: str) -> Any:
         return int
@@ -751,14 +751,14 @@ def test_build_table_symbols_column_creation_error_handling(monkeypatch: Any, ca
     caplog.set_level("WARNING")
 
     # Mock MibTableColumn to raise exception for bad column
-    original_mib_table_column = reg.MibTableColumn
+    original_mib_table_column = reg.mib_table_column_cls
 
     def failing_mib_table_column(*args: Any, **kwargs: Any) -> Any:
         if len(args) > 0 and args[0] == (1, 2, 3, 2, 1, 2):  # bad column OID
             raise ValueError("Bad column")
         return original_mib_table_column(*args, **kwargs)
 
-    reg.MibTableColumn = failing_mib_table_column
+    reg.mib_table_column_cls = failing_mib_table_column
 
     mib_json = {
         "testTable": {"oid": [1, 2, 3, 2]},
@@ -793,7 +793,7 @@ def test_build_table_symbols_row_instance_creation_error_handling(
     caplog.set_level("WARNING")
 
     # Mock MibScalarInstance to raise exception for certain calls
-    original_mib_scalar_instance = reg.MibScalarInstance
+    original_mib_scalar_instance = reg.mib_scalar_instance_cls
     call_count = 0
 
     def failing_mib_scalar_instance(*args: Any, **kwargs: Any) -> Any:
@@ -803,7 +803,7 @@ def test_build_table_symbols_row_instance_creation_error_handling(
             raise ValueError("Bad instance")
         return original_mib_scalar_instance(*args, **kwargs)
 
-    reg.MibScalarInstance = failing_mib_scalar_instance
+    reg.mib_scalar_instance_cls = failing_mib_scalar_instance
 
     mib_json = {
         "testTable": {
@@ -1004,10 +1004,10 @@ def test_build_table_symbols_write_wrappers_readwrite_and_readonly(
             self.name = tuple(oid) + tuple(idx)
             self.syntax = val
 
-    reg.MibTable = FakeTable
-    reg.MibTableRow = FakeRow
-    reg.MibTableColumn = FakeColumn
-    reg.MibScalarInstance = FakeInstance
+    reg.mib_table_cls = FakeTable
+    reg.mib_table_row_cls = FakeRow
+    reg.mib_table_column_cls = FakeColumn
+    reg.mib_scalar_instance_cls = FakeInstance
 
     monkeypatch.setattr(MibRegistrar, "_get_pysnmp_type", lambda self, _t: FakeValue)
     import app.mib_registrar as mr
@@ -1089,10 +1089,10 @@ def test_build_table_symbols_uses_row_index_fallback(monkeypatch: Any) -> None:
             self.name = tuple(oid) + tuple(idx)
             self.syntax = val
 
-    reg.MibTable = FakeTable
-    reg.MibTableRow = FakeRow
-    reg.MibTableColumn = FakeColumn
-    reg.MibScalarInstance = FakeInstance
+    reg.mib_table_cls = FakeTable
+    reg.mib_table_row_cls = FakeRow
+    reg.mib_table_column_cls = FakeColumn
+    reg.mib_scalar_instance_cls = FakeInstance
 
     monkeypatch.setattr(MibRegistrar, "_get_pysnmp_type", lambda self, _t: FakeValue)
     import app.mib_registrar as mr
@@ -1201,7 +1201,7 @@ def test_populate_sysor_table_persists_and_merges_existing_schema(
         lambda self, mib, mj, tr: called.setdefault("mib", mib),
     )
 
-    mib_jsons = {
+    mib_jsons: dict[str, Any] = {
         "SNMPv2-MIB": {
             "objects": {
                 "sysORTable": {"rows": []},
@@ -1256,7 +1256,7 @@ def test_populate_sysor_table_persist_warning_on_write_failure(
 
     monkeypatch.setattr(Path, "open", fake_path_open)
 
-    mib_jsons = {"SNMPv2-MIB": {"objects": {"sysORTable": {"rows": []}}}}
+    mib_jsons: dict[str, Any] = {"SNMPv2-MIB": {"objects": {"sysORTable": {"rows": []}}}}
     reg.populate_sysor_table(mib_jsons)
 
     assert "Could not persist schema to disk" in caplog.text
@@ -1284,7 +1284,7 @@ def test_build_mib_symbols_scalar_write_wrappers_paths(monkeypatch: Any) -> None
         def writeCommit(self, *args: Any, **kwargs: Any) -> None:
             raise RuntimeError("original write failure")
 
-    reg.MibScalarInstance = FakeScalar
+    reg.mib_scalar_instance_cls = FakeScalar
     monkeypatch.setattr(MibRegistrar, "_get_pysnmp_type", lambda self, _t: FakeValue)
     import app.mib_registrar as mr
 

@@ -1,3 +1,5 @@
+"""Tests for test snmp table responder."""
+
 from typing import Any, Dict
 
 import pytest
@@ -6,6 +8,7 @@ from app.snmp_table_responder import SNMPTableResponder
 
 
 def make_basic_behavior() -> Dict[str, Dict[str, Any]]:
+    """Test case for make_basic_behavior."""
     # Simple MIB describing a table with one column and two rows
     return {
         "TEST-MIB": {
@@ -29,6 +32,7 @@ def make_basic_behavior() -> Dict[str, Dict[str, Any]]:
 
 
 def test_table_map_and_detection() -> None:
+    """Test case for test_table_map_and_detection."""
     behavior = make_basic_behavior()
     r = SNMPTableResponder(behavior, mib_builder=None)
 
@@ -41,6 +45,7 @@ def test_table_map_and_detection() -> None:
 
 
 def test_get_table_info_direct_and_within() -> None:
+    """Test case for test_get_table_info_direct_and_within."""
     behavior = make_basic_behavior()
     r = SNMPTableResponder(behavior, mib_builder=None)
 
@@ -59,6 +64,7 @@ def test_get_table_info_direct_and_within() -> None:
 
 
 def test_all_oids_and_get_oid_value_and_getnext() -> None:
+    """Test case for test_all_oids_and_get_oid_value_and_getnext."""
     behavior = make_basic_behavior()
     r = SNMPTableResponder(behavior, mib_builder=None)
 
@@ -85,6 +91,7 @@ def test_all_oids_and_get_oid_value_and_getnext() -> None:
 
 
 def test_short_oid_and_missing_entry_cases() -> None:
+    """Test case for test_short_oid_and_missing_entry_cases."""
     # Table present but entry definition missing
     behavior = {
         "TEST-MIB": {
@@ -103,6 +110,7 @@ def test_short_oid_and_missing_entry_cases() -> None:
 
 
 def test_handle_wrappers() -> None:
+    """Test case for test_handle_wrappers."""
     behavior = make_basic_behavior()
     r = SNMPTableResponder(behavior, mib_builder=None)
 

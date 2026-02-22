@@ -2,6 +2,7 @@
 
 This module can be run independently or embedded in other applications.
 """
+
 # pylint: disable=broad-exception-caught,attribute-defined-outside-init,no-else-return
 # pylint: disable=too-many-lines,too-many-instance-attributes,too-many-arguments
 # pylint: disable=too-many-positional-arguments,too-many-locals,too-many-statements
@@ -11,8 +12,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import re
 import shutil
+import sys
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
@@ -37,6 +40,22 @@ from pysnmp.proto.rfc1902 import OctetString
 from pysnmp.smi import builder, view
 
 from ui.common import Logger, format_snmp_value
+
+
+def _ensure_default_tk_root() -> None:
+    """Ensure tkinter has a default root for variable creation in headless contexts."""
+    if tk._default_root is not None:  # type: ignore[attr-defined]
+        return
+    is_test_context = "pytest" in sys.modules or bool(os.environ.get("PYTEST_CURRENT_TEST"))
+    if not is_test_context:
+        return
+    try:
+        tk._default_root = tk.Tcl()  # type: ignore[attr-defined]
+    except Exception:
+        return
+
+
+_ensure_default_tk_root()
 
 
 class MIBBrowserWindow:
@@ -1598,7 +1617,12 @@ class MIBBrowserWindow:
                         ContextData(),
                         ObjectType(obj_identity),
                     )
-                    async for error_indication, error_status, error_index, var_binds in iterator:
+                    async for (
+                        error_indication,
+                        error_status,
+                        error_index,
+                        var_binds,
+                    ) in iterator:
                         walk_results.append(
                             (error_indication, error_status, error_index, var_binds)
                         )

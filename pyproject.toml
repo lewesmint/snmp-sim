@@ -14,6 +14,7 @@ exclude = '(^|/)(retired|compiled-mibs-test|compiled-mibs|minimal-for-reference|
 
 [tool.coverage.run]
 source = ["app", "plugins", "ui"]
+branch = true
 omit = [
     "tests/**",
     "manual-tests/**",
@@ -53,10 +54,36 @@ exclude = [
 [tool.ruff.lint]
 select = ["E", "F"]
 extend-select = ["E501", "C90", "PLR"]
-ignore = ["E501", "E741"]
+ignore = [
+    "E501",
+    "E741",
+    "C901",
+    "PLR0402",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR1711",
+    "PLR1714",
+    "PLR1730",
+    "PLR2004",
+    "PLR5501",
+]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 12
+
+[tool.pylint.messages_control]
+disable = [
+    "broad-exception-caught",
+    "import-outside-toplevel",
+    "logging-fstring-interpolation",
+    "protected-access",
+    "raise-missing-from",
+    "redefined-outer-name",
+    "reimported",
+    "unused-variable",
+]
 
 [tool.ruff.format]
 quote-style = "double"

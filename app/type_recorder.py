@@ -1,3 +1,7 @@
+"""Build a canonical SNMP type registry by introspecting compiled MIB symbols."""
+
+# pylint: disable=broad-exception-caught,redefined-outer-name,reimported
+
 from __future__ import annotations
 
 import argparse
@@ -25,7 +29,6 @@ import pysnmp.smi.builder as _builder
 
 from app.types import JsonDict
 
-
 # True ASN.1 base types (RFC 2578)
 # These are the only fundamental types in ASN.1:
 TRUE_ASN1_BASE_TYPES: set[str] = {
@@ -51,10 +54,15 @@ _EXPECTED_SNMPV2_SMI_TYPES: set[str] = {
 
 
 class HasGetSyntax(Protocol):
-    def getSyntax(self) -> object: ...
+    """Protocol for syntax objects exposing a PySNMP-style getSyntax method."""
+
+    def getSyntax(self) -> object:  # pylint: disable=invalid-name
+        """Return the underlying syntax object for this SNMP value type."""
 
 
 class TypeEntry(TypedDict):
+    """Normalized metadata schema for one type entry in the generated registry."""
+
     base_type: Optional[str]
     display_hint: Optional[str]
     size: Optional[JsonDict]
@@ -63,11 +71,15 @@ class TypeEntry(TypedDict):
     enums: Optional[List[JsonDict]]
     used_by: List[str]
     defined_in: Optional[str]
-    abstract: bool  # True for abstract/structural types (CHOICE, aliases) not used directly in OBJECT-TYPEs
+    # True for abstract/structural types (CHOICE, aliases)
+    # not used directly in OBJECT-TYPEs.
+    abstract: bool
 
 
 # Move all static/class methods and logic to TypeRecorder
 class TypeRecorder:
+    """Recorder that discovers and normalizes type metadata from compiled MIBs."""
+
     _SIZE_RE = re.compile(r"ValueSizeConstraint object, consts (\d+), (\d+)")
     _RANGE_RE = re.compile(r"ValueRangeConstraint object, consts ([-\d]+), ([-\d]+)")
     _SINGLE_RE = re.compile(r"SingleValueConstraint object, consts ([\d,\s-]+)")
@@ -77,6 +89,7 @@ class TypeRecorder:
         compiled_dir: Path,
         progress_callback: Optional[Callable[[str], None]] = None,
     ):
+        """Create a recorder configured for a compiled-MIB directory."""
         self.compiled_dir = compiled_dir
         self._registry: Optional[Dict[str, TypeEntry]] = None
         self._snmpv2_smi_types: Optional[set[str]] = None
@@ -93,8 +106,6 @@ class TypeRecorder:
         Includes all types, even abstract ones (they'll be flagged as abstract separately).
         """
         try:
-            import inspect
-
             # Import from pysnmp.proto.rfc1902 which contains the compiled SNMPv2-SMI types
             discovered = set()
             for name in dir(_rfc1902):
@@ -128,6 +139,7 @@ class TypeRecorder:
 
     @staticmethod
     def safe_call_zero_arg(obj: object, name: str) -> Optional[object]:
+        """Call a named zero-argument callable on an object if available and safe."""
         fn_obj = getattr(obj, name, None)
         if not callable(fn_obj):
             return None
@@ -187,6 +199,7 @@ class TypeRecorder:
 
     @staticmethod
     def extract_display_hint(syntax: object) -> Optional[str]:
+        """Extract a display hint string from syntax metadata when present."""
         hint = TypeRecorder.safe_call_zero_arg(syntax, "getDisplayHint")
         if hint is not None:
             text = str(hint).strip()
@@ -242,6 +255,7 @@ class TypeRecorder:
     def parse_constraints_from_repr(
         cls, subtype_repr: str
     ) -> Tuple[Optional[JsonDict], List[JsonDict]]:
+        """Parse subtypeSpec repr text into normalized size/constraint structures."""
         constraints: List[JsonDict] = []
         size_ranges: List[Tuple[int, int]] = []
         exact_sizes: List[int] = []
@@ -296,6 +310,7 @@ class TypeRecorder:
     def extract_constraints(
         cls, syntax: object
     ) -> Tuple[Optional[JsonDict], List[JsonDict], Optional[str]]:
+        """Extract normalized size/range constraints and optional repr text."""
         subtype_spec = getattr(syntax, "subtypeSpec", None)
         if subtype_spec is None:
             return None, [], None
@@ -413,7 +428,7 @@ class TypeRecorder:
             True if the type is abstract
         """
         # Check by name for known abstract types
-        KNOWN_ABSTRACT = {
+        known_abstract = {
             "ObjectSyntax",  # ASN.1 CHOICE type
             "SimpleSyntax",  # ASN.1 CHOICE type
             "ApplicationSyntax",  # ASN.1 CHOICE type
@@ -422,7 +437,7 @@ class TypeRecorder:
             "Null",  # Not used in SNMP
         }
 
-        if type_name in KNOWN_ABSTRACT:
+        if type_name in known_abstract:
             return True
 
         # Check if it's a CHOICE type by inspecting MRO
@@ -699,9 +714,7 @@ class TypeRecorder:
             out.append(c)
         return out
 
-    def build(self) -> None:
-        types: Dict[str, TypeEntry] = self._seed_base_types()
-
+    def _load_mib_symbols(self) -> Mapping[str, Mapping[str, object]]:
         snmp_engine = cast(Any, _engine.SnmpEngine())
         mib_builder = cast(Any, snmp_engine.get_mib_builder())
         mib_builder.add_mib_sources(_builder.DirMibSource(str(self.compiled_dir)))
@@ -714,227 +727,226 @@ class TypeRecorder:
             except Exception:
                 continue
 
-        mib_symbols = cast(Mapping[str, Mapping[str, object]], mib_builder.mibSymbols)
+        return cast(Mapping[str, Mapping[str, object]], mib_builder.mibSymbols)
+
+    def _process_textual_convention_symbol(
+        self,
+        types: Dict[str, TypeEntry],
+        mib_name: str,
+        sym_name: str,
+        sym_obj: object,
+    ) -> bool:
+        if not self._is_textual_convention_symbol(sym_obj):
+            return False
+
+        tc_class = cast(type, sym_obj)
+
+        base_type_name: Optional[str] = None
+        snmp_types = self.get_snmpv2_smi_types()
+        for base in tc_class.__mro__[1:]:
+            if base.__name__ in snmp_types:
+                base_type_name = base.__name__
+                break
+
+        display_hint = getattr(tc_class, "displayHint", None)
+        if display_hint and not isinstance(display_hint, str):
+            display_hint = None
+
+        subtype_spec = getattr(tc_class, "subtypeSpec", None)
+        tc_size: Optional[JsonDict] = None
+        tc_constraints: List[JsonDict] = []
+        tc_constraints_repr: Optional[str] = None
+        if subtype_spec is not None:
+            subtype_repr = repr(subtype_spec)
+            tc_size, tc_constraints = self.parse_constraints_from_repr(subtype_repr)
+            if tc_constraints or tc_size:
+                tc_constraints_repr = subtype_repr
+
+        if sym_name not in types:
+            types[sym_name] = {
+                "base_type": base_type_name,
+                "display_hint": cast(Optional[str], display_hint),
+                "size": tc_size,
+                "constraints": tc_constraints,
+                "constraints_repr": tc_constraints_repr,
+                "enums": None,
+                "used_by": [],
+                "defined_in": mib_name,
+                "abstract": False,
+            }
+        elif types[sym_name]["defined_in"] is None:
+            types[sym_name]["defined_in"] = mib_name
+            if types[sym_name]["base_type"] is None and base_type_name is not None:
+                types[sym_name]["base_type"] = base_type_name
+
+        return True
+
+    def _derive_symbol_metadata(
+        self,
+        syntax: object,
+        base_obj: object,
+        base_type_out: Optional[str],
+        allow_metadata: bool,
+    ) -> tuple[
+        Optional[str],
+        Optional[List[JsonDict]],
+        Optional[JsonDict],
+        List[JsonDict],
+        Optional[str],
+    ]:
+        if not allow_metadata:
+            return None, None, None, [], None
+
+        display = self.extract_display_hint(syntax)
+        size, constraints, constraints_repr = self.extract_constraints(syntax)
+
+        if base_obj is not syntax:
+            size2, constraints2, repr2 = self.extract_constraints(base_obj)
+            if not constraints and constraints2:
+                size, constraints, constraints_repr = size2, constraints2, repr2
+
+        enums = self.extract_enums_list(syntax)
+        if enums is None and base_obj is not syntax:
+            enums = self.extract_enums_list(base_obj)
+
+        size, constraints, constraints_repr = self._canonicalise_constraints(
+            size=size,
+            constraints=constraints,
+            enums=enums,
+            constraints_repr=constraints_repr,
+            drop_repr=(base_type_out is not None),
+        )
+
+        return display, enums, size, constraints, constraints_repr
+
+    def _process_object_type_symbol(
+        self,
+        types: Dict[str, TypeEntry],
+        mib_name: str,
+        sym_name: str,
+        sym_obj: object,
+    ) -> None:
+        if not hasattr(sym_obj, "getSyntax"):
+            return
+
+        snmp_obj = cast(HasGetSyntax, sym_obj)
+        try:
+            syntax = snmp_obj.getSyntax()
+        except Exception:
+            return
+
+        if syntax is None:
+            return
+
+        t_name, base_type_raw, base_obj = self.unwrap_syntax(syntax)
+        base_type_out: Optional[str] = base_type_raw if base_type_raw else None
+        if (
+            base_type_out is not None
+            and base_type_out in types
+            and types[base_type_out].get("base_type") is None
+        ):
+            base_type_out = None
+
+        is_tc_def = self._is_textual_convention_symbol(sym_obj)
+        is_application_type = t_name in self.get_snmpv2_smi_types()
+        allow_metadata = is_tc_def or not is_application_type
+
+        display, enums, size, constraints, constraints_repr = self._derive_symbol_metadata(
+            syntax=syntax,
+            base_obj=base_obj,
+            base_type_out=base_type_out,
+            allow_metadata=allow_metadata,
+        )
+
+        if base_type_out is not None and constraints:
+            constraints = self._drop_redundant_base_value_range(
+                base_type=base_type_out,
+                constraints=constraints,
+                types=types,
+            )
+            constraints = self._drop_dominated_value_ranges(constraints)
+            if base_type_out is not None:
+                constraints = self._drop_redundant_base_range_for_enums(
+                    base_type=base_type_out,
+                    constraints=constraints,
+                    enums=enums,
+                    types=types,
+                )
+
+        is_abstract = self._is_abstract_type(t_name, syntax)
+
+        entry = types.setdefault(
+            t_name,
+            {
+                "base_type": base_type_out,
+                "display_hint": display,
+                "size": size,
+                "constraints": constraints,
+                "constraints_repr": constraints_repr,
+                "enums": enums,
+                "used_by": [],
+                "defined_in": None,
+                "abstract": is_abstract,
+            },
+        )
+
+        if is_tc_def and entry["defined_in"] is None:
+            entry["defined_in"] = mib_name
+
+        if entry["base_type"] is None and base_type_out is not None:
+            entry["base_type"] = base_type_out
+
+        if allow_metadata:
+            if entry["display_hint"] is None and display is not None:
+                entry["display_hint"] = display
+            if entry["size"] is None and size is not None:
+                entry["size"] = size
+            if entry["enums"] is None and enums is not None:
+                entry["enums"] = enums
+            if entry["constraints_repr"] is None and constraints_repr is not None:
+                entry["constraints_repr"] = constraints_repr
+            if not entry["constraints"] and constraints:
+                entry["constraints"] = constraints
+
+        entry["used_by"].append(f"{mib_name}::{sym_name}")
+
+    def build(self) -> None:
+        """Build the full type registry by scanning all loaded compiled MIB symbols."""
+        types: Dict[str, TypeEntry] = self._seed_base_types()
+
+        mib_symbols = self._load_mib_symbols()
 
         for mib_name, symbols in mib_symbols.items():
             if self._progress_callback:
                 self._progress_callback(mib_name)
 
             for sym_name, sym_obj in symbols.items():
-                # First, check if this is a TEXTUAL-CONVENTION class definition
-                is_tc_class = self._is_textual_convention_symbol(sym_obj)
-
-                if is_tc_class:
-                    # This is a TC class definition - extract type info from the class itself
-                    tc_class = cast(type, sym_obj)
-
-                    # Infer base type from the class MRO
-                    base_type_name: Optional[str] = None
-                    snmp_types = self.get_snmpv2_smi_types()
-                    for base in tc_class.__mro__[1:]:  # Skip the TC class itself
-                        if base.__name__ in snmp_types:
-                            base_type_name = base.__name__
-                            break
-
-                    # Try to get display hint and constraints from class attributes
-                    display_hint = getattr(tc_class, "displayHint", None)
-                    if display_hint and not isinstance(display_hint, str):
-                        display_hint = None
-
-                    # Get subtypeSpec from class if available
-                    subtype_spec = getattr(tc_class, "subtypeSpec", None)
-                    tc_size: Optional[JsonDict] = None
-                    tc_constraints: List[JsonDict] = []
-                    tc_constraints_repr: Optional[str] = None
-                    if subtype_spec is not None:
-                        subtype_repr = repr(subtype_spec)
-                        tc_size, tc_constraints = self.parse_constraints_from_repr(subtype_repr)
-                        # Set constraints_repr if there are actual constraints
-                        if tc_constraints or tc_size:
-                            tc_constraints_repr = subtype_repr
-
-                    if sym_name not in types:
-                        # TEXTUAL-CONVENTIONs are concrete types, not abstract
-                        types[sym_name] = {
-                            "base_type": base_type_name,
-                            "display_hint": display_hint,
-                            "size": tc_size,
-                            "constraints": tc_constraints,
-                            "constraints_repr": tc_constraints_repr,
-                            "enums": None,
-                            "used_by": [],
-                            "defined_in": mib_name,
-                            "abstract": False,
-                        }
-                    elif types[sym_name]["defined_in"] is None:
-                        # Update the defined_in field if not already set
-                        types[sym_name]["defined_in"] = mib_name
-                        # Also update base_type if not set
-                        if types[sym_name]["base_type"] is None and base_type_name is not None:
-                            types[sym_name]["base_type"] = base_type_name
-                    continue
-
-                # Now process OBJECT-TYPE instances
-                if not hasattr(sym_obj, "getSyntax"):
-                    continue
-
-                snmp_obj = cast(HasGetSyntax, sym_obj)
-                try:
-                    syntax = snmp_obj.getSyntax()
-                except Exception:
-                    continue
-
-                if syntax is None:
-                    continue
-
-                t_name, base_type_raw, base_obj = self.unwrap_syntax(syntax)
-
-                # Keep base_type even if it equals type name - plugins need it to match types.
-                # For SNMP application types (Counter32, Integer32, etc.), base_type should be the same as t_name.
-                # For TEXTUAL-CONVENTIONs, base_type will differ from t_name.
-                base_type_out: Optional[str] = base_type_raw if base_type_raw else None
-                # If the base_type_out refers to a seeded type that itself has no
-                # canonical base_type (eg ...: None), treat the base_type_out as
-                # effectively None so we don't drop useful constraints_repr.
-                if (
-                    base_type_out is not None
-                    and base_type_out in types
-                    and types[base_type_out].get("base_type") is None
+                if self._process_textual_convention_symbol(
+                    types=types,
+                    mib_name=mib_name,
+                    sym_name=sym_name,
+                    sym_obj=sym_obj,
                 ):
-                    base_type_out = None
+                    continue
 
-                is_tc_def = self._is_textual_convention_symbol(sym_obj)
-                is_application_type = t_name in self.get_snmpv2_smi_types()
-
-                allow_metadata = is_tc_def or not is_application_type
-
-                display: Optional[str]
-                enums: Optional[List[JsonDict]]
-                size: Optional[JsonDict]
-                constraints: List[JsonDict]
-                constraints_repr: Optional[str]
-
-                if not allow_metadata:
-                    display = None
-                    enums = None
-                    size = None
-                    constraints = []
-                    constraints_repr = None
-                else:
-                    if base_type_out is None:
-                        # For types whose base is unknown/None, we still capture
-                        # display hints from the syntax if available and also
-                        # inherit constraints/enums from the base_obj when
-                        # syntax itself does not provide them.
-                        display = self.extract_display_hint(syntax)
-
-                        size, constraints, constraints_repr = self.extract_constraints(syntax)
-
-                        # If the syntax itself has no constraints, but the base
-                        # object (from getSyntax()) does, inherit those.
-                        if base_obj is not syntax:
-                            size2, constraints2, repr2 = self.extract_constraints(base_obj)
-                            if not constraints and constraints2:
-                                size, constraints, constraints_repr = (
-                                    size2,
-                                    constraints2,
-                                    repr2,
-                                )
-
-                        # Extract enums from syntax or fallback to base object
-                        enums = self.extract_enums_list(syntax)
-                        if enums is None and base_obj is not syntax:
-                            enums = self.extract_enums_list(base_obj)
-                    else:
-                        display = self.extract_display_hint(syntax)
-
-                        size, constraints, constraints_repr = self.extract_constraints(syntax)
-                        if base_obj is not syntax:
-                            size2, constraints2, repr2 = self.extract_constraints(base_obj)
-                            if not constraints and constraints2:
-                                size, constraints, constraints_repr = (
-                                    size2,
-                                    constraints2,
-                                    repr2,
-                                )
-
-                        enums = self.extract_enums_list(syntax)
-                        if enums is None and base_obj is not syntax:
-                            enums = self.extract_enums_list(base_obj)
-
-                    size, constraints, constraints_repr = self._canonicalise_constraints(
-                        size=size,
-                        constraints=constraints,
-                        enums=enums,
-                        constraints_repr=constraints_repr,
-                        drop_repr=(base_type_out is not None),
-                    )
-
-                if base_type_out is not None and constraints:
-                    constraints = self._drop_redundant_base_value_range(
-                        base_type=base_type_out,
-                        constraints=constraints,
-                        types=types,
-                    )
-                    constraints = self._drop_dominated_value_ranges(constraints)
-                    if base_type_out is not None:
-                        constraints = self._drop_redundant_base_range_for_enums(
-                            base_type=base_type_out,
-                            constraints=constraints,
-                            enums=enums,
-                            types=types,
-                        )
-
-                # Check if this type is abstract (CHOICE types, aliases, etc.)
-                is_abstract = self._is_abstract_type(t_name, syntax)
-
-                entry = types.setdefault(
-                    t_name,
-                    {
-                        "base_type": base_type_out,
-                        "display_hint": display,
-                        "size": size,
-                        "constraints": constraints,
-                        "constraints_repr": constraints_repr,
-                        "enums": enums,
-                        "used_by": [],
-                        "defined_in": None,
-                        "abstract": is_abstract,
-                    },
+                self._process_object_type_symbol(
+                    types=types,
+                    mib_name=mib_name,
+                    sym_name=sym_name,
+                    sym_obj=sym_obj,
                 )
-
-                # If this is a TEXTUAL-CONVENTION definition, record where it's defined
-                if is_tc_def and entry["defined_in"] is None:
-                    entry["defined_in"] = mib_name
-
-                # Update base_type if it's not set (for TC placeholders)
-                if entry["base_type"] is None and base_type_out is not None:
-                    entry["base_type"] = base_type_out
-
-                if allow_metadata:
-                    if entry["display_hint"] is None and display is not None:
-                        entry["display_hint"] = display
-                    if entry["size"] is None and size is not None:
-                        entry["size"] = size
-                    if entry["enums"] is None and enums is not None:
-                        entry["enums"] = enums
-
-                    if entry["constraints_repr"] is None and constraints_repr is not None:
-                        entry["constraints_repr"] = constraints_repr
-                    if not entry["constraints"] and constraints:
-                        entry["constraints"] = constraints
-
-                entry["used_by"].append(f"{mib_name}::{sym_name}")
 
         self._registry = types
 
     @property
     def registry(self) -> Dict[str, TypeEntry]:
+        """Return the built registry, raising if build has not run yet."""
         if self._registry is None:
             raise RuntimeError("TypeRecorder: build() must be called before accessing registry.")
         return self._registry
 
     def export_to_json(self, path: str = "types.json") -> None:
+        """Persist the current registry to a JSON file at the provided path."""
         if self._registry is None:
             raise RuntimeError("TypeRecorder: build() must be called before export.")
         with open(path, "w", encoding="utf-8") as fh:
@@ -942,6 +954,7 @@ class TypeRecorder:
 
 
 def main() -> None:
+    """CLI entry point for generating a type registry JSON from compiled MIBs."""
     parser = argparse.ArgumentParser()
     parser.add_argument("compiled_dir", type=Path)
     parser.add_argument("-o", "--output", type=Path, default=Path("types.json"))

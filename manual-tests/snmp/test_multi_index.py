@@ -43,8 +43,12 @@ ip_parts = registrar._expand_index_value_to_oid_components("192.168.1.1", "IpAdd
 port_parts = registrar._expand_index_value_to_oid_components(8080, "Unsigned32")
 combined = ip_parts + port_parts
 print(f"  Combined OID suffix: .{'.'.join(str(x) for x in combined)}")
-assert combined == (192, 168, 1, 1, 8080), (
-    f"Expected (192, 168, 1, 1, 8080), got {combined}"
-)
+assert combined == (
+    192,
+    168,
+    1,
+    1,
+    8080,
+), f"Expected (192, 168, 1, 1, 8080), got {combined}"
 
 print("\n✅ All tests passed!")

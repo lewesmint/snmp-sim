@@ -1,3 +1,5 @@
+"""Tests for test type recorder build."""
+
 import types
 from pathlib import Path
 from typing import Any
@@ -8,14 +10,20 @@ from app.type_recorder import TypeRecorder
 
 
 def make_fake_builder(mib_symbols: dict[str, dict[str, object]]) -> Any:
+    """Test case for make_fake_builder."""
+
     class FakeBuilder:
+        """Test helper class for FakeBuilder."""
+
         def __init__(self, symbols: dict[str, dict[str, object]]):
             self.mibSymbols = symbols
 
         def add_mib_sources(self, src: object) -> None:
+            """Test case for add_mib_sources."""
             pass
 
         def load_modules(self, *args: object) -> None:
+            """Test case for load_modules."""
             pass
 
     return FakeBuilder(mib_symbols)
@@ -24,18 +32,28 @@ def make_fake_builder(mib_symbols: dict[str, dict[str, object]]) -> Any:
 def test_build_with_textual_convention_and_scalar(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Test case for test_build_with_textual_convention_and_scalar."""
+
     # Prepare fake TextualConvention base class so _is_textual_convention_symbol detects it
     class TextualConvention:
+        """Test helper class for TextualConvention."""
+
         pass
 
     class MyTC(TextualConvention):
+        """Test helper class for MyTC."""
+
         displayHint = "hint"
 
         class subtypeSpec:
+            """Test helper class for subtypeSpec."""
+
             def __repr__(self) -> str:
                 return "ValueSizeConstraint object, consts 1, 1"
 
     class SyntaxObj:
+        """Test helper class for SyntaxObj."""
+
         def __init__(self) -> None:
             self.subtypeSpec = type(
                 "S",
@@ -46,13 +64,17 @@ def test_build_with_textual_convention_and_scalar(
             self.namedValues: Any = types.SimpleNamespace()
 
         def getDisplayHint(self) -> str:
+            """Test case for getDisplayHint."""
             return " disp "
 
         def __repr__(self) -> str:
             return "SyntaxObj()"
 
     class ScalarObj:
+        """Test helper class for ScalarObj."""
+
         def getSyntax(self) -> object:
+            """Test case for getSyntax."""
             # Return an object that has subtypeSpec and namedValues
             s = SyntaxObj()
             # add namedValues with items() callable
@@ -73,7 +95,10 @@ def test_build_with_textual_convention_and_scalar(
 
     # Monkeypatch SnmpEngine to return object with get_mib_builder
     class FakeEngine:
+        """Test helper class for FakeEngine."""
+
         def get_mib_builder(self) -> Any:
+            """Test case for get_mib_builder."""
             return fake_builder
 
     monkeypatch.setattr("app.type_recorder._engine.SnmpEngine", lambda: FakeEngine())

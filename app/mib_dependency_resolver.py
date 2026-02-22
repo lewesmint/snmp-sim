@@ -255,13 +255,15 @@ class MibDependencyResolver:
                     # Configured MIBs: normal styling
                     safe_name = mib_name.replace("-", "_")
                     lines.append(
-                        f'    {safe_name}["{mib_name}"]\n    style {safe_name} fill:#7dd3fc,stroke:#0369a1,color:#000'
+                        f'    {safe_name}["{mib_name}"]\n'
+                        f"    style {safe_name} fill:#7dd3fc,stroke:#0369a1,color:#000"
                     )
                 else:
                     # Transitive dependencies: shaded/faded styling
                     safe_name = mib_name.replace("-", "_")
                     lines.append(
-                        f'    {safe_name}["{mib_name}"]\n    style {safe_name} fill:#e5e7eb,stroke:#9ca3af,color:#666'
+                        f'    {safe_name}["{mib_name}"]\n'
+                        f"    style {safe_name} fill:#e5e7eb,stroke:#9ca3af,color:#666"
                     )
                 added_nodes.add(mib_name)
 

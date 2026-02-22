@@ -1,3 +1,5 @@
+"""Tests for test snmp agent additional."""
+
 from typing import Any, Optional, Tuple
 import json
 import logging
@@ -15,6 +17,7 @@ import app.snmp_agent as snmp_agent_module
 def test_run_validation_failure_logs_and_returns(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_run_validation_failure_logs_and_returns."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     # Ensure no mibs configured and skip generator
     monkeypatch.setattr(agent.app_config, "get", lambda _key, _default=None: [])
@@ -32,8 +35,9 @@ def test_run_validation_failure_logs_and_returns(
 
 
 def test_run_with_preloaded_model_uses_existing_types_json(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Test case for test_run_with_preloaded_model_uses_existing_types_json."""
     # Create types.json and ensure preloaded_model path is used
     tmp_types = tmp_path / "types.json"
     tmp_types.write_text(json.dumps({"X": {}}))
@@ -63,13 +67,14 @@ def test_run_with_preloaded_model_uses_existing_types_json(
 def test_run_compile_failure_logs_and_continues(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_run_compile_failure_logs_and_continues."""
     caplog.set_level("ERROR")
     agent = SNMPAgent(config_path="agent_config.yaml")
     # Configure one MIB to compile
     monkeypatch.setattr(agent.app_config, "get", lambda _key, _default=None: ["FOO"])
 
     # Make compile raise
-    def bad_compile(self: Any, mib_name: str) -> str:
+    def bad_compile(_self: Any, _mib_name: str) -> str:
         raise RuntimeError("compile boom")
 
     monkeypatch.setattr("app.snmp_agent.MibCompiler.compile", bad_compile)
@@ -95,25 +100,30 @@ def test_run_compile_failure_logs_and_continues(
 def test_run_generator_failure_logged(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
+    """Test case for test_run_generator_failure_logged."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     # Setup compiled file list to simulate compiled_mib_paths
     monkeypatch.setattr(agent.app_config, "get", lambda _key, _default=None: ["FOO"])
     compiled_dir = str(tmp_path / "compiled")
     os.makedirs(compiled_dir, exist_ok=True)
     py_path = os.path.join(compiled_dir, "FOO.py")
-    open(py_path, "w").close()
+    Path(py_path).write_text("", encoding="utf-8")
 
-    # Make MibCompiler.compile return the path (shouldn't be invoked since file exists), but set behaviour generator to raise
+    # Make MibCompiler.compile return the path (shouldn't be invoked since
+    # file exists), but set behaviour generator to raise
     monkeypatch.setattr(
         "app.type_registry_validator.validate_type_registry_file",
         lambda _p: (True, [], 0),
     )
 
     class BadGenerator:
+        """Test helper class for BadGenerator."""
+
         def __init__(self, json_dir: str) -> None:
             pass
 
         def generate(self, path: str) -> None:
+            """Test case for generate."""
             raise RuntimeError("generator boom")
 
     monkeypatch.setattr("app.generator.BehaviourGenerator", BadGenerator)
@@ -133,16 +143,16 @@ def test_run_generator_failure_logged(
     assert True
 
 
-def test_setup_transport_raises_when_no_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_setup_transport_raises_when_no_engine() -> None:
+    """Test case for test_setup_transport_raises_when_no_engine."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     agent.snmpEngine = None
     with pytest.raises(RuntimeError):
         agent._setup_transport()
 
 
-def test_setup_responders_raises_without_context(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_setup_responders_raises_without_context() -> None:
+    """Test case for test_setup_responders_raises_without_context."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     # snmpEngine present but snmpContext missing
     agent.snmpEngine = object()
@@ -153,6 +163,7 @@ def test_setup_responders_raises_without_context(
 def test_run_event_loop_keyboard_interrupt_calls_shutdown(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_run_event_loop_keyboard_interrupt_calls_shutdown."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     monkeypatch.setattr(agent.app_config, "get", lambda _key, _default=None: [])
     # Make validation pass
@@ -163,10 +174,15 @@ def test_run_event_loop_keyboard_interrupt_calls_shutdown(
 
     # Provide a fake engine with a dispatcher that raises KeyboardInterrupt
     class FakeDispatcher:
+        """Test helper class for FakeDispatcher."""
+
         def run_dispatcher(self) -> None:
+            """Test case for run_dispatcher."""
             raise KeyboardInterrupt()
 
     class FakeEngine:
+        """Test helper class for FakeEngine."""
+
         def __init__(self) -> None:
             self.transport_dispatcher = FakeDispatcher()
 
@@ -185,7 +201,7 @@ def test_run_event_loop_keyboard_interrupt_calls_shutdown(
     # Replace _shutdown to avoid calling os._exit and record the call
     called = {}
 
-    def fake_shutdown(self: SNMPAgent) -> None:
+    def fake_shutdown(_self: SNMPAgent) -> None:
         called["shutdown"] = True
 
     monkeypatch.setattr(SNMPAgent, "_shutdown", fake_shutdown)
@@ -197,18 +213,23 @@ def test_run_event_loop_keyboard_interrupt_calls_shutdown(
     assert "Received keyboard interrupt, shutting down agent" in caplog.text
 
 
-def test_setup_community_adds_vacm_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Skip this test as it's hard to mock pysnmp config properly
-    pass
+def test_setup_community_adds_vacm_config() -> None:
+    """Test case for test_setup_community_adds_vacm_config."""
+    pytest.skip("Hard to mock pysnmp config properly")
 
 
-def test_populate_sysor_table_calls_registrar(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_populate_sysor_table_calls_registrar() -> None:
+    """Test case for test_populate_sysor_table_calls_registrar."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     # Mock mib_registrar
     fake_registrar = SimpleNamespace()
-    called = []
-    fake_registrar.populate_sysor_table = lambda mib_jsons: called.append(mib_jsons)
-    agent.mib_registrar = fake_registrar  # type: ignore
+    called: list[dict[str, Any]] = []
+
+    def record_populate(mib_jsons: dict[str, Any]) -> None:
+        called.append(mib_jsons)
+
+    fake_registrar.populate_sysor_table = record_populate
+    agent.mib_registrar = fake_registrar
 
     test_mib_jsons: dict[str, Any] = {"TEST-MIB": {}}
     agent.mib_jsons = test_mib_jsons
@@ -217,13 +238,14 @@ def test_populate_sysor_table_calls_registrar(monkeypatch: pytest.MonkeyPatch) -
     assert called == [test_mib_jsons]
 
 
-def test_get_scalar_value_finds_and_returns_value(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_get_scalar_value_finds_and_returns_value() -> None:
+    """Test case for test_get_scalar_value_finds_and_returns_value."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     # Create a proper MibScalarInstance type
     class MibScalarInstance:
+        """Test helper class for MibScalarInstance."""
+
         def __init__(self) -> None:
             self.name: Optional[Tuple[int, ...]] = None
             self.syntax: Optional[Any] = None
@@ -242,9 +264,8 @@ def test_get_scalar_value_finds_and_returns_value(
     assert result == "test_value"
 
 
-def test_get_scalar_value_raises_when_not_found(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_get_scalar_value_raises_when_not_found() -> None:
+    """Test case for test_get_scalar_value_raises_when_not_found."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     # Mock mib_builder with no matching scalar
@@ -260,6 +281,7 @@ def test_get_scalar_value_raises_when_not_found(
 
 
 def test_get_scalar_value_raises_when_no_builder() -> None:
+    """Test case for test_get_scalar_value_raises_when_no_builder."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     agent.mib_builder = None
 
@@ -267,20 +289,26 @@ def test_get_scalar_value_raises_when_no_builder() -> None:
         agent.get_scalar_value((1, 3, 6, 1, 2, 1, 1, 1, 0))
 
 
-def test_set_scalar_value_sets_value(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_set_scalar_value_sets_value() -> None:
+    """Test case for test_set_scalar_value_sets_value."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     # Create a proper MibScalarInstance type
     class MibScalarInstance:
+        """Test helper class for MibScalarInstance."""
+
         def __init__(self) -> None:
             self.name: Optional[Tuple[int, ...]] = None
             self.syntax: Optional[Any] = None
 
     class FakeSyntax:
+        """Test helper class for FakeSyntax."""
+
         def __init__(self, value: Any) -> None:
             self.value = value
 
         def clone(self, new_value: Any) -> Any:
+            """Test case for clone."""
             return new_value
 
     # Mock mib_builder
@@ -298,9 +326,8 @@ def test_set_scalar_value_sets_value(monkeypatch: pytest.MonkeyPatch) -> None:
     assert fake_scalar.syntax == "new_value"  # type: ignore[comparison-overlap]
 
 
-def test_set_scalar_value_raises_when_not_found(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_set_scalar_value_raises_when_not_found() -> None:
+    """Test case for test_set_scalar_value_raises_when_not_found."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     # Mock mib_builder with no matching scalar
@@ -316,6 +343,7 @@ def test_set_scalar_value_raises_when_not_found(
 
 
 def test_set_scalar_value_raises_when_no_builder() -> None:
+    """Test case for test_set_scalar_value_raises_when_no_builder."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     agent.mib_builder = None
 
@@ -326,11 +354,15 @@ def test_set_scalar_value_raises_when_no_builder() -> None:
 def test_shutdown_logs_exception_on_error(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_shutdown_logs_exception_on_error."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     # Set up snmpEngine with dispatcher that raises on close
     class BadDispatcher:
+        """Test helper class for BadDispatcher."""
+
         def close_dispatcher(self) -> None:
+            """Test case for close_dispatcher."""
             raise RuntimeError("close failed")
 
     agent.snmpEngine = SimpleNamespace(transport_dispatcher=BadDispatcher())
@@ -372,31 +404,43 @@ def test_run_success_path_with_mib_compilation_and_generation(
 
     # Mock dependencies
     class FakeCompiler:
-        def __init__(self, _compiled_dir: str, app_config: Any) -> None:
+        """Test helper class for FakeCompiler."""
+
+        def __init__(self, _compiled_dir: str, _app_config: Any) -> None:
             self.compiled_dir = str(compiled_dir)
 
         def compile(self, mib_name: str) -> str:
+            """Test case for compile."""
             py_path = Path(self.compiled_dir) / f"{mib_name}.py"
             py_path.write_text("# fake compiled", encoding="utf-8")
             return str(py_path)
 
     class FakeTypeRegistry:
-        def __init__(self, path: Path) -> None:
+        """Test helper class for FakeTypeRegistry."""
+
+        def __init__(self, _path: Path) -> None:
             self.registry: dict[str, Any] = {}
 
         def build(self) -> None:
-            pass
+            """Test case for build."""
+            return None
 
         def export_to_json(self, path: str) -> None:
-            pass
+            """Test case for export_to_json."""
+            _ = path
+            return None
 
     class FakeGenerator:
+        """Test helper class for FakeGenerator."""
+
         def __init__(self, json_dir: str) -> None:
             self.json_dir = json_dir
 
         def generate(
             self, py_path: str, mib_name: str = "", force_regenerate: bool = False
         ) -> None:
+            """Test case for generate."""
+            _ = force_regenerate
             if not mib_name:
                 mib_name = Path(py_path).stem
             mib_dir = Path(self.json_dir) / mib_name
@@ -430,6 +474,7 @@ def test_run_success_path_with_mib_compilation_and_generation(
 def test_setup_transport_raises_on_pysnmp_import_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test case for test_setup_transport_raises_on_pysnmp_import_error."""
     import sys
     import builtins
 
@@ -458,6 +503,7 @@ def test_setup_transport_raises_on_pysnmp_import_error(
 def test_register_mib_objects_handles_registrar_creation_failure(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """Test case for test_register_mib_objects_handles_registrar_creation_failure."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     agent.mib_builder = object()  # Mock builder
     agent.mib_jsons = {"TEST-MIB": {}}
@@ -478,6 +524,7 @@ def test_register_mib_objects_handles_registrar_creation_failure(
 def test_setup_signal_handlers_sets_up_handlers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test case for test_setup_signal_handlers_sets_up_handlers."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     # Mock signal.signal to track calls
@@ -501,13 +548,29 @@ def test_setup_signal_handlers_sets_up_handlers(
 
 
 def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -> None:
-    schema_path = (
-        Path(__file__).resolve().parent.parent.parent.parent
-        / "agent-model"
-        / "TEST-ENUM-MIB"
-        / "schema.json"
-    )
-    schema = json.loads(schema_path.read_text())
+    """Test case for test_augmented_child_tables_follow_parent."""
+    schema: dict[str, Any] = {
+        "objects": {
+            "testEnumTable": {
+                "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2],
+                "type": "MibTable",
+                "rows": [{"testEnumIndex": 1, "testEnumName": "seed"}],
+            },
+            "testEnumEntry": {
+                "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1],
+                "type": "MibTableRow",
+                "indexes": ["testEnumIndex"],
+            },
+            "testEnumIndex": {
+                "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1, 1],
+                "type": "Integer32",
+            },
+            "testEnumName": {
+                "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1, 2],
+                "type": "DisplayString",
+            },
+        }
+    }
     # Use a synthetic SNMPv2 schema to avoid coupling this test to mutable on-disk state
     snmp_schema: dict[str, Any] = {
         "objects": {
@@ -615,6 +678,7 @@ def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_oid_helpers_and_index_parser() -> None:
+    """Test case for test_oid_helpers_and_index_parser."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     assert agent._normalize_oid_str(" .1..3.6.1. ") == "1.3.6.1"
@@ -639,6 +703,7 @@ def test_oid_helpers_and_index_parser() -> None:
 
 
 def test_find_table_and_entry_name_by_oid() -> None:
+    """Test case for test_find_table_and_entry_name_by_oid."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     objects: dict[str, Any] = {
         "ifTable": {"type": "MibTable", "oid": [1, 3, 6, 1, 2, 1, 2, 2]},
@@ -653,6 +718,7 @@ def test_find_table_and_entry_name_by_oid() -> None:
 
 
 def test_find_parent_table_for_column() -> None:
+    """Test case for test_find_parent_table_for_column."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     agent.mib_jsons = {
         "TEST-MIB": {
@@ -678,6 +744,7 @@ def test_find_parent_table_for_column() -> None:
 
 
 def test_build_instance_str_from_row_variants() -> None:
+    """Test case for test_build_instance_str_from_row_variants."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     idx_cols = ["ifIndex", "ipCol"]
@@ -700,6 +767,7 @@ def test_build_instance_str_from_row_variants() -> None:
 def test_collect_schema_instance_oids_and_filter_deleted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test case for test_collect_schema_instance_oids_and_filter_deleted."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     agent.mib_jsons = {
         "TEST-MIB": {
@@ -734,6 +802,7 @@ def test_collect_schema_instance_oids_and_filter_deleted(
 
 
 def test_instance_defined_in_schema_true_and_false() -> None:
+    """Test case for test_instance_defined_in_schema_true_and_false."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     agent.mib_jsons = {
         "TEST-MIB": {
@@ -766,6 +835,7 @@ def test_instance_defined_in_schema_true_and_false() -> None:
 def test_normalize_loaded_instances_and_fill_defaults(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test case for test_normalize_loaded_instances_and_fill_defaults."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     agent.mib_jsons = {
         "TEST-MIB": {
@@ -811,6 +881,7 @@ def test_normalize_loaded_instances_and_fill_defaults(
 def test_find_source_mib_file_and_should_recompile(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Test case for test_find_source_mib_file_and_should_recompile."""
     project_root = tmp_path
     app_dir = project_root / "app"
     app_dir.mkdir(parents=True, exist_ok=True)
@@ -848,12 +919,16 @@ def test_find_source_mib_file_and_should_recompile(
 def test_should_recompile_handles_stat_oserror(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Test case for test_should_recompile_handles_stat_oserror."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     compiled = tmp_path / "compiled.py"
     compiled.write_text("x")
 
     class BadSource:
+        """Test helper class for BadSource."""
+
         def stat(self) -> Any:
+            """Test case for stat."""
             raise OSError("boom")
 
     monkeypatch.setattr(agent, "_find_source_mib_file", lambda _m: BadSource())
@@ -861,15 +936,21 @@ def test_should_recompile_handles_stat_oserror(
 
 
 def test_lookup_symbol_for_dotted_and_get_all_oids() -> None:
+    """Test case for test_lookup_symbol_for_dotted_and_get_all_oids."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     class GoodObj:
+        """Test helper class for GoodObj."""
+
         def __init__(self, name: tuple[int, ...]) -> None:
             self.name = name
 
     class BadObj:
+        """Test helper class for BadObj."""
+
         @property
         def name(self) -> Any:
+            """Test case for name."""
             raise RuntimeError("broken name")
 
     fake_builder = SimpleNamespace(
@@ -900,6 +981,7 @@ def test_lookup_symbol_for_dotted_and_get_all_oids() -> None:
 def test_migrate_legacy_state_files_triggers_save(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Test case for test_migrate_legacy_state_files_triggers_save."""
     project_root = tmp_path
     app_dir = project_root / "app"
     app_dir.mkdir(parents=True, exist_ok=True)
@@ -926,6 +1008,7 @@ def test_migrate_legacy_state_files_triggers_save(
 def test_load_mib_state_loads_and_normalizes(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Test case for test_load_mib_state_loads_and_normalizes."""
     project_root = tmp_path
     app_dir = project_root / "app"
     app_dir.mkdir(parents=True, exist_ok=True)
@@ -933,9 +1016,9 @@ def test_load_mib_state_loads_and_normalizes(
     fake_module_file.write_text("# fake", encoding="utf-8")
     monkeypatch.setattr(snmp_agent_module, "__file__", str(fake_module_file))
 
-    data_dir = project_root / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    state_file = data_dir / "mib_state.json"
+    model_dir = project_root / "agent-model"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    state_file = model_dir / "mib_state.json"
     state_file.write_text(
         json.dumps(
             {
@@ -951,10 +1034,16 @@ def test_load_mib_state_loads_and_normalizes(
     link_calls: dict[str, Any] = {}
 
     class FakeLinkManager:
+        """Test helper class for FakeLinkManager."""
+
         def load_links_from_state(self, payload: Any) -> None:
+            """Test case for load_links_from_state."""
             link_calls["payload"] = payload
 
-    monkeypatch.setattr("app.snmp_agent.get_link_manager", lambda: FakeLinkManager())
+    def create_link_manager() -> FakeLinkManager:
+        return FakeLinkManager()
+
+    monkeypatch.setattr("app.snmp_agent.get_link_manager", create_link_manager)
 
     agent = SNMPAgent(config_path="agent_config.yaml")
     # Avoid schema filtering side effects in this unit test
@@ -970,12 +1059,19 @@ def test_load_mib_state_loads_and_normalizes(
 
 
 def test_capture_initial_values_and_writable_detection() -> None:
+    """Test case for test_capture_initial_values_and_writable_detection."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     class FakeMibScalarInstance:
-        pass
+        """Test helper class for FakeMibScalarInstance."""
+
+        def __init__(self) -> None:
+            self.name: Optional[Tuple[int, ...]] = None
+            self.syntax: Optional[Any] = None
 
     class FakeSyntax:
+        """Test helper class for FakeSyntax."""
+
         def __str__(self) -> str:
             return "42"
 
@@ -1000,16 +1096,24 @@ def test_capture_initial_values_and_writable_detection() -> None:
 def test_apply_overrides_applies_and_prunes_invalid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test case for test_apply_overrides_applies_and_prunes_invalid."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     class FakeMibScalarInstance:
-        pass
+        """Test helper class for FakeMibScalarInstance."""
+
+        def __init__(self) -> None:
+            self.name: Optional[Tuple[int, ...]] = None
+            self.syntax: Optional[Any] = None
 
     class FakeSyntax:
+        """Test helper class for FakeSyntax."""
+
         def __init__(self, value: Any) -> None:
             self.value = value
 
         def clone(self, new_value: Any) -> "FakeSyntax":
+            """Test case for clone."""
             return FakeSyntax(new_value)
 
     sym = FakeMibScalarInstance()
@@ -1042,6 +1146,7 @@ def test_apply_overrides_applies_and_prunes_invalid(
 def test_apply_table_instances_updates_only_non_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test case for test_apply_table_instances_updates_only_non_empty."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     agent.table_instances = {
         "1.3.6.1.2.1.2.2": {
@@ -1065,6 +1170,7 @@ def test_apply_table_instances_updates_only_non_empty(
 
 
 def test_build_index_str_variants() -> None:
+    """Test case for test_build_index_str_variants."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     assert agent._build_index_str({}) == "1"
@@ -1075,6 +1181,7 @@ def test_build_index_str_variants() -> None:
 
 
 def test_restore_table_instance_true_and_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test case for test_restore_table_instance_true_and_false."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     called: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
@@ -1097,12 +1204,13 @@ def test_restore_table_instance_true_and_false(monkeypatch: pytest.MonkeyPatch) 
     called.clear()
     agent.deleted_instances = []
     assert agent.restore_table_instance(table_oid, idx, {"ifDescr": "eth7"}) is False
-    assert called == []
+    assert not called
 
 
 def test_delete_table_instance_schema_and_non_schema(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test case for test_delete_table_instance_schema_and_non_schema."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     table_oid = " .1..3.6.1.2.1.2.2. "
     norm_table_oid = "1.3.6.1.2.1.2.2"

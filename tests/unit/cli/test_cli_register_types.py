@@ -1,3 +1,5 @@
+"""Tests for test cli register types."""
+
 from pathlib import Path
 import pytest
 from typing import Any
@@ -6,6 +8,7 @@ from app import cli_register_types as crt
 
 
 def test_main_missing_compiled_dir(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Test case for test_main_missing_compiled_dir."""
     fake_dir = tmp_path / "nope"
     rc = crt.main(["--compiled-mibs-dir", str(fake_dir)])
     captured = capsys.readouterr()
@@ -16,6 +19,7 @@ def test_main_missing_compiled_dir(tmp_path: Path, capsys: pytest.CaptureFixture
 def test_main_success_with_mocks(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: Any
 ) -> None:
+    """Test case for test_main_success_with_mocks."""
     # Mock build_type_registry to return a simple registry
     fake_registry = {"MyType": {"base_type": "Integer32", "used_by": []}}
     mocker.patch("app.cli_register_types.build_type_registry", return_value=fake_registry)
@@ -28,6 +32,7 @@ def test_main_success_with_mocks(
 def test_main_verbose_output_formatting(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: Any
 ) -> None:
+    """Test case for test_main_verbose_output_formatting."""
     # Mock build_type_registry and BaseTypeHandler for verbose output
     fake_registry = {
         "MyType": {
@@ -58,7 +63,10 @@ def test_main_verbose_output_formatting(
     }
 
     class MockHandler:
+        """Test helper class for MockHandler."""
+
         def get_default_value(self, type_name: str) -> object:
+            """Test case for get_default_value."""
             if type_name == "MyType":
                 return 42
             elif type_name == "EnumType":
@@ -86,6 +94,7 @@ def test_main_verbose_output_formatting(
 def test_main_exception_handling(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: Any
 ) -> None:
+    """Test case for test_main_exception_handling."""
     mocker.patch(
         "app.cli_register_types.build_type_registry",
         side_effect=Exception("test error"),

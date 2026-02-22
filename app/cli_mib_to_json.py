@@ -5,11 +5,11 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from pathlib import Path
 from typing import Iterable
 
 from app.generator import BehaviourGenerator
 from app.app_config import AppConfig
+from app.model_paths import AGENT_MODEL_DIR, COMPILED_MIBS_DIR
 
 
 def check_imported_mibs(mib_txt_path: str, compiled_dir: str) -> None:
@@ -52,6 +52,7 @@ def check_imported_mibs(mib_txt_path: str, compiled_dir: str) -> None:
 
 
 def main(argv: Iterable[str] | None = None) -> int:
+    """Generate schema.json from compiled MIB Python files."""
     parser = argparse.ArgumentParser(
         description="Generate schema.json from compiled MIB Python files. "
         "If no MIB is specified, processes all MIBs configured in agent_config.yaml. "
@@ -61,7 +62,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         "compiled_mib_py",
         nargs="?",
         default=None,
-        help="Path to the compiled MIB .py file (optional, if omitted processes all configured MIBs)",
+        help=(
+            "Path to the compiled MIB .py file (optional, if omitted processes all configured MIBs)"
+        ),
     )
     parser.add_argument("mib_name", nargs="?", default=None, help="MIB module name")
     parser.add_argument(
@@ -69,7 +72,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     parser.add_argument(
         "--output-dir",
-        default="agent-model",
+        default=str(AGENT_MODEL_DIR),
         help="Base directory for MIB schemas (default: agent-model)",
     )
     parser.add_argument(
@@ -97,7 +100,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             print("No MIBs configured", file=sys.stderr)
             return 1
         for mib in mibs:
-            compiled_path = Path("compiled-mibs") / f"{mib}.py"
+            compiled_path = COMPILED_MIBS_DIR / f"{mib}.py"
             if not compiled_path.exists():
                 print(f"Warning: Compiled MIB not found: {compiled_path}", file=sys.stderr)
                 continue

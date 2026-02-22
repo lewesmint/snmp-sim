@@ -1,12 +1,16 @@
+"""Run the SNMP agent alongside the REST API server."""
+
+import argparse
+import asyncio
+import shutil
 import sys
 import threading
+
 import uvicorn
-import asyncio
-import argparse
-from pathlib import Path
-import shutil
-from app.snmp_agent import SNMPAgent
+
 import app.api
+from app.model_paths import AGENT_MODEL_DIR, COMPILED_MIBS_DIR
+from app.snmp_agent import SNMPAgent
 
 
 def run_snmp_agent(agent: SNMPAgent) -> None:
@@ -21,7 +25,8 @@ def run_snmp_agent(agent: SNMPAgent) -> None:
         sys.exit(1)
 
 
-if __name__ == "__main__":  # pragma: no cover
+def main() -> int:
+    """Parse CLI arguments, start SNMP background thread, and run REST API."""
     try:
         # Parse command-line arguments
         parser = argparse.ArgumentParser(description="Run SNMP Agent with REST API")
@@ -40,8 +45,8 @@ if __name__ == "__main__":  # pragma: no cover
         # Handle rebuild flags
         if args.rebuild:
             print("Forcing rebuild of compiled MIBs and schemas...")
-            compiled_dir = Path("compiled-mibs")
-            schema_dir = Path("agent-model")
+            compiled_dir = COMPILED_MIBS_DIR
+            schema_dir = AGENT_MODEL_DIR
 
             if compiled_dir.exists():
                 print(f"Removing {compiled_dir}...")
@@ -55,7 +60,7 @@ if __name__ == "__main__":  # pragma: no cover
 
         if args.rebuild_schemas:
             print("Forcing regeneration of schemas...")
-            schema_dir = Path("agent-model")
+            schema_dir = AGENT_MODEL_DIR
 
             if schema_dir.exists():
                 print(f"Removing {schema_dir}...")
@@ -80,13 +85,13 @@ if __name__ == "__main__":  # pragma: no cover
 
         # Ensure uvicorn loggers propagate to the root logger configured by AppLogger
         import logging
-        import socket
-        import subprocess
-        import signal
-        import time
         import os
         import platform
         import re
+        import signal
+        import socket
+        import subprocess
+        import time
 
         def _is_port_in_use(port: int) -> bool:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -266,7 +271,12 @@ if __name__ == "__main__":  # pragma: no cover
             reload=False,
             log_level="info",
         )
+        return 0
 
     except Exception as e:
         print(f"\nERROR: {type(e).__name__}: {e}", file=sys.stderr)
-        sys.exit(1)
+        return 1
+
+
+if __name__ == "__main__":  # pragma: no cover
+    sys.exit(main())

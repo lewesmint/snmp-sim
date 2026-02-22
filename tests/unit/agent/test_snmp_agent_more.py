@@ -1,3 +1,5 @@
+"""Tests for test snmp agent more."""
+
 import json
 import logging
 import os
@@ -11,12 +13,14 @@ from app.snmp_agent import SNMPAgent
 
 
 def test_decode_value_passthrough() -> None:
+    """Test case for test_decode_value_passthrough."""
     agent = SNMPAgent()
     assert agent._decode_value(123) == 123
     assert agent._decode_value("abc") == "abc"
 
 
 def test_decode_value_hex() -> None:
+    """Test case for test_decode_value_hex."""
     agent = SNMPAgent()
     v = {"value": "\\xAA\\xBB", "encoding": "hex"}
     decoded = agent._decode_value(v)
@@ -25,6 +29,7 @@ def test_decode_value_hex() -> None:
 
 
 def test_decode_value_unknown_encoding() -> None:
+    """Test case for test_decode_value_unknown_encoding."""
     agent = SNMPAgent()
     v = {"value": "zzz", "encoding": "base64"}
     # unknown encoding should return raw encoded value
@@ -35,6 +40,7 @@ def test_decode_value_unknown_encoding() -> None:
 
 
 def test_setup_signal_handlers_registers_signals(monkeypatch: Any) -> None:
+    """Test case for test_setup_signal_handlers_registers_signals."""
     calls: dict[Any, Any] = {}
 
     def fake_signal(sig: Any, handler: Any) -> None:
@@ -52,6 +58,7 @@ def test_setup_signal_handlers_registers_signals(monkeypatch: Any) -> None:
 
 
 def test_shutdown_closes_dispatcher(monkeypatch: Any, caplog: Any, mocker: Any) -> None:
+    """Test case for test_shutdown_closes_dispatcher."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     # Provide a fake dispatcher with close_dispatcher
     fake_dispatcher = mocker.Mock()
@@ -68,9 +75,9 @@ def test_shutdown_closes_dispatcher(monkeypatch: Any, caplog: Any, mocker: Any) 
 
 
 def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(
-    monkeypatch: Any, tmp_path: Any, caplog: Any
+    monkeypatch: Any, caplog: Any
 ) -> None:
-    # Ensure data/types.json exists
+    """Test case for test_run_with_preloaded_model_uses_preloaded_and_skips_generation."""
     data_dir = Path("data")
     data_dir.mkdir(exist_ok=True)
     types_file = data_dir / "types.json"
@@ -102,8 +109,12 @@ def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(
 
 
 def test_decode_value_delegates_to_mib_registrar(monkeypatch: Any) -> None:
+    """Test case for test_decode_value_delegates_to_mib_registrar."""
+
     # Replace MibRegistrar with a fake that returns a sentinel value
     class FakeRegistrar:
+        """Test helper class for FakeRegistrar."""
+
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
@@ -117,8 +128,12 @@ def test_decode_value_delegates_to_mib_registrar(monkeypatch: Any) -> None:
 
 
 def test_decode_value_fallback_returns_value_on_exception(monkeypatch: Any) -> None:
+    """Test case for test_decode_value_fallback_returns_value_on_exception."""
+
     # Make MibRegistrar constructor raise to trigger fallback
     class FailingRegistrar:
+        """Test helper class for FailingRegistrar."""
+
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             raise RuntimeError("boom")
 

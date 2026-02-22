@@ -24,8 +24,6 @@ class TableRegistrar:
         logger: logging.Logger,
         type_registry: TypeRegistry | None = None,
     ):
-        if type_registry is None:
-            type_registry = {}
         """
         Initialize the TableRegistrar.
 
@@ -38,6 +36,8 @@ class TableRegistrar:
             logger: Logger instance for debug/error messages
             type_registry: Type registry dict mapping type names to type info
         """
+        if type_registry is None:
+            type_registry = {}
         self.mib_builder = mib_builder
         self.mib_scalar_instance = mib_scalar_instance
         self.mib_table = mib_table
@@ -277,7 +277,8 @@ class TableRegistrar:
             col_names.append(col_name)
 
         self.logger.info(
-            f"About to export table {table_name} with OIDs: table={table_oid}, row={entry_oid}, columns={debug_oid_list}"
+            f"About to export table {table_name} with OIDs: "
+            f"table={table_oid}, row={entry_oid}, columns={debug_oid_list}"
         )
 
         # DISABLED: Dynamic table registration doesn't fully work with pysnmp's responder
@@ -297,7 +298,7 @@ class TableRegistrar:
 
     def _register_row_instances(
         self,
-        mib: str,
+        _mib: str,
         table_name: str,
         table_data: Dict[str, Any],
         type_registry: TypeRegistry,
@@ -353,7 +354,8 @@ class TableRegistrar:
                             raw_val = self._get_default_value_for_type(
                                 col_info, type_name, type_info, base_type
                             )
-                        # Attempt to cast/construct the value for the type (int, pysnmp classes, etc.)
+                        # Attempt to cast/construct value for the type
+                        # (int, pysnmp classes, etc.).
                         pysnmp_type(raw_val)
                     except Exception:
                         self.logger.error("Error registering row instance", exc_info=True)
@@ -413,7 +415,7 @@ class TableRegistrar:
         col_info: Dict[str, Any],
         type_name: str,
         type_info: TypeInfo,
-        base_type: str,
+        _base_type: str,
     ) -> Any:
         """
         Determine a sensible default value for a type using BaseTypeHandler.

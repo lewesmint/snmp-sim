@@ -1,19 +1,24 @@
+"""Tests for test mib browser unit."""
+
 from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from tkinter import StringVar
+from typing import Any, cast
 
 import ui.mib_browser as mib_browser_module
 from ui.common import Logger
 from ui.mib_browser import MIBBrowserWindow
 
 
-class _Var:
+class _Var(StringVar):
     def __init__(self, value: str) -> None:
+        super().__init__()
         self._value = value
 
     def get(self) -> str:
+        """Test case for get."""
         return self._value
 
 
@@ -23,6 +28,7 @@ class _Tree:
         self._next_id = 1
 
     def insert(self, parent: str, _index: str, text: str = "", values: Any = None) -> str:
+        """Test case for insert."""
         node_id = f"n{self._next_id}"
         self._next_id += 1
         self.nodes[node_id] = {
@@ -36,9 +42,11 @@ class _Tree:
         return node_id
 
     def get_children(self, item: str = "") -> list[str]:
+        """Test case for get_children."""
         return list(self.nodes.get(item, {}).get("children", []))
 
     def item(self, item: str, option: str | None = None, **kwargs: Any) -> Any:
+        """Test case for item."""
         if kwargs:
             self.nodes[item].update(kwargs)
             return None
@@ -47,6 +55,7 @@ class _Tree:
         return self.nodes[item].get(option)
 
     def delete(self, item: str) -> None:
+        """Test case for delete."""
         for parent_id, parent_data in self.nodes.items():
             if item in parent_data.get("children", []):
                 parent_data["children"].remove(item)
@@ -56,11 +65,13 @@ class _Tree:
         self.nodes.pop(item, None)
 
 
-class _StatusVar:
+class _StatusVar(StringVar):
     def __init__(self) -> None:
+        super().__init__()
         self.value = ""
 
     def set(self, value: str) -> None:
+        """Test case for set."""
         self.value = value
 
 
@@ -71,7 +82,7 @@ def _make_browser(tmp_path: Path) -> MIBBrowserWindow:
     browser.mib_cache_dir.mkdir(parents=True, exist_ok=True)
     browser.loaded_mibs = []
     browser.unsatisfied_mibs = {}
-    browser.mib_builder = SimpleNamespace(mibSymbols={})
+    browser.mib_builder = cast(Any, SimpleNamespace(mibSymbols={}))
     browser.default_port = 161
     browser.host_var = _Var("127.0.0.1")
     browser.port_var = _Var("161")
@@ -80,6 +91,7 @@ def _make_browser(tmp_path: Path) -> MIBBrowserWindow:
 
 
 def test_extract_mib_imports_text_and_py_and_error(tmp_path: Path) -> None:
+    """Test case for test_extract_mib_imports_text_and_py_and_error."""
     browser = _make_browser(tmp_path)
 
     txt = tmp_path / "A-MIB.mib"
@@ -104,10 +116,11 @@ END
     assert "TCP-MIB" in deps_py
 
     missing = tmp_path / "missing.mib"
-    assert browser._extract_mib_imports(missing) == []
+    assert not browser._extract_mib_imports(missing)
 
 
 def test_find_mib_file_in_cache_and_loaded_check(tmp_path: Path) -> None:
+    """Test case for test_find_mib_file_in_cache_and_loaded_check."""
     browser = _make_browser(tmp_path)
     cache_mib = browser.mib_cache_dir / "IF-MIB.mib"
     cache_mib.write_text("x", encoding="utf-8")
@@ -124,6 +137,7 @@ def test_find_mib_file_in_cache_and_loaded_check(tmp_path: Path) -> None:
 
 
 def test_find_mib_file_prefers_cache_and_compiled(monkeypatch: Any, tmp_path: Path) -> None:
+    """Test case for test_find_mib_file_prefers_cache_and_compiled."""
     browser = _make_browser(tmp_path)
 
     cache_py = browser.mib_cache_dir / "SNMPv2-MIB.py"
@@ -145,6 +159,7 @@ def test_find_mib_file_prefers_cache_and_compiled(monkeypatch: Any, tmp_path: Pa
 
 
 def test_normalize_oid_and_connection_params(tmp_path: Path) -> None:
+    """Test case for test_normalize_oid_and_connection_params."""
     browser = _make_browser(tmp_path)
 
     assert MIBBrowserWindow._normalize_oid("1") == "1.0"
@@ -161,6 +176,7 @@ def test_normalize_oid_and_connection_params(tmp_path: Path) -> None:
 
 
 def test_resolve_oid_name_and_format_errors(tmp_path: Path) -> None:
+    """Test case for test_resolve_oid_name_and_format_errors."""
     browser = _make_browser(tmp_path)
 
     # Numeric resolution
@@ -169,12 +185,15 @@ def test_resolve_oid_name_and_format_errors(tmp_path: Path) -> None:
     assert browser._resolve_oid_name_to_tuple("SNMPv2-MIB::sysDescr") is None
 
     # Short-name resolution from loaded MIB symbols
-    class Sym:
-        def getName(self) -> tuple[int, ...]:
+    class Sym:  # pylint: disable=too-few-public-methods
+        """Test helper class for Sym."""
+
+        def getName(self) -> tuple[int, ...]:  # noqa: N802  # pylint: disable=invalid-name
+            """Test case for getName."""
             return (1, 3, 6, 1, 2, 1, 1, 1, 0)
 
     browser.loaded_mibs = ["SNMPv2-MIB"]
-    browser.mib_builder = SimpleNamespace(mibSymbols={"SNMPv2-MIB": {"sysDescr": Sym()}})
+    browser.mib_builder = cast(Any, SimpleNamespace(mibSymbols={"SNMPv2-MIB": {"sysDescr": Sym()}}))
     assert browser._resolve_oid_name_to_tuple("sysDescr") == (1, 3, 6, 1, 2, 1, 1, 1, 0)
 
     msg = browser._format_mib_error(Exception("MibNotFoundError: 'sysDescr' compilation error"))
@@ -183,7 +202,8 @@ def test_resolve_oid_name_and_format_errors(tmp_path: Path) -> None:
     assert browser._format_mib_error(Exception("plain error")) == "plain error"
 
 
-def test_create_object_identity_paths(tmp_path: Path) -> None:
+def test_create_object_identity_paths(monkeypatch: Any, tmp_path: Path) -> None:
+    """Test case for test_create_object_identity_paths."""
     browser = _make_browser(tmp_path)
 
     # numeric
@@ -197,13 +217,13 @@ def test_create_object_identity_paths(tmp_path: Path) -> None:
     assert obj2 is not None
 
     # short name resolved
-    browser._resolve_oid_name_to_tuple = lambda _v: (1, 3, 6, 1)
+    monkeypatch.setattr(browser, "_resolve_oid_name_to_tuple", lambda _v: (1, 3, 6, 1))
     obj3, disp3 = browser._create_object_identity("sysDescr")
     assert disp3 == "1.3.6.1"
     assert obj3 is not None
 
     # unresolved with no loaded MIBs
-    browser._resolve_oid_name_to_tuple = lambda _v: None
+    monkeypatch.setattr(browser, "_resolve_oid_name_to_tuple", lambda _v: None)
     browser.loaded_mibs = []
     try:
         browser._create_object_identity("unknownName")
@@ -220,7 +240,11 @@ def test_create_object_identity_paths(tmp_path: Path) -> None:
         assert "loaded MIBs: SNMPv2-MIB" in str(e)
 
 
-def test_resolve_mib_dependencies_reports_resolved_and_missing(tmp_path: Path) -> None:
+def test_resolve_mib_dependencies_reports_resolved_and_missing(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Test case for test_resolve_mib_dependencies_reports_resolved_and_missing."""
     browser = _make_browser(tmp_path)
     deps = {
         "ROOT": ["A", "B"],
@@ -229,8 +253,12 @@ def test_resolve_mib_dependencies_reports_resolved_and_missing(tmp_path: Path) -
         "C": ["MISSING"],
     }
 
-    browser._find_mib_file = lambda name: tmp_path / f"{name}.mib" if name != "MISSING" else None
-    browser._extract_mib_imports = lambda p: deps[p.stem]
+    monkeypatch.setattr(
+        browser,
+        "_find_mib_file",
+        lambda name: tmp_path / f"{name}.mib" if name != "MISSING" else None,
+    )
+    monkeypatch.setattr(browser, "_extract_mib_imports", lambda p: deps[p.stem])
 
     resolved, missing = browser._resolve_mib_dependencies("ROOT")
     assert resolved == ["C", "A", "B"]
@@ -238,8 +266,9 @@ def test_resolve_mib_dependencies_reports_resolved_and_missing(tmp_path: Path) -
 
 
 def test_tree_agent_and_operation_nodes_reuse_existing(tmp_path: Path) -> None:
+    """Test case for test_tree_agent_and_operation_nodes_reuse_existing."""
     browser = _make_browser(tmp_path)
-    browser.results_tree = _Tree()
+    browser.results_tree = cast(Any, _Tree())
     browser.agent_tree_items = {}
     browser.agent_results = {}
 
@@ -254,12 +283,17 @@ def test_tree_agent_and_operation_nodes_reuse_existing(tmp_path: Path) -> None:
     assert same_op_item == op_item
 
 
-def test_expand_collapse_and_clear_results(tmp_path: Path) -> None:
+def test_expand_collapse_and_clear_results(monkeypatch: Any, tmp_path: Path) -> None:
+    """Test case for test_expand_collapse_and_clear_results."""
     browser = _make_browser(tmp_path)
-    browser.results_tree = _Tree()
+    browser.results_tree = cast(Any, _Tree())
     browser.logger = Logger()
     logs: list[tuple[str, str]] = []
-    browser.logger.log = lambda msg, level="INFO": logs.append((level, msg))  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        browser.logger,
+        "log",
+        lambda message, level="INFO": logs.append((level, message)),
+    )
     browser.status_var = _StatusVar()
     browser.agent_results = {"a": {}}
     browser.agent_tree_items = {"a": "n1"}
@@ -277,8 +311,8 @@ def test_expand_collapse_and_clear_results(tmp_path: Path) -> None:
     assert browser.results_tree.item(child, "open") is False
 
     browser._clear_results()
-    assert browser.results_tree.get_children("") == []
-    assert browser.agent_results == {}
-    assert browser.agent_tree_items == {}
+    assert not browser.results_tree.get_children("")
+    assert not browser.agent_results
+    assert not browser.agent_tree_items
     assert browser.status_var.value == "Results cleared"
     assert any("Results cleared" in m for _, m in logs)

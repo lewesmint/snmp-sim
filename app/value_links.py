@@ -22,6 +22,7 @@ class ValueLinkEndpoint:
         self.column_name = column_name
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize the endpoint to a JSON-compatible dictionary."""
         return {
             "table_oid": self.table_oid,
             "column": self.column_name,
@@ -50,6 +51,7 @@ class ValueLink:
         self.create_missing = create_missing
 
     def __repr__(self) -> str:
+        """Return a compact debugging representation of the link."""
         return (
             f"ValueLink({self.link_id}, endpoints={len(self.endpoints)}, "
             f"scope={self.scope}, source={self.source})"
@@ -127,6 +129,7 @@ class ValueLinkManager:
         column_names: List[str],
         table_oid: Optional[str],
     ) -> List[ValueLinkEndpoint]:
+        """Create endpoint objects from a list of column names."""
         return [ValueLinkEndpoint(table_oid, col) for col in column_names]
 
     def _table_oid_from_columns(
@@ -134,6 +137,7 @@ class ValueLinkManager:
         columns: List[str],
         objects: Dict[str, Any],
     ) -> Optional[str]:
+        """Infer table OID from object metadata for the given columns."""
         for col_name in columns:
             if col_name in objects:
                 col_oid = objects[col_name].get("oid", [])
@@ -147,6 +151,7 @@ class ValueLinkManager:
         link_config: Dict[str, Any],
         objects: Optional[Dict[str, Any]],
     ) -> Tuple[str, List[ValueLinkEndpoint], str, str, str, Optional[str], bool]:
+        """Parse one link config entry into normalized link construction fields."""
         link_id = link_config.get("id") or ""
         scope = link_config.get("scope", "per-instance")
         match = link_config.get("match", "shared-index")
@@ -203,6 +208,7 @@ class ValueLinkManager:
             )
 
     def load_links_from_state(self, link_configs: List[Dict[str, Any]]) -> None:
+        """Load persisted runtime links from state JSON records."""
         if not link_configs:
             return
 
@@ -224,6 +230,11 @@ class ValueLinkManager:
             )
 
     def export_links(self, include_schema: bool = True) -> List[Dict[str, Any]]:
+        """Export links as JSON-serializable records.
+
+        Args:
+            include_schema: When False, include only state-origin links.
+        """
         links: List[Dict[str, Any]] = []
         for link in self._links:
             if not include_schema and link.source != "state":
@@ -243,6 +254,7 @@ class ValueLinkManager:
         return links
 
     def export_state_links(self) -> List[Dict[str, Any]]:
+        """Export only links that should be persisted in runtime state."""
         return self.export_links(include_schema=False)
 
     def get_linked_targets(
@@ -285,6 +297,7 @@ class ValueLinkManager:
         column_name: str,
         instance_key: Optional[str] = None,
     ) -> bool:
+        """Check whether a propagation update is not already in progress."""
         update_key = f"{column_name}:{instance_key}" if instance_key else column_name
         return update_key not in self._updating
 
@@ -293,6 +306,7 @@ class ValueLinkManager:
         column_name: str,
         instance_key: Optional[str] = None,
     ) -> None:
+        """Mark a column/instance pair as actively being propagated."""
         update_key = f"{column_name}:{instance_key}" if instance_key else column_name
         self._updating.add(update_key)
 
@@ -301,6 +315,7 @@ class ValueLinkManager:
         column_name: str,
         instance_key: Optional[str] = None,
     ) -> None:
+        """Clear the in-progress marker for a propagated update."""
         update_key = f"{column_name}:{instance_key}" if instance_key else column_name
         self._updating.discard(update_key)
 

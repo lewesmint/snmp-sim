@@ -1,3 +1,5 @@
+"""Tests for test agent errors."""
+
 import pytest
 from app.snmp_agent import SNMPAgent
 from typing import Any, List

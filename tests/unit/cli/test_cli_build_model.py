@@ -1,3 +1,5 @@
+"""Tests for test cli build model."""
+
 import json
 from typing import Any, NoReturn
 
@@ -6,6 +8,7 @@ from app import cli_build_model as cbm
 
 
 def test_load_mib_schema_missing(tmp_path: Any, capsys: Any) -> None:
+    """Test case for test_load_mib_schema_missing."""
     schema = cbm.load_mib_schema("NONEXISTENT", str(tmp_path))
     captured = capsys.readouterr()
     assert schema is None
@@ -13,6 +16,7 @@ def test_load_mib_schema_missing(tmp_path: Any, capsys: Any) -> None:
 
 
 def test_load_mib_schema_invalid_json(tmp_path: Any, capsys: Any) -> None:
+    """Test case for test_load_mib_schema_invalid_json."""
     mib_dir = tmp_path / "TEST-MIB"
     mib_dir.mkdir()
     (mib_dir / "schema.json").write_text("{ not: json }")
@@ -24,6 +28,7 @@ def test_load_mib_schema_invalid_json(tmp_path: Any, capsys: Any) -> None:
 
 
 def test_load_mib_schema_valid(tmp_path: Any) -> None:
+    """Test case for test_load_mib_schema_valid."""
     mib_dir = tmp_path / "GOOD-MIB"
     mib_dir.mkdir()
     data = {"foo": {"type": "MibScalar"}}
@@ -34,6 +39,7 @@ def test_load_mib_schema_valid(tmp_path: Any) -> None:
 
 
 def test_build_internal_model_only_includes_present(tmp_path: Any) -> None:
+    """Test case for test_build_internal_model_only_includes_present."""
     m1 = tmp_path / "A"
     m1.mkdir()
     (m1 / "schema.json").write_text(json.dumps({"a": {}}))
@@ -44,6 +50,7 @@ def test_build_internal_model_only_includes_present(tmp_path: Any) -> None:
 
 
 def test_print_model_summary(capsys: Any) -> None:
+    """Test case for test_print_model_summary."""
     model = {
         "M1": {"x": {"type": "MibScalar"}, "t": {"type": "MibTable"}},
         "M2": {"a": {"type": "MibScalar"}},
@@ -55,26 +62,34 @@ def test_print_model_summary(capsys: Any) -> None:
 
 
 class DummyConfigNoMibs:
+    """Test helper class for DummyConfigNoMibs."""
+
     def __init__(self, *a: Any, **k: Any) -> None:
         pass
 
     def get(self, key: Any, default: Any = None) -> Any:
+        """Test case for get."""
         if key == "mibs":
             return []
         return default
 
 
 class DummyConfigWithMibs:
+    """Test helper class for DummyConfigWithMibs."""
+
     def __init__(self, *a: Any, **k: Any) -> None:
         pass
 
     def get(self, key: Any, default: Any = None) -> Any:
+        """Test case for get."""
         if key == "mibs":
             return ["M1"]
         return default
 
 
-def test_main_config_not_found(monkeypatch: Any, capsys: Any) -> None:
+def test_main_config_not_found(monkeypatch: Any) -> None:
+    """Test case for test_main_config_not_found."""
+
     def raise_nf(*a: Any, **k: Any) -> NoReturn:
         raise FileNotFoundError()
 
@@ -84,12 +99,14 @@ def test_main_config_not_found(monkeypatch: Any, capsys: Any) -> None:
 
 
 def test_main_no_mibs(monkeypatch: Any) -> None:
+    """Test case for test_main_no_mibs."""
     monkeypatch.setattr(cbm, "AppConfig", DummyConfigNoMibs)
     rc = cbm.main([])
     assert rc == 1
 
 
 def test_main_no_schemas_loaded(monkeypatch: Any) -> None:
+    """Test case for test_main_no_schemas_loaded."""
     monkeypatch.setattr(cbm, "AppConfig", DummyConfigWithMibs)
     monkeypatch.setattr(cbm, "build_internal_model", lambda mibs, schema_dir: {})
     rc = cbm.main(["--schema-dir", "nonexistent_dir"])
@@ -97,6 +114,7 @@ def test_main_no_schemas_loaded(monkeypatch: Any) -> None:
 
 
 def test_main_output_write_error(monkeypatch: Any, tmp_path: Any) -> None:
+    """Test case for test_main_output_write_error."""
     # Provide a model and attempt to write to a directory path to force an IOError
     monkeypatch.setattr(cbm, "AppConfig", DummyConfigWithMibs)
     monkeypatch.setattr(cbm, "build_internal_model", lambda mibs, schema_dir: {"M1": {}})
@@ -107,6 +125,7 @@ def test_main_output_write_error(monkeypatch: Any, tmp_path: Any) -> None:
 
 
 def test_main_success_writes_output(monkeypatch: Any, tmp_path: Any, capsys: Any) -> None:
+    """Test case for test_main_success_writes_output."""
     monkeypatch.setattr(cbm, "AppConfig", DummyConfigWithMibs)
     model: dict[str, dict[str, Any]] = {"M1": {"a": {}}}
     monkeypatch.setattr(cbm, "build_internal_model", lambda mibs, schema_dir: model)

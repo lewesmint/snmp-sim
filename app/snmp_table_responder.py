@@ -6,6 +6,8 @@ by returning data from the behavior JSON files, enabling full SNMP queryability
 (GET, GETNEXT, WALK) without relying on pysnmp's native table handling.
 """
 
+# pylint: disable=logging-fstring-interpolation,unused-variable
+
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 from pysnmp.smi import builder
@@ -96,11 +98,10 @@ class SNMPTableResponder:
             return True
 
         # Check if it's within a table (row or column)
-        for table_oid in self.table_oid_map.keys():
-            if len(oid) > len(table_oid) and oid[: len(table_oid)] == table_oid:
-                return True
-
-        return False
+        return any(
+            len(oid) > len(table_oid) and oid[: len(table_oid)] == table_oid
+            for table_oid in self.table_oid_map
+        )
 
     def get_table_info(
         self, oid: Tuple[int, ...]
@@ -222,6 +223,95 @@ class SNMPTableResponder:
 
         return sorted(oids)
 
+    @staticmethod
+    def _collect_entry_columns(
+        objects: Dict[str, Any],
+        entry_oid: Tuple[int, ...],
+    ) -> dict[str, dict[str, Any]]:
+        columns: dict[str, dict[str, Any]] = {}
+        for col_name, col_info in objects.items():
+            if not isinstance(col_info, dict):
+                continue
+            col_oid = col_info.get("oid", [])
+            if (
+                isinstance(col_oid, list)
+                and len(col_oid) == len(entry_oid) + 1
+                and col_oid[: len(entry_oid)] == list(entry_oid)
+            ):
+                columns[col_name] = col_info
+        return columns
+
+    @staticmethod
+    def _build_instance_str(instance_parts: Tuple[int, ...]) -> str:
+        return ".".join(str(x) for x in instance_parts) if instance_parts else "1"
+
+    @staticmethod
+    def _build_row_index_string(row: Dict[str, Any], index_columns: List[str]) -> Optional[str]:
+        if not index_columns:
+            return "1"
+        if len(index_columns) == 1:
+            row_idx_val = row.get(index_columns[0])
+            return str(row_idx_val) if row_idx_val is not None else ""
+
+        row_parts: List[str] = []
+        for idx_col in index_columns:
+            row_val = row.get(idx_col)
+            if row_val is None:
+                return None
+            if isinstance(row_val, (list, tuple)):
+                row_parts.extend(str(v) for v in row_val)
+            else:
+                row_parts.extend(str(v) for v in str(row_val).split("."))
+        return ".".join(row_parts)
+
+    def _lookup_single_column_value(
+        self,
+        rows: List[Any],
+        col_name: str,
+        index_columns: List[str],
+        instance_str: str,
+    ) -> Optional[Any]:
+        if not index_columns:
+            if instance_str != "1":
+                return None
+            for row in rows:
+                if isinstance(row, dict) and col_name in row:
+                    return row[col_name]
+            return None
+
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if col_name not in row:
+                continue
+            row_idx_str = self._build_row_index_string(row, index_columns)
+            if row_idx_str == instance_str:
+                return row[col_name]
+        return None
+
+    def _lookup_multi_column_value(
+        self,
+        columns: dict[str, dict[str, Any]],
+        rows: List[Any],
+        index_columns: List[str],
+        col_id: int,
+        instance_str: str,
+    ) -> Optional[Any]:
+        for col_name, col_info in columns.items():
+            if col_info.get("oid", [])[-1] != col_id:
+                continue
+
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                if col_name not in row:
+                    continue
+                row_idx_str = self._build_row_index_string(row, index_columns)
+                if row_idx_str == instance_str:
+                    return row[col_name]
+            return None
+        return None
+
     def _get_oid_value(self, oid: Tuple[int, ...]) -> Optional[Any]:
         """Get the value for a specific OID."""
         table_info = self.get_table_info(oid)
@@ -243,79 +333,28 @@ class SNMPTableResponder:
 
         if not entry_data:
             return None
-        # Find columns by OID prefix
-        columns: dict[str, dict[str, Any]] = {}
-        entry_oid = tuple(entry_data.get("oid", []))
-        for col_name, col_info in objects.items():
-            if not isinstance(col_info, dict):
-                continue
-            col_oid = col_info.get("oid", [])
-            if (
-                isinstance(col_oid, list)
-                and len(col_oid) == len(entry_oid) + 1
-                and col_oid[: len(entry_oid)] == list(entry_oid)
-            ):
-                columns[col_name] = col_info
 
-        # Find the column by OID
         entry_oid = tuple(entry_data.get("oid", []))
         if not entry_oid:
             return None
+
+        columns = self._collect_entry_columns(objects, entry_oid)
+        rows = table_data.get("rows", [])
+        if not isinstance(rows, list):
+            return None
+        index_columns = entry_data.get("indexes", [])
+        if not isinstance(index_columns, list):
+            index_columns = []
+
         if len(columns) == 1:
             if len(oid) < len(entry_oid) + 1:
                 return None
             if oid[: len(entry_oid)] != entry_oid:
                 return None
             instance_parts = oid[len(entry_oid) :]
-            instance_str = ".".join(str(x) for x in instance_parts) if instance_parts else "1"
+            instance_str = self._build_instance_str(instance_parts)
             col_name = next(iter(columns))
-            rows = table_data.get("rows", [])
-            if not isinstance(rows, list):
-                return None
-            index_columns = entry_data.get("indexes", [])
-            if not isinstance(index_columns, list):
-                index_columns = []
-
-            if not index_columns:
-                if instance_str != "1":
-                    return None
-                for row in rows:
-                    if isinstance(row, dict) and col_name in row:
-                        return row[col_name]
-                return None
-
-            if len(index_columns) == 1:
-                idx_col = index_columns[0]
-                for row in rows:
-                    if not isinstance(row, dict):
-                        continue
-                    if col_name not in row:
-                        continue
-                    row_idx_val = row.get(idx_col)
-                    row_idx_str = str(row_idx_val) if row_idx_val is not None else ""
-                    if row_idx_str == instance_str:
-                        return row[col_name]
-                return None
-
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                if col_name not in row:
-                    continue
-                row_parts: List[str] = []
-                for idx_col in index_columns:
-                    row_val = row.get(idx_col)
-                    if row_val is None:
-                        row_parts = []
-                        break
-                    if isinstance(row_val, (list, tuple)):
-                        row_parts.extend(str(v) for v in row_val)
-                    else:
-                        row_parts.extend(str(v) for v in str(row_val).split("."))
-                row_idx_str = ".".join(row_parts)
-                if row_idx_str == instance_str:
-                    return row[col_name]
-            return None
+            return self._lookup_single_column_value(rows, col_name, index_columns, instance_str)
 
         if len(oid) < len(entry_oid) + 1:
             return None
@@ -326,58 +365,15 @@ class SNMPTableResponder:
         col_id = oid[len(entry_oid)]
         # Instance parts follow the column id
         instance_parts = oid[len(entry_oid) + 1 :]
-        instance_str = ".".join(str(x) for x in instance_parts) if instance_parts else "1"
+        instance_str = self._build_instance_str(instance_parts)
 
-        # Find which column has this OID
-        for col_name, col_info in columns.items():
-            if col_info.get("oid", [])[-1] == col_id:
-                # Found the column, get the value from table data
-                rows = table_data.get("rows", [])
-                if not isinstance(rows, list):
-                    return None
-                index_columns = entry_data.get("indexes", [])
-                if not isinstance(index_columns, list):
-                    index_columns = []
-
-                if not index_columns:
-                    if instance_str != "1":
-                        return None
-                    for row in rows:
-                        if isinstance(row, dict) and col_name in row:
-                            return row[col_name]
-                elif len(index_columns) == 1:
-                    idx_col = index_columns[0]
-                    for row in rows:
-                        if not isinstance(row, dict):
-                            continue
-                        if col_name not in row:
-                            continue
-                        row_idx_val = row.get(idx_col)
-                        row_idx_str = str(row_idx_val) if row_idx_val is not None else ""
-                        if row_idx_str == instance_str:
-                            return row[col_name]
-                else:
-                    for row in rows:
-                        if not isinstance(row, dict):
-                            continue
-                        if col_name not in row:
-                            continue
-                        row_idx_parts: List[str] = []
-                        for idx_col in index_columns:
-                            row_val = row.get(idx_col)
-                            if row_val is None:
-                                row_idx_parts = []
-                                break
-                            if isinstance(row_val, (list, tuple)):
-                                row_idx_parts.extend(str(v) for v in row_val)
-                            else:
-                                row_idx_parts.extend(str(v) for v in str(row_val).split("."))
-                        row_idx_str = ".".join(row_idx_parts)
-                        if row_idx_str == instance_str:
-                            return row[col_name]
-                break
-
-        return None
+        return self._lookup_multi_column_value(
+            columns=columns,
+            rows=rows,
+            index_columns=index_columns,
+            col_id=col_id,
+            instance_str=instance_str,
+        )
 
     def handle_get_request(self, oid: Tuple[int, ...]) -> Optional[Any]:
         """Handle SNMP GET request for an OID."""

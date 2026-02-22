@@ -7,17 +7,22 @@ import sys
 
 from app.app_config import AppConfig
 from app.cli_build_model import build_internal_model
+from app.model_paths import AGENT_MODEL_DIR
 from app.snmp_agent import SNMPAgent
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the SNMP agent with a preloaded model from configured MIB schemas."""
     parser = argparse.ArgumentParser(
-        description="Run the SNMP agent with a preloaded internal model from configured MIB schemas. "
-        "Builds the model and starts the agent to respond to GET and GETNEXT requests."
+        description=(
+            "Run the SNMP agent with a preloaded internal model from "
+            "configured MIB schemas. Builds the model and starts the agent "
+            "to respond to GET and GETNEXT requests."
+        )
     )
     parser.add_argument(
         "--schema-dir",
-        default="agent-model",
+        default=str(AGENT_MODEL_DIR),
         help="Directory containing MIB schema subdirectories (default: agent-model)",
     )
     parser.add_argument(

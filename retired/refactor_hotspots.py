@@ -20,6 +20,7 @@ EXCLUDED_DIRS = {
     "logs",
     "agent-model",
     "agent-model-backups",
+    "scripts",
 }
 
 
@@ -144,18 +145,30 @@ def analyze_file(path: Path) -> tuple[FileHotspot | None, list[FunctionHotspot]]
     collector = FunctionCollector(path)
     collector.visit(tree)
     return (
-        FileHotspot(path=path, line_count=line_count, function_count=len(collector.items)),
+        FileHotspot(
+            path=path, line_count=line_count, function_count=len(collector.items)
+        ),
         collector.items,
     )
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Rank Python refactor hotspots by size and complexity.")
+    parser = argparse.ArgumentParser(
+        description="Rank Python refactor hotspots by size and complexity."
+    )
     parser.add_argument("root", nargs="?", default=".", help="Repository root to scan.")
-    parser.add_argument("--top-files", type=int, default=20, help="Number of files to show.")
-    parser.add_argument("--top-functions", type=int, default=30, help="Number of functions to show.")
-    parser.add_argument("--min-function-lines", type=int, default=40, help="Minimum function size.")
-    parser.add_argument("--min-complexity", type=int, default=10, help="Minimum function complexity.")
+    parser.add_argument(
+        "--top-files", type=int, default=20, help="Number of files to show."
+    )
+    parser.add_argument(
+        "--top-functions", type=int, default=30, help="Number of functions to show."
+    )
+    parser.add_argument(
+        "--min-function-lines", type=int, default=40, help="Minimum function size."
+    )
+    parser.add_argument(
+        "--min-complexity", type=int, default=10, help="Minimum function complexity."
+    )
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
@@ -174,12 +187,17 @@ def main() -> int:
     print("== Largest Files ==")
     for file_item in files_sorted[: args.top_files]:
         rel = file_item.path.relative_to(root)
-        print(f"{file_item.line_count:5d} lines  {file_item.function_count:4d} funcs  {rel}")
+        print(
+            f"{file_item.line_count:5d} lines  {file_item.function_count:4d} funcs  {rel}"
+        )
 
     print("\n== Function Hotspots ==")
     shown = 0
     for fn_item in functions_sorted:
-        if fn_item.length < args.min_function_lines and fn_item.complexity < args.min_complexity:
+        if (
+            fn_item.length < args.min_function_lines
+            and fn_item.complexity < args.min_complexity
+        ):
             continue
         rel = fn_item.path.relative_to(root)
         print(

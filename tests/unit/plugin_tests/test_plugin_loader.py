@@ -2,15 +2,37 @@
 Tests for the plugin_loader module.
 """
 
-import pytest
 from pathlib import Path
 import logging
 from typing import Any
+import pytest
 from app.plugin_loader import load_plugins_from_directory, load_plugins
 
 
 class TestPluginLoader:
     """Test the plugin loader functionality."""
+
+    @staticmethod
+    def _make_plugin_dir(tmp_path: Path, files: list[str] | None = None) -> Path:
+        plugin_dir = tmp_path / "plugins"
+        plugin_dir.mkdir()
+        for file_name in files or []:
+            (plugin_dir / file_name).write_text("# test plugin")
+        return plugin_dir
+
+    @staticmethod
+    def _setup_success_mocks(mocker: Any) -> tuple[Any, Any]:
+        mock_module_from_spec = mocker.patch("importlib.util.module_from_spec")
+        mock_spec_from_file = mocker.patch("importlib.util.spec_from_file_location")
+
+        mock_spec = mocker.MagicMock()
+        mock_loader = mocker.MagicMock()
+        mock_spec.loader = mock_loader
+        mock_spec_from_file.return_value = mock_spec
+
+        mock_module = mocker.MagicMock()
+        mock_module_from_spec.return_value = mock_module
+        return mock_spec_from_file, mock_loader
 
     def test_load_plugins_from_directory_nonexistent_dir(
         self, caplog: pytest.LogCaptureFixture
@@ -19,7 +41,7 @@ class TestPluginLoader:
         with caplog.at_level(logging.WARNING):
             result = load_plugins_from_directory("nonexistent_dir")
 
-        assert result == []
+        assert not result
         assert "Plugin directory 'nonexistent_dir' does not exist" in caplog.text
 
     def test_load_plugins_from_directory_not_a_dir(
@@ -32,45 +54,36 @@ class TestPluginLoader:
         with caplog.at_level(logging.WARNING):
             result = load_plugins_from_directory(str(file_path))
 
-        assert result == []
+        assert not result
         assert f"Plugin path '{file_path}' is not a directory" in caplog.text
 
     def test_load_plugins_from_directory_empty_dir(self, tmp_path: Path) -> None:
         """Test loading plugins from an empty directory."""
-        plugin_dir = tmp_path / "plugins"
-        plugin_dir.mkdir()
+        plugin_dir = self._make_plugin_dir(tmp_path)
 
         result = load_plugins_from_directory(str(plugin_dir))
-        assert result == []
+        assert not result
 
     def test_load_plugins_from_directory_with_underscore_files(self, tmp_path: Path) -> None:
         """Test that files starting with underscore are skipped."""
-        plugin_dir = tmp_path / "plugins"
-        plugin_dir.mkdir()
-
-        # Create files that should be skipped
-        (plugin_dir / "__init__.py").write_text("# init file")
-        (plugin_dir / "_private.py").write_text("# private plugin")
+        plugin_dir = self._make_plugin_dir(tmp_path, ["__init__.py", "_private.py"])
 
         result = load_plugins_from_directory(str(plugin_dir))
-        assert result == []
+        assert not result
 
     def test_load_plugins_from_directory_bad_spec(
         self, mocker: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test handling of bad plugin spec."""
         mock_spec_from_file = mocker.patch("importlib.util.spec_from_file_location")
-        plugin_dir = tmp_path / "plugins"
-        plugin_dir.mkdir()
-        plugin_file = plugin_dir / "test_plugin.py"
-        plugin_file.write_text("# test plugin")
+        plugin_dir = self._make_plugin_dir(tmp_path, ["test_plugin.py"])
 
         mock_spec_from_file.return_value = None
 
         with caplog.at_level(logging.WARNING):
             result = load_plugins_from_directory(str(plugin_dir))
 
-        assert result == []
+        assert not result
         assert "Could not load plugin spec" in caplog.text
 
     def test_load_plugins_from_directory_bad_loader(
@@ -78,10 +91,7 @@ class TestPluginLoader:
     ) -> None:
         """Test handling of spec with no loader."""
         mock_spec_from_file = mocker.patch("importlib.util.spec_from_file_location")
-        plugin_dir = tmp_path / "plugins"
-        plugin_dir.mkdir()
-        plugin_file = plugin_dir / "test_plugin.py"
-        plugin_file.write_text("# test plugin")
+        plugin_dir = self._make_plugin_dir(tmp_path, ["test_plugin.py"])
 
         mock_spec = mocker.MagicMock()
         mock_spec.loader = None
@@ -90,27 +100,15 @@ class TestPluginLoader:
         with caplog.at_level(logging.WARNING):
             result = load_plugins_from_directory(str(plugin_dir))
 
-        assert result == []
+        assert not result
         assert "Could not load plugin spec" in caplog.text
 
     def test_load_plugins_from_directory_exec_error(
         self, mocker: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test handling of execution errors during plugin loading."""
-        mock_module_from_spec = mocker.patch("importlib.util.module_from_spec")
-        mock_spec_from_file = mocker.patch("importlib.util.spec_from_file_location")
-        plugin_dir = tmp_path / "plugins"
-        plugin_dir.mkdir()
-        plugin_file = plugin_dir / "test_plugin.py"
-        plugin_file.write_text("# test plugin")
-
-        mock_spec = mocker.MagicMock()
-        mock_loader = mocker.MagicMock()
-        mock_spec.loader = mock_loader
-        mock_spec_from_file.return_value = mock_spec
-
-        mock_module = mocker.MagicMock()
-        mock_module_from_spec.return_value = mock_module
+        plugin_dir = self._make_plugin_dir(tmp_path, ["test_plugin.py"])
+        _, mock_loader = self._setup_success_mocks(mocker)
 
         # Make exec_module raise an exception
         mock_loader.exec_module.side_effect = Exception("Exec error")
@@ -118,7 +116,7 @@ class TestPluginLoader:
         with caplog.at_level(logging.ERROR):
             result = load_plugins_from_directory(str(plugin_dir))
 
-        assert result == []
+        assert not result
         assert "Failed to load plugin" in caplog.text
         assert "Exec error" in caplog.text
 
@@ -126,20 +124,8 @@ class TestPluginLoader:
         self, mocker: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test successful plugin loading."""
-        mock_module_from_spec = mocker.patch("importlib.util.module_from_spec")
-        mock_spec_from_file = mocker.patch("importlib.util.spec_from_file_location")
-        plugin_dir = tmp_path / "plugins"
-        plugin_dir.mkdir()
-        plugin_file = plugin_dir / "test_plugin.py"
-        plugin_file.write_text("# test plugin")
-
-        mock_spec = mocker.MagicMock()
-        mock_loader = mocker.MagicMock()
-        mock_spec.loader = mock_loader
-        mock_spec_from_file.return_value = mock_spec
-
-        mock_module = mocker.MagicMock()
-        mock_module_from_spec.return_value = mock_module
+        plugin_dir = self._make_plugin_dir(tmp_path, ["test_plugin.py"])
+        self._setup_success_mocks(mocker)
 
         with caplog.at_level(logging.INFO):
             result = load_plugins_from_directory(str(plugin_dir))
@@ -160,24 +146,11 @@ class TestPluginLoader:
         self, mocker: Any, tmp_path: Path
     ) -> None:
         """Test loading multiple plugins."""
-        mock_spec_from_file = mocker.patch("importlib.util.spec_from_file_location")
-        mock_module_from_spec = mocker.patch("importlib.util.module_from_spec")
-        plugin_dir = tmp_path / "plugins"
-        plugin_dir.mkdir()
-
-        # Create multiple plugin files
-        (plugin_dir / "plugin_a.py").write_text("# plugin a")
-        (plugin_dir / "plugin_b.py").write_text("# plugin b")
-        (plugin_dir / "plugin_c.py").write_text("# plugin c")
-
-        # Set up mocks for successful loading
-        mock_spec = mocker.MagicMock()
-        mock_loader = mocker.MagicMock()
-        mock_spec.loader = mock_loader
-        mock_spec_from_file.return_value = mock_spec
-
-        mock_module = mocker.MagicMock()
-        mock_module_from_spec.return_value = mock_module
+        plugin_dir = self._make_plugin_dir(
+            tmp_path,
+            ["plugin_a.py", "plugin_b.py", "plugin_c.py"],
+        )
+        self._setup_success_mocks(mocker)
 
         result = load_plugins_from_directory(str(plugin_dir))
 

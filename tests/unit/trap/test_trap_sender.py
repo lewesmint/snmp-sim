@@ -13,6 +13,7 @@ from app.trap_sender import TrapSender
 
 @pytest.fixture
 def trap_sender() -> TrapSender:
+    """Test case for trap_sender."""
     return TrapSender(dest=("localhost", 162), community="public")
 
 

@@ -1,3 +1,5 @@
+"""Misc regression tests for API endpoints, config, logging, and basic models."""
+
 import logging
 import logging.handlers
 import sys
@@ -7,25 +9,25 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-import app.api as api
+from app import api
 from app.app_config import AppConfig
 from app.app_logger import AppLogger, LoggingConfig, ColoredFormatter
-from app.behaviour_store import BehaviourStore
 from app.mib_object import MibObject
 from app.mib_registry import MibRegistry
 from app.mib_table import MibTable
-from app.snmp_transport import SNMPTransport
 from app.type_registry_validator import validate_type_registry
 
 
 @pytest.fixture
 def api_client() -> TestClient:
+    """Create a FastAPI test client for API route tests."""
     return TestClient(api.app)
 
 
 def test_api_get_sysdescr_without_agent(
     api_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Return 500 when getting sysDescr before SNMP agent is initialized."""
     monkeypatch.setattr(api, "snmp_agent", None)
     response = api_client.get("/sysdescr")
     assert response.status_code == 500
@@ -35,6 +37,7 @@ def test_api_get_sysdescr_without_agent(
 def test_api_set_sysdescr_without_agent(
     api_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Return 500 when setting sysDescr before SNMP agent is initialized."""
     monkeypatch.setattr(api, "snmp_agent", None)
     response = api_client.post("/sysdescr", json={"value": "test"})
     assert response.status_code == 500
@@ -44,15 +47,22 @@ def test_api_set_sysdescr_without_agent(
 def test_api_get_and_set_sysdescr_with_agent(
     api_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Exercise GET and POST sysDescr paths with a fake in-memory agent."""
+
     class FakeAgent:
+        """Minimal fake SNMP agent implementing scalar get/set used by the API."""
+
         def __init__(self) -> None:
+            """Initialize fake agent state for assertion of last set call."""
             self.last_set: tuple[tuple[int, ...], Any] | None = None
 
         def get_scalar_value(self, oid: tuple[int, ...]) -> str:
+            """Return a static sysDescr value for the expected OID."""
             assert oid == (1, 3, 6, 1, 2, 1, 1, 1, 0)
             return "sysdescr-value"
 
         def set_scalar_value(self, oid: tuple[int, ...], value: Any) -> None:
+            """Record the latest set request for downstream assertions."""
             self.last_set = (oid, value)
 
     fake_agent = FakeAgent()
@@ -75,16 +85,8 @@ def test_api_get_and_set_sysdescr_with_agent(
     assert fake_agent.last_set == ((1, 3, 6, 1, 2, 1, 1, 1, 0), "new-value")
 
 
-def test_behaviour_store_get_set() -> None:
-    store = BehaviourStore()
-    assert store.get("1.2.3") is None
-    store.set("1.2.3", "value")
-    store.load("/tmp/behaviour.json")
-    store.save("/tmp/behaviour.json")
-    assert store.get("1.2.3") == "value"
-
-
 def test_mib_object_get_set() -> None:
+    """Validate get/set round-trip behavior on MibObject."""
     obj = MibObject("1.2.3", {"syntax": "Integer"}, value=10)
     assert obj.get_value() == 10
     obj.set_value(42)
@@ -92,6 +94,7 @@ def test_mib_object_get_set() -> None:
 
 
 def test_mib_table_add_row() -> None:
+    """Validate row insertion order and retrieval in MibTable."""
     table = MibTable("1.2.3", [])
     table.add_row(["row1", 1])
     table.add_row(["row2", 2])
@@ -99,6 +102,7 @@ def test_mib_table_add_row() -> None:
 
 
 def test_mib_registry_get_type_default() -> None:
+    """Return empty dict for unknown OID and stored value for known OID."""
     registry = MibRegistry()
     registry.load_from_json("/tmp/types.json")
     assert registry.get_type("1.2.3") == {}
@@ -106,17 +110,13 @@ def test_mib_registry_get_type_default() -> None:
     assert registry.get_type("1.2.3") == {"name": "sysDescr"}
 
 
-def test_snmp_transport_start_stop_noop() -> None:
-    transport = SNMPTransport()
-    transport.start()
-    transport.stop()
-
-
 def _reset_app_config_singleton() -> None:
+    """Reset AppConfig singleton to isolate test cases."""
     AppConfig._instance = None
 
 
 def test_app_config_reads_values(tmp_path: Path) -> None:
+    """Read scalar and platform-specific values from a temporary config file."""
     _reset_app_config_singleton()
     try:
         config_dir = tmp_path / "cfg"
@@ -147,6 +147,7 @@ system_mib_dir:
 
 
 def test_app_config_missing_file() -> None:
+    """Raise FileNotFoundError when AppConfig points to a missing file."""
     _reset_app_config_singleton()
     try:
         with pytest.raises(FileNotFoundError):
@@ -156,6 +157,7 @@ def test_app_config_missing_file() -> None:
 
 
 def test_app_logger_configures_handlers(tmp_path: Path) -> None:
+    """Configure file/console handlers and colored formatter when console is enabled."""
     AppLogger._configured = False
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
@@ -179,6 +181,7 @@ def test_app_logger_configures_handlers(tmp_path: Path) -> None:
 
 
 def test_app_logger_no_console(tmp_path: Path) -> None:
+    """Create only file handler formatting when console logging is disabled."""
     AppLogger._configured = False
     log_dir = tmp_path / "logs-no-console"
     log_dir.mkdir()
@@ -200,6 +203,7 @@ def test_app_logger_no_console(tmp_path: Path) -> None:
 
 
 def test_app_logger_static_methods(caplog: pytest.LogCaptureFixture) -> None:
+    """Emit static logger messages and verify they are captured."""
     with caplog.at_level(logging.INFO):
         AppLogger.info("info-msg")
         AppLogger.warning("warn-msg")
@@ -210,6 +214,7 @@ def test_app_logger_static_methods(caplog: pytest.LogCaptureFixture) -> None:
 
 
 def test_app_logger_configured_short_circuit(tmp_path: Path) -> None:
+    """No-op when logger is already configured."""
     AppLogger._configured = True
     log_dir = tmp_path / "logs-short"
     log_dir.mkdir()
@@ -218,7 +223,61 @@ def test_app_logger_configured_short_circuit(tmp_path: Path) -> None:
     AppLogger._configured = False
 
 
+def test_app_logger_configure_uses_test_log_file_under_pytest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Route AppLogger.configure output to test log file when running under pytest."""
+
+    class _DummyConfig:
+        def __init__(self, logger_cfg: dict[str, Any]) -> None:
+            self._logger_cfg = logger_cfg
+
+        def get(self, key: str, default: Any = None) -> Any:
+            """Test case for get."""
+            if key == "logger":
+                return self._logger_cfg
+            return default
+
+    AppLogger._configured = False
+    log_dir = tmp_path / "logs-configure"
+    log_dir.mkdir()
+
+    cfg = _DummyConfig(
+        {
+            "log_dir": str(log_dir),
+            "log_file": "snmp-agent.log",
+            "test_log_file": "snmp-agent.test.log",
+            "console": False,
+            "rotate_on_startup": False,
+            "level": "INFO",
+        }
+    )
+
+    root = logging.getLogger()
+    old_handlers = list(root.handlers)
+    try:
+        monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests::dummy")
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+
+        AppLogger.configure(cfg)  # type: ignore[arg-type]
+
+        file_handlers = [
+            h for h in root.handlers if isinstance(h, logging.handlers.RotatingFileHandler)
+        ]
+        assert file_handlers
+        target = Path(file_handlers[0].baseFilename).name
+        assert target == "snmp-agent.test.log"
+    finally:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
+        for handler in old_handlers:
+            root.addHandler(handler)
+        AppLogger._configured = False
+
+
 def test_colored_formatter_changes_levelname() -> None:
+    """Ensure formatter output contains message and preserves record levelname."""
     formatter = ColoredFormatter(fmt="%(levelname)s %(message)s")
     record = logging.LogRecord(
         name="test",
@@ -253,7 +312,7 @@ def test_validate_type_registry_ok() -> None:
     }
     is_valid, errors = validate_type_registry(registry)
     assert is_valid is True
-    assert errors == []
+    assert not errors
 
 
 def test_validate_type_registry_missing_fields() -> None:

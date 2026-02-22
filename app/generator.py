@@ -1,12 +1,17 @@
+"""Schema generation from compiled MIB files."""
+
+import json
 import os
 import re
-import json
-from typing import Dict, Any, cast, Optional
 from pathlib import Path
+from typing import Any, Dict, Optional, cast
+
 from pysnmp.smi import builder
+
 from app.app_logger import AppLogger
-from app.plugin_loader import load_plugins
 from app.default_value_plugins import get_default_value
+from app.model_paths import AGENT_MODEL_DIR
+from app.plugin_loader import load_plugins
 
 logger = AppLogger.get(__name__)
 
@@ -24,8 +29,13 @@ class BehaviourGenerator:
     Output structure: {output_dir}/{MIB_NAME}/schema.json
     """
 
-    def __init__(self, output_dir: str = "agent-model", load_default_plugins: bool = True) -> None:
+    def __init__(
+        self,
+        output_dir: str = str(AGENT_MODEL_DIR),
+        load_default_plugins: bool = True,
+    ) -> None:
         self.output_dir = output_dir
+        self._type_registry: Dict[str, Any] = {}
         os.makedirs(self.output_dir, exist_ok=True)
 
         # Load plugins on initialization
@@ -65,18 +75,16 @@ class BehaviourGenerator:
 
         json_path = mib_dir / "schema.json"
 
-        if os.path.exists(json_path):
-            if force_regenerate:
-                os.remove(json_path)
-            else:
-                return str(json_path)
+        if os.path.exists(json_path) and not force_regenerate:
+            return str(json_path)
 
         # Extract MIB information (now includes objects and traps)
         extracted_data = self._extract_mib_info(compiled_py_path, mib_name)
         info = extracted_data.get("objects", {})
         traps = extracted_data.get("traps", {})
 
-        # Ensure table and entry symbols are recorded with their type, and each table has at least one row
+        # Ensure table and entry symbols are recorded with their type,
+        # and each table has at least one row.
         for name, symbol_info in info.items():
             # Record type for tables and entries
             if isinstance(symbol_info, dict):
@@ -111,24 +119,24 @@ class BehaviourGenerator:
                             # This is a best-effort: look for setIndexNames in the compiled MIB
                             # (We assume the symbol_name is the same as entry_name)
                             try:
-                                mibBuilder = builder.MibBuilder()
+                                mib_builder = builder.MibBuilder()
                                 # Some tests / mocks replace `builder` with a minimal object
                                 # that only exposes `MibBuilder`. Protect against missing
                                 # `DirMibSource` by trying the usual call and falling back.
                                 try:
-                                    mibBuilder.add_mib_sources(
+                                    mib_builder.add_mib_sources(
                                         builder.DirMibSource(os.path.dirname(compiled_py_path))
                                     )
                                 except Exception:
                                     # either DirMibSource is missing (AttributeError) or
                                     # the add call failed; call without args (mocks accept it)
                                     try:
-                                        mibBuilder.add_mib_sources()
+                                        mib_builder.add_mib_sources()
                                     except Exception:
                                         # best-effort: move on if even that fails
                                         pass
-                                mibBuilder.load_modules(mib_name)
-                                mib_symbols = mibBuilder.mibSymbols[mib_name]
+                                mib_builder.load_modules(mib_name)
+                                mib_symbols = mib_builder.mibSymbols[mib_name]
                                 entry_obj = mib_symbols.get(entry_name)
                                 if entry_obj and hasattr(entry_obj, "getIndexNames"):
                                     index_names = [idx[2] for idx in entry_obj.getIndexNames()]
@@ -156,7 +164,7 @@ class BehaviourGenerator:
                                 columns.append(col_name)
                         # Build a default row with sensible values
                         default_row = {}
-                        if not hasattr(self, "_type_registry"):
+                        if not getattr(self, "_type_registry", None):
                             self._type_registry = self._load_type_registry()
                         index_names = entry_info.get("indexes", [])
                         if not index_names:
@@ -177,26 +185,31 @@ class BehaviourGenerator:
                             if col in index_names:
                                 default_value = self._get_default_index_value(col_type, type_info)
                                 # Ensure index values respect their type constraints
-                                # For types with constraints excluding 0 (like InterfaceIndex), use 1 as minimum
+                                # For types with constraints excluding 0
+                                # (like InterfaceIndex), use 1 as minimum.
                                 if isinstance(default_value, int) and default_value < 1:
                                     # Check if type has constraints that exclude 0
                                     constraints = type_info.get("constraints", [])
                                     has_nonzero_constraint = any(
-                                        c.get("min", 0) > 0
-                                        if isinstance(c, dict)
-                                        and c.get("type") == "ValueRangeConstraint"
-                                        else False
+                                        (
+                                            c.get("min", 0) > 0
+                                            if isinstance(c, dict)
+                                            and c.get("type") == "ValueRangeConstraint"
+                                            else False
+                                        )
                                         for c in constraints
                                     )
                                     # Only fix to 1 if constraints require it
                                     if has_nonzero_constraint or col_type in ("InterfaceIndex",):
                                         default_value = 1
                                 default_row[col] = default_value
-                                # Don't set col_info["initial"] - table columns shouldn't have initial values
+                                # Don't set col_info["initial"] - table columns
+                                # shouldn't have initial values.
                             else:
                                 value = self._get_default_value_from_type_info(type_info, col)
                                 default_row[col] = value
-                                # Don't set col_info["initial"] - table columns shouldn't have initial values
+                                # Don't set col_info["initial"] - table columns
+                                # shouldn't have initial values.
                         if default_row:
                             symbol_info["rows"].append(default_row)
 
@@ -206,8 +219,12 @@ class BehaviourGenerator:
             "objects": info,
             "traps": traps,
         }
-        with open(json_path, "w") as f:
+        tmp_path = json_path.with_suffix(".json.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(output_data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, json_path)
 
         logger.info(f"Schema JSON written to {json_path} with {len(traps)} trap(s)")
         return str(json_path)
@@ -234,17 +251,17 @@ class BehaviourGenerator:
             Dictionary mapping symbol names to their metadata
         """
 
-        mibBuilder = builder.MibBuilder()
+        mib_builder = builder.MibBuilder()
         # Protect against minimal / mocked `builder` objects that lack DirMibSource
         try:
-            mibBuilder.add_mib_sources(builder.DirMibSource(os.path.dirname(mib_py_path)))
+            mib_builder.add_mib_sources(builder.DirMibSource(os.path.dirname(mib_py_path)))
         except Exception:
             try:
-                mibBuilder.add_mib_sources()
+                mib_builder.add_mib_sources()
             except Exception:
                 pass
-        mibBuilder.load_modules(mib_name)
-        mib_symbols = mibBuilder.mibSymbols[mib_name]
+        mib_builder.load_modules(mib_name)
+        mib_symbols = mib_builder.mibSymbols[mib_name]
 
         if not isinstance(mib_symbols, dict):
             mib_type = type(mib_symbols)
@@ -277,7 +294,7 @@ class BehaviourGenerator:
             else:
                 type_name = symbol_type
 
-            if not hasattr(self, "_type_registry"):
+            if not getattr(self, "_type_registry", None):
                 self._type_registry = self._load_type_registry()
             type_info = self._type_registry.get(type_name, {})
 
@@ -303,7 +320,8 @@ class BehaviourGenerator:
                 # DEBUG
                 if symbol_name_str in ("ifAdminStatus", "ifOperStatus"):
                     logger.warning(
-                        f"DEBUG {symbol_name_str}: extracted enums = {extracted_type_info.get('enums')}"
+                        f"DEBUG {symbol_name_str}: extracted enums = "
+                        f"{extracted_type_info.get('enums')}"
                     )
                 # Merge extracted enums and constraints into type_info
                 # Extracted info has priority as it comes from the specific symbol
@@ -388,7 +406,8 @@ class BehaviourGenerator:
                         obj_refs = symbol_obj.getObjects()
                         if obj_refs:
                             for obj_ref in obj_refs:
-                                # obj_ref is a tuple like (('IF-MIB', 'ifIndex'), ('IF-MIB', 'ifAdminStatus'))
+                                # obj_ref is a tuple like
+                                # (('IF-MIB', 'ifIndex'), ('IF-MIB', 'ifAdminStatus'))
                                 if isinstance(obj_ref, tuple) and len(obj_ref) >= 2:
                                     obj_mib = str(obj_ref[0])
                                     obj_name = str(obj_ref[1])
@@ -419,7 +438,8 @@ class BehaviourGenerator:
                         "mib": mib_name,
                     }
                     logger.debug(
-                        f"Extracted trap {symbol_name_str} with OID {oid} and {len(objects)} objects"
+                        f"Extracted trap {symbol_name_str} with OID {oid} "
+                        f"and {len(objects)} objects"
                     )
                 except Exception as e:
                     logger.warning(f"Failed to extract trap info for {symbol_name_str}: {e}")
@@ -433,7 +453,8 @@ class BehaviourGenerator:
         registry_path = Path(__file__).resolve().parent.parent / "data" / "types.json"
         if not registry_path.exists():
             raise FileNotFoundError(
-                f"Type registry JSON not found at {registry_path}. Run the type recorder/export step first."
+                f"Type registry JSON not found at {registry_path}. "
+                "Run the type recorder/export step first."
             )
         with registry_path.open("r", encoding="utf-8") as f:
             return cast(Dict[str, Any], json.load(f))
@@ -564,7 +585,7 @@ class BehaviourGenerator:
             return 0
         if col_type == "InterfaceIndex":
             return 1
-        elif col_type in ("Unsigned32", "Integer32", "Integer", "Gauge32"):
+        if col_type in ("Unsigned32", "Integer32", "Integer", "Gauge32"):
             # For port numbers and similar, use a more realistic default
             # Check if this might be a port based on constraints
             if type_info:
@@ -572,11 +593,10 @@ class BehaviourGenerator:
                 if "port" in base.lower():
                     return 8080
             return 1
-        elif col_type in ("OctetString", "DisplayString", "PhysAddress"):
+        if col_type in ("OctetString", "DisplayString", "PhysAddress"):
             return "default"
-        else:
-            # Use the generic default value generator
-            return self._get_default_value_from_type_info(type_info, "index")
+        # Use the generic default value generator
+        return self._get_default_value_from_type_info(type_info, "index")
 
     def _get_default_value_from_type_info(self, type_info: Dict[str, Any], symbol_name: str) -> Any:
         """Get a sensible default value based on type info and symbol name.
@@ -607,32 +627,31 @@ class BehaviourGenerator:
         # but kept as fallback
         if symbol_name == "sysDescr":
             return "Simple Python SNMP Agent - Demo System"
-        elif symbol_name == "sysObjectID":
+        if symbol_name == "sysObjectID":
             return "1.3.6.1.4.1.99999"
-        elif symbol_name == "sysContact":
+        if symbol_name == "sysContact":
             return "Admin <admin@example.com>"
-        elif symbol_name == "sysName":
+        if symbol_name == "sysName":
             return "my-pysnmp-agent"
-        elif symbol_name == "sysLocation":
+        if symbol_name == "sysLocation":
             return "Development Lab"
-        elif symbol_name == "sysUpTime":
+        if symbol_name == "sysUpTime":
             return None  # Dynamic, handled by uptime function
 
         # Type-based defaults
         if syntax in ("DisplayString", "OctetString"):
             return "unset"
-        elif syntax == "ObjectIdentifier":
+        if syntax == "ObjectIdentifier":
             return "0.0"
-        elif syntax in ("Integer32", "Integer", "Gauge32", "Unsigned32"):
+        if syntax in ("Integer32", "Integer", "Gauge32", "Unsigned32"):
             return 0
-        elif syntax in ("Counter32", "Counter64"):
+        if syntax in ("Counter32", "Counter64"):
             return 0
-        elif syntax == "IpAddress":
+        if syntax == "IpAddress":
             return "0.0.0.0"
-        elif syntax == "TimeTicks":
+        if syntax == "TimeTicks":
             return 0
-        else:
-            return None
+        return None
 
     def _get_dynamic_function(self, symbol_name: str) -> Any:
         """Determine if this symbol should use a dynamic function."""

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Iterable
 
+from app.model_paths import AGENT_MODEL_DIR
 
 DEFAULT_SCHEMA_VERSION = "1.0.1"
 
@@ -16,12 +17,13 @@ def _iter_schema_files(schema_dir: Path) -> list[Path]:
 
 
 def main(argv: Iterable[str] | None = None) -> int:
+    """Update schema_version for all schema.json files."""
     parser = argparse.ArgumentParser(
         description="Update schema_version for all schema.json files.",
     )
     parser.add_argument(
         "--schema-dir",
-        default="agent-model",
+        default=str(AGENT_MODEL_DIR),
         help="Directory containing MIB schema subdirectories (default: agent-model)",
     )
     parser.add_argument(

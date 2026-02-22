@@ -4,6 +4,7 @@ Example usage of the async_wrapper synchronous SNMP wrapper.
 This demonstrates how to use the wrapper for basic SNMP operations.
 Note: Requires a running SNMP agent on the target.
 """
+
 # pyright: reportAttributeAccessIssue=false, reportCallIssue=false, reportArgumentType=false
 
 from async_wrapper import (

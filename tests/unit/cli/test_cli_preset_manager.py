@@ -17,6 +17,7 @@ from app.cli_preset_manager import (
 
 
 def test_list_presets_returns_sorted_names(tmp_path: Path) -> None:
+    """Test case for test_list_presets_returns_sorted_names."""
     preset_base = tmp_path / "presets"
     assert list_presets(preset_base) == []
 
@@ -28,6 +29,7 @@ def test_list_presets_returns_sorted_names(tmp_path: Path) -> None:
 
 
 def test_save_preset_missing_schema_dir(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Test case for test_save_preset_missing_schema_dir."""
     code = save_preset(tmp_path / "agent-model", tmp_path / "presets", "test")
     out = capsys.readouterr()
     assert code == 1
@@ -37,6 +39,7 @@ def test_save_preset_missing_schema_dir(tmp_path: Path, capsys: pytest.CaptureFi
 def test_save_preset_creates_copy_and_metadata(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """Test case for test_save_preset_creates_copy_and_metadata."""
     schema_dir = tmp_path / "agent-model"
     schema_dir.mkdir(parents=True)
     (schema_dir / "A-MIB").mkdir(parents=True)
@@ -60,6 +63,7 @@ def test_save_preset_existing_cancel_or_overwrite(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """Test case for test_save_preset_existing_cancel_or_overwrite."""
     schema_dir = tmp_path / "agent-model"
     schema_dir.mkdir(parents=True)
     (schema_dir / "schema.json").write_text('{"v":1}', encoding="utf-8")
@@ -87,6 +91,7 @@ def test_load_preset_missing_and_success_paths(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """Test case for test_load_preset_missing_and_success_paths."""
     schema_dir = tmp_path / "agent-model"
     preset_base = tmp_path / "presets"
     backup_base = tmp_path / "backups"
@@ -114,6 +119,7 @@ def test_load_preset_missing_and_success_paths(
 
 
 def test_load_preset_no_backup_skips_backup(tmp_path: Path) -> None:
+    """Test case for test_load_preset_no_backup_skips_backup."""
     schema_dir = tmp_path / "agent-model"
     preset_base = tmp_path / "presets"
     backup_base = tmp_path / "backups"
@@ -132,6 +138,7 @@ def test_load_preset_no_backup_skips_backup(tmp_path: Path) -> None:
 def test_delete_preset_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """Test case for test_delete_preset_paths."""
     preset_base = tmp_path / "presets"
     code_missing = delete_preset(preset_base, "none")
     out_missing = capsys.readouterr()
@@ -161,6 +168,7 @@ def test_main_dispatches_actions(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test case for test_main_dispatches_actions."""
     schema_dir = tmp_path / "agent-model"
     preset_dir = tmp_path / "presets"
     backup_dir = tmp_path / "backups"

@@ -1,3 +1,5 @@
+"""Application logging configuration and utilities."""
+
 from __future__ import annotations
 
 import logging
@@ -13,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 @dataclass(frozen=True)
 class LoggingConfig:
+    """Configuration for application logging."""
+
     level: str
     log_dir: Path
     log_file: str = "snmp-agent.log"
@@ -141,6 +145,8 @@ def _archive_log_file(log_path: Path) -> None:
 
 
 class AppLogger:
+    """Application logger with configuration management."""
+
     _configured: bool = False
 
     @staticmethod
@@ -155,11 +161,17 @@ class AppLogger:
 
         log_dir = logger_cfg.get("log_dir", "logs")
         log_file = logger_cfg.get("log_file", "snmp-agent.log")
+        test_log_file = logger_cfg.get("test_log_file", "snmp-agent.test.log")
         level = logger_cfg.get("level", "INFO")
         console = logger_cfg.get("console", True)
         max_bytes = logger_cfg.get("max_bytes", 10 * 1024 * 1024)
         backup_count = logger_cfg.get("backup_count", 5)
         rotate_on_startup = logger_cfg.get("rotate_on_startup", True)
+
+        is_pytest_context = "pytest" in sys.modules or bool(os.environ.get("PYTEST_CURRENT_TEST"))
+        if is_pytest_context:
+            log_file = test_log_file
+
         config = LoggingConfig(
             level=level,
             log_dir=Path(os.path.abspath(log_dir)),
@@ -172,6 +184,7 @@ class AppLogger:
         AppLogger(config)
 
     def __init__(self, config: LoggingConfig) -> None:
+        """Initialize the logger with the given configuration."""
         if AppLogger._configured:
             return
         self._configure(config)
@@ -179,18 +192,22 @@ class AppLogger:
 
     @staticmethod
     def get(name: str | None = None) -> logging.Logger:
+        """Get a logger instance by name."""
         return logging.getLogger(name)
 
     @staticmethod
     def warning(msg: str, *args: Any, **kwargs: Any) -> None:
+        """Log a warning message."""
         logging.getLogger().warning(msg, *args, **kwargs)
 
     @staticmethod
     def error(msg: str, *args: Any, **kwargs: Any) -> None:
+        """Log an error message."""
         logging.getLogger().error(msg, *args, **kwargs)
 
     @staticmethod
     def info(msg: str, *args: Any, **kwargs: Any) -> None:
+        """Log an info message."""
         logging.getLogger().info(msg, *args, **kwargs)
 
     @staticmethod

@@ -19,7 +19,6 @@ from pysnmp.hlapi.v3arch.asyncio import (
 from pysnmp.smi.rfc1902 import ObjectType, ObjectIdentity
 from pysnmp.proto.rfc1902 import OctetString
 
-
 # Configuration
 HOST = "127.0.0.1"
 PORT = 11161

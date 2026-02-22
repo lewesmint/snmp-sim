@@ -1,3 +1,5 @@
+"""Tests for test api."""
+
 import json
 from pathlib import Path
 from typing import Dict, Any, Generator
@@ -5,13 +7,14 @@ from typing import Dict, Any, Generator
 import pytest
 from fastapi.testclient import TestClient
 
-import app.api as api
+from app import api
 
 client = TestClient(api.app)
 
 
 @pytest.fixture(autouse=True)
 def restore_snmp_agent() -> Generator[None, None, None]:
+    """Test case for restore_snmp_agent."""
     # Ensure we don't leak a fake snmp_agent between tests
     original = getattr(api, "snmp_agent")
     api.snmp_agent = None
@@ -21,6 +24,7 @@ def restore_snmp_agent() -> Generator[None, None, None]:
 
 @pytest.fixture
 def backup_types_json(tmp_path: Any, monkeypatch: Any) -> Generator[None, None, None]:
+    """Test case for backup_types_json."""
     # Back up existing data/types.json if present and restore after test
     data_path = Path("data") / "types.json"
     backup = None
@@ -37,12 +41,14 @@ def backup_types_json(tmp_path: Any, monkeypatch: Any) -> Generator[None, None, 
 
 
 def test_get_sysdescr_agent_not_initialized() -> None:
+    """Test case for test_get_sysdescr_agent_not_initialized."""
     r = client.get("/sysdescr")
     assert r.status_code == 500
     assert "SNMP agent not initialized" in r.json()["detail"]
 
 
 def test_get_and_set_sysdescr_happy_path(mocker: Any) -> None:
+    """Test case for test_get_and_set_sysdescr_happy_path."""
     fake = mocker.MagicMock()
     oid = (1, 3, 6, 1, 2, 1, 1, 1, 0)
     fake.get_scalar_value.return_value = "My system"
@@ -61,6 +67,7 @@ def test_get_and_set_sysdescr_happy_path(mocker: Any) -> None:
 
 
 def test_validate_types_invalid(monkeypatch: Any) -> None:
+    """Test case for test_validate_types_invalid."""
     # Patch validator to return invalid
     monkeypatch.setattr(
         "app.type_registry_validator.validate_type_registry_file",
@@ -74,6 +81,7 @@ def test_validate_types_invalid(monkeypatch: Any) -> None:
 
 
 def test_validate_types_valid(monkeypatch: Any) -> None:
+    """Test case for test_validate_types_valid."""
     monkeypatch.setattr(
         "app.type_registry_validator.validate_type_registry_file",
         lambda p: (True, [], 42),
@@ -86,6 +94,7 @@ def test_validate_types_valid(monkeypatch: Any) -> None:
 
 
 def test_get_type_info_not_found(backup_types_json: Any) -> None:
+    """Test case for test_get_type_info_not_found."""
     # Write a minimal registry that does not contain FooType
     Path("data").mkdir(exist_ok=True)
     Path("data/types.json").write_text(json.dumps({"Bar": {"base_type": "Integer32"}}))
@@ -95,6 +104,7 @@ def test_get_type_info_not_found(backup_types_json: Any) -> None:
 
 
 def test_get_type_info_found(backup_types_json: Any) -> None:
+    """Test case for test_get_type_info_found."""
     # Prepare a registry where DisplayString -> OctetString and OctetString -> OCTET STRING
     Path("data").mkdir(exist_ok=True)
     registry: Dict[str, Any] = {
@@ -112,6 +122,7 @@ def test_get_type_info_found(backup_types_json: Any) -> None:
 
 
 def test_list_types(backup_types_json: Any) -> None:
+    """Test case for test_list_types."""
     Path("data").mkdir(exist_ok=True)
     registry: Dict[str, Any] = {"A": {}, "B": {}, "C": {}}
     Path("data/types.json").write_text(json.dumps(registry))

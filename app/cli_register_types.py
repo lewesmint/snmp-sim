@@ -140,7 +140,8 @@ def main(argv: Iterable[str] | None = None) -> int:
                     mib_name = "SNMPv2-SMI"
 
                 print(
-                    f"  {type_name:<30s} {base_type:<20s} {default_str:<15s} {mib_name:<20s} {used_by_count}"
+                    f"  {type_name:<30s} {base_type:<20s} "
+                    f"{default_str:<15s} {mib_name:<20s} {used_by_count}"
                 )
 
         return 0

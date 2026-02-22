@@ -5,6 +5,7 @@ from datetime import datetime
 
 
 def test_date_and_time() -> None:
+    """Test case for test_date_and_time."""
     now = datetime.utcnow()
     year_bytes = now.year.to_bytes(2, byteorder="big")
     octets = year_bytes + bytes([now.month, now.day, now.hour, now.minute, now.second, 0])

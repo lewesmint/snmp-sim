@@ -233,3 +233,149 @@ Source: `scripts/refactor_hotspots.py` run with `--top-functions 20 --min-functi
 3. T05 (table responder resolution dedupe)
 4. T07 (type recorder decomposition)
 5. T06 + T10 + T09 (UI method decomposition)
+
+---
+
+## Exact implementation plan
+
+This is the exact order and method I will execute, with no behavior changes intended.
+
+### Phase 1 — API refactors first (lowest risk, highest duplication reduction)
+1. Implement **T02** in `app/api.py`:
+   - Extract helpers for schema context load, index conversion, instance index build, and default merge.
+   - Remove duplicated default-merge logic and keep one shared helper.
+   - Keep response payload and exception behavior unchanged.
+2. Implement **T08** in `app/api.py`:
+   - Extract table/entry resolution, column collection, instance normalization, virtual index injection.
+   - Preserve output schema exactly.
+3. Validate Phase 1:
+   - `ruff check app/api.py --select C90,PLR`
+   - `pytest -q tests -k "table_schema or table_row"`
+
+### Phase 2 — Registrar decomposition (largest complexity hotspots)
+4. Implement **T01** in `app/mib_registrar.py`:
+   - Extract entry resolution, column collection, index tuple build, row value resolve, instance creation, write-hook attachment.
+   - Keep symbol names and instance naming unchanged.
+5. Implement **T04** in `app/mib_registrar.py`:
+   - Extract scalar candidate iteration, type/value resolution, scalar creation, sysUpTime hook, write hooks, table registration.
+   - Keep registration side effects and logging behavior intact.
+6. Validate Phase 2:
+   - `ruff check app/mib_registrar.py --select C90,PLR`
+   - `pytest -q tests -k "mib_registrar"`
+
+### Phase 3 — Table lookup correctness hardening
+7. Implement **T05** in `app/snmp_table_responder.py`:
+   - Deduplicate row index matching logic into shared helpers.
+   - Preserve OID matching semantics for single/multi-column and multi-part indexes.
+8. Validate Phase 3:
+   - `ruff check app/snmp_table_responder.py --select C90,PLR`
+   - `pytest -q tests -k "table_responder or getnext or table"`
+
+### Phase 4 — Type recorder cleanup
+9. Implement **T07** in `app/type_recorder.py`:
+   - Split module loading and symbol processors.
+   - Consolidate metadata derivation branches while keeping registry output equivalent.
+10. Validate Phase 4:
+   - `ruff check app/type_recorder.py --select C90,PLR`
+   - `pytest -q tests -k "type_recorder"`
+
+### Phase 5 — UI method decomposition (last; higher regression risk)
+11. Implement **T06** in `ui/snmp_gui.py`.
+12. Implement **T10** in `ui/snmp_gui.py`.
+13. Implement **T09** in `ui/snmp_gui.py`.
+14. Validate Phase 5:
+   - `ruff check ui/snmp_gui.py --select C90,PLR`
+   - Run existing manual UI smoke checklist in `manual-tests/ui/`.
+
+### Global guardrails I will follow
+- No endpoint contract changes.
+- No schema shape changes.
+- No changes to OID semantics or instance key formats.
+- No new features; refactor-only commits.
+- Keep changes small and ticket-scoped (one ticket per patch set).
+
+### Completion criteria per ticket
+- Function complexity/branching reduced materially (checked by `ruff --select C90,PLR`).
+- Existing tests for that domain still pass.
+- No net new lint/type errors introduced in touched files.
+
+### Final repo-level verification after all 10 tickets
+- `ruff check . --select C90,PLR --statistics`
+- `python scripts/refactor_hotspots.py . --top-functions 20 --min-function-lines 40 --min-complexity 10`
+- `pytest -q`
+
+---
+
+## Completion notes (executed)
+
+- Status: **T01, T02, T04, T05, T06, T07, T08, T09, T10 completed** in code.
+- Deferred by design: **T03** (`app/api.py:get_tree_bulk_data`) kept out of scope in this pass to avoid large API-surface churn while stabilizing other hotspots first.
+- Verification executed:
+   - `ruff check . --select C90,PLR --statistics`
+   - `python scripts/refactor_hotspots.py . --top-functions 20 --min-function-lines 40 --min-complexity 10`
+   - `pytest -q` (result: **658 passed, 0 failed**)
+
+## Before/after hotspot snapshot (targeted)
+
+Values below compare original ticket snapshot (top of this document) vs current post-refactor hotspot scan.
+
+- `app/mib_registrar.py:_build_table_symbols`
+   - Before: score=520, cc=75, branches=74, lines=361
+   - After:  score=105, cc=14, branches=13, lines=116
+- `app/api.py:create_table_row`
+   - Before: score=482, cc=72, branches=71, lines=260
+   - After:  score=107, cc=15, branches=14, lines=95
+- `app/snmp_table_responder.py:_get_oid_value`
+   - Before: score=425, cc=66, branches=65, lines=156
+   - After:  score=88, cc=13, branches=12, lines=62
+- `app/type_recorder.py:build` (decomposed; helper now carries remaining logic)
+   - Before (`build`): score=385, cc=57, branches=56, lines=228
+   - After (primary helper `_process_object_type_symbol`): score=178, cc=27, branches=26, lines=90
+- `ui/snmp_gui.py:_open_link_dialog`
+   - Before: score=362, cc=52, branches=51, lines=260
+   - After:  score=156, cc=22, branches=21, lines=134
+- `ui/snmp_gui.py:_add_instance`
+   - Before: score=358, cc=51, branches=50, lines=273
+   - After:  score=68, cc=10, branches=9, lines=50
+
+## Changelog summary (files touched + risk notes)
+
+- Core files refactored:
+   - `app/api.py`
+   - `app/api_table_helpers.py` (new helper module)
+   - `app/mib_registrar.py`
+   - `app/snmp_table_responder.py`
+   - `app/type_recorder.py`
+   - `ui/snmp_gui.py`
+- Process/docs updated:
+   - `docs/REFACTOR_EXECUTION_CHECKLIST.md`
+   - `docs/REFACTOR_TICKETS_TOP10.md`
+- Risk notes:
+   - Behavior-preserving extraction pattern used (orchestration method + focused helpers).
+   - SNMP table/index and hook paths were regression-checked with targeted tests.
+   - UI manual smoke pass is still required for full UX confidence.
+
+## PR description draft
+
+Title: `refactor: decompose top complexity hotspots across API/registrar/table responder/type recorder/UI`
+
+Summary:
+- Extracts helper methods from major hotspot functions to reduce branch/statement complexity.
+- Preserves endpoint contracts, table/index semantics, and hook behavior.
+- Adds/updates execution tracking docs for phased delivery.
+
+What changed:
+- API: split table schema/row creation workflows and moved shared table helpers to `app/api_table_helpers.py`.
+- Registrar: decomposed scalar/table symbol build paths and centralized hook attachment.
+- Table responder: split OID value resolution into reusable lookup helpers.
+- Type recorder: converted `build()` into orchestration with dedicated symbol processors.
+- UI: decomposed `_discover_table_instances`, `_add_instance`, and `_open_link_dialog`.
+
+Validation:
+- `pytest -q`: 658 passed, 0 failed.
+- Repo complexity snapshot: `ruff check . --select C90,PLR --statistics`.
+- Hotspot snapshot: `scripts/refactor_hotspots.py`.
+
+Known follow-ups:
+- Manual UI smoke checks in `manual-tests/ui/`.
+- Remaining global lint debt (not introduced by this refactor), especially legacy findings in `app/api.py` and large UI modules.

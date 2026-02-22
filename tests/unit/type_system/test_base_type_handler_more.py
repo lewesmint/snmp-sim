@@ -1,3 +1,5 @@
+"""Tests for test base type handler more."""
+
 import importlib
 import types
 import logging
@@ -11,6 +13,7 @@ from pytest_mock import MockerFixture
 
 @pytest.fixture
 def handler() -> BaseTypeHandler:
+    """Test case for handler."""
     registry: TypeRegistry = {
         "OctetString": {"base_type": "OCTET STRING"},
         "Integer32": {"base_type": "INTEGER"},
@@ -20,6 +23,7 @@ def handler() -> BaseTypeHandler:
 
 
 def test_resolve_to_base_type_recursive_lookup() -> None:
+    """Test case for test_resolve_to_base_type_recursive_lookup."""
     registry: TypeRegistry = {
         "MyTC": {"base_type": "DisplayString"},
         "DisplayString": {"base_type": "OctetString"},
@@ -33,6 +37,7 @@ def test_resolve_to_base_type_recursive_lookup() -> None:
 def test_resolve_to_base_type_fallback_logs(
     caplog: pytest.LogCaptureFixture, handler: BaseTypeHandler
 ) -> None:
+    """Test case for test_resolve_to_base_type_fallback_logs."""
     caplog.set_level(logging.WARNING)
     # Unknown type - should warn and default to INTEGER
     assert handler.resolve_to_base_type("CompletelyUnknown") == "INTEGER"
@@ -44,12 +49,19 @@ def test_create_pysnmp_value_handles_type_class_exception(
     handler: BaseTypeHandler,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    """Test case for test_create_pysnmp_value_handles_type_class_exception."""
+
     class BadCls:
+        """Test helper class for BadCls."""
+
         def __init__(self, _v: Any) -> None:
             raise ValueError("boom")
 
     class BadBuilder:
+        """Test helper class for BadBuilder."""
+
         def import_symbols(self, module: str, name: str) -> Tuple[Any, ...]:
+            """Test case for import_symbols."""
             return (BadCls,)
 
     caplog.set_level(logging.WARNING)
@@ -62,8 +74,12 @@ def test_create_pysnmp_value_handles_type_class_exception(
 def test_create_pysnmp_value_fallback_to_rfc1902(
     monkeypatch: pytest.MonkeyPatch, handler: BaseTypeHandler
 ) -> None:
+    """Test case for test_create_pysnmp_value_fallback_to_rfc1902."""
+
     # Simulate missing MIB type and patch rfc1902
     class FakeInt:
+        """Test helper class for FakeInt."""
+
         def __init__(self, v: Any) -> None:
             self.v = int(v)
 
@@ -78,7 +94,10 @@ def test_create_pysnmp_value_fallback_to_rfc1902(
 
     # Use a builder that raises to force fallback
     class RaisingBuilder:
+        """Test helper class for RaisingBuilder."""
+
         def import_symbols(self, module: str, name: str) -> Tuple[Any, ...]:
+            """Test case for import_symbols."""
             raise RuntimeError("nope")
 
     out = handler.create_pysnmp_value("Integer32", 42, mib_builder=RaisingBuilder())
@@ -94,11 +113,18 @@ def test_create_pysnmp_value_fallback_to_rfc1902(
 def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
     monkeypatch: pytest.MonkeyPatch, handler: BaseTypeHandler
 ) -> None:
+    """Test case for test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902."""
+
     class MyClass:
+        """Test helper class for MyClass."""
+
         pass
 
     class Builder:
+        """Test helper class for Builder."""
+
         def import_symbols(self, module: str, name: str) -> Tuple[Any, ...]:
+            """Test case for import_symbols."""
             if module == "SNMPv2-SMI":
                 return (MyClass,)
             raise RuntimeError
@@ -109,10 +135,15 @@ def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
 
     # Now simulate import_symbols failing and rfc1902 providing class
     class FailBuilder:
+        """Test helper class for FailBuilder."""
+
         def import_symbols(self, module: str, name: str) -> Tuple[Any, ...]:
+            """Test case for import_symbols."""
             raise RuntimeError
 
     class RfcCls:
+        """Test helper class for RfcCls."""
+
         pass
 
     # Patch the existing pysnmp.proto.rfc1902 if the package is loaded
@@ -124,6 +155,7 @@ def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
 
 
 def test_validate_value_integer_range_and_octet_size(handler: BaseTypeHandler) -> None:
+    """Test case for test_validate_value_integer_range_and_octet_size."""
     # Integer range check using constraints['range'] format
     type_info = {"base_type": "Integer32", "constraints": {"range": [5, 10]}}
     h = BaseTypeHandler(type_registry={"Foo": type_info})
@@ -144,6 +176,7 @@ def test_validate_value_integer_range_and_octet_size(handler: BaseTypeHandler) -
 
 
 def test_validate_oid_element_types(handler: BaseTypeHandler) -> None:
+    """Test case for test_validate_oid_element_types."""
     assert not handler.validate_value("ObjectIdentifier", ["1", 2])
     assert not handler.validate_value("ObjectIdentifier", (1, "2"))
 
@@ -209,6 +242,8 @@ def test_get_pysnmp_type_class_rfc1902_exception(
 
     # Mock rfc1902 to raise an exception
     class FakeRfc:
+        """Test helper class for FakeRfc."""
+
         def __getattr__(self, name: str) -> Any:
             raise AttributeError(f"no such type: {name}")
 
@@ -224,7 +259,10 @@ def test_get_pysnmp_type_class_rfc1902_exception(
     try:
         # Test with a builder that fails
         class FailingBuilder:
+            """Test helper class for FailingBuilder."""
+
             def import_symbols(self, module: str, name: str) -> Tuple[Any, ...]:
+                """Test case for import_symbols."""
                 raise RuntimeError("builder failed")
 
         result = handler._get_pysnmp_type_class("SomeType", FailingBuilder())

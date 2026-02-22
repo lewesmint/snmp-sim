@@ -2,28 +2,34 @@
 SNMPAgent: Main orchestrator for the SNMP agent (initial workflow).
 """
 
+# pylint: disable=invalid-name
+
 from dataclasses import dataclass
-from typing import cast
-from app.app_logger import AppLogger
-from app.app_config import AppConfig
-from app.compiler import MibCompiler
-from app.mib_registrar import MibRegistrar
+import json
 import os
+from pathlib import Path
 import signal
 import sys
-from pathlib import Path
-import json
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
+
 from pysnmp import debug as pysnmp_debug
+
+from app.app_config import AppConfig
+from app.app_logger import AppLogger
+from app.compiler import MibCompiler
+from app.mib_registrar import MibRegistrar
+from app.model_paths import agent_model_dir, compiled_mibs_dir, mib_state_file
 from app.value_links import get_link_manager
 
 # Load type converter plugins
-import plugins.date_and_time  # noqa: F401 - registers the converter
+import plugins.date_and_time  # noqa: F401  # pylint: disable=unused-import
 
 
 @dataclass
 class AugmentedTableChild:
+    """Represents an augmented table child relationship."""
+
     table_oid: str
     entry_name: str
     indexes: tuple[str, ...]
@@ -32,6 +38,8 @@ class AugmentedTableChild:
 
 
 class SNMPAgent:
+    """SNMP agent implementation for responding to SNMP requests."""
+
     def __init__(
         self,
         host: str = "0.0.0.0",
@@ -54,7 +62,8 @@ class SNMPAgent:
         self.port = port
         self.snmpEngine: Optional[Any] = None
         self.snmpContext: Optional[Any] = None
-        # self.mib_builder: Optional[Any] = None
+        self.mib_builder: Any = None
+        self.mib_registrar: Any = None
         self.mib_jsons: Dict[str, Dict[str, Any]] = {}
         # Track agent start time for sysUpTime
         self.start_time = time.time()
@@ -82,7 +91,7 @@ class SNMPAgent:
         """Set up signal handlers for graceful shutdown."""
         import os
 
-        def signal_handler(signum: int, frame: Any) -> None:
+        def signal_handler(signum: int, _frame: Any) -> None:
             sig_name = signal.Signals(signum).name
             self.logger.info(f"Received signal {sig_name} ({signum}), terminating immediately...")
             # Force immediate exit - don't wait for event loop
@@ -187,14 +196,40 @@ class SNMPAgent:
 
         return False
 
+    def _repair_loaded_schema(self, mib: str, schema: Dict[str, Any]) -> None:
+        """Repair known schema metadata gaps in-place after loading from disk."""
+        if mib != "SNMPv2-MIB":
+            return
+
+        objects = schema.get("objects") if isinstance(schema.get("objects"), dict) else schema
+        if not isinstance(objects, dict):
+            return
+
+        sysor_table = objects.get("sysORTable")
+        if not isinstance(sysor_table, dict):
+            return
+
+        changed = False
+        if not sysor_table.get("oid"):
+            sysor_table["oid"] = [1, 3, 6, 1, 2, 1, 1, 9]
+            changed = True
+        if not sysor_table.get("type"):
+            sysor_table["type"] = "MibTable"
+            changed = True
+        if "rows" not in sysor_table or not isinstance(sysor_table.get("rows"), list):
+            sysor_table["rows"] = []
+            changed = True
+
+        if changed:
+            self.logger.info("Repaired SNMPv2-MIB sysORTable metadata in loaded schema")
+
     def run(self) -> None:
+        """Compile/load MIB assets, register symbols, and start the SNMP dispatcher."""
         self.logger.info("Starting SNMP Agent setup workflow...")
         # Compile MIBs and generate behavior JSONs as before
         mibs = cast(list[str], self.app_config.get("mibs", []))
-        from pathlib import Path
-
-        compiled_dir = Path(__file__).resolve().parent.parent / "compiled-mibs"
-        json_dir = Path(__file__).resolve().parent.parent / "agent-model"
+        compiled_dir = compiled_mibs_dir(__file__)
+        json_dir = agent_model_dir(__file__)
         json_dir.mkdir(parents=True, exist_ok=True)
 
         # Build and export the canonical type registry
@@ -229,17 +264,32 @@ class SNMPAgent:
             self.logger.info(
                 "Using preloaded model and existing types.json, skipping full MIB compilation"
             )
-            # Load existing type registry
-            with types_json_path.open("r", encoding="utf-8") as f:
-                type_registry_data = json.load(f)
-            type_registry = TypeRegistry(Path(""))  # dummy
-            type_registry._registry = type_registry_data
+            # Load existing type registry; if malformed, rebuild it.
+            try:
+                with types_json_path.open("r", encoding="utf-8") as f:
+                    type_registry_data = json.load(f)
+                type_registry = TypeRegistry(Path(""))  # dummy
+                type_registry._registry = type_registry_data
+            except json.JSONDecodeError as e:
+                self.logger.warning(
+                    "Invalid JSON in type registry at %s: %s. Rebuilding types.json.",
+                    types_json_path,
+                    e,
+                )
+                type_registry = TypeRegistry(compiled_dir)
+                type_registry.build()
+                type_registry.export_to_json(str(types_json_path))
+                self.logger.info(
+                    "Rebuilt type registry to data/types.json with "
+                    f"{len(type_registry.registry)} types."
+                )
         else:
             type_registry = TypeRegistry(compiled_dir)
             type_registry.build()
             type_registry.export_to_json(str(types_json_path))
             self.logger.info(
-                f"Exported type registry to data/types.json with {len(type_registry.registry)} types."
+                "Exported type registry to data/types.json with "
+                f"{len(type_registry.registry)} types."
             )
 
         # Validate types
@@ -283,7 +333,8 @@ class SNMPAgent:
                             # Schema is up-to-date, don't regenerate
                             force_regen = False
                             self.logger.info(
-                                f"✓ Schema for {mib_name} is up-to-date (MIB: {py_mtime:.0f}, Schema: {schema_mtime:.0f}). "
+                                f"✓ Schema for {mib_name} is up-to-date "
+                                f"(MIB: {py_mtime:.0f}, Schema: {schema_mtime:.0f}). "
                                 f"Preserving baked values. To regenerate, use Fresh State."
                             )
                         else:
@@ -307,14 +358,77 @@ class SNMPAgent:
 
             # Load schema JSONs for SNMP serving
             # Directory structure: {json_dir}/{MIB_NAME}/schema.json
+            invalid_schema_mibs: list[str] = []
+            for mib in mibs:
+                schema_path = json_dir / mib / "schema.json"
+                if not schema_path.exists():
+                    continue
+                try:
+                    with schema_path.open("r", encoding="utf-8") as jf:
+                        json.load(jf)
+                except json.JSONDecodeError:
+                    invalid_schema_mibs.append(mib)
+
+            if invalid_schema_mibs:
+                self.logger.warning(
+                    "Pre-load schema health check found %d invalid schema file(s): %s",
+                    len(invalid_schema_mibs),
+                    ", ".join(invalid_schema_mibs),
+                )
+
             for mib in mibs:
                 mib_dir = json_dir / mib
                 schema_path = mib_dir / "schema.json"
 
                 if schema_path.exists():
-                    with schema_path.open("r", encoding="utf-8") as jf:
-                        self.mib_jsons[mib] = json.load(jf)
-                    self.logger.info(f"Loaded schema for {mib} from {schema_path}")
+                    try:
+                        with schema_path.open("r", encoding="utf-8") as jf:
+                            self.mib_jsons[mib] = json.load(jf)
+                        self._repair_loaded_schema(mib, self.mib_jsons[mib])
+                        self.logger.info(f"Loaded schema for {mib} from {schema_path}")
+                    except json.JSONDecodeError as e:
+                        self.logger.warning(
+                            "Invalid JSON schema for %s at %s: %s",
+                            mib,
+                            schema_path,
+                            e,
+                        )
+
+                        regenerated = False
+                        regen_py_path = mib_to_py_path.get(mib)
+                        if regen_py_path:
+                            try:
+                                self.logger.info(
+                                    "Regenerating schema for %s due to invalid JSON...",
+                                    mib,
+                                )
+                                generator.generate(
+                                    regen_py_path,
+                                    mib_name=mib,
+                                    force_regenerate=True,
+                                )
+                                with schema_path.open("r", encoding="utf-8") as jf:
+                                    self.mib_jsons[mib] = json.load(jf)
+                                self._repair_loaded_schema(mib, self.mib_jsons[mib])
+                                self.logger.info(
+                                    "Successfully regenerated and loaded schema for %s",
+                                    mib,
+                                )
+                                regenerated = True
+                            except Exception as regen_error:
+                                self.logger.error(
+                                    "Failed to regenerate schema for %s: %s",
+                                    mib,
+                                    regen_error,
+                                    exc_info=True,
+                                )
+
+                        if not regenerated:
+                            self.logger.warning(
+                                "Skipping schema for %s due to invalid JSON at %s",
+                                mib,
+                                schema_path,
+                            )
                 else:
                     self.logger.warning(f"Schema not found for {mib} at {schema_path}")
 
@@ -660,14 +774,13 @@ class SNMPAgent:
                             self._save_mib_state()
                         except Exception:
                             self.logger.exception("Failed to save MIB state")
-                    else:
-                        # If we've reverted to initial, remove any existing override
-                        if dotted in self.overrides:
-                            self.overrides.pop(dotted, None)
-                            try:
-                                self._save_mib_state()
-                            except Exception:
-                                self.logger.exception("Failed to save MIB state")
+                    # If we've reverted to initial, remove any existing override
+                    elif dotted in self.overrides:
+                        self.overrides.pop(dotted, None)
+                        try:
+                            self._save_mib_state()
+                        except Exception:
+                            self.logger.exception("Failed to save MIB state")
 
                     return
 
@@ -718,9 +831,7 @@ class SNMPAgent:
     # ---- Overrides persistence helpers ----
     def _state_file_path(self) -> str:
         """Return path to unified state file (scalars, tables, deletions)."""
-        from pathlib import Path
-
-        return str(Path(__file__).resolve().parent.parent / "data" / "mib_state.json")
+        return str(mib_state_file(__file__))
 
     def _load_mib_state(self) -> None:
         """Load unified MIB state (scalars, tables, deletions) from disk."""
@@ -729,7 +840,7 @@ class SNMPAgent:
 
         if os.path.exists(path):
             try:
-                with open(path, "r") as f:
+                with open(path, "r", encoding="utf-8") as f:
                     mib_state = json.load(f)
                 self.logger.info(f"Loaded MIB state from {path}")
             except Exception as e:
@@ -739,7 +850,7 @@ class SNMPAgent:
             try:
                 self._migrate_legacy_state_files()
                 if os.path.exists(path):
-                    with open(path, "r") as f:
+                    with open(path, "r", encoding="utf-8") as f:
                         mib_state = json.load(f)
                     self.logger.info(f"Migrated legacy state files to {path}")
             except Exception as e:
@@ -765,7 +876,8 @@ class SNMPAgent:
             self.logger.error(f"Failed to load link state: {e}", exc_info=True)
 
         self.logger.info(
-            f"Loaded state: {len(self.overrides)} scalars, {sum(len(v) for v in self.table_instances.values())} table instances, "
+            f"Loaded state: {len(self.overrides)} scalars, "
+            f"{sum(len(v) for v in self.table_instances.values())} table instances, "
             f"{len(self.deleted_instances)} deleted instances"
         )
 
@@ -785,7 +897,8 @@ class SNMPAgent:
         if len(self.deleted_instances) != before:
             self._save_mib_state()
             self.logger.info(
-                f"Filtered deleted instances against schema: {before} -> {len(self.deleted_instances)}"
+                "Filtered deleted instances against schema: "
+                f"{before} -> {len(self.deleted_instances)}"
             )
 
     def _collect_schema_instance_oids(self) -> tuple[set[str], bool]:
@@ -1344,7 +1457,7 @@ class SNMPAgent:
 
         if legacy_overrides.exists():
             try:
-                with open(legacy_overrides) as f:
+                with open(legacy_overrides, "r", encoding="utf-8") as f:
                     mib_state["scalars"] = json.load(f)
                 self.logger.info(f"Migrated scalars from {legacy_overrides}")
             except Exception as e:
@@ -1352,7 +1465,7 @@ class SNMPAgent:
 
         if legacy_tables.exists():
             try:
-                with open(legacy_tables) as f:
+                with open(legacy_tables, "r", encoding="utf-8") as f:
                     mib_state["tables"] = json.load(f)
                 self.logger.info(f"Migrated tables from {legacy_tables}")
             except Exception as e:
@@ -1376,7 +1489,7 @@ class SNMPAgent:
         }
 
         try:
-            with open(path, "w") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(mib_state, f, indent=2, sort_keys=True)
             self.logger.debug(f"Saved MIB state to {path}")
         except Exception as e:
@@ -1449,7 +1562,8 @@ class SNMPAgent:
                 # Convert unhashable types (list, dict) to strings for storage
                 if isinstance(value, (list, dict)):
                     self.logger.debug(
-                        f"Converting {type(value).__name__} to string for column {column_name}: {value}"
+                        f"Converting {type(value).__name__} to string "
+                        f"for column {column_name}: {value}"
                     )
                     if isinstance(value, list):
                         # Convert list to dot-notation OID string
@@ -1507,7 +1621,8 @@ class SNMPAgent:
                                 updated = True
                             except Exception as e:
                                 self.logger.error(
-                                    f"Failed to update MibScalarInstance {cell_oid} with value {value!r} "
+                                    f"Failed to update MibScalarInstance {cell_oid} "
+                                    f"with value {value!r} "
                                     f"(type: {type(value).__name__}): {e}"
                                 )
                             break
@@ -1518,7 +1633,8 @@ class SNMPAgent:
                     if linked_targets:
                         targets_display = [f"{t.table_oid}:{t.column_name}" for t in linked_targets]
                         self.logger.info(
-                            f"Propagating value from {column_name} to linked columns: {targets_display}"
+                            f"Propagating value from {column_name} "
+                            f"to linked columns: {targets_display}"
                         )
                         for target in linked_targets:
                             target_table = target.table_oid or table_oid
@@ -1767,7 +1883,8 @@ class SNMPAgent:
                                     self._writable_oids.add(dotted)
                                     added = True
                                     self.logger.debug(
-                                        f"Marked writable via schema: {dotted} -> {module_name}.{base_name}"
+                                        "Marked writable via schema: "
+                                        f"{dotted} -> {module_name}.{base_name}"
                                     )
                             if not added:
                                 # Fallback to inspecting symbol object if it exposes access
@@ -1830,7 +1947,8 @@ class SNMPAgent:
                                 symbol_obj.syntax = new_syntax
                             except Exception as e:
                                 self.logger.warning(
-                                    f"Failed to apply override for {dotted} with value {stored!r}: {e}"
+                                    f"Failed to apply override for {dotted} "
+                                    f"with value {stored!r}: {e}"
                                 )
                                 continue
 
@@ -1876,8 +1994,6 @@ class SNMPAgent:
 
 
 if __name__ == "__main__":  # pragma: no cover
-    import sys
-
     try:
         agent = SNMPAgent()
         agent.run()

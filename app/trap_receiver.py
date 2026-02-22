@@ -142,17 +142,17 @@ class TrapReceiver:
 
     def _trap_callback(
         self,
-        snmpEngine: Any,
-        stateReference: Any,
-        contextEngineId: Any,
-        contextName: Any,
-        varBinds: Any,
-        cbCtx: Any,
+        _snmp_engine: Any,
+        _state_reference: Any,
+        _context_engine_id: Any,
+        _context_name: Any,
+        var_binds: Any,
+        _cb_ctx: Any,
     ) -> None:
         """Callback invoked when a trap is received."""
         try:
             # Parse varbinds
-            trap_data = self._parse_trap(varBinds)
+            trap_data = self._parse_trap(var_binds)
 
             # Store trap
             self.received_traps.append(trap_data)
@@ -175,7 +175,7 @@ class TrapReceiver:
         except Exception as e:
             self.logger.exception(f"Error processing trap: {e}")
 
-    def _parse_trap(self, varBinds: Any) -> dict[str, Any]:
+    def _parse_trap(self, var_binds: Any) -> dict[str, Any]:
         """Parse trap varbinds into a structured dictionary."""
         timestamp = datetime.now().isoformat()
         uptime = None
@@ -184,7 +184,7 @@ class TrapReceiver:
         varbinds = []
         is_test_trap = False
 
-        for oid, val in varBinds:
+        for oid, val in var_binds:
             oid_tuple = tuple(oid)
             oid_str = oid_tuple_to_str(oid_tuple)
 

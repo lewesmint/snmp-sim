@@ -1,3 +1,5 @@
+"""Tests for test agent registration."""
+
 import pytest
 from pytest_mock import MockerFixture
 from typing import Any

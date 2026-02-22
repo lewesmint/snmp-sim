@@ -1,21 +1,24 @@
+"""Tests for test cli load model."""
+
 import json
 from pathlib import Path
-import pytest
 from typing import Dict, Any, cast
-
+import pytest
 
 from app import cli_load_model as clm
 
 
 def test_load_all_schemas_missing_dir(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Test case for test_load_all_schemas_missing_dir."""
     fake_dir = tmp_path / "nope"
     model = clm.load_all_schemas(str(fake_dir))
     captured = capsys.readouterr()
-    assert model == {}
+    assert not model
     assert "Schema directory not found" in captured.err
 
 
 def test_load_all_schemas_invalid_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Test case for test_load_all_schemas_invalid_json."""
     base = tmp_path / "schemas"
     mib_dir = base / "BAD"
     mib_dir.mkdir(parents=True)
@@ -23,11 +26,12 @@ def test_load_all_schemas_invalid_json(tmp_path: Path, capsys: pytest.CaptureFix
 
     model = clm.load_all_schemas(str(base))
     captured = capsys.readouterr()
-    assert model == {}
+    assert not model
     assert "Error loading" in captured.err
 
 
 def test_load_all_schemas_success(tmp_path: Path) -> None:
+    """Test case for test_load_all_schemas_success."""
     base = tmp_path / "schemas"
     mib_dir = base / "GOOD"
     mib_dir.mkdir(parents=True)
@@ -40,6 +44,7 @@ def test_load_all_schemas_success(tmp_path: Path) -> None:
 
 
 def test_main_no_schemas(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test case for test_main_no_schemas."""
     # Ensure load_all_schemas returns empty
     monkeypatch.setattr(clm, "load_all_schemas", lambda d: {})
     rc = clm.main(["--schema-dir", "doesnotmatter"])  # prints and returns 1
@@ -47,6 +52,7 @@ def test_main_no_schemas(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_main_success_writes_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test case for test_main_success_writes_output."""
     model: Dict[str, Dict[str, Any]] = {"M1": {"a": {}}}
     monkeypatch.setattr(clm, "load_all_schemas", lambda d: model)
     out_file = tmp_path / "out.json"
@@ -59,6 +65,7 @@ def test_main_success_writes_output(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 
 
 def test_main_output_write_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test case for test_main_output_write_error."""
     model: Dict[str, Dict[str, Any]] = {"M1": {"a": {}}}
     monkeypatch.setattr(clm, "load_all_schemas", lambda d: model)
     out_dir = tmp_path
@@ -68,6 +75,7 @@ def test_main_output_write_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 
 
 def test_load_all_schemas_skips_empty_and_non_schema_entries(tmp_path: Path) -> None:
+    """Test case for test_load_all_schemas_skips_empty_and_non_schema_entries."""
     base = tmp_path / "schemas"
     good = base / "GOOD"
     empty = base / "EMPTY"
@@ -90,6 +98,7 @@ def test_load_all_schemas_generic_processing_error(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """Test case for test_load_all_schemas_generic_processing_error."""
     base = tmp_path / "schemas"
     mib_dir = base / "BROKEN"
     mib_dir.mkdir(parents=True)
@@ -108,13 +117,14 @@ def test_load_all_schemas_generic_processing_error(
 
     model = clm.load_all_schemas(str(base))
     captured = capsys.readouterr()
-    assert model == {}
+    assert not model
     assert "Error processing BROKEN: boom" in captured.err
 
 
 def test_print_model_summary_handles_both_schema_shapes(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """Test case for test_print_model_summary_handles_both_schema_shapes."""
     model: Dict[str, Dict[str, Any]] = {
         "NEW": {
             "objects": {
@@ -138,6 +148,7 @@ def test_print_model_summary_handles_both_schema_shapes(
 
 
 def test_main_success_without_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test case for test_main_success_without_output."""
     model: Dict[str, Dict[str, Any]] = {"M1": {"objects": {"x": {"type": "MibScalar"}}}}
     monkeypatch.setattr(clm, "load_all_schemas", lambda d: model)
 

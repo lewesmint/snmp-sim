@@ -1,3 +1,5 @@
+"""SNMP trap/inform sender utilities built on top of PySNMP async HLAPI."""
+
 from __future__ import annotations
 
 import asyncio
@@ -120,6 +122,14 @@ class TrapSender:
         trap_type: Literal["trap", "inform"] = "inform",
         extra_varbinds: Optional[Sequence[VarBindSpec]] = None,
     ) -> None:
+        """Send a MIB-defined notification to the configured destination.
+
+        Args:
+            mib: MIB module name containing the notification symbol.
+            notification: NOTIFICATION-TYPE symbol name.
+            trap_type: Either unconfirmed `trap` or confirmed `inform`.
+            extra_varbinds: Optional additional varbinds to include.
+        """
         engine = self.snmp_engine
 
         # When using the agent's SnmpEngine, sysUpTime is already correct via the readGet wrapper
@@ -147,7 +157,8 @@ class TrapSender:
             if self._uses_external_engine:
                 raise
             self.logger.warning(
-                "Notification send hit NoSuchInstanceError; resetting internal SnmpEngine and retrying once"
+                "Notification send hit NoSuchInstanceError; "
+                "resetting internal SnmpEngine and retrying once"
             )
             self.snmp_engine = SnmpEngine()
             self._configure_mib_sources(self.snmp_engine)

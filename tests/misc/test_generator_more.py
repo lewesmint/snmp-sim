@@ -462,6 +462,7 @@ def test_extract_mib_info_handles_symbol_without_getname(
         delattr(g, "_type_registry")
 
     mock_registry = {"Integer32": {"base_type": "Integer32"}}
+
     def load_type_registry() -> dict[str, dict[str, str]]:
         return mock_registry
 
@@ -491,6 +492,7 @@ def test_extract_mib_info_handles_symbol_without_getname(
             pass
 
     monkeypatch.setattr("pysnmp.smi.builder.MibBuilder", MockMibBuilder3)
+
     def extract_type_info(_syntax_obj: Any, _name: str) -> dict[str, str]:
         return {"base_type": "Integer32"}
 
@@ -510,6 +512,7 @@ def test_extract_mib_info_base_type_mapping(monkeypatch: pytest.MonkeyPatch) -> 
     g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
 
     mock_registry: Dict[str, Any] = {}  # Empty registry
+
     def load_type_registry() -> Dict[str, Any]:
         return mock_registry
 
@@ -642,9 +645,7 @@ def test_detect_inherited_indexes() -> None:
     g._detect_inherited_indexes(result, table_entries, "TEST-MIB")
 
     assert "index_from" in result["testEntry"]
-    assert result["testEntry"]["index_from"] == [
-        {"mib": "OTHER-MIB", "column": "inheritedIndex"}
-    ]  # type: ignore[comparison-overlap]
+    assert result["testEntry"]["index_from"] == [{"mib": "OTHER-MIB", "column": "inheritedIndex"}]  # type: ignore[comparison-overlap]
 
 
 def test_generate_force_regenerate_removes_existing_file(

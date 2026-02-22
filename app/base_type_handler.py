@@ -73,7 +73,7 @@ class BaseTypeHandler:
             return type_name
 
         # Map SNMP application types to ASN.1 base types
-        SNMP_TO_ASN1_MAP = {
+        snmp_to_asn1_map = {
             "Integer32": "INTEGER",
             "Unsigned32": "INTEGER",
             "Counter32": "INTEGER",
@@ -97,8 +97,8 @@ class BaseTypeHandler:
             "NotificationName": "OBJECT IDENTIFIER",  # Alias for ObjectIdentifier
         }
 
-        if type_name in SNMP_TO_ASN1_MAP:
-            return SNMP_TO_ASN1_MAP[type_name]
+        if type_name in snmp_to_asn1_map:
+            return snmp_to_asn1_map[type_name]
 
         # Look up in registry and recursively resolve
         type_info = self.get_type_info(type_name)
@@ -128,7 +128,8 @@ class BaseTypeHandler:
         if "initial" in context:
             return context["initial"]
 
-        # Use type_info from context if provided (caller can supply resolved info), otherwise get from registry
+        # Use type_info from context if provided
+        # (caller can supply resolved info), otherwise get from registry.
         if "type_info" in context and isinstance(context["type_info"], dict):
             type_info = context["type_info"]
         else:
@@ -190,23 +191,22 @@ class BaseTypeHandler:
             if min_val is not None and max_val is not None:
                 if min_val <= 0 <= max_val:
                     return 0
-                else:
-                    return min_val
+                return min_val
             return 0
 
-        elif base_type == "OCTET STRING":
+        if base_type == "OCTET STRING":
             # Check if it's a special type
             if type_name in ["IpAddress"]:
                 return "0.0.0.0"
-            elif "address" in type_name.lower() and "mac" in type_name.lower():
+            if "address" in type_name.lower() and "mac" in type_name.lower():
                 return "00:00:00:00:00:00"
             # BITS type - return empty bits
-            elif "bits" in type_info.get("syntax", "").lower():
+            if "bits" in type_info.get("syntax", "").lower():
                 return ""
             # Default to empty bytes
             return b""
 
-        elif base_type == "OBJECT IDENTIFIER":
+        if base_type == "OBJECT IDENTIFIER":
             return (0, 0)
 
         # Should never reach here
@@ -247,13 +247,13 @@ class BaseTypeHandler:
                 from pysnmp.proto import rfc1902
 
                 return rfc1902.Integer32(value)
-            elif base_type == "OCTET STRING":
+            if base_type == "OCTET STRING":
                 from pysnmp.proto import rfc1902
 
                 if isinstance(value, str):
                     value = value.encode("utf-8")
                 return rfc1902.OctetString(value)
-            elif base_type == "OBJECT IDENTIFIER":
+            if base_type == "OBJECT IDENTIFIER":
                 from pysnmp.proto import rfc1902
 
                 return rfc1902.ObjectIdentifier(value)
@@ -264,28 +264,41 @@ class BaseTypeHandler:
 
     def _get_pysnmp_type_class(self, type_name: str, mib_builder: Any) -> Optional[Any]:
         """
-        Import PySNMP type class from MIB builder.
+        Import PySNMP type class from MIB builder or rfc1902.
+
+        Strategy:
+        1. Try MibBuilder first (for TEXTUAL-CONVENTIONs like DisplayString, PhysAddress)
+        2. Fallback to rfc1902 (for base types like Integer32, OctetString, Counter32)
+
+        Note: TEXTUAL-CONVENTIONs (DisplayString, PhysAddress, etc.) are NOT in rfc1902.
+        They must come from MibBuilder.import_symbols('SNMPv2-TC', ...).
+        See docs/PYSNMP_TYPE_SOURCING.md for details.
 
         Args:
-            type_name: SNMP type name
+            type_name: SNMP type name (e.g., 'DisplayString', 'Integer32', 'OctetString')
             mib_builder: MIB builder instance
 
         Returns:
-            PySNMP type class or None
+            PySNMP type class or None if not found
         """
-        # Try common MIB modules
+        # Try MibBuilder first - handles both base types and TEXTUAL-CONVENTIONs
+        # SNMPv2-SMI: base types (Integer32, Counter32, etc.)
+        # SNMPv2-TC: TEXTUAL-CONVENTIONs (DisplayString, PhysAddress, etc.)
+        # SNMPv2-CONF: conformance types (rarely used for values)
         for module in ["SNMPv2-SMI", "SNMPv2-TC", "SNMPv2-CONF"]:
             try:
                 return mib_builder.import_symbols(module, type_name)[0]
             except Exception:
                 continue
 
-        # Try pysnmp.proto.rfc1902 directly
+        # Fallback to rfc1902 for base RFC 1902 types
+        # This works for: Integer32, Counter32, OctetString, IpAddress, etc.
+        # This FAILS for: DisplayString, PhysAddress, MacAddress, etc. (returns None)
         try:
             from pysnmp.proto import rfc1902
 
             return getattr(rfc1902, type_name, None)
-        except Exception:
+        except ImportError:
             pass
 
         return None
@@ -313,7 +326,7 @@ class BaseTypeHandler:
             if "range" in constraints:
                 range_val = constraints["range"]
                 if isinstance(range_val, list) and len(range_val) >= 2:
-                    if not (range_val[0] <= value <= range_val[1]):
+                    if not range_val[0] <= value <= range_val[1]:
                         return False
 
         elif base_type == "OCTET STRING":
@@ -328,7 +341,7 @@ class BaseTypeHandler:
                     if length != size:
                         return False
                 elif isinstance(size, list) and len(size) >= 2:
-                    if not (size[0] <= length <= size[1]):
+                    if not size[0] <= length <= size[1]:
                         return False
 
         elif base_type == "OBJECT IDENTIFIER":
