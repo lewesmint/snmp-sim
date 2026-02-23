@@ -240,17 +240,30 @@ class MibRegistrar:
                 with snmp2_schema_file.open("r", encoding="utf-8") as f:
                     existing_schema = json.load(f)
 
-            # Merge updated data into existing schema
-            if "objects" in snmp2:
-                if "objects" not in existing_schema:
-                    existing_schema["objects"] = {}
-                # Merge only the modified objects (sysORTable and sysOREntry)
-                for obj_name, obj_data in snmp2["objects"].items():
-                    if obj_name in ("sysORTable", "sysOREntry") or obj_name.startswith("sysOR"):
-                        existing_schema["objects"][obj_name] = obj_data
+            # Merge updated data into existing schema.
+            # IMPORTANT: only persist sysORTable rows here. Column metadata such as
+            # sysORDescr OID/type/access must remain canonical from generated schema.
+            existing_objects = existing_schema.get("objects")
+            if not isinstance(existing_objects, dict):
+                existing_objects = {}
+                existing_schema["objects"] = existing_objects
 
-            if "traps" in snmp2:
-                existing_schema["traps"] = snmp2["traps"]
+            incoming_objects = snmp2.get("objects") if isinstance(snmp2.get("objects"), dict) else snmp2
+            if isinstance(incoming_objects, dict):
+                incoming_table = incoming_objects.get("sysORTable")
+                if isinstance(incoming_table, dict):
+                    existing_table = existing_objects.get("sysORTable")
+                    if not isinstance(existing_table, dict):
+                        existing_table = {
+                            "oid": [1, 3, 6, 1, 2, 1, 1, 9],
+                            "type": "MibTable",
+                            "rows": [],
+                        }
+                        existing_objects["sysORTable"] = existing_table
+
+                    rows = incoming_table.get("rows")
+                    if isinstance(rows, list):
+                        existing_table["rows"] = rows
 
             write_json_with_horizontal_oid_lists(snmp2_schema_file, existing_schema)
             self.logger.info("Persisted updated sysORTable schema to %s", snmp2_schema_file)

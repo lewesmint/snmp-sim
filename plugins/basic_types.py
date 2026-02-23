@@ -43,6 +43,7 @@ _DIRECT_TYPE_DEFAULTS: dict[str, object] = {
 _STRING_TYPES = {"OctetString", "DisplayString", "SnmpAdminString", "OCTET STRING"}
 _OID_TYPES = {"ObjectIdentifier", "AutonomousType", "OBJECT IDENTIFIER"}
 _INTEGER_TYPES = {"Integer32", "Integer", "Gauge32", "Unsigned32", "INTEGER"}
+_PLACEHOLDER_STRINGS = {"", "unset", "default", "none", "null", "n/a"}
 
 
 def _is_mac_symbol(symbol_name: str) -> bool:
@@ -51,6 +52,70 @@ def _is_mac_symbol(symbol_name: str) -> bool:
         or "MacAddress" in symbol_name
         or symbol_name in {"ifPhysAddress", "ipNetMediaPhysAddress", "atPhysAddress"}
     )
+
+
+def _is_ip_address_type(type_info: TypeInfo) -> bool:
+    """Return True when type metadata represents IpAddress semantics."""
+    base_type = str(type_info.get("base_type", ""))
+    if base_type == "IpAddress":
+        return True
+    if base_type != "OCTET STRING":
+        return False
+
+    size_info = type_info.get("size")
+    if isinstance(size_info, dict):
+        allowed = size_info.get("allowed")
+        if isinstance(allowed, list) and allowed == [4]:
+            return True
+
+    constraints = type_info.get("constraints")
+    if isinstance(constraints, list):
+        for constraint in constraints:
+            if not isinstance(constraint, dict):
+                continue
+            if constraint.get("type") != "ValueSizeConstraint":
+                continue
+            if constraint.get("min") == 4 and constraint.get("max") == 4:
+                return True
+
+    return False
+
+
+def _encode_ip_address(value: object) -> str:
+    """Normalize Python value into valid dotted IPv4 syntax for PySNMP IpAddress."""
+
+    def _normalize_octet(item: object) -> int | None:
+        try:
+            octet = int(item)
+        except (TypeError, ValueError):
+            return None
+        return octet if 0 <= octet <= 255 else None
+
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate.lower() in _PLACEHOLDER_STRINGS:
+            return "0.0.0.0"
+        parts = candidate.split(".")
+        if len(parts) != 4:
+            return "0.0.0.0"
+        octets: list[int] = []
+        for part in parts:
+            octet = _normalize_octet(part)
+            if octet is None:
+                return "0.0.0.0"
+            octets.append(octet)
+        return ".".join(str(octet) for octet in octets)
+
+    if isinstance(value, (list, tuple)) and len(value) == 4:
+        octets = []
+        for part in value:
+            octet = _normalize_octet(part)
+            if octet is None:
+                return "0.0.0.0"
+            octets.append(octet)
+        return ".".join(str(octet) for octet in octets)
+
+    return "0.0.0.0"
 
 
 def _get_first_enum_value(enums: object) -> object | None:
@@ -97,6 +162,8 @@ def get_default_value(type_info: TypeInfo, symbol_name: str) -> object | None:
 
     if _is_mac_symbol(symbol_name):
         default_value = _NULL_MAC
+    elif _is_ip_address_type(type_info):
+        default_value = _ZERO_IP
     elif base_type in _STRING_TYPES:
         default_value = "unset"
     elif base_type in _OID_TYPES:
@@ -132,3 +199,4 @@ register_type_encoder("StorageType", lambda x: x)
 register_type_encoder("DisplayString", lambda x: x)
 register_type_encoder("PhysAddress", lambda x: x)
 register_type_encoder("MacAddress", lambda x: x)
+register_type_encoder("IpAddress", _encode_ip_address)

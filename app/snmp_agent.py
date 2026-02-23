@@ -244,8 +244,98 @@ class SNMPAgent:
             sysor_table["rows"] = []
             changed = True
 
+        expected_sysor_columns: dict[str, list[int]] = {
+            "sysORIndex": [1, 3, 6, 1, 2, 1, 1, 9, 1, 1],
+            "sysORID": [1, 3, 6, 1, 2, 1, 1, 9, 1, 2],
+            "sysORDescr": [1, 3, 6, 1, 2, 1, 1, 9, 1, 3],
+            "sysORUpTime": [1, 3, 6, 1, 2, 1, 1, 9, 1, 4],
+        }
+        expected_sysor_types: dict[str, str] = {
+            "sysORIndex": "Integer32",
+            "sysORID": "ObjectIdentifier",
+            "sysORDescr": "DisplayString",
+            "sysORUpTime": "TimeStamp",
+        }
+        expected_sysor_access: dict[str, str] = {
+            "sysORIndex": "not-accessible",
+            "sysORID": "read-only",
+            "sysORDescr": "read-only",
+            "sysORUpTime": "read-only",
+        }
+
+        for col_name, expected_oid in expected_sysor_columns.items():
+            col_obj = objects.get(col_name)
+            if not isinstance(col_obj, dict):
+                objects[col_name] = {
+                    "oid": expected_oid,
+                    "type": expected_sysor_types[col_name],
+                    "access": expected_sysor_access[col_name],
+                }
+                changed = True
+                continue
+
+            oid_value = col_obj.get("oid")
+            if oid_value != expected_oid:
+                col_obj["oid"] = expected_oid
+                changed = True
+
+            if not col_obj.get("type"):
+                col_obj["type"] = expected_sysor_types[col_name]
+                changed = True
+
+            if not col_obj.get("access"):
+                col_obj["access"] = expected_sysor_access[col_name]
+                changed = True
+
         if changed:
             self.logger.info("Repaired SNMPv2-MIB sysORTable metadata in loaded schema")
+
+    def _validate_snmpv2_core_schema(self, mib: str, schema: dict[str, JsonValue]) -> None:
+        """Validate critical SNMPv2-MIB sysOR schema metadata and fail on corruption."""
+        if mib != "SNMPv2-MIB":
+            return
+
+        objects = schema.get("objects") if isinstance(schema.get("objects"), dict) else schema
+        if not isinstance(objects, dict):
+            msg = "SNMPv2-MIB schema missing objects container"
+            raise ValueError(msg)
+
+        required_columns: dict[str, tuple[list[int], str, str]] = {
+            "sysORIndex": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 1], "Integer32", "not-accessible"),
+            "sysORID": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 2], "ObjectIdentifier", "read-only"),
+            "sysORDescr": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 3], "DisplayString", "read-only"),
+            "sysORUpTime": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 4], "TimeStamp", "read-only"),
+        }
+
+        for col_name, (expected_oid, expected_type, expected_access) in required_columns.items():
+            col_obj = objects.get(col_name)
+            if not isinstance(col_obj, dict):
+                msg = f"SNMPv2-MIB core column missing or invalid: {col_name}"
+                raise ValueError(msg)
+
+            oid_value = col_obj.get("oid")
+            if oid_value != expected_oid:
+                msg = (
+                    f"SNMPv2-MIB {col_name} has malformed OID {oid_value}; "
+                    f"expected {expected_oid}"
+                )
+                raise ValueError(msg)
+
+            type_value = col_obj.get("type")
+            if type_value != expected_type:
+                msg = (
+                    f"SNMPv2-MIB {col_name} has malformed type {type_value}; "
+                    f"expected {expected_type}"
+                )
+                raise ValueError(msg)
+
+            access_value = col_obj.get("access")
+            if access_value != expected_access:
+                msg = (
+                    f"SNMPv2-MIB {col_name} has malformed access {access_value}; "
+                    f"expected {expected_access}"
+                )
+                raise ValueError(msg)
 
     def run(self) -> None:
         """Compile/load MIB assets, register symbols, and start the SNMP dispatcher."""
@@ -414,6 +504,7 @@ class SNMPAgent:
                     try:
                         with schema_path.open("r", encoding="utf-8") as jf:
                             self.mib_jsons[mib] = json.load(jf)
+                        self._validate_snmpv2_core_schema(mib, self.mib_jsons[mib])
                         self._repair_loaded_schema(mib, self.mib_jsons[mib])
                         self.logger.info("Loaded schema for %s from %s", mib, schema_path)
                     except json.JSONDecodeError as e:
@@ -439,6 +530,7 @@ class SNMPAgent:
                                 )
                                 with schema_path.open("r", encoding="utf-8") as jf:
                                     self.mib_jsons[mib] = json.load(jf)
+                                self._validate_snmpv2_core_schema(mib, self.mib_jsons[mib])
                                 self._repair_loaded_schema(mib, self.mib_jsons[mib])
                                 self.logger.info(
                                     "Successfully regenerated and loaded schema for %s",
@@ -452,6 +544,8 @@ class SNMPAgent:
                                 TypeError,
                                 ValueError,
                             ) as regen_error:
+                                if isinstance(regen_error, ValueError):
+                                    raise
                                 self.logger.exception(
                                     "Failed to regenerate schema for %s: %s",
                                     mib,
@@ -466,6 +560,9 @@ class SNMPAgent:
                             )
                 else:
                     self.logger.warning("Schema not found for %s at %s", mib, schema_path)
+
+        for loaded_mib, loaded_schema in self.mib_jsons.items():
+            self._validate_snmpv2_core_schema(loaded_mib, loaded_schema)
 
         self.logger.info(
             "Loaded %d MIB schemas for SNMP serving.",

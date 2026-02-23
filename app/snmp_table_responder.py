@@ -159,6 +159,7 @@ class SNMPTableResponder:
                         rows = obj_data.get("rows", [])
                         if not isinstance(rows, list):
                             continue
+                        default_row = self._default_row(rows)
 
                         entry_oid = tuple(entry_data.get("oid", []))
                         index_columns = entry_data.get("indexes", [])
@@ -186,7 +187,7 @@ class SNMPTableResponder:
                             else:
                                 instance_parts = []
                                 for idx in index_columns:
-                                    idx_val = row.get(idx)
+                                    idx_val = self._index_value_with_default(row, idx, default_row)
                                     if idx_val is None:
                                         continue
                                     if isinstance(idx_val, (list, tuple)):
@@ -198,27 +199,57 @@ class SNMPTableResponder:
                                 if not instance_parts:
                                     instance_parts = ["1"]
                             if len(columns) == 1:
-                                if isinstance(entry_oid, tuple):
-                                    try:
-                                        full_oid = tuple(
-                                            list(entry_oid) + [int(p) for p in instance_parts]
-                                        )
-                                    except ValueError:
-                                        continue
-                                    oids.append(full_oid)
+                                col_oid_list = next(iter(columns.values()))
+                                try:
+                                    full_oid = tuple(col_oid_list + [int(p) for p in instance_parts])
+                                except ValueError:
+                                    continue
+                                oids.append(full_oid)
                                 continue
 
                             for col_name, col_oid_list in columns.items():
-                                if col_name in row:
-                                    try:
-                                        full_oid = tuple(
-                                            col_oid_list + [int(p) for p in instance_parts]
-                                        )
-                                    except ValueError:
-                                        continue
-                                    oids.append(full_oid)
+                                if self._row_value_with_default(row, col_name, default_row) is None:
+                                    continue
+                                try:
+                                    full_oid = tuple(col_oid_list + [int(p) for p in instance_parts])
+                                except ValueError:
+                                    continue
+                                oids.append(full_oid)
 
         return sorted(oids)
+
+    @staticmethod
+    def _default_row(rows: list[Any]) -> dict[str, Any]:
+        """Return the table default row (first dict row), if present."""
+        if rows and isinstance(rows[0], dict):
+            return rows[0]
+        return {}
+
+    @staticmethod
+    def _row_value_with_default(
+        row: dict[str, Any],
+        col_name: str,
+        default_row: dict[str, Any],
+    ) -> object | None:
+        """Resolve a row column value, falling back to table defaults."""
+        if col_name in row:
+            return row[col_name]
+        if col_name in default_row:
+            return default_row[col_name]
+        return None
+
+    @staticmethod
+    def _index_value_with_default(
+        row: dict[str, Any],
+        index_name: str,
+        default_row: dict[str, Any],
+    ) -> object | None:
+        """Resolve an index value from row data with default-row fallback."""
+        if index_name in row:
+            return row[index_name]
+        if index_name in default_row:
+            return default_row[index_name]
+        return None
 
     @staticmethod
     def _collect_entry_columns(
@@ -243,16 +274,21 @@ class SNMPTableResponder:
         return ".".join(str(x) for x in instance_parts) if instance_parts else "1"
 
     @staticmethod
-    def _build_row_index_string(row: dict[str, Any], index_columns: list[str]) -> str | None:
+    def _build_row_index_string(
+        row: dict[str, Any],
+        index_columns: list[str],
+        default_row: dict[str, Any],
+    ) -> str | None:
         if not index_columns:
             return "1"
         if len(index_columns) == 1:
-            row_idx_val = row.get(index_columns[0])
+            idx_name = index_columns[0]
+            row_idx_val = row[idx_name] if idx_name in row else default_row.get(idx_name)
             return str(row_idx_val) if row_idx_val is not None else ""
 
         row_parts: list[str] = []
         for idx_col in index_columns:
-            row_val = row.get(idx_col)
+            row_val = row[idx_col] if idx_col in row else default_row.get(idx_col)
             if row_val is None:
                 return None
             if isinstance(row_val, (list, tuple)):
@@ -267,23 +303,26 @@ class SNMPTableResponder:
         col_name: str,
         index_columns: list[str],
         instance_str: str,
+        default_row: dict[str, Any],
     ) -> object | None:
         if not index_columns:
             if instance_str != "1":
                 return None
             for row in rows:
-                if isinstance(row, dict) and col_name in row:
-                    return cast("object", row[col_name])
+                if not isinstance(row, dict):
+                    continue
+                value = self._row_value_with_default(row, col_name, default_row)
+                if value is not None:
+                    return cast("object", value)
             return None
 
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            if col_name not in row:
-                continue
-            row_idx_str = self._build_row_index_string(row, index_columns)
+            row_idx_str = self._build_row_index_string(row, index_columns, default_row)
             if row_idx_str == instance_str:
-                return cast("object", row[col_name])
+                value = self._row_value_with_default(row, col_name, default_row)
+                return cast("object", value) if value is not None else None
         return None
 
     def _lookup_multi_column_value(
@@ -293,6 +332,7 @@ class SNMPTableResponder:
         index_columns: list[str],
         col_id: int,
         instance_str: str,
+        default_row: dict[str, Any],
     ) -> object | None:
         for col_name, col_info in columns.items():
             if col_info.get("oid", [])[-1] != col_id:
@@ -301,11 +341,10 @@ class SNMPTableResponder:
             for row in rows:
                 if not isinstance(row, dict):
                     continue
-                if col_name not in row:
-                    continue
-                row_idx_str = self._build_row_index_string(row, index_columns)
+                row_idx_str = self._build_row_index_string(row, index_columns, default_row)
                 if row_idx_str == instance_str:
-                    return cast("object", row[col_name])
+                    value = self._row_value_with_default(row, col_name, default_row)
+                    return cast("object", value) if value is not None else None
             return None
         return None
 
@@ -339,19 +378,28 @@ class SNMPTableResponder:
         rows = table_data.get("rows", [])
         if not isinstance(rows, list):
             return None
+        default_row = self._default_row(rows)
         index_columns = entry_data.get("indexes", [])
         if not isinstance(index_columns, list):
             index_columns = []
 
         if len(columns) == 1:
-            if len(oid) < len(entry_oid) + 1:
+            col_name, col_info = next(iter(columns.items()))
+            col_oid = tuple(col_info.get("oid", []))
+            if col_oid and len(oid) >= len(col_oid) + 1 and oid[: len(col_oid)] == col_oid:
+                instance_parts = oid[len(col_oid) :]
+            elif len(oid) >= len(entry_oid) + 1 and oid[: len(entry_oid)] == entry_oid:
+                instance_parts = oid[len(entry_oid) :]
+            else:
                 return None
-            if oid[: len(entry_oid)] != entry_oid:
-                return None
-            instance_parts = oid[len(entry_oid) :]
             instance_str = self._build_instance_str(instance_parts)
-            col_name = next(iter(columns))
-            return self._lookup_single_column_value(rows, col_name, index_columns, instance_str)
+            return self._lookup_single_column_value(
+                rows,
+                col_name,
+                index_columns,
+                instance_str,
+                default_row,
+            )
 
         if len(oid) < len(entry_oid) + 1:
             return None
@@ -370,6 +418,7 @@ class SNMPTableResponder:
             index_columns=index_columns,
             col_id=col_id,
             instance_str=instance_str,
+            default_row=default_row,
         )
 
     def handle_get_request(self, oid: tuple[int, ...]) -> object | None:

@@ -199,6 +199,7 @@ class BehaviourGenerator:
                             col_info = info[col]
                             col_type = col_info.get("type", "")
                             type_info = self._type_registry.get(col_type, {})
+                            type_info = self._normalize_type_info_for_symbol(type_info, col_type)
                             # Add enums from col_info to type_info if present
                             if "enums" in col_info:
                                 type_info = {**type_info, "enums": col_info["enums"]}
@@ -313,6 +314,10 @@ class BehaviourGenerator:
             symbol_name_str: str = str(cast("object", symbol_name))
             if not (hasattr(symbol_obj, "getName") and hasattr(symbol_obj, "getSyntax")):
                 continue
+
+            if symbol_obj.__class__.__name__ == "MibScalarInstance":
+                continue
+
             try:
                 oid = symbol_obj.getName()
                 syntax_obj = symbol_obj.getSyntax()
@@ -377,6 +382,7 @@ class BehaviourGenerator:
                 initial_value = None
                 dynamic_func = None
             else:
+                type_info = self._normalize_type_info_for_symbol(type_info or {}, type_name)
                 initial_value = self._get_default_value_from_type_info(
                     type_info or {}, symbol_name_str
                 )
@@ -682,6 +688,18 @@ class BehaviourGenerator:
             "in the plugins/ directory or ensure the type is properly registered."
         )
         raise RuntimeError(msg)
+
+    def _normalize_type_info_for_symbol(
+        self,
+        type_info: dict[str, Any],
+        type_name: str,
+    ) -> dict[str, Any]:
+        """Normalize type metadata when the symbol type should override base_type."""
+        if type_name == "IpAddress" and type_info.get("base_type") != "IpAddress":
+            normalized = dict(type_info) if type_info else {}
+            normalized["base_type"] = "IpAddress"
+            return normalized
+        return type_info
 
     def _get_default_value(self, syntax: str, symbol_name: str) -> object:  # noqa: C901, PLR0911
         """Legacy method - kept for compatibility."""
