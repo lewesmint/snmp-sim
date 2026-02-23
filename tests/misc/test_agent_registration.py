@@ -1,11 +1,11 @@
 """Tests for test agent registration."""
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pytest_mock import MockerFixture
 
-from app.snmp_agent import SNMPAgent
+from app.snmp_agent import JsonValue, SNMPAgent
 
 
 def test_register_mib_objects_handles_tcs(
@@ -31,7 +31,7 @@ def test_register_mib_objects_handles_tcs(
     }
 
     # Patch methods that interact with SNMP engine and file system
-    monkeypatch.setattr(SNMPAgent, "_setup_snmpEngine", lambda self, compiled_dir: None)
+    monkeypatch.setattr(SNMPAgent, "_setup_snmp_engine", lambda self, compiled_dir: None)
     monkeypatch.setattr(SNMPAgent, "_setup_transport", lambda self: None)
     monkeypatch.setattr(SNMPAgent, "_setup_community", lambda self: None)
     monkeypatch.setattr(SNMPAgent, "_setup_responders", lambda self: None)
@@ -39,7 +39,7 @@ def test_register_mib_objects_handles_tcs(
 
     # Create agent - SNMPAgent only takes host, port, and config_path
     agent = SNMPAgent(config_path="agent_config.yaml")
-    agent.mib_jsons = {"IF-MIB": mib_json}
+    agent.mib_jsons = {"IF-MIB": cast(dict[str, JsonValue], mib_json)}
 
     # Verify agent was created successfully
     assert agent is not None

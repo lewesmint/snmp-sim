@@ -691,6 +691,10 @@ class RegistrarTableBuilder:
             if not isinstance(row_data, dict):
                 continue
 
+            # Skip rows with sentinel values in raw data (sample/template data)
+            if any(row_data.get(idx) == "default" for idx in index_names):
+                continue
+
             index_tuple = self.build_row_index_tuple(
                 row_data=row_data,
                 index_names=index_names,

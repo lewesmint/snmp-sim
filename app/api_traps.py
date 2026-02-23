@@ -246,8 +246,6 @@ def get_trap_varbinds(trap_name: str) -> dict[str, object]:  # noqa: C901, PLR09
                                                     "type": col_data.get("type", "Unknown"),
                                                     "access": col_data.get("access", "unknown"),
                                                 }
-
-                                        break
                     break
 
         varbinds_metadata.append(

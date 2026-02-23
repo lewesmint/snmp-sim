@@ -3,7 +3,7 @@
 import importlib
 import logging
 import types
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from pytest_mock import MockerFixture
@@ -65,12 +65,12 @@ def test_create_pysnmp_value_handles_type_class_exception(
     class BadBuilder:
         """Test helper class for BadBuilder."""
 
-        def import_symbols(self, module: str, name: str) -> tuple[Any, ...]:
+        def import_symbols(self, module: str, *symbols: str) -> tuple[object, ...]:
             """Test case for import_symbols."""
             return (BadCls,)
 
     caplog.set_level(logging.WARNING)
-    out = handler.create_pysnmp_value("SomeType", 5, mib_builder=BadBuilder())
+    out = handler.create_pysnmp_value("SomeType", value=5, mib_builder=BadBuilder())
     # Should return raw value on construction failure
     assert out == 5
     assert any("Failed to create SomeType" in r.message for r in caplog.records)
@@ -102,19 +102,19 @@ def test_create_pysnmp_value_fallback_to_rfc1902(
     class RaisingBuilder:
         """Test helper class for RaisingBuilder."""
 
-        def import_symbols(self, module: str, name: str) -> tuple[Any, ...]:
+        def import_symbols(self, module: str, *symbols: str) -> tuple[object, ...]:
             """Test case for import_symbols."""
             msg = "nope"
             raise RuntimeError(msg)
 
-    out = handler.create_pysnmp_value("Integer32", 42, mib_builder=RaisingBuilder())
+    out = handler.create_pysnmp_value("Integer32", value=42, mib_builder=RaisingBuilder())
     assert hasattr(out, "v")
     assert out.v == 42
 
-    out2 = handler.create_pysnmp_value("OctetString", "foo", mib_builder=RaisingBuilder())
+    out2 = handler.create_pysnmp_value("OctetString", value="foo", mib_builder=RaisingBuilder())
     assert isinstance(out2, bytes)
 
-    out3 = handler.create_pysnmp_value("ObjectIdentifier", (1, 2, 3), mib_builder=RaisingBuilder())
+    out3 = handler.create_pysnmp_value("ObjectIdentifier", value=(1, 2, 3), mib_builder=RaisingBuilder())
     assert out3 == (1, 2, 3)
 
 
@@ -130,7 +130,7 @@ def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
     class Builder:
         """Test helper class for Builder."""
 
-        def import_symbols(self, module: str, name: str) -> tuple[Any, ...]:
+        def import_symbols(self, module: str, *symbols: str) -> tuple[object, ...]:
             """Test case for import_symbols."""
             if module == "SNMPv2-SMI":
                 return (MyClass,)
@@ -138,13 +138,13 @@ def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
 
     mb = Builder()
     got = handler._get_pysnmp_type_class("SomeName", mb)
-    assert got is MyClass
+    assert cast(object, got) is MyClass
 
     # Now simulate import_symbols failing and rfc1902 providing class
     class FailBuilder:
         """Test helper class for FailBuilder."""
 
-        def import_symbols(self, module: str, name: str) -> tuple[Any, ...]:
+        def import_symbols(self, module: str, *symbols: str) -> tuple[object, ...]:
             """Test case for import_symbols."""
             raise RuntimeError
 
@@ -156,7 +156,7 @@ def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
     monkeypatch.setattr(proto_mod, "rfc1902", types.SimpleNamespace(SomeName=RfcCls), raising=False)
 
     got2 = handler._get_pysnmp_type_class("SomeName", FailBuilder())
-    assert got2 is RfcCls
+    assert cast(object, got2) is RfcCls
 
 
 def test_validate_value_integer_range_and_octet_size(handler: BaseTypeHandler) -> None:
@@ -238,7 +238,7 @@ def test_create_pysnmp_value_rfc1902_fallback_exception(
     mocker.patch("pysnmp.proto.rfc1902", mock_rfc1902)
 
     # Pass a dummy mib_builder so it doesn't return early
-    result = handler.create_pysnmp_value("Integer32", 42, mib_builder=mocker.MagicMock())
+    result = handler.create_pysnmp_value("Integer32", value=42, mib_builder=mocker.MagicMock())
     assert result == 42  # Should return raw value
     assert any("Failed to create PySNMP value" in record.message for record in caplog.records)
 
@@ -272,7 +272,7 @@ def test_get_pysnmp_type_class_rfc1902_exception(
         class FailingBuilder:
             """Test helper class for FailingBuilder."""
 
-            def import_symbols(self, module: str, name: str) -> tuple[Any, ...]:
+            def import_symbols(self, module: str, *symbols: str) -> tuple[object, ...]:
                 """Test case for import_symbols."""
                 msg = "builder failed"
                 raise RuntimeError(msg)

@@ -709,8 +709,8 @@ class MibRegistrar:
 
         try:
             return self.mib_builder.import_symbols("SNMPv2-SMI", pysnmp_name)[0]
-        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+        except Exception:  # Broad catch for any import failures (SmiError, etc.)
             try:
                 return self.mib_builder.import_symbols("SNMPv2-TC", pysnmp_name)[0]
-            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+            except Exception:  # Broad catch for any import failures
                 return getattr(rfc1902, pysnmp_name, None)

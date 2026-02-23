@@ -14,10 +14,11 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 import uvicorn
 
+from app.app_config import AppConfig
 from app.api_state import set_snmp_agent
 from app.model_paths import AGENT_MODEL_DIR, COMPILED_MIBS_DIR
 from app.snmp_agent import SNMPAgent
@@ -37,6 +38,7 @@ LOCALHOST_BIND = "127.0.0.1"
 API_HOST = "0.0.0.0"  # noqa: S104
 NETSTAT_MIN_PARTS = 5
 NETSTAT_STATE_INDEX = 3
+DEFAULT_SNMP_PORT = 11161
 
 
 def _configure_cli_logging() -> None:
@@ -246,32 +248,39 @@ def _abort_start(message: str) -> NoReturn:
     raise SystemExit(1)
 
 
-def _ensure_rest_port_available(port: int) -> None:
+def _find_available_rest_port(start_port: int, max_attempts: int = 20) -> int:
+    """Find the next available TCP port starting from start_port."""
+    for attempt in range(max_attempts):
+        candidate = start_port + attempt
+        if not _is_port_in_use(candidate):
+            return candidate
+    msg = f"Could not find available port after {max_attempts} attempts starting from {start_port}"
+    _abort_start(msg)
+
+
+def _ensure_snmp_port_available(port: int) -> None:
+    """Fail if SNMP port is in use - SNMP port must not be shared."""
     if not _is_port_in_use(port):
         return
 
     pids = _find_pids_on_port(port)
-    prompt = f"Port {port} appears to be in use"
+    error_msg = f"SNMP port {port} is already in use"
     if pids:
-        prompt += f" by PIDs {pids}"
-    prompt += ". Kill the process(es) and retry? [y/N]: "
+        error_msg += f" by PIDs {pids}"
+    error_msg += ". Please stop the conflicting process and try again."
+    _abort_start(error_msg)
 
-    try:
-        answer = input(prompt)
-    except (EOFError, KeyboardInterrupt):
-        answer = "n"
 
-    if not (answer and answer.lower() == "y"):
-        _abort_start("Aborting start due to port in use")
+def _ensure_rest_port_available(port: int) -> int:
+    """Find available REST port (hopping to next available if needed). Returns the port to use."""
+    if not _is_port_in_use(port):
+        logger.info("REST API port %s is available", port)
+        return port
 
-    if pids:
-        _kill_pids(pids)
-        time.sleep(1)
-
-    if _is_port_in_use(port):
-        _abort_start(f"Port {port} still in use, aborting start")
-
-    logger.info("Port %s freed, starting REST API", port)
+    logger.warning("REST API port %s is in use, finding alternative...", port)
+    available_port = _find_available_rest_port(port)
+    logger.info("REST API will use port %s instead (original %s in use)", available_port, port)
+    return available_port
 
 
 def run_snmp_agent(agent: SNMPAgent) -> None:
@@ -287,24 +296,32 @@ def main() -> int:
     args = _parse_args()
     _handle_rebuild_flags(args)
 
-    agent = SNMPAgent()
+    # Load config to get SNMP port
+    config = AppConfig("data/agent_config.yaml")
+    snmp_port: int = int(cast(int | str, config.get("snmp.port", DEFAULT_SNMP_PORT)))
+
+    # Check SNMP port availability before starting agent
+    logger.info("Checking SNMP port %s availability...", snmp_port)
+    _ensure_snmp_port_available(snmp_port)
+
+    agent = SNMPAgent(port=snmp_port)
     set_snmp_agent(agent)
 
     snmp_thread = threading.Thread(target=run_snmp_agent, args=(agent,), daemon=True)
     snmp_thread.start()
 
     logger.info("Starting SNMP Agent with REST API...")
-    logger.info("SNMP Agent running in background")
-    logger.info("REST API available at http://localhost:%s", REST_PORT)
+    logger.info("SNMP Agent running in background on port %s", snmp_port)
     logger.info("Press Ctrl+C to stop")
 
     _configure_uvicorn_loggers()
-    _ensure_rest_port_available(REST_PORT)
+    actual_rest_port = _ensure_rest_port_available(REST_PORT)
+    logger.info("REST API available at http://localhost:%s", actual_rest_port)
 
     uvicorn.run(
         "app.api:app",
         host=API_HOST,
-        port=REST_PORT,
+        port=actual_rest_port,
         reload=False,
         log_level="info",
     )

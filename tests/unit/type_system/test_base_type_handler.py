@@ -124,7 +124,7 @@ class DummyBuilder:
     def __init__(self, cls: Any) -> None:
         self._cls = cls
 
-    def import_symbols(self, module: str, name: str) -> tuple[Any, ...]:
+    def import_symbols(self, module: str, *symbols: str) -> tuple[object, ...]:
         """Test case for import_symbols."""
         return (self._cls,)
 
@@ -133,7 +133,7 @@ def test_create_pysnmp_value_uses_mib_builder_class(handler: BaseTypeHandler) ->
     """Test case for test_create_pysnmp_value_uses_mib_builder_class."""
     dummy = DummyClass
     mb = DummyBuilder(dummy)
-    out = handler.create_pysnmp_value("SomeType", 123, mib_builder=mb)
+    out = handler.create_pysnmp_value("SomeType", value=123, mib_builder=mb)
     assert isinstance(out, DummyClass)
     assert out.v == 123
 
@@ -142,7 +142,7 @@ def test_create_pysnmp_value_returns_raw_when_no_builder(
     handler: BaseTypeHandler,
 ) -> None:
     """Test case for test_create_pysnmp_value_returns_raw_when_no_builder."""
-    assert handler.create_pysnmp_value("SomeType", 7, mib_builder=None) == 7
+    assert handler.create_pysnmp_value("SomeType", value=7, mib_builder=None) == 7
 
 
 def test_validate_value_integer_and_octets_and_oid(handler: BaseTypeHandler) -> None:

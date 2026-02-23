@@ -472,10 +472,10 @@ class TableRegistrar:
             return None
         try:
             return self.mib_builder.import_symbols("SNMPv2-SMI", base_type)[0]
-        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+        except Exception:  # Broad catch for any import failures
             try:
                 return self.mib_builder.import_symbols("SNMPv2-TC", base_type)[0]
-            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+            except Exception:  # Broad catch for any import failures
                 return getattr(rfc1902, base_type, None)
 
     @staticmethod
