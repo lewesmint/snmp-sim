@@ -23,7 +23,7 @@ from pysnmp.smi.error import MibNotFoundError, SmiError
 from app.api_shared import MIN_PARENT_OID_LEN, JsonObject
 from app.api_state import logger, state
 from app.cli_load_model import load_all_schemas
-from app.model_paths import AGENT_MODEL_DIR
+from app.model_paths import AGENT_MODEL_DIR, CONFIG_DIR, TRAP_OVERRIDES_FILE
 
 router = APIRouter()
 
@@ -63,7 +63,7 @@ def list_traps() -> dict[str, object]:
 
 
 def _load_trap_overrides_from_data() -> dict[str, JsonObject]:
-    overrides_path = Path("data/trap_overrides.json")
+    overrides_path = TRAP_OVERRIDES_FILE
     try:
         if overrides_path.exists():
             with overrides_path.open(encoding="utf-8") as f:
@@ -71,14 +71,13 @@ def _load_trap_overrides_from_data() -> dict[str, JsonObject]:
             if isinstance(data, dict):
                 return data
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
-        logger.warning("Failed to load trap overrides from data: %s", exc)
+        logger.warning("Failed to load trap overrides from config: %s", exc)
     return {}
 
 
 def _save_trap_overrides_to_data(overrides: dict[str, JsonObject]) -> None:
-    data_dir = Path("data")
-    data_dir.mkdir(parents=True, exist_ok=True)
-    overrides_path = data_dir / "trap_overrides.json"
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    overrides_path = TRAP_OVERRIDES_FILE
     try:
         pruned_overrides: dict[str, JsonObject] = {}
         for name, data in overrides.items():
@@ -97,7 +96,7 @@ def _save_trap_overrides_to_data(overrides: dict[str, JsonObject]) -> None:
         with overrides_path.open("w", encoding="utf-8") as f:
             json.dump(pruned_overrides, f, indent=2)
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
-        logger.warning("Failed to save trap overrides to data: %s", exc)
+        logger.warning("Failed to save trap overrides to config: %s", exc)
 
 
 trap_overrides: dict[str, JsonObject] = _load_trap_overrides_from_data()

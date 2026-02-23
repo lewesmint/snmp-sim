@@ -57,7 +57,7 @@ Example structure:
 from app.types import TypeRegistry
 
 def load_registry() -> TypeRegistry:
-    with open("data/types.json") as f:
+    with open("config/types.json") as f:
         return json.load(f)
 
 def get_type(registry: TypeRegistry, type_name: str) -> TypeInfo:
@@ -165,7 +165,7 @@ from app.types import TypeInfo, TypeRegistry
 
 # CORRECT: Full registry
 def load_types() -> TypeRegistry:
-    with open("data/types.json") as f:
+    with open("config/types.json") as f:
         return json.load(f)
 
 # CORRECT: Single type entry

@@ -5,7 +5,7 @@ syntax names to their base SNMP types. In the old codebase, this was handled
 by OLD_APP/syntax_resolver.py. Now it's distributed across:
 - app/type_registry.py: Type information indexed by OID
 - app/generator.py: Base type extraction from MIB structures
-- data/types.json: Canonical type registry with base_type field
+- config/types.json: Canonical type registry with base_type field
 """
 
 from pathlib import Path
@@ -91,12 +91,12 @@ def test_type_info_extraction_from_registry() -> None:
     """Test that type information can be extracted from the registry.
 
     This is the new approach - instead of resolve_syntax_name() function,
-    we look up type info in the canonical registry via data/types.json.
+    we look up type info in the canonical registry via config/types.json.
     """
     import json
     from pathlib import Path
 
-    types_json = Path(__file__).parent.parent / "data" / "types.json"
+    types_json = Path(__file__).parent.parent.parent / "config" / "types.json"
 
     types_dict = None
     if types_json.exists():
@@ -122,7 +122,7 @@ def test_type_info_extraction_from_registry() -> None:
     if not types_dict or not required.issubset(set(types_dict.keys())):
         compiled_dir = Path(__file__).parent.parent / "compiled-mibs"
         if not compiled_dir.exists():
-            # pytest.skip("data/types.json not found and no compiled-mibs to build from")
+            # pytest.skip("config/types.json not found and no compiled-mibs to build from")
             pass
         registry = TypeRegistry(compiled_dir)
         registry.build()

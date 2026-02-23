@@ -57,14 +57,14 @@ class TestTypeRegistryLoading:
     def test_type_registry_path_construction(self, temp_dir: Path) -> None:
         """Test different ways of constructing type registry path."""
         # Method 1: Hardcoded string
-        path1 = "data/types.json"
+        path1 = "config/types.json"
 
         # Method 2: os.path.join
-        path2 = os.path.join("data", "types.json")
+        path2 = os.path.join("config", "types.json")
 
         # Method 3: Relative to module
         base_dir = temp_dir
-        path3 = os.path.join(base_dir, "data", "types.json")
+        path3 = os.path.join(base_dir, "config", "types.json")
 
         # All should produce valid paths
         assert isinstance(path1, str)
@@ -74,13 +74,13 @@ class TestTypeRegistryLoading:
     def test_type_registry_default_path(self) -> None:
         """Test that default type registry path is consistent."""
         # This tests the pattern used in multiple files
-        default_path = os.path.join("data", "types.json")
+        default_path = os.path.join("config", "types.json")
 
-        assert default_path == "data/types.json"
+        assert default_path == "config/types.json"
 
     def test_load_registry_with_error_handling(self, temp_dir: Path) -> None:
         """Test loading registry with proper error handling."""
-        registry_path = temp_dir / "data" / "types.json"
+        registry_path = temp_dir / "config" / "types.json"
 
         # Simulate the pattern used in mib_registrar.py
         try:

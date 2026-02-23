@@ -57,6 +57,7 @@ OLD-mock-behaviour/
 mock-behaviour/
 logs/
 data/
+config/
 walks/
 agent-model-backups/
 agent-model/*

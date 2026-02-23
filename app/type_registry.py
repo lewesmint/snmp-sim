@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 # Import the TypeRecorder from app.type_recorder
+from app.model_paths import TYPE_REGISTRY_FILE
 from app.type_recorder import TypeEntry, TypeRecorder
 
 
@@ -36,8 +37,8 @@ class TypeRegistry:
             raise RuntimeError(msg)
         return self._registry
 
-    def export_to_json(self, path: str = "data/types.json") -> None:
-        """Export the type registry to a JSON file in the data folder by default."""
+    def export_to_json(self, path: str = str(TYPE_REGISTRY_FILE)) -> None:
+        """Export the type registry to a JSON file in the config folder by default."""
         if self._registry is None:
             msg = "Type registry has not been built yet. Call build() first."
             raise RuntimeError(msg)

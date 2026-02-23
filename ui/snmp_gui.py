@@ -31,6 +31,7 @@ import customtkinter as ctk
 import requests
 import yaml
 
+from app.model_paths import CONFIG_DIR, GUI_CONFIG_JSON_FILE, GUI_CONFIG_YAML_FILE
 from ui.common import Logger, save_gui_log
 from ui.mib_browser import MIBBrowserWindow
 from ui.snmp_gui_links_mixin import SNMPGuiLinksMixin
@@ -4795,9 +4796,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
     def _save_config_locally(self, cfg: dict[str, Any]) -> None:
         """Fallback method to save config locally if server save fails."""
         try:
-            data_dir = Path("data")
-            data_dir.mkdir(parents=True, exist_ok=True)
-            with (data_dir / "gui_config.yaml").open("w", encoding="utf-8") as file_handle:
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            with GUI_CONFIG_YAML_FILE.open("w", encoding="utf-8") as file_handle:
                 yaml.safe_dump(cfg, file_handle)
         except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
             self._log(f"Failed to save config locally: {e}", "ERROR")
@@ -5359,8 +5359,8 @@ def main() -> None:
 
         # Fallback to local files if server load failed
         if saved is None:
-            cfg_path_yaml = Path("data/gui_config.yaml")
-            cfg_path_json = Path("data/gui_config.json")
+            cfg_path_yaml = GUI_CONFIG_YAML_FILE
+            cfg_path_json = GUI_CONFIG_JSON_FILE
 
             if cfg_path_yaml.exists():
                 with cfg_path_yaml.open(encoding="utf-8") as file_handle:

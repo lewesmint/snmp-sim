@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.api_state import logger, state
 from app.base_type_handler import BaseTypeHandler
+from app.model_paths import TYPE_REGISTRY_FILE
 from app.type_registry_validator import validate_type_registry_file
 
 router = APIRouter()
@@ -22,7 +22,7 @@ def _load_type_registry_json() -> dict[str, object]:
     Prefer strict parsing first, then fall back to decoding the first valid
     JSON object from the file content.
     """
-    raw_text = Path("data/types.json").read_text(encoding="utf-8", errors="ignore")
+    raw_text = TYPE_REGISTRY_FILE.read_text(encoding="utf-8", errors="ignore")
     try:
         loaded = json.loads(raw_text)
         return loaded if isinstance(loaded, dict) else {}
@@ -62,7 +62,7 @@ def set_sysdescr(update: SysDescrUpdate) -> dict[str, object]:
 @router.get("/validate-types")
 def validate_types() -> dict[str, object]:
     """Validate the type registry JSON file."""
-    is_valid, errors, type_count = validate_type_registry_file("data/types.json")
+    is_valid, errors, type_count = validate_type_registry_file(str(TYPE_REGISTRY_FILE))
 
     if not is_valid:
         raise HTTPException(status_code=422, detail={"errors": errors, "valid": False})

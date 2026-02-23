@@ -31,8 +31,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         "-o",
-        default="data/types.json",
-        help="Output path for the type registry JSON file (default: data/types.json)",
+        default="config/types.json",
+        help="Output path for the type registry JSON file (default: config/types.json)",
     )
     parser.add_argument(
         "--verbose",

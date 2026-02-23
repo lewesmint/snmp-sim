@@ -30,6 +30,9 @@ from app.model_paths import (
     AGENT_MODEL_DIR,
     AGENT_MODEL_PRESETS_DIR,
     COMPILED_MIBS_DIR,
+    CONFIG_DIR,
+    GUI_CONFIG_JSON_FILE,
+    GUI_CONFIG_YAML_FILE,
     MIB_STATE_FILE,
 )
 
@@ -73,12 +76,12 @@ def _clear_agent_state() -> None:
 def get_config() -> dict[str, object]:
     """Get GUI configuration from server."""
     try:
-        config_path = Path("data/gui_config.yaml")
+        config_path = GUI_CONFIG_YAML_FILE
         if config_path.exists():
             with config_path.open(encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
         else:
-            config_path = Path("data/gui_config.json")
+            config_path = GUI_CONFIG_JSON_FILE
             if config_path.exists():
                 with config_path.open(encoding="utf-8") as f:
                     config = json.load(f)
@@ -94,12 +97,11 @@ def get_config() -> dict[str, object]:
 def save_config(config: ConfigData) -> dict[str, object]:
     """Save GUI configuration to server."""
     try:
-        data_dir = Path("data")
-        data_dir.mkdir(parents=True, exist_ok=True)
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
         config_dict = config.model_dump()
 
-        config_path = data_dir / "gui_config.yaml"
+        config_path = GUI_CONFIG_YAML_FILE
         with config_path.open("w", encoding="utf-8") as f:
             yaml.safe_dump(config_dict, f)
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:

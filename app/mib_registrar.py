@@ -29,7 +29,7 @@ from app.mib_registrar_helpers import (
     RegistrarValueDecoder,
     RegistrarWriteHooks,
 )
-from app.model_paths import AGENT_MODEL_DIR
+from app.model_paths import AGENT_MODEL_DIR, TYPE_REGISTRY_FILE
 from plugins.type_encoders import encode_value
 
 ObjectType: TypeAlias = Any
@@ -143,7 +143,7 @@ class MibRegistrar:
 
         Args:
             mib_jsons: Dictionary mapping MIB names to their JSON data
-            type_registry_path: Optional path to types.json (defaults to data/types.json)
+            type_registry_path: Optional path to types.json (defaults to config/types.json)
 
         """
         if self.mib_builder is None:
@@ -152,7 +152,7 @@ class MibRegistrar:
 
         # Load the type registry from the exported JSON file
         if type_registry_path is None:
-            type_registry_path = str(Path(__file__).resolve().parent.parent / "data" / "types.json")
+            type_registry_path = str(TYPE_REGISTRY_FILE)
 
         try:
             type_registry_path_obj = Path(type_registry_path)
@@ -170,14 +170,14 @@ class MibRegistrar:
         """Load type registry from JSON file.
 
         Args:
-            type_registry_path: Optional path to types.json (defaults to data/types.json)
+            type_registry_path: Optional path to types.json (defaults to config/types.json)
 
         Returns:
             Type registry dictionary, or empty dict if load fails
 
         """
         if type_registry_path is None:
-            type_registry_path_obj = Path(__file__).resolve().parent.parent / "data" / "types.json"
+            type_registry_path_obj = Path(TYPE_REGISTRY_FILE)
         else:
             type_registry_path_obj = Path(type_registry_path)
 
@@ -282,7 +282,7 @@ class MibRegistrar:
 
         Args:
             mib_jsons: Dictionary mapping MIB names to their JSON data
-            type_registry_path: Optional path to types.json (defaults to data/types.json)
+            type_registry_path: Optional path to types.json (defaults to config/types.json)
 
         """
         try:

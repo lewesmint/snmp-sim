@@ -31,7 +31,7 @@ from app.app_config import AppConfig
 from app.app_logger import AppLogger
 from app.compiler import MibCompiler
 from app.mib_registrar import MibRegistrar, SNMPContext
-from app.model_paths import agent_model_dir, compiled_mibs_dir, mib_state_file
+from app.model_paths import TYPE_REGISTRY_FILE, agent_model_dir, compiled_mibs_dir, mib_state_file
 from app.value_links import get_link_manager
 
 
@@ -380,7 +380,7 @@ class SNMPAgent:
             else:
                 compiled_mib_paths.append(str(compiled_file))
 
-        types_json_path = Path("data") / "types.json"
+        types_json_path = TYPE_REGISTRY_FILE
         if self.preloaded_model and types_json_path.exists():
             self.logger.info(
                 "Using preloaded model and existing types.json, skipping full MIB compilation"
@@ -401,7 +401,8 @@ class SNMPAgent:
                 type_registry.build()
                 type_registry.export_to_json(str(types_json_path))
                 self.logger.info(
-                    "Rebuilt type registry to data/types.json with %s types.",
+                    "Rebuilt type registry to %s with %s types.",
+                    types_json_path,
                     len(type_registry.registry),
                 )
         else:
@@ -409,7 +410,8 @@ class SNMPAgent:
             type_registry.build()
             type_registry.export_to_json(str(types_json_path))
             self.logger.info(
-                "Exported type registry to data/types.json with %s types.",
+                "Exported type registry to %s with %s types.",
+                types_json_path,
                 len(type_registry.registry),
             )
 
@@ -417,7 +419,7 @@ class SNMPAgent:
         self.logger.info("Validating type registry...")
         from app.type_registry_validator import validate_type_registry_file
 
-        is_valid, errors, type_count = validate_type_registry_file("data/types.json")
+        is_valid, errors, type_count = validate_type_registry_file(str(types_json_path))
         if not is_valid:
             self.logger.error("Type registry validation failed: %s", errors)
             return

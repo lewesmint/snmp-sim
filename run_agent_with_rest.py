@@ -21,6 +21,7 @@ import uvicorn
 from app.app_config import AppConfig
 from app.api_state import set_snmp_agent
 from app.model_paths import AGENT_MODEL_DIR, COMPILED_MIBS_DIR
+from app.model_paths import AGENT_CONFIG_FILE
 from app.snmp_agent import SNMPAgent
 
 _psutil: Any | None
@@ -301,7 +302,7 @@ def main() -> int:
     _handle_rebuild_flags(args)
 
     # Load config to get SNMP port
-    config = AppConfig("data/agent_config.yaml")
+    config = AppConfig(str(AGENT_CONFIG_FILE))
     snmp_port: int = int(cast(int | str, config.get("snmp.port", DEFAULT_SNMP_PORT)))
 
     # Check SNMP port availability before starting agent

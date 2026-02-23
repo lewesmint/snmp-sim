@@ -6,13 +6,14 @@ from typing import Any
 
 from app.compiler import MibCompilationError, MibCompiler
 from app.generator import BehaviourGenerator
+from app.model_paths import TYPE_REGISTRY_FILE
 from app.snmp_agent import SNMPAgent
 from app.type_registry import TypeRegistry
 
 
 def build_type_registry(
     compiled_mibs_dir: str | Path = "compiled-mibs",
-    output_path: str = "data/types.json",
+    output_path: str = str(TYPE_REGISTRY_FILE),
     progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Build the type registry from compiled MIBs and export to JSON.

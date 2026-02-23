@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app import api
 from app import api_state
+from app.model_paths import CONFIG_DIR, TYPE_REGISTRY_FILE
 
 client = TestClient(api.app)
 
@@ -28,8 +29,8 @@ def restore_snmp_agent() -> Generator[None, None, None]:
 @pytest.fixture
 def backup_types_json(tmp_path: Any, monkeypatch: Any) -> Generator[None, None, None]:
     """Test case for backup_types_json."""
-    # Back up existing data/types.json if present and restore after test
-    data_path = Path("data") / "types.json"
+    # Back up existing config/types.json if present and restore after test
+    data_path = TYPE_REGISTRY_FILE
     backup = None
     if data_path.exists():
         backup = data_path.read_text()
@@ -97,8 +98,8 @@ def test_validate_types_valid(monkeypatch: Any) -> None:
 def test_get_type_info_not_found(backup_types_json: Any) -> None:
     """Test case for test_get_type_info_not_found."""
     # Write a minimal registry that does not contain FooType
-    Path("data").mkdir(exist_ok=True)
-    Path("data/types.json").write_text(json.dumps({"Bar": {"base_type": "Integer32"}}))
+    CONFIG_DIR.mkdir(exist_ok=True)
+    TYPE_REGISTRY_FILE.write_text(json.dumps({"Bar": {"base_type": "Integer32"}}))
 
     r = client.get("/type-info/FooType")
     assert r.status_code == 404
@@ -107,12 +108,12 @@ def test_get_type_info_not_found(backup_types_json: Any) -> None:
 def test_get_type_info_found(backup_types_json: Any) -> None:
     """Test case for test_get_type_info_found."""
     # Prepare a registry where DisplayString -> OctetString and OctetString -> OCTET STRING
-    Path("data").mkdir(exist_ok=True)
+    CONFIG_DIR.mkdir(exist_ok=True)
     registry: dict[str, Any] = {
         "DisplayString": {"base_type": "OctetString", "display_hint": "255a"},
         "OctetString": {"base_type": "OCTET STRING"},
     }
-    Path("data/types.json").write_text(json.dumps(registry))
+    TYPE_REGISTRY_FILE.write_text(json.dumps(registry))
 
     r = client.get("/type-info/DisplayString")
     assert r.status_code == 200
@@ -124,9 +125,9 @@ def test_get_type_info_found(backup_types_json: Any) -> None:
 
 def test_list_types(backup_types_json: Any) -> None:
     """Test case for test_list_types."""
-    Path("data").mkdir(exist_ok=True)
+    CONFIG_DIR.mkdir(exist_ok=True)
     registry: dict[str, Any] = {"A": {}, "B": {}, "C": {}}
-    Path("data/types.json").write_text(json.dumps(registry))
+    TYPE_REGISTRY_FILE.write_text(json.dumps(registry))
 
     r = client.get("/types")
     assert r.status_code == 200

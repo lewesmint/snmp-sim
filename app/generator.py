@@ -12,7 +12,7 @@ from pysnmp.smi import builder
 from app.app_logger import AppLogger
 from app.default_value_plugins import get_default_value
 from app.json_format import dumps_with_horizontal_oid_lists
-from app.model_paths import AGENT_MODEL_DIR
+from app.model_paths import AGENT_MODEL_DIR, TYPE_REGISTRY_FILE
 from app.plugin_loader import load_plugins
 
 logger = AppLogger.get(__name__)
@@ -503,7 +503,7 @@ class BehaviourGenerator:
 
     def _load_type_registry(self) -> dict[str, Any]:
         """Load the canonical type registry from the exported JSON file."""
-        registry_path = Path(__file__).resolve().parent.parent / "data" / "types.json"
+        registry_path = TYPE_REGISTRY_FILE
         if not registry_path.exists():
             msg = (
                 f"Type registry JSON not found at {registry_path}. "

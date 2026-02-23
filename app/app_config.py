@@ -7,6 +7,8 @@ from threading import Lock
 from dynaconf import Dynaconf
 from typing_extensions import Self
 
+from app.model_paths import AGENT_CONFIG_FILE
+
 
 class ConfigFileNotFoundError(FileNotFoundError):
     """Raised when the configuration file is missing."""
@@ -50,11 +52,10 @@ class AppConfig:
         if self.__class__.initialized:
             return
 
-        # If caller passed the default name, prefer data/agent_config.yaml if present
+        # If caller passed the default name, prefer config/agent_config.yaml if present
         if config_path == "agent_config.yaml":
-            data_path = Path("data") / "agent_config.yaml"
-            if data_path.exists():
-                config_path = str(data_path)
+            if AGENT_CONFIG_FILE.exists():
+                config_path = str(AGENT_CONFIG_FILE)
 
         if not Path(config_path).exists():
             raise ConfigFileNotFoundError(config_path)
