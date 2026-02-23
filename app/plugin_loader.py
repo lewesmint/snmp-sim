@@ -55,15 +55,7 @@ def load_plugins_from_directory(plugin_dir: str = "plugins") -> list[str]:
             loaded_plugins.append(module_name)
             logger.info("Loaded plugin: %s", module_name)
 
-        except (
-            ImportError,
-            SyntaxError,
-            AttributeError,
-            LookupError,
-            OSError,
-            TypeError,
-            ValueError
-        ):
+        except Exception:
             logger.exception("Failed to load plugin %s", plugin_file)
 
     return loaded_plugins

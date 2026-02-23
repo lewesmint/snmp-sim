@@ -8,18 +8,17 @@ import pytest
 from app import cli_register_types as crt
 
 
-def test_main_missing_compiled_dir(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_missing_compiled_dir(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Test case for test_main_missing_compiled_dir."""
     fake_dir = tmp_path / "nope"
     rc = crt.main(["--compiled-mibs-dir", str(fake_dir)])
-    captured = capsys.readouterr()
     assert rc == 1
-    assert "Compiled MIBs directory not found" in captured.err
+    assert "Compiled MIBs directory not found" in caplog.text
 
 
 def test_main_success_with_mocks(
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
     mocker: Any,
 ) -> None:
     """Test case for test_main_success_with_mocks."""
@@ -27,14 +26,13 @@ def test_main_success_with_mocks(
     fake_registry = {"MyType": {"base_type": "Integer32", "used_by": []}}
     mocker.patch("app.cli_register_types.build_type_registry", return_value=fake_registry)
     rc = crt.main(["--compiled-mibs-dir", str(tmp_path), "--output", str(tmp_path / "out.json")])
-    captured = capsys.readouterr()
     assert rc == 0
-    assert "Successfully built type registry" in captured.out
+    assert "Successfully built type registry" in caplog.text
 
 
 def test_main_verbose_output_formatting(
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
     mocker: Any,
 ) -> None:
     """Test case for test_main_verbose_output_formatting."""
@@ -85,9 +83,8 @@ def test_main_verbose_output_formatting(
     mocker.patch("app.cli_register_types.build_type_registry", return_value=fake_registry)
     mocker.patch("app.cli_register_types.BaseTypeHandler", return_value=MockHandler())
     rc = crt.main(["--compiled-mibs-dir", str(tmp_path), "--verbose"])
-    captured = capsys.readouterr()
     assert rc == 0
-    out = captured.out
+    out = caplog.text
     assert "MyType" in out
     assert "Integer32" in out
     assert "42" in out
@@ -98,7 +95,7 @@ def test_main_verbose_output_formatting(
 
 def test_main_exception_handling(
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
     mocker: Any,
 ) -> None:
     """Test case for test_main_exception_handling."""
@@ -107,6 +104,6 @@ def test_main_exception_handling(
         side_effect=Exception("test error"),
     )
     rc = crt.main(["--compiled-mibs-dir", str(tmp_path)])
-    captured = capsys.readouterr()
     assert rc == 1
-    assert "Error building type registry: test error" in captured.err
+    assert "Error building type registry" in caplog.text
+    assert "test error" in caplog.text

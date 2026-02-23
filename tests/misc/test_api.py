@@ -71,7 +71,7 @@ def test_validate_types_invalid(monkeypatch: Any) -> None:
     """Test case for test_validate_types_invalid."""
     # Patch validator to return invalid
     monkeypatch.setattr(
-        "app.type_registry_validator.validate_type_registry_file",
+        "app.api_system.validate_type_registry_file",
         lambda p: (False, ["err1"], 0),
     )
     r = client.get("/validate-types")
@@ -84,7 +84,7 @@ def test_validate_types_invalid(monkeypatch: Any) -> None:
 def test_validate_types_valid(monkeypatch: Any) -> None:
     """Test case for test_validate_types_valid."""
     monkeypatch.setattr(
-        "app.type_registry_validator.validate_type_registry_file",
+        "app.api_system.validate_type_registry_file",
         lambda p: (True, [], 42),
     )
     r = client.get("/validate-types")

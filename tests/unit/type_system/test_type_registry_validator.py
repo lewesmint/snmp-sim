@@ -135,7 +135,7 @@ def test_main_no_args(capsys: pytest.CaptureFixture[str]) -> None:
         text=True,
     )
     assert result.returncode == 2
-    assert "Usage:" in result.stdout
+    assert "Usage:" in result.stderr
 
 
 def test_main_with_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

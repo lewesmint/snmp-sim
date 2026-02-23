@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 def test_backup_schemas_existing_and_missing(
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_backup_schemas_existing_and_missing."""
     schema_dir = tmp_path / "agent-model"
@@ -31,28 +31,25 @@ def test_backup_schemas_existing_and_missing(
     (schema_dir / "MIB-A" / "schema.json").write_text("{}", encoding="utf-8")
 
     backup_dir = backup_schemas(schema_dir, backup_base)
-    out = capsys.readouterr()
     assert backup_dir.exists()
     assert (backup_dir / "MIB-A" / "schema.json").exists()
-    assert "Backup created" in out.out
+    assert "Backup created" in caplog.text
 
     missing_dir = tmp_path / "missing-agent-model"
     backup_dir2 = backup_schemas(missing_dir, backup_base)
-    out2 = capsys.readouterr()
     assert backup_dir2.parent == backup_base
-    assert "does not exist, skipping backup" in out2.out
+    assert "does not exist, skipping backup" in caplog.text
 
 
 def test_load_mib_state_missing_and_present(
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_load_mib_state_missing_and_present."""
     missing = tmp_path / "mib_state.json"
     state_missing = load_mib_state(missing)
-    out_missing = capsys.readouterr()
     assert state_missing == {"scalars": {}, "tables": {}, "deleted_instances": []}
-    assert "does not exist" in out_missing.out
+    assert "does not exist" in caplog.text
 
     present = tmp_path / "present_state.json"
     expected = {
@@ -126,7 +123,7 @@ def test_bake_state_into_schemas_scalars_and_tables(tmp_path: Path) -> None:
 
 def test_bake_state_handles_index_sentinel_and_bad_schema(
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_bake_state_handles_index_sentinel_and_bad_schema."""
     schema_dir = tmp_path / "agent-model"
@@ -159,10 +156,9 @@ def test_bake_state_handles_index_sentinel_and_bad_schema(
     }
 
     baked_count = bake_state_into_schemas(schema_dir, state)
-    out = capsys.readouterr()
 
     assert baked_count == 1
-    assert "Error processing" in out.err
+    assert "Error processing" in caplog.text
 
     updated = json.loads((mib_dir / "schema.json").read_text(encoding="utf-8"))
     rows = updated["objects"]["testTable"]["rows"]

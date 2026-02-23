@@ -7,10 +7,11 @@ Handles SNMPv3 and SNMP Framework MIB objects that require special consideration
 
 import hashlib
 import socket
-from functools import lru_cache
 
 from app.default_value_plugins import register_plugin
 from app.types import TypeInfo
+
+_CACHED_ENGINE_ID: bytes | None = None
 
 
 def _generate_stable_engine_id() -> bytes:
@@ -46,10 +47,12 @@ def _generate_stable_engine_id() -> bytes:
     return prefix + suffix_hash[:11]
 
 
-@lru_cache(maxsize=1)
 def _get_stable_engine_id() -> bytes:
     """Get the cached or newly generated stable engine ID."""
-    return _generate_stable_engine_id()
+    global _CACHED_ENGINE_ID
+    if _CACHED_ENGINE_ID is None:
+        _CACHED_ENGINE_ID = _generate_stable_engine_id()
+    return _CACHED_ENGINE_ID
 
 
 @register_plugin("snmp_framework")

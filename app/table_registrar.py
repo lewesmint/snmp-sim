@@ -438,8 +438,12 @@ class TableRegistrar:
                         continue
 
                     # Create scalar instance (best-effort). Tests patch this method.
-                    self.mib_scalar_instance()
-                    created_any = True
+                    try:
+                        self.mib_scalar_instance()
+                        created_any = True
+                    except Exception:
+                        self.logger.exception("Error registering row instance")
+                        continue
                 except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
                     self.logger.exception("Error registering row instance")
 
@@ -476,7 +480,10 @@ class TableRegistrar:
             try:
                 return self.mib_builder.import_symbols("SNMPv2-TC", base_type)[0]
             except Exception:  # Broad catch for any import failures
-                return getattr(rfc1902, base_type, None)
+                try:
+                    return getattr(rfc1902, base_type, None)
+                except Exception:
+                    return None
 
     @staticmethod
     def _oid_tuple(value: ObjectType) -> tuple[int, ...] | None:

@@ -6,24 +6,22 @@ from typing import Any, NoReturn
 from app import cli_build_model as cbm
 
 
-def test_load_mib_schema_missing(tmp_path: Any, capsys: Any) -> None:
+def test_load_mib_schema_missing(tmp_path: Any, caplog: Any) -> None:
     """Test case for test_load_mib_schema_missing."""
     schema = cbm.load_mib_schema("NONEXISTENT", str(tmp_path))
-    captured = capsys.readouterr()
     assert schema is None
-    assert "Warning: Schema not found" in captured.err
+    assert "Schema not found" in caplog.text
 
 
-def test_load_mib_schema_invalid_json(tmp_path: Any, capsys: Any) -> None:
+def test_load_mib_schema_invalid_json(tmp_path: Any, caplog: Any) -> None:
     """Test case for test_load_mib_schema_invalid_json."""
     mib_dir = tmp_path / "TEST-MIB"
     mib_dir.mkdir()
     (mib_dir / "schema.json").write_text("{ not: json }")
 
     schema = cbm.load_mib_schema("TEST-MIB", str(tmp_path))
-    captured = capsys.readouterr()
     assert schema is None
-    assert "Error: Failed to parse" in captured.err
+    assert "Failed to parse" in caplog.text
 
 
 def test_load_mib_schema_valid(tmp_path: Any) -> None:
@@ -48,16 +46,15 @@ def test_build_internal_model_only_includes_present(tmp_path: Any) -> None:
     assert "B" not in model
 
 
-def test_print_model_summary(capsys: Any) -> None:
+def test_print_model_summary(caplog: Any) -> None:
     """Test case for test_print_model_summary."""
     model = {
         "M1": {"x": {"type": "MibScalar"}, "t": {"type": "MibTable"}},
         "M2": {"a": {"type": "MibScalar"}},
     }
     cbm.print_model_summary(model)
-    out = capsys.readouterr().out
-    assert "Loaded 2 MIB schemas" in out
-    assert "M1: 2 objects, 1 tables" in out
+    assert "Loaded 2 MIB schemas" in caplog.text
+    assert "M1: 2 objects, 1 tables" in caplog.text
 
 
 class DummyConfigNoMibs:
@@ -123,7 +120,7 @@ def test_main_output_write_error(monkeypatch: Any, tmp_path: Any) -> None:
     assert rc == 1
 
 
-def test_main_success_writes_output(monkeypatch: Any, tmp_path: Any, capsys: Any) -> None:
+def test_main_success_writes_output(monkeypatch: Any, tmp_path: Any, caplog: Any) -> None:
     """Test case for test_main_success_writes_output."""
     monkeypatch.setattr(cbm, "AppConfig", DummyConfigWithMibs)
     model: dict[str, dict[str, Any]] = {"M1": {"a": {}}}
@@ -135,4 +132,4 @@ def test_main_success_writes_output(monkeypatch: Any, tmp_path: Any, capsys: Any
     assert out_file.exists()
     data = json.loads(out_file.read_text())
     assert data == model
-    assert "Model saved to" in capsys.readouterr().out
+    assert "Model saved to" in caplog.text

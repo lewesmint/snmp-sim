@@ -15,6 +15,24 @@ from app.type_registry_validator import validate_type_registry_file
 router = APIRouter()
 
 
+def _load_type_registry_json() -> dict[str, object]:
+    """Load type registry JSON, tolerating trailing garbage bytes.
+
+    Some environments can leave trailing NULs or stale bytes after writes.
+    Prefer strict parsing first, then fall back to decoding the first valid
+    JSON object from the file content.
+    """
+    raw_text = Path("data/types.json").read_text(encoding="utf-8", errors="ignore")
+    try:
+        loaded = json.loads(raw_text)
+        return loaded if isinstance(loaded, dict) else {}
+    except json.JSONDecodeError:
+        cleaned = raw_text.rstrip("\x00 \t\r\n")
+        decoder = json.JSONDecoder()
+        loaded, _ = decoder.raw_decode(cleaned)
+        return loaded if isinstance(loaded, dict) else {}
+
+
 class SysDescrUpdate(BaseModel):
     """Request model for updating the system description (sysDescr) value."""
 
@@ -59,8 +77,7 @@ def validate_types() -> dict[str, object]:
 @router.get("/type-info/{type_name}")
 def get_type_info(type_name: str) -> dict[str, object]:
     """Get information about a specific SNMP type."""
-    with Path("data/types.json").open(encoding="utf-8") as f:
-        type_registry = json.load(f)
+    type_registry = _load_type_registry_json()
 
     handler = BaseTypeHandler(type_registry=type_registry)
     type_info = handler.get_type_info(type_name)
@@ -82,8 +99,7 @@ def get_type_info(type_name: str) -> dict[str, object]:
 @router.get("/types")
 def list_types() -> dict[str, object]:
     """List all available SNMP types in the registry."""
-    with Path("data/types.json").open(encoding="utf-8") as f:
-        type_registry = json.load(f)
+    type_registry = _load_type_registry_json()
 
     handler = BaseTypeHandler(type_registry=type_registry)
     all_types = list(handler.type_registry.keys())

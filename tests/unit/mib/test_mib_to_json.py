@@ -11,7 +11,7 @@ from app.cli_mib_to_json import check_imported_mibs, main
 
 def test_cli_success_prints_path(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI should generate behaviour JSON and print the path."""
-    mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
+    mocker.patch("app.cli_mib_to_json.Path.exists", return_value=True)
 
     mock_generator = mocker.MagicMock()
     mock_generator.generate.return_value = "agent-model/TEST-MIB/schema.json"
@@ -29,7 +29,7 @@ def test_cli_missing_compiled_mib(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """CLI should error when compiled MIB path is missing."""
-    mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=False)
+    mocker.patch("app.cli_mib_to_json.Path.exists", return_value=False)
 
     exit_code = main(["compiled-mibs/MISSING.py", "MISSING-MIB"])
     output = capsys.readouterr()
@@ -43,7 +43,7 @@ def test_cli_checks_imports_when_txt_path_provided(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """CLI should call import checks when a MIB text file is provided."""
-    mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
+    mocker.patch("app.cli_mib_to_json.Path.exists", return_value=True)
     mock_check = mocker.patch("app.cli_mib_to_json.check_imported_mibs")
 
     mock_generator = mocker.MagicMock()
@@ -60,7 +60,7 @@ def test_cli_checks_imports_when_txt_path_provided(
 
 def test_cli_no_plugins_flag(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI should disable plugin loading when --no-plugins is used."""
-    mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
+    mocker.patch("app.cli_mib_to_json.Path.exists", return_value=True)
 
     mock_generator = mocker.MagicMock()
     mock_generator.generate.return_value = "agent-model/TEST-MIB/schema.json"
@@ -105,7 +105,7 @@ def test_check_imported_mibs_missing_txt_path(
 
 def test_cli_output_dir_flag(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI should pass output dir to BehaviourGenerator."""
-    mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
+    mocker.patch("app.cli_mib_to_json.Path.exists", return_value=True)
 
     mock_generator = mocker.MagicMock()
     mock_generator.generate.return_value = "custom-out/TEST-MIB/schema.json"
@@ -120,7 +120,7 @@ def test_cli_output_dir_flag(mocker: MockerFixture, capsys: pytest.CaptureFixtur
 
 def test_cli_mib_name_optional(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
     """CLI should allow mib_name to be omitted."""
-    mocker.patch("app.cli_mib_to_json.os.path.exists", return_value=True)
+    mocker.patch("app.cli_mib_to_json.Path.exists", return_value=True)
 
     mock_generator = mocker.MagicMock()
     mock_generator.generate.return_value = "agent-model/TEST-MIB/schema.json"

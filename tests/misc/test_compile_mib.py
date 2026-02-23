@@ -1,5 +1,7 @@
 """Tests for compile_mib CLI wrapper."""
 
+import logging
+
 import pytest
 import pytest_mock
 
@@ -20,43 +22,43 @@ def _setup_compiler(
         mock_compiler.compile.return_value = "compiled-mibs/CISCO-ALARM-MIB.py"
 
     mocker.patch("app.cli_compile_mib.MibCompiler", return_value=mock_compiler)
-    mocker.patch("app.cli_compile_mib.os.path.exists", return_value=True)
+    mocker.patch("app.cli_compile_mib.Path.exists", return_value=True)
 
 
 def test_compile_mib_success(
     mocker: pytest_mock.MockerFixture,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test successful MIB compilation."""
     mock_results = {"CISCO-ALARM-MIB": "compiled"}
     _setup_compiler(mock_results, mocker)
 
-    exit_code = main(["CISCO-ALARM-MIB.txt"])
-    output = capsys.readouterr()
+    with caplog.at_level(logging.INFO):
+        exit_code = main(["CISCO-ALARM-MIB.txt"])
 
     assert exit_code == 0
-    assert "CISCO-ALARM-MIB: compiled" in output.out
+    assert "CISCO-ALARM-MIB: compiled" in caplog.text
 
 
 def test_compile_mib_failure(
     mocker: pytest_mock.MockerFixture,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test MIB compilation failure."""
     mock_results = {"CISCO-ALARM-MIB": "failed"}
     _setup_compiler(mock_results, mocker, compile_side_effect=MibCompilationError("boom"))
 
-    exit_code = main(["CISCO-ALARM-MIB.txt"])
-    output = capsys.readouterr()
+    with caplog.at_level(logging.INFO):
+        exit_code = main(["CISCO-ALARM-MIB.txt"])
 
     assert exit_code == 1
-    assert "CISCO-ALARM-MIB: failed" in output.out
-    assert "boom" in output.err
+    assert "CISCO-ALARM-MIB: failed" in caplog.text
+    assert "boom" in caplog.text
 
 
 def test_compile_mib_partial_success(
     mocker: pytest_mock.MockerFixture,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test MIB compilation with partial success."""
     mock_results = {
@@ -65,9 +67,9 @@ def test_compile_mib_partial_success(
     }
     _setup_compiler(mock_results, mocker)
 
-    exit_code = main(["CISCO-ALARM-MIB.txt"])
-    output = capsys.readouterr()
+    with caplog.at_level(logging.INFO):
+        exit_code = main(["CISCO-ALARM-MIB.txt"])
 
     assert exit_code == 1
-    assert "CISCO-ALARM-MIB: compiled" in output.out
-    assert "SNMPv2-SMI: missing" in output.out
+    assert "CISCO-ALARM-MIB: compiled" in caplog.text
+    assert "SNMPv2-SMI: missing" in caplog.text

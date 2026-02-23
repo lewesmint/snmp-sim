@@ -31,7 +31,7 @@ def test_run_snmp_agent_handles_success() -> None:
     assert agent.ran is True
 
 
-def test_run_snmp_agent_reports_error(capsys: Any) -> None:
+def test_run_snmp_agent_reports_error(caplog: Any) -> None:
     class DummyAgent:
         def run(self) -> None:
             msg = "boom"
@@ -41,16 +41,15 @@ def test_run_snmp_agent_reports_error(capsys: Any) -> None:
     with pytest.raises(SystemExit) as exc:
         raw.run_snmp_agent(bad_agent)
     assert exc.value.code == 1
-
-    output = capsys.readouterr()
-    assert "SNMP Agent ERROR" in output.err
+    assert "SNMP agent crashed" in caplog.text
 
 
 def test_main_starts_uvicorn_and_sets_agent(monkeypatch: Any) -> None:
     run_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
     class DummyAgent:
-        pass
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
 
     class DummyThread:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -62,6 +61,12 @@ def test_main_starts_uvicorn_and_sets_agent(monkeypatch: Any) -> None:
             self.started = True
 
     class DummySocket:
+        def __enter__(self) -> Any:
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
         def setsockopt(self, *_args: Any, **_kwargs: Any) -> None:
             return None
 

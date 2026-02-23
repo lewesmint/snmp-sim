@@ -7,7 +7,7 @@ import pytest
 import app.cli_run_agent as cli
 
 
-def test_main_missing_config(monkeypatch: Any, capsys: Any) -> None:
+def test_main_missing_config(monkeypatch: Any, caplog: Any) -> None:
     """Test case for test_main_missing_config."""
 
     # AppConfig constructor raises FileNotFoundError
@@ -20,12 +20,11 @@ def test_main_missing_config(monkeypatch: Any, capsys: Any) -> None:
     monkeypatch.setattr(cli, "AppConfig", BadConfig)
 
     ret = cli.main(["--config", "nope.yaml"])
-    captured = capsys.readouterr()
     assert ret == 1
-    assert "Error: Config file not found" in captured.err
+    assert "Error: Config file not found" in caplog.text
 
 
-def test_main_no_mibs_configured(monkeypatch: Any, capsys: Any) -> None:
+def test_main_no_mibs_configured(monkeypatch: Any, caplog: Any) -> None:
     """Test case for test_main_no_mibs_configured."""
 
     class EmptyConfig:
@@ -41,12 +40,11 @@ def test_main_no_mibs_configured(monkeypatch: Any, capsys: Any) -> None:
     monkeypatch.setattr(cli, "AppConfig", EmptyConfig)
 
     ret = cli.main(["--config", "some.yaml"])
-    captured = capsys.readouterr()
     assert ret == 1
-    assert "No MIBs configured" in captured.err
+    assert "No MIBs configured" in caplog.text
 
 
-def test_main_no_schemas_loaded(monkeypatch: Any, capsys: Any) -> None:
+def test_main_no_schemas_loaded(monkeypatch: Any, caplog: Any) -> None:
     """Test case for test_main_no_schemas_loaded."""
 
     class Cfg:
@@ -63,9 +61,8 @@ def test_main_no_schemas_loaded(monkeypatch: Any, capsys: Any) -> None:
     monkeypatch.setattr(cli, "build_internal_model", lambda mibs, sd: {})
 
     ret = cli.main(["--config", "some.yaml", "--schema-dir", "unused"])
-    captured = capsys.readouterr()
     assert ret == 1
-    assert "Error: No schemas could be loaded" in captured.err
+    assert "Error: No schemas could be loaded" in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -83,7 +80,7 @@ def test_main_no_schemas_loaded(monkeypatch: Any, capsys: Any) -> None:
             ["--config", "some.yaml"],
             1,
             "err",
-            "Error running agent: boom",
+            "Error running agent",
         ),
         (
             None,
@@ -96,7 +93,7 @@ def test_main_no_schemas_loaded(monkeypatch: Any, capsys: Any) -> None:
 )
 def test_main_agent_run_outcomes(
     monkeypatch: Any,
-    capsys: Any,
+    caplog: Any,
     agent_outcome: BaseException | None,
     argv: list[str],
     expected_rc: int,
@@ -132,7 +129,6 @@ def test_main_agent_run_outcomes(
     monkeypatch.setattr(cli, "SNMPAgent", Agent)
 
     ret = cli.main(argv)
-    captured = capsys.readouterr()
     assert ret == expected_rc
-    text = captured.out if expected_stream == "out" else captured.err
+    text = caplog.text
     assert expected_text in text

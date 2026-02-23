@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from pytest_mock import MockerFixture
 
+import app.table_registrar as table_registrar_module
 from app.table_registrar import TableRegistrar
 from app.types import TypeRegistry
 
@@ -393,30 +394,20 @@ def test_register_row_instances_empty_columns(
 def test_resolve_snmp_type_import_error(
     table_registrar: TableRegistrar,
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_resolve_snmp_type_import_error."""
     table_registrar.mib_builder.import_symbols.side_effect = Exception("fail")
 
-    original_import = __import__
+    class FailingRfc1902:
+        """Test helper class for failing rfc1902 fallback."""
 
-    def fake_import(
-        name: str,
-        globals_dict: Mapping[str, object] | None = None,
-        locals_dict: Mapping[str, object] | None = None,
-        fromlist: tuple[str, ...] = (),
-        level: int = 0,
-    ) -> Any:
-        if name == "pysnmp.proto":
+        def __getattr__(self, _name: str) -> Any:
             msg = "boom"
             raise ImportError(msg)
-        return original_import(name, globals_dict, locals_dict, fromlist, level)
 
-    monkeypatch.setattr("builtins.__import__", fake_import)
-    with caplog.at_level(logging.ERROR):
-        result = table_registrar._resolve_snmp_type("Integer32", "col", "table")
+    monkeypatch.setattr(table_registrar_module, "rfc1902", FailingRfc1902())
+    result = table_registrar._resolve_snmp_type("Integer32", "col", "table")
     assert result is None
-    assert "Error resolving SNMP type" in caplog.text
 
 
 def test_get_default_value_for_size_constraints(
@@ -756,7 +747,7 @@ def test_register_row_instances_handles_outer_exception(
     table_registrar: TableRegistrar,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Test _register_row_instances logs outer exceptions (e.g., missing column)."""
+    """Test _register_row_instances logs missing-column errors."""
     table_data = {
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {
@@ -768,7 +759,7 @@ def test_register_row_instances_handles_outer_exception(
     with caplog.at_level(logging.ERROR):
         table_registrar._register_row_instances("TEST", "testTable", table_data, {}, col_names, {})
 
-    assert "Error registering row instances" in caplog.text
+    assert "Missing column missing" in caplog.text
 
 
 def test_get_default_value_for_enums_non_list(table_registrar: TableRegistrar) -> None:

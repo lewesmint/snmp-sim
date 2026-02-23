@@ -725,7 +725,7 @@ class SNMPAgent:
             mib_registrar_module = importlib.import_module("app.mib_registrar")
 
             registrar_cls = mib_registrar_module.MibRegistrar
-            snmp_context_cls = mib_registrar_module.SNMPContext
+            snmp_context_cls = getattr(mib_registrar_module, "SNMPContext", None)
 
             if snmp_context_cls is not None:
                 snmp_context = snmp_context_cls(

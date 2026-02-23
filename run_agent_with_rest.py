@@ -287,7 +287,11 @@ def run_snmp_agent(agent: SNMPAgent) -> None:
     """Run the SNMP agent in a separate thread with its own event loop."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    agent.run()
+    try:
+        agent.run()
+    except Exception:
+        logger.exception("SNMP agent crashed")
+        raise SystemExit(1)
 
 
 def main() -> int:

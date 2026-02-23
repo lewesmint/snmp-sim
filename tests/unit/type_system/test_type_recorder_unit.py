@@ -1416,10 +1416,10 @@ class TestExportToJson:
         recorder._registry = {"Integer32": int32_entry}
 
         m = mocker.mock_open()
-        mocker.patch("builtins.open", m)
+        mocker.patch("pathlib.Path.open", m)
         recorder.export_to_json("types.json")
 
-        m.assert_called_once_with("types.json", "w", encoding="utf-8")
+        m.assert_called_once_with("w", encoding="utf-8")
         # Verify json.dump was called
         handle = m()
         written_data = "".join(call.args[0] for call in handle.write.call_args_list)

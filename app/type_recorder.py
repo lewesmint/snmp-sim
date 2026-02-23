@@ -254,7 +254,7 @@ class TypeRecorder:
 
             try:
                 raw_pairs = typed_items()
-            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+            except Exception:
                 continue
 
             if not isinstance(raw_pairs, Iterable):
@@ -552,7 +552,7 @@ class TypeRecorder:
                 continue
             try:
                 syntax_obj = ctor()
-            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+            except Exception:
                 continue
 
             size, constraints, constraints_repr = self.extract_constraints(syntax_obj)
@@ -743,7 +743,7 @@ class TypeRecorder:
                 continue
             try:
                 mib_builder.load_modules(path.stem)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+            except Exception:
                 continue
 
         return mib_builder.mibSymbols
@@ -851,7 +851,7 @@ class TypeRecorder:
         snmp_obj = cast("HasGetSyntax", sym_obj)
         try:
             syntax = snmp_obj.getSyntax()
-        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+        except Exception:
             return
 
         if syntax is None:

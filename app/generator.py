@@ -162,14 +162,7 @@ class BehaviourGenerator:
                                 if entry_obj and hasattr(entry_obj, "getIndexNames"):
                                     index_names = [idx[2] for idx in entry_obj.getIndexNames()]
                                     entry_info["indexes"] = index_names
-                            except (
-                                AttributeError,
-                                LookupError,
-                                OSError,
-                                TypeError,
-                                ValueError,
-                                RuntimeError,
-                            ) as e:
+                            except Exception as e:
                                 logger.warning(
                                     "Could not extract index columns for %s: %s", entry_name, e
                                 )
@@ -296,22 +289,8 @@ class BehaviourGenerator:
             mib_builder.add_mib_sources(
                 builder.DirMibSource(str(Path(mib_py_path).parent))
             )
-        except (
-            AttributeError,
-            LookupError,
-            OSError,
-            TypeError,
-            ValueError,
-            RuntimeError,
-        ):
-            with contextlib.suppress(
-                AttributeError,
-                LookupError,
-                OSError,
-                TypeError,
-                ValueError,
-                RuntimeError,
-            ):
+        except Exception:
+            with contextlib.suppress(Exception):
                 mib_builder.add_mib_sources()
         mib_builder.load_modules(mib_name)
         mib_symbols = mib_builder.mibSymbols[mib_name]
@@ -569,7 +548,7 @@ class BehaviourGenerator:
                 # Only mark as inherited if there are actually inherited index columns
                 if inherited_indexes and entry_name in result:
                     result[entry_name]["index_from"] = inherited_indexes
-            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+            except Exception:
                 # Skip if we can't detect - not all objects have getIndexNames
                 pass
 

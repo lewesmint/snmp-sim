@@ -106,16 +106,15 @@ def test_load_all_schemas_generic_processing_error(
     schema_path = mib_dir / "schema.json"
     schema_path.write_text("{}", encoding="utf-8")
 
-    real_open = open
+    real_path_open = Path.open
 
-    def fake_open(*args: Any, **kwargs: Any) -> Any:
-        file_arg = args[0] if args else ""
-        if str(file_arg).endswith("schema.json"):
+    def fake_path_open(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if self.name == "schema.json":
             msg = "boom"
             raise RuntimeError(msg)
-        return real_open(*args, **kwargs)
+        return real_path_open(self, *args, **kwargs)
 
-    monkeypatch.setattr("builtins.open", fake_open)
+    monkeypatch.setattr(Path, "open", fake_path_open)
 
     model = clm.load_all_schemas(str(base))
     captured = capsys.readouterr()
@@ -124,7 +123,7 @@ def test_load_all_schemas_generic_processing_error(
 
 
 def test_print_model_summary_handles_both_schema_shapes(
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_print_model_summary_handles_both_schema_shapes."""
     model: dict[str, dict[str, Any]] = {
@@ -142,11 +141,10 @@ def test_print_model_summary_handles_both_schema_shapes(
     }
 
     clm.print_model_summary(model)
-    out = capsys.readouterr().out
-    assert "Loaded 3 MIB schemas:" in out
-    assert "NEW: 2 objects, 1 tables" in out
-    assert "OLD: 2 objects, 1 tables" in out
-    assert "BAD: 0 objects, 0 tables" in out
+    assert "Loaded 3 MIB schemas:" in caplog.text
+    assert "NEW: 2 objects, 1 tables" in caplog.text
+    assert "OLD: 2 objects, 1 tables" in caplog.text
+    assert "BAD: 0 objects, 0 tables" in caplog.text
 
 
 def test_main_success_without_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

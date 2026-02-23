@@ -26,34 +26,32 @@ def test_iter_schema_files_returns_sorted_paths(tmp_path: Path) -> None:
 
 
 def test_main_returns_error_when_schema_dir_missing(
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_main_returns_error_when_schema_dir_missing."""
     code = main(["--schema-dir", "does-not-exist"])
-    out = capsys.readouterr()
 
     assert code == 1
-    assert "Schema directory not found" in out.out
+    assert "Schema directory not found" in caplog.text
 
 
 def test_main_returns_error_when_no_schema_files(
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_main_returns_error_when_no_schema_files."""
     empty_dir = tmp_path / "agent-model"
     empty_dir.mkdir(parents=True)
 
     code = main(["--schema-dir", str(empty_dir)])
-    out = capsys.readouterr()
 
     assert code == 1
-    assert "No schema.json files found." in out.out
+    assert "No schema.json files found." in caplog.text
 
 
 def test_main_updates_only_changed_files(
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_main_updates_only_changed_files."""
     schema_dir = tmp_path / "agent-model"
@@ -68,17 +66,16 @@ def test_main_updates_only_changed_files(
     p2.write_text(json.dumps({"schema_version": "1.0.1", "objects": {}}), encoding="utf-8")
 
     code = main(["--schema-dir", str(schema_dir), "--set-version", "1.0.1"])
-    out = capsys.readouterr()
 
     assert code == 0
-    assert "Updated 1 schema file(s) to version 1.0.1." in out.out
+    assert "Updated 1 schema file(s) to version 1.0.1." in caplog.text
     assert json.loads(p1.read_text(encoding="utf-8"))["schema_version"] == "1.0.1"
     assert json.loads(p2.read_text(encoding="utf-8"))["schema_version"] == "1.0.1"
 
 
 def test_main_skips_non_dict_json_and_handles_bad_json(
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_main_skips_non_dict_json_and_handles_bad_json."""
     schema_dir = tmp_path / "agent-model"
@@ -94,11 +91,10 @@ def test_main_skips_non_dict_json_and_handles_bad_json(
     (bad / "schema.json").write_text("{bad json", encoding="utf-8")
 
     code = main(["--schema-dir", str(schema_dir), "--set-version", "2.0.0"])
-    out = capsys.readouterr()
 
     assert code == 0
-    assert "Failed to update" in out.out
-    assert "Updated 1 schema file(s) to version 2.0.0." in out.out
+    assert "Failed to update" in caplog.text
+    assert "Updated 1 schema file(s) to version 2.0.0." in caplog.text
     assert (
         json.loads((good / "schema.json").read_text(encoding="utf-8"))["schema_version"] == "2.0.0"
     )

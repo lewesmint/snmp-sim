@@ -94,9 +94,7 @@ def test_create_pysnmp_value_fallback_to_rfc1902(
         OctetString=lambda x: x if isinstance(x, bytes) else x.encode("utf-8"),
         ObjectIdentifier=tuple,
     )
-    # Ensure we patch the already-imported pysnmp.proto package (if present)
-    proto_mod = importlib.import_module("pysnmp.proto")
-    monkeypatch.setattr(proto_mod, "rfc1902", fake_rfc, raising=False)
+    monkeypatch.setattr("app.base_type_handler.rfc1902", fake_rfc, raising=False)
 
     # Use a builder that raises to force fallback
     class RaisingBuilder:
@@ -151,9 +149,11 @@ def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
     class RfcCls:
         """Test helper class for RfcCls."""
 
-    # Patch the existing pysnmp.proto.rfc1902 if the package is loaded
-    proto_mod = importlib.import_module("pysnmp.proto")
-    monkeypatch.setattr(proto_mod, "rfc1902", types.SimpleNamespace(SomeName=RfcCls), raising=False)
+    monkeypatch.setattr(
+        "app.base_type_handler.rfc1902",
+        types.SimpleNamespace(SomeName=RfcCls),
+        raising=False,
+    )
 
     got2 = handler._get_pysnmp_type_class("SomeName", FailBuilder())
     assert cast(object, got2) is RfcCls
@@ -235,7 +235,7 @@ def test_create_pysnmp_value_rfc1902_fallback_exception(
     # Mock the rfc1902 import to raise an exception in the fallback
     mock_rfc1902 = mocker.MagicMock()
     mock_rfc1902.Integer32.side_effect = ValueError("rfc1902 error")
-    mocker.patch("pysnmp.proto.rfc1902", mock_rfc1902)
+    mocker.patch("app.base_type_handler.rfc1902", mock_rfc1902)
 
     # Pass a dummy mib_builder so it doesn't return early
     result = handler.create_pysnmp_value("Integer32", value=42, mib_builder=mocker.MagicMock())

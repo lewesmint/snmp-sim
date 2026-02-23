@@ -165,10 +165,14 @@ def test_cli_missing_required_args(capsys: pytest.CaptureFixture[str]) -> None:
     assert "required" in output.err.lower()
 
 
-def test_cli_sends_notification(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_sends_notification(
+    mocker: MockerFixture,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test CLI sends notification using new NotificationType API."""
     mock_sender = mocker.MagicMock()
     mocker.patch("app.cli_trap_sender.TrapSender", return_value=mock_sender)
+    caplog.set_level(logging.INFO)
 
     exit_code = cli_main(
         [
@@ -184,9 +188,8 @@ def test_cli_sends_notification(mocker: MockerFixture, capsys: pytest.CaptureFix
             "trap",
         ],
     )
-    output = capsys.readouterr()
     assert exit_code == 0
-    assert "Sent trap SNMPv2-MIB::coldStart" in output.out
+    assert "Sent trap SNMPv2-MIB::coldStart" in caplog.text
     mock_sender.send_mib_notification.assert_called_once_with(
         mib="SNMPv2-MIB",
         notification="coldStart",
@@ -197,11 +200,12 @@ def test_cli_sends_notification(mocker: MockerFixture, capsys: pytest.CaptureFix
 
 def test_cli_sends_notification_with_varbinds(
     mocker: MockerFixture,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test CLI sends notification with extra varbinds."""
     mock_sender = mocker.MagicMock()
     mocker.patch("app.cli_trap_sender.TrapSender", return_value=mock_sender)
+    caplog.set_level(logging.INFO)
 
     exit_code = cli_main(
         [
@@ -223,9 +227,8 @@ def test_cli_sends_notification_with_varbinds(
             "inform",
         ],
     )
-    output = capsys.readouterr()
     assert exit_code == 0
-    assert "Sent inform IF-MIB::linkDown" in output.out
+    assert "Sent inform IF-MIB::linkDown" in caplog.text
 
     # Verify send_mib_notification was called
     mock_sender.send_mib_notification.assert_called_once()
@@ -239,11 +242,12 @@ def test_cli_sends_notification_with_varbinds(
 
 def test_cli_varbind_string_and_index_string_parsing(
     mocker: MockerFixture,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """CLI should parse non-int varbind value/index as OctetString/string."""
     mock_sender = mocker.MagicMock()
     mocker.patch("app.cli_trap_sender.TrapSender", return_value=mock_sender)
+    caplog.set_level(logging.INFO)
 
     exit_code = cli_main(
         [
@@ -262,10 +266,8 @@ def test_cli_varbind_string_and_index_string_parsing(
             "eth0",
         ],
     )
-    output = capsys.readouterr()
-
     assert exit_code == 0
-    assert "Sent inform IF-MIB::linkDown" in output.out
+    assert "Sent inform IF-MIB::linkDown" in caplog.text
     call_args = mock_sender.send_mib_notification.call_args
     extra = call_args.kwargs["extra_varbinds"]
     assert extra is not None
@@ -285,12 +287,13 @@ def test_cli_varbind_string_and_index_string_parsing(
 
 def test_cli_sender_exception_returns_error(
     mocker: MockerFixture,
-    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """CLI should return 1 and print stderr when TrapSender raises."""
     mock_sender = mocker.MagicMock()
     mock_sender.send_mib_notification.side_effect = RuntimeError("send failed")
     mocker.patch("app.cli_trap_sender.TrapSender", return_value=mock_sender)
+    caplog.set_level(logging.ERROR)
 
     exit_code = cli_main(
         [
@@ -300,7 +303,6 @@ def test_cli_sender_exception_returns_error(
             "coldStart",
         ],
     )
-    output = capsys.readouterr()
-
     assert exit_code == 1
-    assert "Error sending notification: send failed" in output.err
+    assert "Error sending notification" in caplog.text
+    assert "send failed" in caplog.text

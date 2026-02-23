@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import api
+from app import api_state
 from app.app_config import AppConfig
 from app.app_logger import AppLogger, ColoredFormatter, LoggingConfig
 from app.mib_object import MibObject
@@ -29,7 +30,7 @@ def test_api_get_sysdescr_without_agent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Return 500 when getting sysDescr before SNMP agent is initialized."""
-    monkeypatch.setattr(api, "snmp_agent", None)
+    monkeypatch.setattr(api_state.state, "snmp_agent", None)
     response = api_client.get("/sysdescr")
     assert response.status_code == 500
     assert response.json()["detail"] == "SNMP agent not initialized"
@@ -40,7 +41,7 @@ def test_api_set_sysdescr_without_agent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Return 500 when setting sysDescr before SNMP agent is initialized."""
-    monkeypatch.setattr(api, "snmp_agent", None)
+    monkeypatch.setattr(api_state.state, "snmp_agent", None)
     response = api_client.post("/sysdescr", json={"value": "test"})
     assert response.status_code == 500
     assert response.json()["detail"] == "SNMP agent not initialized"
@@ -69,7 +70,7 @@ def test_api_get_and_set_sysdescr_with_agent(
             self.last_set = (oid, value)
 
     fake_agent = FakeAgent()
-    monkeypatch.setattr(api, "snmp_agent", fake_agent)
+    monkeypatch.setattr(api_state.state, "snmp_agent", fake_agent)
 
     get_response = api_client.get("/sysdescr")
     assert get_response.status_code == 200

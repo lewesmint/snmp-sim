@@ -173,7 +173,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     except FileNotFoundError:
         logger.exception("Type registry input file not found")
         return 1
-    except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+    except Exception:
         logger.exception("Error building type registry")
         return 1
 
