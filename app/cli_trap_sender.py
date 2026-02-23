@@ -7,6 +7,7 @@ For sending arbitrary traps, use the REST API /send-trap endpoint instead.
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from collections.abc import Iterable
 
@@ -14,9 +15,12 @@ from pysnmp.proto import rfc1902
 
 from app.trap_sender import TrapSender, VarBindSpec
 
+logger = logging.getLogger(__name__)
+
 
 def main(argv: Iterable[str] | None = None) -> int:
     """Send a MIB-defined SNMP notification (trap or inform)."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(
         description="Send a MIB-defined SNMP notification (trap or inform)",
         epilog=(
@@ -106,11 +110,18 @@ def main(argv: Iterable[str] | None = None) -> int:
             trap_type=args.trap_type,
             extra_varbinds=extra_varbinds or None,
         )
-        print(f"✓ Sent {args.trap_type} {args.mib}::{args.notification} to {args.host}:{args.port}")
-        return 0
-    except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-        print(f"Error sending notification: {e}", file=sys.stderr)
+        logger.info(
+            "✓ Sent %s %s::%s to %s:%s",
+            args.trap_type,
+            args.mib,
+            args.notification,
+            args.host,
+            args.port,
+        )
+    except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+        logger.exception("Error sending notification")
         return 1
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover

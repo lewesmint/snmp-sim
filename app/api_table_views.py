@@ -368,8 +368,7 @@ def set_oid_value(update: OIDValueUpdate) -> dict[str, object]:
     except (AttributeError, LookupError, OSError, TypeError):
         logger.exception("Unexpected error setting value for OID %s", parts)
         raise HTTPException(status_code=500, detail="Internal server error") from None
-    else:
-        return {"status": "ok", "oid": parts, "new_value": update.value}
+    return {"status": "ok", "oid": parts, "new_value": update.value}
 
 
 @router.get("/tree/bulk")

@@ -1,0 +1,13 @@
+{
+  "Integer32": {
+    "base_type": null,
+    "display_hint": null,
+    "size": null,
+    "constraints": [],
+    "constraints_repr": null,
+    "enums": null,
+    "defined_in": null,
+    "abstract": false,
+    "used_by": []
+  }
+}

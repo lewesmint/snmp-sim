@@ -44,7 +44,16 @@ def test_default_value_fixes() -> None:
         from plugins.basic_types import get_default_value
 
         get_default_value(type_info, "ifAdminStatus")
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except (
+        AssertionError,
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
         pass
     import traceback
 

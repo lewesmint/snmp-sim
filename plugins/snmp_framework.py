@@ -7,7 +7,7 @@ Handles SNMPv3 and SNMP Framework MIB objects that require special consideration
 
 import hashlib
 import socket
-from typing import Any
+from functools import lru_cache
 
 from app.default_value_plugins import register_plugin
 from app.types import TypeInfo
@@ -46,20 +46,14 @@ def _generate_stable_engine_id() -> bytes:
     return prefix + suffix_hash[:11]
 
 
-# Cache the engine ID so it remains stable within the process
-_CACHED_ENGINE_ID: bytes | None = None
-
-
+@lru_cache(maxsize=1)
 def _get_stable_engine_id() -> bytes:
     """Get the cached or newly generated stable engine ID."""
-    global _CACHED_ENGINE_ID
-    if _CACHED_ENGINE_ID is None:
-        _CACHED_ENGINE_ID = _generate_stable_engine_id()
-    return _CACHED_ENGINE_ID
+    return _generate_stable_engine_id()
 
 
 @register_plugin("snmp_framework")
-def get_default_value(type_info: TypeInfo, symbol_name: str) -> Any:
+def get_default_value(_type_info: TypeInfo, symbol_name: str) -> object | None:
     """Provide default values for SNMP Framework MIB objects."""
     # snmpEngineID must be stable across agent restarts
     if symbol_name == "snmpEngineID":

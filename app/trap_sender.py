@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Sequence
+from contextlib import suppress
 from pathlib import Path
-from typing import Any, Literal, Union, cast
+from typing import Any, Literal, TypeAlias, cast
 
 from pysnmp.hlapi.v3arch.asyncio import (
     CommunityData,
@@ -21,12 +22,13 @@ from pysnmp.hlapi.v3arch.asyncio import (
 from pysnmp.smi import builder as snmp_builder
 from pysnmp.smi import error as snmp_error
 
-OidIndex = Union[int, str, tuple[int, ...]]
-VarBindSpec = Union[
-    ObjectType,
-    tuple[str, str, object],  # (mib, symbol, value) for scalars
-    tuple[str, str, object, OidIndex],  # (mib, symbol, value, index) for table columns
-]
+OidIndex: TypeAlias = int | str | tuple[int, ...]
+VarBindValue: TypeAlias = Any
+VarBindSpec: TypeAlias = (
+    ObjectType
+    | tuple[str, str, VarBindValue]
+    | tuple[str, str, VarBindValue, OidIndex]
+)
 
 
 class TrapSender:
@@ -45,18 +47,20 @@ class TrapSender:
         dest: tuple[str, int] = ("localhost", 162),
         community: str = "public",
         logger: logging.Logger | None = None,
-        snmp_engine: Any | None = None,
+        snmp_engine: SnmpEngine | None = None,
     ) -> None:
+        """Initialize sender with destination, community, and optional SNMP engine."""
         self._uses_external_engine = snmp_engine is not None
-        self.snmp_engine = snmp_engine if snmp_engine is not None else SnmpEngine()
+        self.snmp_engine: SnmpEngine = snmp_engine if snmp_engine is not None else SnmpEngine()
         self.dest = dest
         self.community = community
         self.logger = logger or logging.getLogger(__name__)
+        self._pending_tasks: set[asyncio.Task[None]] = set()
         self._configure_mib_sources(self.snmp_engine)
 
-    def _configure_mib_sources(self, engine: Any) -> None:
+    def _configure_mib_sources(self, engine: SnmpEngine) -> None:
         try:
-            mib_builder = engine.getMibBuilder()
+            mib_builder = engine.get_mib_builder()
         except (AttributeError, LookupError, OSError, TypeError, ValueError):
             return
 
@@ -68,18 +72,14 @@ class TrapSender:
 
         add_sources = getattr(mib_builder, "add_mib_sources", None)
         if callable(add_sources):
-            try:
+            with suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
                 add_sources(mib_source)
                 return
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                pass
 
         add_sources_alt = getattr(mib_builder, "addMibSources", None)
         if callable(add_sources_alt):
-            try:
+            with suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
                 add_sources_alt(mib_source)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                pass
 
     @staticmethod
     def _coerce_varbind(spec: VarBindSpec) -> ObjectType:
@@ -94,27 +94,31 @@ class TrapSender:
             return cast("ObjectType", spec)
 
         if not isinstance(spec, tuple):
-            raise TypeError(
+            msg = (
                 "extra_varbinds entries must be ObjectType or tuple, got "
                 f"{type(spec).__name__}: {spec!r}"
             )
+            raise TypeError(msg)
 
         mib, symbol, value, *rest = spec
 
         if not rest:
             # Scalar: symbol.0
-            return ObjectType(ObjectIdentity(mib, symbol, 0), value)
+            return ObjectType(ObjectIdentity(mib, symbol, 0), cast("VarBindValue", value))
 
         if len(rest) == 1:
             index = rest[0]
             if isinstance(index, tuple):
-                return ObjectType(ObjectIdentity(mib, symbol, *index), value)
-            return ObjectType(ObjectIdentity(mib, symbol, index), value)
+                return ObjectType(
+                    ObjectIdentity(mib, symbol, *index), cast("VarBindValue", value)
+                )
+            return ObjectType(ObjectIdentity(mib, symbol, index), cast("VarBindValue", value))
 
-        raise ValueError(
+        msg = (
             "Unsupported varbind tuple. Expected (mib, symbol, value) or "
             f"(mib, symbol, value, index). Got: {spec!r}"
         )
+        raise ValueError(msg)
 
     async def send_mib_notification_async(
         self,
@@ -142,7 +146,7 @@ class TrapSender:
             coerced = [self._coerce_varbind(vb) for vb in extra_varbinds]
             notif = notif.add_var_binds(*coerced)
 
-        async def _send_with(target_engine: object) -> tuple[object, object, object, object]:
+        async def _send_with(target_engine: SnmpEngine) -> tuple[object, object, object, object]:
             result = await send_notification(
                 target_engine,
                 CommunityData(self.community),
@@ -193,7 +197,7 @@ class TrapSender:
         trap_type: Literal["trap", "inform"] = "inform",
         extra_varbinds: Sequence[VarBindSpec] | None = None,
     ) -> None:
-        """Synchronous wrapper.
+        """Send notification from synchronous code.
 
         If called from within a running event loop, this schedules the send and returns.
         """
@@ -210,7 +214,7 @@ class TrapSender:
             )
             return
 
-        loop.create_task(
+        task = loop.create_task(
             self.send_mib_notification_async(
                 mib=mib,
                 notification=notification,
@@ -218,3 +222,5 @@ class TrapSender:
                 extra_varbinds=extra_varbinds,
             )
         )
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)

@@ -1,4 +1,10 @@
-# pylint: disable=protected-access,unused-argument,attribute-defined-outside-init,redefined-outer-name,reimported,pointless-string-statement,broad-exception-caught,trailing-whitespace,line-too-long,too-many-lines,missing-module-docstring,missing-class-docstring,missing-function-docstring,invalid-name,too-few-public-methods,import-outside-toplevel,consider-iterating-dictionary,use-implicit-booleaness-not-comparison
+# pylint: disable=protected-access,unused-argument,attribute-defined-outside-init
+# pylint: disable=redefined-outer-name,reimported,pointless-string-statement
+# pylint: disable=broad-exception-caught,trailing-whitespace,line-too-long
+# pylint: disable=too-many-lines,missing-module-docstring,missing-class-docstring
+# pylint: disable=missing-function-docstring,invalid-name,too-few-public-methods
+# pylint: disable=import-outside-toplevel,consider-iterating-dictionary
+# pylint: disable=use-implicit-booleaness-not-comparison
 
 import json
 import logging
@@ -10,6 +16,17 @@ from typing import Any, cast
 import pytest
 
 from app.mib_registrar import MibRegistrar
+
+EXC_TYPES = (
+    AssertionError,
+    AttributeError,
+    ImportError,
+    LookupError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 class DummyScalarInstance:
@@ -709,7 +726,7 @@ def test_build_table_symbols_skips_non_dict_columns(monkeypatch: Any) -> None:
             mib_json,
             {},
         )
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except EXC_TYPES:
         pass  # Expected
 
 
@@ -734,7 +751,7 @@ def test_build_table_symbols_skips_invalid_column_oid(monkeypatch: Any) -> None:
             mib_json,
             {},
         )
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except EXC_TYPES:
         pass  # Expected
 
 
@@ -764,7 +781,7 @@ def test_build_table_symbols_skips_columns_not_in_entry(monkeypatch: Any) -> Non
             mib_json,
             {},
         )
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except EXC_TYPES:
         pass  # Expected
 
 
@@ -805,7 +822,7 @@ def test_build_table_symbols_column_creation_error_handling(monkeypatch: Any, ca
         assert "badColumn" not in symbols
         # Should have warning for bad column
         assert "Error creating column badColumn: Bad column" in caplog.text
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except EXC_TYPES:
         pass  # Expected due to incomplete structure
 
 
@@ -857,7 +874,7 @@ def test_build_table_symbols_row_instance_creation_error_handling(
         assert "testTable" in symbols
         # Should have warning for bad instance
         assert "Error creating instance for testColumn1 row (2,): Bad instance" in caplog.text
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except EXC_TYPES:
         pass  # Expected due to incomplete mocking
 
 
@@ -889,7 +906,7 @@ def test_build_table_symbols_sysortable_logging(monkeypatch: Any, caplog: Any) -
             mib_json,
             {},
         )
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except EXC_TYPES:
         pass  # Expected
 
     # Should have sysORTable logging

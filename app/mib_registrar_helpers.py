@@ -10,8 +10,6 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any, TypeAlias
 
-from plugins.type_encoders import encode_value
-
 ObjectType: TypeAlias = Any
 WriteHookWrapper: TypeAlias = Callable[..., None]
 
@@ -25,6 +23,7 @@ class RegistrarCommonDeps:
     normalize_access: Callable[[str], str]
     preferred_snmp_types: Callable[[], set[str]]
     decode_value: Callable[[ObjectType], ObjectType]
+    encode_value: Callable[[ObjectType, str], ObjectType]
     write_hooks: RegistrarWriteHooks
 
 
@@ -154,7 +153,7 @@ class RegistrarWriteHooks:
             try:
                 if original_write:
                     original_write(*a, **kw)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
                 pass
 
             try:
@@ -264,6 +263,7 @@ class RegistrarScalarBuilder:
         self._normalize_access = deps.common.normalize_access
         self._preferred_snmp_types = deps.common.preferred_snmp_types
         self._decode_value = deps.common.decode_value
+        self._encode_value = deps.common.encode_value
         self._write_hooks = deps.common.write_hooks
 
     def iter_scalar_candidates(
@@ -318,7 +318,7 @@ class RegistrarScalarBuilder:
             value = int(uptime_seconds * 100)
 
         value = self._decode_value(value)
-        value = encode_value(value, base_type)
+        value = self._encode_value(value, base_type)
 
         if value is None:
             if base_type in [
@@ -428,6 +428,7 @@ class RegistrarTableBuilder:
         self._normalize_access = deps.common.normalize_access
         self._preferred_snmp_types = deps.common.preferred_snmp_types
         self._decode_value = deps.common.decode_value
+        self._encode_value = deps.common.encode_value
         self._write_hooks = deps.common.write_hooks
 
     def resolve_table_entry(
@@ -566,7 +567,7 @@ class RegistrarTableBuilder:
         index_tuple, value = instance_context
 
         value = self._decode_value(value)
-        value = encode_value(value, base_type)
+        value = self._encode_value(value, base_type)
 
         try:
             pysnmp_type = self._get_pysnmp_type(base_type)

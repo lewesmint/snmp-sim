@@ -103,7 +103,16 @@ def test_type_info_extraction_from_registry() -> None:
         try:
             with open(types_json) as f:
                 types_dict = json.load(f)
-        except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+        except (
+            AssertionError,
+            AttributeError,
+            ImportError,
+            LookupError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ):
             types_dict = None
 
     # If types.json is missing or appears to be a placeholder, try to generate

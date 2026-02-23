@@ -1,19 +1,21 @@
-#!/usr/bin/env python3
 """Run consolidated quality checks for the main project Python folders."""
+# ruff: noqa: INP001
 
 from __future__ import annotations
 
 import argparse
+import logging
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 PROJECT_DIRS = ("app", "tests", "plugins", "ui", "scripts")
+logger = logging.getLogger(__name__)
 
 
 def dirs_with_python_files(root: Path, dirs: list[str]) -> list[str]:
@@ -87,12 +89,12 @@ def quote_cmd(parts: Iterable[str]) -> str:
 def require_executable(executable: str, install_hint: str) -> None:
     """Ensure an executable exists on PATH before a tool run."""
     if shutil.which(executable) is None:
-        print()
-        print(f"ERROR: Required tool '{executable}' is not installed or not on PATH.")
-        print("Install it, then re-run this script.")
-        print()
-        print("Suggested install:")
-        print(install_hint)
+        logger.info("")
+        logger.error("ERROR: Required tool '%s' is not installed or not on PATH.", executable)
+        logger.error("Install it, then re-run this script.")
+        logger.info("")
+        logger.error("Suggested install:")
+        logger.error("%s", install_hint)
         raise SystemExit(2)
 
 
@@ -101,10 +103,10 @@ def run_tool(name: str, command: list[str], cwd: Path) -> ToolResult:
     if name == "pytest (with coverage)":
         clear_coverage_artifacts(cwd)
 
-    print()
-    print(f"==> {name}")
-    print("    " + quote_cmd(command))
-    completed = subprocess.run(command, cwd=str(cwd), check=False)
+    logger.info("")
+    logger.info("==> %s", name)
+    logger.info("    %s", quote_cmd(command))
+    completed = subprocess.run(command, cwd=str(cwd), check=False)  # noqa: S603
     return ToolResult(name=name, ok=completed.returncode == 0, return_code=completed.returncode)
 
 
@@ -119,13 +121,13 @@ def existing_target_dirs(root: Path) -> list[str]:
     """Validate all configured project target directories exist."""
     missing = [d for d in PROJECT_DIRS if not (root / d).exists()]
     if missing:
-        print()
-        print("ERROR: These expected directories do not exist at project root:")
+        logger.info("")
+        logger.error("ERROR: These expected directories do not exist at project root:")
         for d in missing:
-            print(f"- {d}")
-        print()
-        print("Project root is:")
-        print(str(root))
+            logger.error("- %s", d)
+        logger.info("")
+        logger.error("Project root is:")
+        logger.error("%s", root)
         raise SystemExit(2)
 
     return list(PROJECT_DIRS)
@@ -172,19 +174,20 @@ def run_suppressions_only(root: Path, targets: list[str]) -> int:
     """Run suppression scan mode and return a process-style status code."""
     hits = scan_suppressions(root, targets)
     if hits:
-        print()
-        print("Suppression markers found")
-        print("-------------------------")
+        logger.info("")
+        logger.info("Suppression markers found")
+        logger.info("-------------------------")
         for hit in hits:
-            print(f"{hit.file}:{hit.line_no} [{hit.pattern}] {hit.line}")
+            logger.info("%s:%s [%s] %s", hit.file, hit.line_no, hit.pattern, hit.line)
         return 1
-    print("No suppression markers found.")
+    logger.info("No suppression markers found.")
     return 0
 
 
 def build_tools(
     targets: list[str],
     mypy_targets: list[str],
+    *,
     fix: bool,
     optional: bool,
     pip_audit_verbose: bool,
@@ -192,19 +195,18 @@ def build_tools(
     """Build the ordered set of quality tools to execute."""
     tools: list[ToolRun] = []
 
-    # Ruff: format + lint
     if fix:
         tools.append(
             ToolRun(
                 name="ruff format",
-                command=["ruff", "format"] + targets,
+                command=["ruff", "format", *targets],
                 install_hint="python -m pip install -U ruff",
             )
         )
         tools.append(
             ToolRun(
                 name="ruff check (fix)",
-                command=["ruff", "check", "--fix"] + targets,
+                command=["ruff", "check", "--fix", *targets],
                 install_hint="python -m pip install -U ruff",
             )
         )
@@ -212,14 +214,14 @@ def build_tools(
         tools.append(
             ToolRun(
                 name="ruff format (check)",
-                command=["ruff", "format", "--check"] + targets,
+                command=["ruff", "format", "--check", *targets],
                 install_hint="python -m pip install -U ruff",
             )
         )
         tools.append(
             ToolRun(
                 name="ruff check",
-                command=["ruff", "check"] + targets,
+                command=["ruff", "check", *targets],
                 install_hint="python -m pip install -U ruff",
             )
         )
@@ -228,19 +230,18 @@ def build_tools(
     tools.append(
         ToolRun(
             name="mypy",
-            command=["mypy"] + mypy_targets,
+            command=["mypy", *mypy_targets],
             install_hint="python -m pip install -U mypy",
         )
     )
     tools.append(
         ToolRun(
             name="pyright",
-            command=["pyright"] + targets,
+            command=["pyright", *targets],
             install_hint="python -m pip install -U pyright",
         )
     )
 
-    # Tests + coverage (pytest-cov)
     tools.append(
         ToolRun(
             name="pytest (with coverage)",
@@ -260,7 +261,7 @@ def build_tools(
     tools.append(
         ToolRun(
             name="bandit",
-            command=["bandit", "-q", "-r"] + targets,
+            command=["bandit", "-q", "-r", *targets],
             install_hint="python -m pip install -U bandit",
         )
     )
@@ -283,14 +284,14 @@ def build_tools(
         tools.append(
             ToolRun(
                 name="vulture (dead code)",
-                command=["vulture"] + targets,
+                command=["vulture", *targets],
                 install_hint="python -m pip install -U vulture",
             )
         )
         tools.append(
             ToolRun(
                 name="radon (complexity)",
-                command=["radon", "cc", "-s", "-a"] + targets,
+                command=["radon", "cc", "-s", "-a", *targets],
                 install_hint="python -m pip install -U radon",
             )
         )
@@ -319,6 +320,7 @@ def build_tools(
 
 def main() -> int:
     """Parse CLI arguments, run checks, and print a summary."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(
         description=(
             "Run Python quality checks across app/tests/plugins/ui/scripts, "
@@ -368,14 +370,14 @@ def main() -> int:
         return run_suppressions_only(root, targets)
 
     if not targets_for_tools or not mypy_targets:
-        print()
+        logger.info("")
         if not targets_for_tools:
-            print("ERROR: None of the target directories contain any .py or .pyi files.")
-            print("Targets checked:")
+            logger.error("ERROR: None of the target directories contain any .py or .pyi files.")
+            logger.error("Targets checked:")
             for d in targets:
-                print(f"- {d}")
+                logger.error("- %s", d)
         else:
-            print("ERROR: No Python files found for mypy after excludes.")
+            logger.error("ERROR: No Python files found for mypy after excludes.")
         return 2
 
     # Preflight: require every tool that will be run
@@ -389,28 +391,26 @@ def main() -> int:
     for tool in tools:
         require_executable(tool.command[0], tool.install_hint)
 
-    results: list[ToolResult] = []
-    for tool in tools:
-        results.append(run_tool(tool.name, tool.command, cwd=root))
+    results: list[ToolResult] = [run_tool(tool.name, tool.command, cwd=root) for tool in tools]
 
     hits = scan_suppressions(root, targets)
 
-    print()
-    print("Summary")
-    print("-------")
+    logger.info("")
+    logger.info("Summary")
+    logger.info("-------")
     any_failed = False
     for res in results:
         status = "OK" if res.ok else f"FAIL ({res.return_code})"
-        print(f"{res.name}: {status}")
+        logger.info("%s: %s", res.name, status)
         if not res.ok:
             any_failed = True
 
     if hits:
-        print()
-        print("Suppression markers found")
-        print("-------------------------")
+        logger.info("")
+        logger.info("Suppression markers found")
+        logger.info("-------------------------")
         for hit in hits:
-            print(f"{hit.file}:{hit.line_no} [{hit.pattern}] {hit.line}")
+            logger.info("%s:%s [%s] %s", hit.file, hit.line_no, hit.pattern, hit.line)
 
         if args.fail_on_suppressions:
             any_failed = True

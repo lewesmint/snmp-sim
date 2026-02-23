@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-import os
 import re
+from pathlib import Path
 from typing import Any, cast
 
 
 class MibDependencyResolver:
     """Resolves MIB dependencies by parsing IMPORTS sections."""
 
-    def __init__(self, mib_source_dirs: list[str] | None = None):
+    _MAX_MIB_SEARCH_DEPTH = 5
+
+    def __init__(self, mib_source_dirs: list[str] | None = None) -> None:
         """Initialize the resolver with optional custom MIB directories.
 
         Args:
@@ -41,30 +43,31 @@ class MibDependencyResolver:
 
         # Try to find source file with common extensions
         for search_dir in self.mib_source_dirs:
-            if not os.path.exists(search_dir):
+            search_path = Path(search_dir)
+            if not search_path.exists():
                 continue
 
             # Try direct match first
             for ext in [".txt", ".mib", ".my"]:
-                mib_path = os.path.join(search_dir, f"{mib_name}{ext}")
-                if os.path.exists(mib_path):
-                    self._mib_file_cache[mib_name] = mib_path
-                    return mib_path
+                mib_path = search_path / f"{mib_name}{ext}"
+                if mib_path.exists():
+                    self._mib_file_cache[mib_name] = str(mib_path)
+                    return str(mib_path)
 
             # Search subdirectories recursively with depth limit
-            for root, dirs, files in os.walk(search_dir):
-                # Calculate depth and limit recursion to avoid infinite traversal
-                depth = root[len(search_dir) :].count(os.sep)
-                if depth > 5:  # Limit depth to 5 levels
-                    dirs[:] = []  # Don't descend further
+            for candidate in search_path.rglob("*"):
+                if not candidate.is_file():
                     continue
-
-                for ext in [".txt", ".mib", ".my"]:
-                    mib_filename = f"{mib_name}{ext}"
-                    if mib_filename in files:
-                        mib_path = os.path.join(root, mib_filename)
-                        self._mib_file_cache[mib_name] = mib_path
-                        return mib_path
+                rel_parts = candidate.relative_to(search_path).parts
+                depth = max(len(rel_parts) - 1, 0)
+                if depth > self._MAX_MIB_SEARCH_DEPTH:
+                    continue
+                if candidate.stem != mib_name:
+                    continue
+                if candidate.suffix not in (".txt", ".mib", ".my"):
+                    continue
+                self._mib_file_cache[mib_name] = str(candidate)
+                return str(candidate)
 
         self._mib_file_cache[mib_name] = None
         return None
@@ -79,11 +82,11 @@ class MibDependencyResolver:
             Set of MIB names imported by this MIB.
 
         """
-        if not os.path.exists(mib_path):
+        if not Path(mib_path).exists():
             return set()
 
         try:
-            with open(mib_path, encoding="utf-8") as f:
+            with Path(mib_path).open(encoding="utf-8") as f:
                 content = f.read()
         except (OSError, UnicodeDecodeError):
             return set()
@@ -98,11 +101,11 @@ class MibDependencyResolver:
 
         # Parse "FROM MIB_NAME" patterns
         from_matches = re.findall(r"FROM\s+(\S+)", imports_text)
-        for mib_name in from_matches:
+        for imported_name in from_matches:
             # Clean up - remove trailing punctuation
-            mib_name = mib_name.rstrip(";,")
-            if mib_name and mib_name not in ("", " "):
-                imported_mibs.add(mib_name)
+            cleaned_name = imported_name.rstrip(";,")
+            if cleaned_name and cleaned_name not in ("", " "):
+                imported_mibs.add(cleaned_name)
 
         return imported_mibs
 
@@ -120,10 +123,7 @@ class MibDependencyResolver:
             return self._dependency_cache[mib_name].copy()
 
         mib_path = self._find_mib_source(mib_name)
-        if mib_path:
-            dependencies = self._parse_imports(mib_path)
-        else:
-            dependencies = set()
+        dependencies = self._parse_imports(mib_path) if mib_path else set()
 
         self._dependency_cache[mib_name] = dependencies
         return dependencies.copy()
@@ -183,9 +183,9 @@ class MibDependencyResolver:
             transitive_deps = all_deps - direct_deps
 
             tree[mib_name] = {
-                "direct_deps": sorted(list(direct_deps)),
-                "transitive_deps": sorted(list(transitive_deps)),
-                "all_deps": sorted(list(all_deps)),
+                "direct_deps": sorted(direct_deps),
+                "transitive_deps": sorted(transitive_deps),
+                "all_deps": sorted(all_deps),
                 "is_configured": True,
             }
 
@@ -197,9 +197,9 @@ class MibDependencyResolver:
                     dep_transitive_deps = dep_all_deps - dep_direct_deps
 
                     tree[dep] = {
-                        "direct_deps": sorted(list(dep_direct_deps)),
-                        "transitive_deps": sorted(list(dep_transitive_deps)),
-                        "all_deps": sorted(list(dep_all_deps)),
+                        "direct_deps": sorted(dep_direct_deps),
+                        "transitive_deps": sorted(dep_transitive_deps),
+                        "all_deps": sorted(dep_all_deps),
                         "is_configured": False,
                     }
 
@@ -224,7 +224,7 @@ class MibDependencyResolver:
 
         configured = sorted(mib_names)
         all_mib_names = set(tree.keys())
-        transitive = sorted(list(all_mib_names - set(configured)))
+        transitive = sorted(all_mib_names - set(configured))
 
         return {
             "configured_mibs": configured,

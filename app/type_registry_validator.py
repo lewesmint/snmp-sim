@@ -1,9 +1,14 @@
-"""Validator for the type registry. Checks for structure, required fields, and type consistency.
-"""
+"""Validator for the type registry. Checks for structure, required fields, and type consistency."""
 
 import json
+import logging
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+_EXPECTED_ARGC = 2
+_USAGE_EXIT_CODE = 2
 
 
 def validate_type_registry(registry: dict[str, dict[str, object]]) -> tuple[bool, list[str]]:
@@ -51,7 +56,7 @@ def validate_type_registry_file(json_path: str) -> tuple[bool, list[str], int]:
         return False, [f"Type registry file not found: {json_path}"], 0
 
     try:
-        with open(path, encoding="utf-8") as f:
+        with path.open(encoding="utf-8") as f:
             data = json.load(f)
 
         if not isinstance(data, dict):
@@ -73,9 +78,10 @@ def validate_type_registry_file(json_path: str) -> tuple[bool, list[str], int]:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <types.json>")
-        sys.exit(2)
-    with open(sys.argv[1], encoding="utf-8") as f:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if len(sys.argv) != _EXPECTED_ARGC:
+        logger.error("Usage: %s <types.json>", sys.argv[0])
+        sys.exit(_USAGE_EXIT_CODE)
+    with Path(sys.argv[1]).open(encoding="utf-8") as f:
         registry = json.load(f)
     validate_type_registry(registry)

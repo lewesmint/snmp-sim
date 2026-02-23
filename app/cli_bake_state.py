@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """CLI tool to bake current MIB state into agent-model schema files.
 
 This tool:
@@ -10,28 +9,189 @@ This tool:
 
 import argparse
 import json
+import logging
 import shutil
 import sys
-import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.json_format import write_json_with_horizontal_oid_lists
 from app.model_paths import AGENT_MODEL_BACKUPS_DIR, AGENT_MODEL_DIR, MIB_STATE_FILE
 
+logger = logging.getLogger(__name__)
+
+
+def _object_oid_string(obj_data: dict[str, Any]) -> str:
+    return ".".join(str(part) for part in obj_data["oid"])
+
+
+def _normalize_scalar_oid(oid: str) -> str:
+    return oid.removesuffix(".0")
+
+
+def _schema_objects_view(schema: dict[str, Any]) -> dict[str, Any]:
+    return cast("dict[str, Any]", schema.get("objects", schema))
+
+
+def _process_schema_file(
+    schema_file: Path,
+    schema_dir: Path,
+    scalars: dict[str, Any],
+    tables: dict[str, Any],
+) -> int:
+    try:
+        with schema_file.open(encoding="utf-8") as f:
+            schema = json.load(f)
+
+        objects = _schema_objects_view(schema)
+
+        scalar_baked = _bake_scalars(objects, scalars)
+        table_baked = _bake_tables(objects, tables)
+        baked_total = scalar_baked + table_baked
+
+        if baked_total > 0:
+            write_json_with_horizontal_oid_lists(schema_file, schema)
+            logger.info("✓ Updated %s", schema_file.relative_to(schema_dir.parent))
+    except (AttributeError, LookupError, OSError, TypeError, ValueError):
+        logger.exception("Error processing %s", schema_file)
+        return 0
+    return baked_total
+
+
+def _find_table_entry_obj(objects: dict[str, Any], table_obj: dict[str, Any]) -> dict[str, Any]:
+    expected_entry_oid = [*list(table_obj["oid"]), 1]
+    for other_data in objects.values():
+        if (
+            isinstance(other_data, dict)
+            and other_data.get("type") == "MibTableRow"
+            and list(other_data.get("oid", [])) == expected_entry_oid
+        ):
+            return other_data
+    return {}
+
+
+def _parse_index_values(
+    instance_str: str,
+    index_columns: list[str],
+    columns_meta: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    row: dict[str, Any] = {}
+    if index_columns == ["__index__"]:
+        row["__index__"] = instance_str
+        return row
+
+    parts = instance_str.split(".")
+    pos = 0
+    for col_name in index_columns:
+        col_type = columns_meta.get(col_name, {}).get("type", "")
+        if col_type == "IpAddress":
+            if pos + 4 <= len(parts):
+                row[col_name] = ".".join(parts[pos : pos + 4])
+                pos += 4
+            else:
+                row[col_name] = ".".join(parts[pos:])
+                pos = len(parts)
+        elif pos < len(parts):
+            try:
+                row[col_name] = int(parts[pos])
+            except (ValueError, IndexError):
+                row[col_name] = parts[pos] if pos < len(parts) else ""
+            pos += 1
+
+    return row
+
+
+def _build_rows_for_instances(
+    instances_dict: dict[str, Any],
+    index_columns: list[str],
+    columns_meta: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for instance_str, instance_data in instances_dict.items():
+        row = _parse_index_values(instance_str, index_columns, columns_meta)
+
+        if isinstance(instance_data, dict):
+            column_values = instance_data.get("column_values", {})
+            if isinstance(column_values, dict):
+                row.update(column_values)
+            index_values = instance_data.get("index_values", {})
+            if isinstance(index_values, dict):
+                row.update(index_values)
+
+        if row:
+            rows.append(row)
+
+    return rows
+
+
+def _bake_scalars(objects: dict[str, Any], scalars: dict[str, Any]) -> int:
+    baked_count = 0
+    for oid, value in scalars.items():
+        normalized_oid = _normalize_scalar_oid(oid)
+        for obj_name, obj_data in objects.items():
+            if not (isinstance(obj_data, dict) and "oid" in obj_data):
+                continue
+
+            obj_oid_str = _object_oid_string(obj_data)
+            if obj_oid_str == normalized_oid or oid.endswith(f".{obj_oid_str}.0"):
+                obj_data["initial"] = value
+                baked_count += 1
+                logger.info("  Baked scalar %s (%s) = %s", obj_name, oid, value)
+
+    return baked_count
+
+
+def _bake_tables(objects: dict[str, Any], tables: dict[str, Any]) -> int:
+    baked_count = 0
+    for table_oid, instances_dict in tables.items():
+        if not isinstance(instances_dict, dict):
+            continue
+
+        for obj_name, obj_data in objects.items():
+            if not (isinstance(obj_data, dict) and obj_data.get("type") == "MibTable"):
+                continue
+
+            if _object_oid_string(obj_data) != table_oid:
+                continue
+
+            entry_obj = _find_table_entry_obj(objects, obj_data)
+            index_columns = entry_obj.get("indexes", [])
+            if not isinstance(index_columns, list):
+                index_columns = []
+
+            columns_meta = {
+                column_name: column_meta
+                for column_name in index_columns
+                if isinstance((column_meta := objects.get(column_name)), dict)
+            }
+
+            rows = _build_rows_for_instances(instances_dict, index_columns, columns_meta)
+            if rows:
+                obj_data["rows"] = rows
+                baked_count += len(rows)
+                logger.info(
+                    "  Baked %s row(s) for table %s (%s)",
+                    len(rows),
+                    obj_name,
+                    table_oid,
+                )
+            break
+
+    return baked_count
+
 
 def backup_schemas(schema_dir: Path, backup_base: Path) -> Path:
     """Backup existing schema directory with timestamp."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
     backup_dir = backup_base / timestamp
 
     if schema_dir.exists():
-        print(f"Backing up {schema_dir} to {backup_dir}...")
+        logger.info("Backing up %s to %s...", schema_dir, backup_dir)
         shutil.copytree(schema_dir, backup_dir)
-        print(f"✓ Backup created: {backup_dir}")
+        logger.info("✓ Backup created: %s", backup_dir)
     else:
-        print(f"Warning: Schema directory {schema_dir} does not exist, skipping backup")
+        logger.warning("Schema directory %s does not exist, skipping backup", schema_dir)
 
     return backup_dir
 
@@ -39,10 +199,10 @@ def backup_schemas(schema_dir: Path, backup_base: Path) -> Path:
 def load_mib_state(state_file: Path) -> dict[str, Any]:
     """Load current MIB state from mib_state.json."""
     if not state_file.exists():
-        print(f"Warning: State file {state_file} does not exist")
+        logger.warning("State file %s does not exist", state_file)
         return {"scalars": {}, "tables": {}, "deleted_instances": []}
 
-    with open(state_file, encoding="utf-8") as f:
+    with state_file.open(encoding="utf-8") as f:
         state: dict[str, Any] = json.load(f)
         return state
 
@@ -52,159 +212,20 @@ def bake_state_into_schemas(schema_dir: Path, state: dict[str, Any]) -> int:
 
     Returns the number of values baked.
     """
-    baked_count = 0
+    baked_total = 0
     scalars = state.get("scalars", {})
     tables = state.get("tables", {})
 
     # Process all schema files
     for schema_file in schema_dir.rglob("schema.json"):
-        try:
-            with open(schema_file, encoding="utf-8") as f:
-                schema = json.load(f)
+        baked_total += _process_schema_file(schema_file, schema_dir, scalars, tables)
 
-            modified = False
-
-            # Handle both old flat structure and new {"objects": ..., "traps": ...} structure
-            if "objects" in schema:
-                objects = schema["objects"]
-            else:
-                objects = schema
-
-            # Bake scalar values
-            for oid, value in scalars.items():
-                # Find object by OID string
-                for obj_name, obj_data in objects.items():
-                    if isinstance(obj_data, dict) and "oid" in obj_data:
-                        obj_oid_str = ".".join(str(x) for x in obj_data["oid"])
-                        if obj_oid_str == oid or oid.endswith(f".{obj_oid_str}.0"):
-                            # Strip instance suffix (.0) if present
-                            if oid.endswith(".0"):
-                                obj_oid_base = oid[:-2]
-                            else:
-                                obj_oid_base = oid
-
-                            if obj_oid_str == obj_oid_base:
-                                obj_data["initial"] = value
-                                modified = True
-                                baked_count += 1
-                                print(f"  Baked scalar {obj_name} ({oid}) = {value}")
-
-                            # pylint: disable=broad-exception-caught
-            # Bake table instances
-            # table_instances format: {table_oid: {instance_str: {column_values: {...}}}}
-            for table_oid, instances_dict in tables.items():
-                if not isinstance(instances_dict, dict):
-                    continue
-                # Find the table object and entry by OID
-                for obj_name, obj_data in objects.items():
-                    if isinstance(obj_data, dict) and obj_data.get("type") == "MibTable":
-                        obj_oid_str = ".".join(str(x) for x in obj_data["oid"])
-                        if obj_oid_str == table_oid:
-                            # Find the entry object by OID structure (table_oid + [1])
-                            entry_obj = {}
-                            expected_entry_oid = list(obj_data["oid"]) + [1]
-                            for other_name, other_data in objects.items():
-                                if (
-                                    isinstance(other_data, dict)
-                                    and other_data.get("type") == "MibTableRow"
-                                ):
-                                    if list(other_data.get("oid", [])) == expected_entry_oid:
-                                        entry_obj = other_data
-                                        break
-                            index_columns = entry_obj.get("indexes", [])
-                            if not isinstance(index_columns, list):
-                                index_columns = []
-
-                            # Build columns metadata for type info (needed for IpAddress parsing)
-                            columns_meta: dict[str, Any] = {}
-                            for col_name in index_columns:
-                                if col_name in objects:
-                                    columns_meta[col_name] = objects[col_name]
-
-                            # Convert instance dict to list of row dicts
-                            rows: list[dict[str, Any]] = []
-                            for instance_str, instance_data in instances_dict.items():
-                                # Reconstruct index values from instance_str
-                                # and index_columns metadata.
-                                row: dict[str, Any] = {}
-
-                                if index_columns == ["__index__"]:
-                                    row["__index__"] = instance_str
-                                    # Apply column values if present
-                                    column_values = (
-                                        instance_data.get("column_values", {})
-                                        if isinstance(instance_data, dict)
-                                        else {}
-                                    )
-                                    if isinstance(column_values, dict):
-                                        row.update(column_values)
-                                    rows.append(row)
-                                    continue
-
-                                # Parse instance_str to extract index values
-                                parts = instance_str.split(".")
-                                pos = 0
-                                for col_name in index_columns:
-                                    col_meta = columns_meta.get(col_name, {})
-                                    col_type = col_meta.get("type", "")
-
-                                    if col_type == "IpAddress":
-                                        # IpAddress uses 4 octets
-                                        if pos + 4 <= len(parts):
-                                            row[col_name] = ".".join(parts[pos : pos + 4])
-                                            pos += 4
-                                        else:
-                                            # Fallback: use remaining parts
-                                            row[col_name] = ".".join(parts[pos:])
-                                            pos = len(parts)
-                                    # Single value
-                                    elif pos < len(parts):
-                                        # Try to convert to int if it looks like a number
-                                        try:
-                                            row[col_name] = int(parts[pos])
-                                        except (ValueError, IndexError):
-                                            row[col_name] = parts[pos] if pos < len(parts) else ""
-                                        pos += 1
-
-                                # Add column values
-                                if isinstance(instance_data, dict):
-                                    if "column_values" in instance_data:
-                                        row.update(instance_data["column_values"])
-                                    elif "index_values" in instance_data:
-                                        # Legacy format with explicit index_values
-                                        row.update(instance_data["index_values"])
-                                        if "column_values" in instance_data:
-                                            row.update(instance_data["column_values"])
-                                # Old format: instance_data is the row dict directly
-                                elif isinstance(instance_data, dict):
-                                    row.update(instance_data)
-
-                                if row:
-                                    rows.append(row)
-
-                            if rows:
-                                obj_data["rows"] = rows
-                                modified = True
-                                baked_count += len(rows)
-                                print(
-                                    f"  Baked {len(rows)} row(s) for table {obj_name} ({table_oid})"
-                                )
-                            break
-
-            # Write back if modified
-            if modified:
-                write_json_with_horizontal_oid_lists(schema_file, schema)
-                print(f"✓ Updated {schema_file.relative_to(schema_dir.parent)}")
-
-        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-            print(f"Error processing {schema_file}: {e}", file=sys.stderr)
-            traceback.print_exc()
-
-    return baked_count
+    return baked_total
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Main entry point for baking state into schemas."""
+    """Bake state into schemas."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(
         description="Bake current MIB state into agent-model schema files"
     )
@@ -235,42 +256,42 @@ def main(argv: list[str] | None = None) -> int:
     state_file = Path(args.state_file)
     backup_base = Path(args.backup_dir)
 
-    print("=" * 60)
-    print("Baking MIB State into Agent Model Schemas")
-    print("=" * 60)
+    logger.info("%s", "=" * 60)
+    logger.info("Baking MIB State into Agent Model Schemas")
+    logger.info("%s", "=" * 60)
 
     # Backup existing schemas
     if not args.no_backup:
         _backup_dir = backup_schemas(schema_dir, backup_base)
     else:
-        print("Skipping backup (--no-backup specified)")
+        logger.info("Skipping backup (--no-backup specified)")
 
     # Load current state
-    print(f"\nLoading state from {state_file}...")
+    logger.info("\nLoading state from %s...", state_file)
     state = load_mib_state(state_file)
     scalar_count = len(state.get("scalars", {}))
     table_count = len(state.get("tables", {}))
-    print(f"✓ Loaded {scalar_count} scalar(s) and {table_count} table(s)")
+    logger.info("✓ Loaded %s scalar(s) and %s table(s)", scalar_count, table_count)
 
     # Bake state into schemas
-    print(f"\nBaking state into schemas in {schema_dir}...")
+    logger.info("\nBaking state into schemas in %s...", schema_dir)
     baked_count = bake_state_into_schemas(schema_dir, state)
 
     # Clear the state file now that values have been baked
-    print(f"\nClearing state file {state_file}...")
-    with open(state_file, "w", encoding="utf-8") as f:
+    logger.info("\nClearing state file %s...", state_file)
+    with state_file.open("w", encoding="utf-8") as f:
         json.dump(
             {"scalars": {}, "tables": {}, "deleted_instances": []},
             f,
             indent=2,
             sort_keys=True,
         )
-    print("✓ State file cleared")
+    logger.info("✓ State file cleared")
 
-    print("\n" + "=" * 60)
-    print(f"✓ Baking complete! Baked {baked_count} value(s) into schemas")
-    print("✓ State file has been cleared")
-    print("=" * 60)
+    logger.info("\n%s", "=" * 60)
+    logger.info("✓ Baking complete! Baked %s value(s) into schemas", baked_count)
+    logger.info("✓ State file has been cleared")
+    logger.info("%s", "=" * 60)
 
     return 0
 

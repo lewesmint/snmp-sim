@@ -4,30 +4,32 @@ Separates table registration logic from SNMPAgent, improving testability
 and making table registration behavior clearer and more maintainable.
 """
 
-# pylint: disable=redefined-builtin,invalid-name
+# pylint: disable=invalid-name
 
 import logging
 from typing import Any, TypeAlias
 
-object: TypeAlias = Any
+from pysnmp.proto import rfc1902
 
 from app.base_type_handler import BaseTypeHandler
 from app.types import TypeInfo, TypeRegistry
+
+ObjectType: TypeAlias = Any
 
 
 class TableRegistrar:
     """Manages the discovery and registration of SNMP tables from MIB JSON data."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
-        mib_builder: object,
-        mib_scalar_instance: object,
-        mib_table: object,
-        mib_table_row: object,
-        mib_table_column: object,
+        mib_builder: ObjectType,
+        mib_scalar_instance: ObjectType,
+        mib_table: ObjectType,
+        mib_table_row: ObjectType,
+        mib_table_column: ObjectType,
         logger: logging.Logger,
         type_registry: TypeRegistry | None = None,
-    ):
+    ) -> None:
         """Initialize the TableRegistrar.
 
         Args:
@@ -50,7 +52,7 @@ class TableRegistrar:
         self.logger = logger
         self.type_handler = BaseTypeHandler(type_registry=type_registry, logger=logger)
 
-    def find_table_related_objects(self, mib_json: dict[str, object]) -> set[str]:
+    def find_table_related_objects(self, mib_json: dict[str, ObjectType]) -> set[str]:
         """Return set of table-related object names (tables, entries, columns).
 
         Identifies all objects in the MIB JSON that are part of table structures,
@@ -67,15 +69,19 @@ class TableRegistrar:
         for name, info in mib_json.items():
             if not isinstance(info, dict):
                 continue
-            if name.endswith("Table") or name.endswith("Entry"):
+            if name.endswith(("Table", "Entry")):
                 table_related_objects.add(name)
                 if name.endswith("Entry"):
-                    entry_oid = tuple(info.get("oid", []))
+                    entry_oid = self._oid_tuple(info.get("oid"))
+                    if entry_oid is None:
+                        continue
                     # Find all columns that are children of this entry
                     for col_name, col_info in mib_json.items():
                         if not isinstance(col_info, dict):
                             continue
-                        col_oid = tuple(col_info.get("oid", []))
+                        col_oid = self._oid_tuple(col_info.get("oid"))
+                        if col_oid is None:
+                            continue
                         if (
                             len(col_oid) == len(entry_oid) + 1
                             and col_oid[: len(entry_oid)] == entry_oid
@@ -83,12 +89,12 @@ class TableRegistrar:
                             table_related_objects.add(col_name)
         return table_related_objects
 
-    def register_tables(
+    def register_tables(  # noqa: C901, PLR0912
         self,
         mib: str,
-        mib_json: dict[str, object],
+        mib_json: dict[str, ObjectType],
         type_registry: TypeRegistry,
-        mib_jsons: dict[str, dict[str, object]],
+        mib_jsons: dict[str, dict[str, ObjectType]],
     ) -> None:
         """Detect and register all tables in the MIB.
 
@@ -109,36 +115,44 @@ class TableRegistrar:
             return
 
         # Find all tables by looking for objects ending in "Table"
-        tables: dict[str, dict[str, object]] = {}
+        tables: dict[str, dict[str, ObjectType]] = {}
 
         for name, info in mib_json.items():
             if not isinstance(info, dict):
                 continue
             if info.get("type") == "MibTable" and info.get("access") == "not-accessible":
                 # Found a table, now find its entry by OID structure
-                expected_entry_oid = list(info["oid"]) + [1]
+                table_oid = self._oid_tuple(info.get("oid"))
+                if table_oid is None:
+                    continue
+                expected_entry_oid = [*table_oid, 1]
                 entry_name = None
                 entry_oid = None
 
                 for other_name, other_data in mib_json.items():
-                    if isinstance(other_data, dict) and other_data.get("type") == "MibTableRow":
-                        if list(other_data.get("oid", [])) == expected_entry_oid:
-                            entry_name = other_name
-                            entry_oid = tuple(other_data["oid"])
-                            break
+                    if (
+                        isinstance(other_data, dict)
+                        and other_data.get("type") == "MibTableRow"
+                        and list(other_data.get("oid", [])) == expected_entry_oid
+                    ):
+                        entry_name = other_name
+                        entry_oid = self._oid_tuple(other_data.get("oid"))
+                        break
 
                 if not entry_name or not entry_oid:
                     continue
 
                 # Collect all columns for this table by checking OID hierarchy
                 # Columns must be direct children of the entry OID
-                columns = {}
+                columns: dict[str, dict[str, ObjectType]] = {}
                 for col_name, col_info in mib_json.items():
                     if not isinstance(col_info, dict):
                         continue
                     if col_name in [name, entry_name]:
                         continue
-                    col_oid = tuple(col_info.get("oid", []))
+                    col_oid = self._oid_tuple(col_info.get("oid"))
+                    if col_oid is None:
+                        continue
                     # Check if column OID is a child of entry OID
                     if (
                         len(col_oid) == len(entry_oid) + 1
@@ -161,7 +175,7 @@ class TableRegistrar:
             )
             try:
                 self.register_single_table(mib, table_name, table_data, type_registry, mib_jsons)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError) as e:
                 self.logger.warning(
                     "Could not register table %s: %s",
                     table_name,
@@ -169,13 +183,13 @@ class TableRegistrar:
                     exc_info=True,
                 )
 
-    def register_single_table(
+    def register_single_table(  # noqa: C901
         self,
         mib: str,
         table_name: str,
-        table_data: dict[str, object],
+        table_data: dict[str, ObjectType],
         type_registry: TypeRegistry,
-        mib_jsons: dict[str, dict[str, object]],
+        mib_jsons: dict[str, dict[str, ObjectType]],
     ) -> None:
         """Register a single table by adding a row to the JSON model and PySNMP MIB tree.
 
@@ -195,13 +209,16 @@ class TableRegistrar:
         # Check if this is an augmented table (has index_from in entry)
         # Augmented tables should not have rows created here - they use parent table rows
         entry = table_data["entry"]
+        if not isinstance(entry, dict):
+            self.logger.error("Table entry metadata missing for %s", table_name)
+            return
         if entry.get("index_from"):
             self.logger.debug(
                 "Skipping row creation for augmented table %s - it uses index_from", table_name
             )
             # Still need to ensure the table JSON exists, but don't add rows
             table_json = mib_json.get(table_name)
-            if table_json is None:
+            if table_json is None or not isinstance(table_json, dict):
                 table_json = {"rows": []}
                 mib_json[table_name] = table_json
             if "rows" not in table_json:
@@ -209,7 +226,7 @@ class TableRegistrar:
             return
 
         table_json = mib_json.get(table_name)
-        if table_json is None:
+        if table_json is None or not isinstance(table_json, dict):
             table_json = {"rows": []}
             mib_json[table_name] = table_json
         if "rows" not in table_json:
@@ -217,7 +234,13 @@ class TableRegistrar:
 
         # Build a new row with initial values for all columns (including index columns)
         new_row = {}
-        for col_name, col_info in table_data["columns"].items():
+        columns = table_data.get("columns")
+        if not isinstance(columns, dict):
+            self.logger.error("Missing columns metadata for %s", table_name)
+            return
+        for col_name, col_info in columns.items():
+            if not isinstance(col_info, dict):
+                continue
             type_name = col_info.get("type", "")
             type_info = type_registry.get(type_name, {}) if type_name else {}
             base_type = type_info.get("base_type") or type_name
@@ -244,9 +267,9 @@ class TableRegistrar:
         self,
         mib: str,
         table_name: str,
-        table_data: dict[str, object],
-        type_registry: dict[str, object],
-        new_row: dict[str, object],
+        table_data: dict[str, ObjectType],
+        type_registry: TypeRegistry,
+        new_row: dict[str, ObjectType],
     ) -> None:
         """Register table structures in PySNMP.
 
@@ -263,9 +286,21 @@ class TableRegistrar:
             self.logger.warning("mib_builder not available for table %s", table_name)
             return
 
-        table_oid = tuple(table_data["table"]["oid"])
-        entry_oid = tuple(table_data["entry"]["oid"])
-        columns = table_data["columns"]
+        table_obj = table_data.get("table")
+        entry_obj = table_data.get("entry")
+        columns = table_data.get("columns")
+        if not isinstance(table_obj, dict) or not isinstance(entry_obj, dict):
+            self.logger.warning("Table metadata missing for %s", table_name)
+            return
+        if not isinstance(columns, dict):
+            self.logger.warning("Table columns missing for %s", table_name)
+            return
+
+        table_oid = self._oid_tuple(table_obj.get("oid"))
+        entry_oid = self._oid_tuple(entry_obj.get("oid"))
+        if table_oid is None or entry_oid is None:
+            self.logger.warning("Table OID metadata invalid for %s", table_name)
+            return
 
         # Create Table, Row, and Column objects
         self.mib_table(table_oid)
@@ -276,7 +311,11 @@ class TableRegistrar:
         self.logger.debug("Registering table: %s OID=%s", table_name, table_oid)
         self.logger.debug("Registering row: %sEntry OID=%s", table_name, entry_oid)
         for col_name, col_info in columns.items():
-            col_oid = tuple(col_info["oid"])
+            if not isinstance(col_info, dict):
+                continue
+            col_oid = self._oid_tuple(col_info.get("oid"))
+            if col_oid is None:
+                continue
             # Resolve SNMP type for the column
             type_name = col_info.get("type", "")
             type_info = type_registry.get(type_name, {}) if type_name else {}
@@ -317,14 +356,15 @@ class TableRegistrar:
             suppress_export=True,
         )
 
-    def _register_row_instances(
+    def _register_row_instances(  # noqa: C901, PLR0912, PLR0913
         self,
         _mib: str,
         table_name: str,
-        table_data: dict[str, object],
+        table_data: dict[str, ObjectType],
         type_registry: TypeRegistry,
         col_names: list[str],
-        new_row: dict[str, object],
+        new_row: dict[str, ObjectType],
+        *,
         suppress_export: bool = False,
     ) -> None:
         """Register individual row instances in PySNMP.
@@ -344,18 +384,27 @@ class TableRegistrar:
                 try:
                     if self.mib_builder:
                         self.mib_builder.export_symbols("SNMPv2-SMI")
-                except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
                     self.logger.exception("Error exporting")
 
             created_any = False
 
+            missing_column: str | None = None
+            columns = table_data.get("columns")
+            if not isinstance(columns, dict):
+                self.logger.error("Missing columns metadata for %s", table_name)
+                return
             for col_name in col_names:
                 try:
                     # Fetch column info; missing column is treated as an outer error
-                    col_info = table_data.get("columns", {}).get(col_name)
+                    col_info = columns.get(col_name)
                     if not col_info:
-                        # Missing column - bubble out to outer exception handler
-                        raise KeyError(f"Missing column {col_name}")
+                        missing_column = col_name
+                        break
+
+                    if not isinstance(col_info, dict):
+                        missing_column = col_name
+                        break
 
                     type_name = col_info.get("type", "")
                     type_info = type_registry.get(type_name, {}) if type_name else {}
@@ -377,29 +426,37 @@ class TableRegistrar:
                         # Attempt to cast/construct value for the type
                         # (int, pysnmp classes, etc.).
                         pysnmp_type(raw_val)
-                    except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                    except (
+                        AttributeError,
+                        LookupError,
+                        OSError,
+                        TypeError,
+                        ValueError,
+                        RuntimeError,
+                    ):
                         self.logger.exception("Error registering row instance")
                         continue
 
                     # Create scalar instance (best-effort). Tests patch this method.
                     self.mib_scalar_instance()
                     created_any = True
-                except KeyError:
-                    # Treat missing column as an outer exception
-                    raise
-                except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
                     self.logger.exception("Error registering row instance")
+
+            if missing_column is not None:
+                self.logger.error("Missing column %s", missing_column)
+                return
 
             if not created_any:
                 self.logger.warning("No row instances registered")
 
-        except KeyError:
-            self.logger.exception("Error registering row instances")
-        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
             self.logger.exception("Error registering row instances")
             return
 
-    def _resolve_snmp_type(self, base_type: str, col_name: str, table_name: str) -> object | None:
+    def _resolve_snmp_type(
+        self, base_type: str, _col_name: str, _table_name: str
+    ) -> ObjectType | None:
         """Resolve an SNMP type class from its base type name.
 
         Args:
@@ -411,35 +468,31 @@ class TableRegistrar:
             The SNMP type class, or None if resolution failed
 
         """
+        if not base_type:
+            return None
         try:
-            if base_type:
-                try:
-                    return self.mib_builder.import_symbols("SNMPv2-SMI", base_type)[0]
-                except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                    try:
-                        return self.mib_builder.import_symbols("SNMPv2-TC", base_type)[0]
-                    except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                        from pysnmp.proto import rfc1902
+            return self.mib_builder.import_symbols("SNMPv2-SMI", base_type)[0]
+        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+            try:
+                return self.mib_builder.import_symbols("SNMPv2-TC", base_type)[0]
+            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+                return getattr(rfc1902, base_type, None)
 
-                        return getattr(rfc1902, base_type, None)
-            return None
-        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-            self.logger.exception(
-                "Error resolving SNMP type %s for column %s in %s: %s",
-                base_type,
-                col_name,
-                table_name,
-                e,
-            )
-            return None
+    @staticmethod
+    def _oid_tuple(value: ObjectType) -> tuple[int, ...] | None:
+        if isinstance(value, tuple) and all(isinstance(part, int) for part in value):
+            return value
+        if isinstance(value, list) and all(isinstance(part, int) for part in value):
+            return tuple(value)
+        return None
 
     def _get_default_value_for_type(
         self,
-        col_info: dict[str, object],
+        col_info: dict[str, ObjectType],
         type_name: str,
         type_info: TypeInfo,
         _base_type: str,
-    ) -> object:
+    ) -> ObjectType:
         """Determine a sensible default value for a type using BaseTypeHandler.
 
         Args:

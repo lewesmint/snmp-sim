@@ -1,5 +1,4 @@
-"""MibObject: Represents a single MIB object (scalar or table column).
-"""
+"""MibObject: Represents a single MIB object (scalar or table column)."""
 
 class MibObject:
     """Represents a single MIB object (scalar or table column)."""

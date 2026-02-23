@@ -51,7 +51,9 @@ def test_register_pysnmp_table_column_type_resolution_fails(
     new_row: dict[str, Any] = {}
 
     # Make _resolve_snmp_type return None
-    mock_registrar._resolve_snmp_type = mocker.Mock(return_value=None)  # type: ignore[method-assign]
+    mock_registrar._resolve_snmp_type = mocker.Mock(  # type: ignore[method-assign]
+        return_value=None,
+    )
 
     with caplog.at_level(logging.DEBUG):
         mock_registrar._register_pysnmp_table(
@@ -116,7 +118,9 @@ def test_register_row_instances_type_resolution_fails(
     new_row: dict[str, Any] = {"badCol": 0}
 
     # Make _resolve_snmp_type return None - this causes continue on line 290
-    mock_registrar._resolve_snmp_type = mocker.Mock(return_value=None)  # type: ignore[method-assign]
+    mock_registrar._resolve_snmp_type = mocker.Mock(  # type: ignore[method-assign]
+        return_value=None,
+    )
 
     mock_registrar._register_row_instances(
         "TEST",

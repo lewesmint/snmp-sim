@@ -68,34 +68,7 @@
     "sysORTable": {
       "rows": [
         {
-          "sysORIndex": 1,
-          "sysORID": [
-            1,
-            3,
-            6,
-            1,
-            2,
-            1,
-            11,
-            2,
-            1
-          ],
-          "sysORDescr": "The MIB module for SNMPv2 entities",
-          "sysORUpTime": 10
-        },
-        {
-          "sysORIndex": 2,
-          "sysORID": [
-            1,
-            3,
-            6,
-            1,
-            2,
-            1,
-            2
-          ],
-          "sysORDescr": "The MIB module for managing network interfaces",
-          "sysORUpTime": 20
+          "sysORIndex": 1
         }
       ]
     },

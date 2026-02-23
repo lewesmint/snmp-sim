@@ -1,5 +1,4 @@
-"""MibRegistry: Manages OID-to-type mappings and type lookups.
-"""
+"""MibRegistry: Manages OID-to-type mappings and type lookups."""
 
 class MibRegistry:
     """Manages OID-to-type mappings and type lookups."""

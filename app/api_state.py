@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from app.app_logger import AppLogger
-from app.snmp_agent import SNMPAgent
-from app.trap_receiver import TrapReceiver
+
+if TYPE_CHECKING:
+    from app.snmp_agent import SNMPAgent
+    from app.trap_receiver import TrapReceiver
 
 
 @dataclass

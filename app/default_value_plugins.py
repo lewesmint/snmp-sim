@@ -1,4 +1,4 @@
-"""Default Value Plugin System for SNMP Behaviour Generation
+"""Provide a default value plugin system for SNMP behavior generation.
 
 This module provides a plugin system for determining default values when generating
 SNMP behavior JSON files. Plugins are called during MIB-to-JSON generation to provide
@@ -21,8 +21,21 @@ class DefaultValuePluginRegistry:
     """Registry for default value plugins used during JSON generation."""
 
     def __init__(self) -> None:
+        """Initialize empty plugin registries."""
         self._plugins: list[DefaultValuePlugin] = []
         self._plugin_names: dict[str, DefaultValuePlugin] = {}
+
+    @staticmethod
+    def _run_plugin(
+        plugin: DefaultValuePlugin,
+        type_info: TypeInfo,
+        symbol_name: str,
+    ) -> object | None:
+        try:
+            return cast("object | None", plugin(type_info, symbol_name))
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            logger.exception("Plugin %s failed", plugin.__name__)
+            return None
 
     def register(self, name: str, plugin: DefaultValuePlugin) -> None:
         """Register a plugin function with a name.
@@ -56,12 +69,9 @@ class DefaultValuePluginRegistry:
 
         """
         for plugin in self._plugins:
-            try:
-                value = plugin(type_info, symbol_name)
-                if value is not None:
-                    return cast("object", value)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-                logger.exception("%s", f"Plugin {plugin.__name__} failed: {e}")
+            value = self._run_plugin(plugin, type_info, symbol_name)
+            if value is not None:
+                return value
 
         return None
 
@@ -75,7 +85,7 @@ _registry = DefaultValuePluginRegistry()
 
 
 def register_plugin(name: str) -> Callable[[DefaultValuePlugin], DefaultValuePlugin]:
-    """Decorator to register a plugin function.
+    """Register a plugin function via decorator.
 
     Usage:
         @register_plugin('my_plugin')

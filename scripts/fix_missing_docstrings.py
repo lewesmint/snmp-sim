@@ -1,13 +1,17 @@
 """Fix pylint missing docstring warnings by inserting concise docstrings."""
+# ruff: noqa: INP001
 
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PATTERN = re.compile(r"^(?P<file>[^:]+):(?P<line>\d+):\d+:\s+(?P<code>C011[456]):")
+logger = logging.getLogger(__name__)
 
 
 def _module_doc(path: str, stem: str) -> str:
@@ -29,12 +33,15 @@ def _func_doc(path: str, name: str) -> str:
 
 
 def _collect_warnings() -> dict[str, list[tuple[int, str]]]:
-    command = 'pylint app tests 2>/dev/null | rg "C0114|C0115|C0116"'
-    result = subprocess.run(
-        command, shell=True, cwd=ROOT, text=True, capture_output=True, check=False
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "pylint", "app", "tests"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
     )
     warnings: dict[str, list[tuple[int, str]]] = {}
-    for raw in result.stdout.splitlines():
+    for raw in result.stdout.splitlines() + result.stderr.splitlines():
         match = PATTERN.search(raw.strip())
         if not match:
             continue
@@ -52,7 +59,7 @@ def _insert_docstrings(file_path: Path, rel: str, items: list[tuple[int, str]]) 
         idx = line_no - 1
         if code == "C0114":
             stripped = "".join(lines).lstrip()
-            if stripped.startswith('"""') or stripped.startswith("'''"):
+            if stripped.startswith(('"""', "'''")):
                 continue
             stem = Path(rel).stem.replace("_", " ")
             inserts.append((0, f'"""{_module_doc(rel, stem)}"""\n\n'))
@@ -91,10 +98,12 @@ def _insert_docstrings(file_path: Path, rel: str, items: list[tuple[int, str]]) 
 
 
 def main() -> None:
+    """Collect pylint docstring warnings and insert generated docstrings."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     warnings = _collect_warnings()
     if not warnings:
-        print("No missing docstring warnings found.")
+        logger.info("No missing docstring warnings found.")
         return
 
     changed: list[str] = []
@@ -105,9 +114,9 @@ def main() -> None:
         if _insert_docstrings(path, rel, items):
             changed.append(rel)
 
-    print(f"Updated {len(changed)} files")
+    logger.info("Updated %s files", len(changed))
     for rel in changed:
-        print(rel)
+        logger.info("%s", rel)
 
 
 if __name__ == "__main__":

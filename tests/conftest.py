@@ -41,7 +41,16 @@ def _showwarning_filter(
         fn = str(filename)
         if category is DeprecationWarning and "compiled-mibs" in fn:
             return
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except (
+        AssertionError,
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
         pass
     _orig_showwarning(message, category, filename, lineno, file=file, line=line)
 
@@ -211,7 +220,16 @@ def cleanup_asyncio_and_imports() -> Generator[None, None, None]:
             # If schema was corrupted to {"test": "schema"}, restore it
             if '{"test": "schema"}' in current_content:
                 schema_path.write_text(original_content)
-        except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+        except (
+            AssertionError,
+            AttributeError,
+            ImportError,
+            LookupError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ):
             pass
 
     # After each test, clean up asyncio event loops
@@ -228,7 +246,16 @@ def cleanup_asyncio_and_imports() -> Generator[None, None, None]:
                     loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
             if not loop.is_closed():
                 loop.close()
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except (
+        AssertionError,
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
         pass
 
     # Force garbage collection to clean up any lingering pysnmp objects

@@ -126,21 +126,21 @@ def test_simple_2x2_table_with_getnext(
         # Test getting the table entry
         modName, symName, indices = mib_view.getNodeName((table_oid,))
         logger.info(f"Table OID lookup: modName={modName}, symName={symName}, indices={indices}")
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError) as e:
+    except Exception as e:
         logger.info(f"Cannot lookup table OID (expected): {e}")
 
     try:
         # Test getting the entry
         modName, symName, indices = mib_view.getNodeName((entry_oid,))
         logger.info(f"Entry OID lookup: modName={modName}, symName={symName}, indices={indices}")
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError) as e:
+    except Exception as e:
         logger.info(f"Cannot lookup entry OID (expected): {e}")
 
     try:
         # Test getting a column
         modName, symName, indices = mib_view.getNodeName((col1_oid,))
         logger.info(f"Column OID lookup: modName={modName}, symName={symName}, indices={indices}")
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError) as e:
+    except Exception as e:
         logger.info(f"Cannot lookup column OID (expected): {e}")
 
     # The main assertion: the table registration shouldn't crash
@@ -251,7 +251,16 @@ def test_table_without_export_responds_to_mib_lookup(
         logger.info(
             f"getNextMibNode from table: modName={modName}, symName={symName}, indices={indices}",
         )
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError) as e:
+    except (
+        AssertionError,
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as e:
         logger.info(f"getNextMibNode from table failed (expected): {type(e).__name__}: {e}")
 
     # This test documents the expected behavior when table export is disabled

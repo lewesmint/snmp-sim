@@ -1,6 +1,9 @@
 """Extended unit tests for `BehaviourGenerator` edge cases and fallback paths."""
 
-# pylint: disable=too-many-lines,missing-function-docstring,protected-access,missing-class-docstring,invalid-name,too-few-public-methods,import-outside-toplevel,import-error,unused-argument,broad-exception-raised,unused-variable
+# pylint: disable=too-many-lines,missing-function-docstring,protected-access
+# pylint: disable=missing-class-docstring,invalid-name,too-few-public-methods
+# pylint: disable=import-outside-toplevel,import-error,unused-argument
+# pylint: disable=broad-exception-raised,unused-variable
 
 import json
 import os
@@ -644,7 +647,7 @@ def test_detect_inherited_indexes() -> None:
             return [(None, "OTHER-MIB", "inheritedIndex")]
 
     table_entries = {"testEntry": MockEntry()}
-    result = {
+    result: dict[str, dict[str, Any]] = {
         "testEntry": {"oid": [1, 2, 3, 1]},
         "testCol1": {"oid": [1, 2, 3, 1, 1]},
         # inheritedIndex is not in the columns
@@ -653,7 +656,8 @@ def test_detect_inherited_indexes() -> None:
     g._detect_inherited_indexes(result, table_entries, "TEST-MIB")
 
     assert "index_from" in result["testEntry"]
-    assert result["testEntry"]["index_from"] == [{"mib": "OTHER-MIB", "column": "inheritedIndex"}]  # type: ignore[comparison-overlap]
+    expected_index_from = [{"mib": "OTHER-MIB", "column": "inheritedIndex"}]
+    assert result["testEntry"]["index_from"] == expected_index_from
 
 
 def test_generate_force_regenerate_removes_existing_file(

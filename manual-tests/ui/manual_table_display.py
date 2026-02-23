@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""
-Test script to verify table display changes in SNMP GUI.
-Tests that tables show entries (like sysOREntry.1) under the table, and columns grouped under each entry.
+"""Test script to verify table display changes in SNMP GUI.
+
+Tests that tables show entries (like sysOREntry.1) under the table, and
+columns grouped under each entry.
 """
 
 import sys
@@ -87,7 +88,8 @@ def test_table_display() -> bool:
 
     print(f"Table {table_text} has {len(children)} children after expansion")
 
-    # Check that children are entry instances (should have names like "sysOREntry.1", "sysOREntry.2", etc.)
+    # Check that children are entry instances (names like "sysOREntry.1",
+    # "sysOREntry.2", etc.).
     expected_entry_pattern = "sysOREntry."  # Should have "sysOREntry.X"
     found_entries = False
     for child in children:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 
 from app.app_config import AppConfig
@@ -10,9 +11,12 @@ from app.cli_build_model import build_internal_model
 from app.model_paths import AGENT_MODEL_DIR
 from app.snmp_agent import SNMPAgent
 
+logger = logging.getLogger(__name__)
+
 
 def main(argv: list[str] | None = None) -> int:
     """Run the SNMP agent with a preloaded model from configured MIB schemas."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(
         description=(
             "Run the SNMP agent with a preloaded internal model from "
@@ -47,24 +51,29 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = AppConfig(args.config)
     except FileNotFoundError:
-        print(f"Error: Config file not found: {args.config}", file=sys.stderr)
+        logger.exception("Error: Config file not found: %s", args.config)
         return 1
 
     mibs_raw = config.get("mibs", [])
     mibs = mibs_raw if isinstance(mibs_raw, list) else []
     mibs = [str(mib) for mib in mibs]
     if not mibs:
-        print("No MIBs configured", file=sys.stderr)
+        logger.error("No MIBs configured")
         return 1
 
-    print(f"Building internal model for {len(mibs)} configured MIBs...")
+    logger.info("Building internal model for %s configured MIBs...", len(mibs))
     model = build_internal_model(mibs, args.schema_dir)
 
     if not model:
-        print("Error: No schemas could be loaded", file=sys.stderr)
+        logger.error("Error: No schemas could be loaded")
         return 1
 
-    print(f"Model built with {len(model)} MIBs. Starting SNMP agent on {args.host}:{args.port}...")
+    logger.info(
+        "Model built with %s MIBs. Starting SNMP agent on %s:%s...",
+        len(model),
+        args.host,
+        args.port,
+    )
 
     try:
         agent = SNMPAgent(
@@ -75,9 +84,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         agent.run()
     except KeyboardInterrupt:
-        print("\nAgent stopped by user.")
-    except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-        print(f"Error running agent: {e}", file=sys.stderr)
+        logger.info("Agent stopped by user.")
+    except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+        logger.exception("Error running agent")
         return 1
 
     return 0

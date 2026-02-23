@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from app.app_config import AppConfig
 from app.generator import BehaviourGenerator
-from app.model_paths import AGENT_MODEL_DIR, COMPILED_MIBS_DIR
+from app.model_paths import AGENT_MODEL_DIR
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -109,7 +109,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             print("No MIBs configured", file=sys.stderr)  # noqa: T201
             return 1
         for mib in mibs:
-            compiled_path = COMPILED_MIBS_DIR / f"{mib}.py"
+            compiled_path = Path("compiled-mibs") / f"{mib}.py"
             if not compiled_path.exists():
                 print(  # noqa: T201
                     f"Warning: Compiled MIB not found: {compiled_path}",

@@ -1,9 +1,10 @@
-"""Canonical type registry for the SNMP agent, matching the output of tools/record_types.py.
-Manages build, export, and access to the registry after MIB compilation.
+"""Canonical type registry for the SNMP agent.
+
+Matches the output of tools/record_types.py and manages build, export, and
+access to the registry after MIB compilation.
 """
 
 import json
-import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -14,7 +15,7 @@ from app.type_recorder import TypeEntry, TypeRecorder
 class TypeRegistry:
     """Facade for building, accessing, and exporting the canonical type registry."""
 
-    def __init__(self, compiled_mibs_dir: Path | None = None):
+    def __init__(self, compiled_mibs_dir: Path | None = None) -> None:
         """Initialize registry state and compiled-MIB source directory."""
         self.compiled_mibs_dir = compiled_mibs_dir or (
             Path(__file__).parent.parent / "compiled-mibs"
@@ -31,15 +32,16 @@ class TypeRegistry:
     def registry(self) -> dict[str, TypeEntry]:
         """Return the built registry data."""
         if self._registry is None:
-            raise RuntimeError(
-                "Type registry has not been built yet. Call build() after compiling MIBs."
-            )
+            msg = "Type registry has not been built yet. Call build() after compiling MIBs."
+            raise RuntimeError(msg)
         return self._registry
 
     def export_to_json(self, path: str = "data/types.json") -> None:
         """Export the type registry to a JSON file in the data folder by default."""
         if self._registry is None:
-            raise RuntimeError("Type registry has not been built yet. Call build() first.")
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
+            msg = "Type registry has not been built yet. Call build() first."
+            raise RuntimeError(msg)
+        output_path = Path(path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", encoding="utf-8") as f:
             json.dump(self._registry, f, indent=2)

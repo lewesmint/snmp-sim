@@ -57,7 +57,8 @@ def test_build_with_textual_convention_and_scalar(
                 (),
                 {"__repr__": lambda self: "ValueSizeConstraint object, consts 2, 2"},
             )()
-            # Declare namedValues so static analyzers know the attribute exists; tests may overwrite it.
+            # Declare namedValues so static analyzers know the attribute exists;
+            # tests may overwrite it.
             self.namedValues: Any = types.SimpleNamespace()
 
         def getDisplayHint(self) -> str:

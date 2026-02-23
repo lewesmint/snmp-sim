@@ -151,9 +151,12 @@ def normalize_mib_state(state_file: Path, agent_model_dir: Path) -> int:
 
                 if coerced_value != original_value and coerced_value is not None:
                     column_values[column_name] = coerced_value
-                    print(
-                        f"  {column_name}[{index_str}]: {type(original_value).__name__}({original_value!r}) -> {type(coerced_value).__name__}({coerced_value!r})"
+                    msg = (
+                        f"  {column_name}[{index_str}]: "
+                        f"{type(original_value).__name__}({original_value!r}) -> "
+                        f"{type(coerced_value).__name__}({coerced_value!r})"
                     )
+                    print(msg)
                     changes_made += 1
 
     # Write back to file

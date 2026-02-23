@@ -87,8 +87,7 @@ def get_config() -> dict[str, object]:
     except (AttributeError, LookupError, OSError, TypeError, ValueError):
         logger.exception("Failed to load config")
         return {}
-    else:
-        return config
+    return config
 
 
 @router.post("/config")
@@ -106,8 +105,7 @@ def save_config(config: ConfigData) -> dict[str, object]:
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         logger.exception("Failed to save config")
         raise HTTPException(status_code=500, detail=f"Failed to save config: {e!s}") from e
-    else:
-        return {"status": "ok", "message": "Configuration saved"}
+    return {"status": "ok", "message": "Configuration saved"}
 
 
 @router.post("/bake-state")
@@ -125,15 +123,14 @@ def bake_state() -> dict[str, object]:
         _clear_agent_state()
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to bake state: {e}") from e
-    else:
-        return {
-            "status": "ok",
-            "baked_count": baked_count,
-            "backup_dir": str(backup_dir),
-            "message": (
-                f"Successfully baked {baked_count} value(s) into schemas and cleared state"
-            ),
-        }
+    return {
+        "status": "ok",
+        "baked_count": baked_count,
+        "backup_dir": str(backup_dir),
+        "message": (
+            f"Successfully baked {baked_count} value(s) into schemas and cleared state"
+        ),
+    }
 
 
 @router.post("/state/reset")
@@ -146,8 +143,7 @@ def reset_state() -> dict[str, object]:
         _clear_agent_state()
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to reset state: {e}") from e
-    else:
-        return {"status": "ok", "message": "State reset"}
+    return {"status": "ok", "message": "State reset"}
 
 
 @router.post("/state/fresh")
@@ -177,13 +173,12 @@ def fresh_state() -> dict[str, object]:
         _clear_agent_state()
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to run fresh state: {e}") from e
-    else:
-        return {
-            "status": "ok",
-            "backup_dir": str(backup_dir),
-            "regenerated": regenerated,
-            "message": "Fresh state complete",
-        }
+    return {
+        "status": "ok",
+        "backup_dir": str(backup_dir),
+        "regenerated": regenerated,
+        "message": "Fresh state complete",
+    }
 
 
 @router.get("/presets")
@@ -217,12 +212,11 @@ def save_preset(request: PresetRequest) -> dict[str, object]:
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         sys.stdout = old_stdout
         raise HTTPException(status_code=500, detail=f"Failed to save preset: {e}") from e
-    else:
-        return {
-            "status": "ok",
-            "preset_name": request.preset_name,
-            "message": f"Preset '{request.preset_name}' saved successfully",
-        }
+    return {
+        "status": "ok",
+        "preset_name": request.preset_name,
+        "message": f"Preset '{request.preset_name}' saved successfully",
+    }
 
 
 @router.post("/presets/load")
@@ -250,15 +244,14 @@ def load_preset(request: PresetRequest) -> dict[str, object]:
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         sys.stdout = old_stdout
         raise HTTPException(status_code=500, detail=f"Failed to load preset: {e}") from e
-    else:
-        return {
-            "status": "ok",
-            "preset_name": request.preset_name,
-            "message": (
-                f"Preset '{request.preset_name}' loaded successfully. "
-                "Restart agent to apply changes."
-            ),
-        }
+    return {
+        "status": "ok",
+        "preset_name": request.preset_name,
+        "message": (
+            f"Preset '{request.preset_name}' loaded successfully. "
+            "Restart agent to apply changes."
+        ),
+    }
 
 
 @router.delete("/presets/{preset_name}")
@@ -279,9 +272,8 @@ def delete_preset(preset_name: str) -> dict[str, object]:
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
         sys.stdout = old_stdout
         raise HTTPException(status_code=500, detail=f"Failed to delete preset: {e}") from e
-    else:
-        return {
-            "status": "ok",
-            "preset_name": preset_name,
-            "message": f"Preset '{preset_name}' deleted successfully",
-        }
+    return {
+        "status": "ok",
+        "preset_name": preset_name,
+        "message": f"Preset '{preset_name}' deleted successfully",
+    }

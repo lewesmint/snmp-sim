@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from app.api_shared import JsonValue
 from app.snmp_agent import SNMPAgent
 
 
@@ -21,7 +22,7 @@ def test_decode_value_passthrough() -> None:
 def test_decode_value_hex() -> None:
     """Test case for test_decode_value_hex."""
     agent = SNMPAgent()
-    v = {"value": "\\xAA\\xBB", "encoding": "hex"}
+    v: JsonValue = {"value": "\\xAA\\xBB", "encoding": "hex"}
     decoded = agent._decode_value(v)
     assert isinstance(decoded, (bytes, bytearray))
     assert decoded == b"\xaa\xbb"
@@ -30,7 +31,7 @@ def test_decode_value_hex() -> None:
 def test_decode_value_unknown_encoding() -> None:
     """Test case for test_decode_value_unknown_encoding."""
     agent = SNMPAgent()
-    v = {"value": "zzz", "encoding": "base64"}
+    v: JsonValue = {"value": "zzz", "encoding": "base64"}
     # unknown encoding should return raw encoded value
     assert agent._decode_value(v) == "zzz"
 
@@ -61,7 +62,7 @@ def test_shutdown_closes_dispatcher(monkeypatch: Any, caplog: Any, mocker: Any) 
     agent = SNMPAgent(config_path="agent_config.yaml")
     # Provide a fake dispatcher with close_dispatcher
     fake_dispatcher = mocker.Mock()
-    agent.snmpEngine = SimpleNamespace(transport_dispatcher=fake_dispatcher)
+    agent.snmp_engine = SimpleNamespace(transport_dispatcher=fake_dispatcher)
 
     # Prevent os._exit from terminating test process
     monkeypatch.setattr(os, "_exit", lambda code: None)
@@ -97,8 +98,8 @@ def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(
     # Prevent SNMP engine setup and further networking
     monkeypatch.setattr(
         SNMPAgent,
-        "_setup_snmpEngine",
-        lambda self, cd: setattr(self, "snmpEngine", None),
+        "_setup_snmp_engine",
+        lambda self, cd: setattr(self, "snmp_engine", None),
     )
 
     with caplog.at_level(logging.INFO):
@@ -141,5 +142,5 @@ def test_decode_value_fallback_returns_value_on_exception(monkeypatch: Any) -> N
     monkeypatch.setattr("app.mib_registrar.MibRegistrar", FailingRegistrar)
 
     agent = SNMPAgent(config_path="agent_config.yaml")
-    sentinel = object()
+    sentinel: JsonValue = {"sentinel": "value"}
     assert agent._decode_value(sentinel) is sentinel

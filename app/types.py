@@ -5,7 +5,7 @@ to ensure consistency and improve type safety.
 """
 
 from collections.abc import Callable
-from typing import Any, Union
+from typing import Any
 
 # Type information dictionary - represents a SINGLE type entry in the registry
 # Contains: base_type, display_hint, size, constraints, enums, used_by, defined_in, abstract
@@ -19,7 +19,7 @@ TypeRegistry = dict[str, TypeInfo]
 JsonDict = dict[str, Any]
 
 # OID type - can be tuple or list of integers
-OidType = Union[tuple[int, ...], list[int]]
+OidType = tuple[int, ...] | list[int]
 
 # Type encoder function signature
 TypeEncoder = Callable[[Any], Any]

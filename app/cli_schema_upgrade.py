@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from collections.abc import Iterable
 from pathlib import Path
 
 from app.model_paths import AGENT_MODEL_DIR
 
 DEFAULT_SCHEMA_VERSION = "1.0.1"
+logger = logging.getLogger(__name__)
 
 
 def _iter_schema_files(schema_dir: Path) -> list[Path]:
@@ -18,6 +20,7 @@ def _iter_schema_files(schema_dir: Path) -> list[Path]:
 
 def main(argv: Iterable[str] | None = None) -> int:
     """Update schema_version for all schema.json files."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(
         description="Update schema_version for all schema.json files.",
     )
@@ -36,12 +39,12 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     schema_dir = Path(args.schema_dir)
     if not schema_dir.exists():
-        print(f"Schema directory not found: {schema_dir}")
+        logger.error("Schema directory not found: %s", schema_dir)
         return 1
 
     schema_files = _iter_schema_files(schema_dir)
     if not schema_files:
-        print("No schema.json files found.")
+        logger.error("No schema.json files found.")
         return 1
 
     updated = 0
@@ -57,10 +60,10 @@ def main(argv: Iterable[str] | None = None) -> int:
                 with schema_file.open("w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2)
                 updated += 1
-        except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
-            print(f"Failed to update {schema_file}: {exc}")
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            logger.exception("Failed to update %s", schema_file)
 
-    print(f"Updated {updated} schema file(s) to version {args.set_version}.")
+    logger.info("Updated %s schema file(s) to version %s.", updated, args.set_version)
     return 0
 
 

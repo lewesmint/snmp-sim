@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
+# ruff: noqa: B007, BLE001, ERA001, EXE001, PLC0415, PLR2004, PT018, S101, T201
 """Optimized tests for SNMP wrapper: get_sync, set_sync, get_next_sync."""
 
 import sys
 import time
+
+from pysnmp.hlapi.asyncio import CommunityData, ObjectType
+
 from snmp_wrapper import (
-    StatelessSnmpClient,
     PersistentSnmpClient,
     SnmpSyncError,
+    StatelessSnmpClient,
     make_oid,
 )
-from pysnmp.hlapi.asyncio import CommunityData, ObjectType
 
 # Test configuration
 PARROT_ADDRESS = ("parrot", 161)
@@ -214,9 +217,11 @@ def test_performance_comparison() -> None:
     for i in range(iterations):
         client_stateless.get(oid)
     stateless_time = time.time() - start
-    print(
-        f"    {iterations} calls: {stateless_time:.2f}s ({stateless_time / iterations:.2f}s per call)"
+    stateless_msg = (
+        f"    {iterations} calls: {stateless_time:.2f}s "
+        f"({stateless_time / iterations:.2f}s per call)"
     )
+    print(stateless_msg)
 
     # Persistent: reused engine
     print("\n  Persistent client (reused engine):")
@@ -228,9 +233,11 @@ def test_performance_comparison() -> None:
         for i in range(iterations):
             client_persistent.get(oid)
         persistent_time = time.time() - start
-        print(
-            f"    {iterations} calls: {persistent_time:.2f}s ({persistent_time / iterations:.2f}s per call)"
+        persistent_msg = (
+            f"    {iterations} calls: {persistent_time:.2f}s "
+            f"({persistent_time / iterations:.2f}s per call)"
         )
+        print(persistent_msg)
 
         # Speed comparison
         speedup = stateless_time / persistent_time if persistent_time > 0 else float("inf")

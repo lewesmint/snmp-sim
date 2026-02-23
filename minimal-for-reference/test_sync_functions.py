@@ -4,6 +4,8 @@ Tests the wrapper against parrot:161 with enterprise MIB 99999.
 Verifies results match CLI snmp commands.
 """
 
+from typing import List
+
 from async_wrapper import (
     get_sync,
     get_next_sync,
@@ -12,7 +14,6 @@ from async_wrapper import (
     SyncSnmpClient,
 )
 from pysnmp.hlapi.asyncio import SnmpEngine, CommunityData, ObjectType
-from typing import List
 
 
 def test_get_sync() -> None:
@@ -108,14 +109,16 @@ def test_walk_enterprise_mib() -> None:
 
                     # Check if we've walked past the enterprise root
                     if not oid_str.startswith("1.3.6.1.4.1.99999"):
-                        print(
-                            f"✓ WALK complete - walked past enterprise root after {len(results)} OIDs"
+                        msg = (
+                            "✓ WALK complete - walked past enterprise root "
+                            f"after {len(results)} OIDs"
                         )
+                        print(msg)
                         return
 
                     # Update current OID for next iteration
                     # Extract just the OID part before the =
-                    oid_part = oid_str.split(" = ")[0]
+                    oid_part = oid_str.split(" = ", maxsplit=1)[0]
                     current_oid = ObjectType(make_oid(oid_part))
 
             except SnmpSyncError:

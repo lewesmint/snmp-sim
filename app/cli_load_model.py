@@ -32,7 +32,14 @@ def load_all_schemas(schema_dir: str) -> dict[str, dict[str, object]]:
                         model[item] = schema
                 except json.JSONDecodeError as e:
                     sys.stderr.write(f"Error loading {schema_path}: {e}\n")
-                except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                except (
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                    RuntimeError,
+                ) as e:
                     sys.stderr.write(f"Error processing {item}: {e}\n")
 
     return model

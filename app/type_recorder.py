@@ -1,6 +1,7 @@
 """Build a canonical SNMP type registry by introspecting compiled MIB symbols."""
 
-# pylint: disable=broad-exception-caught,redefined-outer-name,reimported
+# pylint: disable=broad-exception-caught,redefined-outer-name,reimported,too-few-public-methods,too-many-locals,too-many-branches
+# ruff: noqa: D205, D401
 
 from __future__ import annotations
 
@@ -8,10 +9,10 @@ import argparse
 import inspect
 import json
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import (
-    Any,
+    TYPE_CHECKING,
     Protocol,
     TypedDict,
     cast,
@@ -21,7 +22,8 @@ import pysnmp.entity.engine as _engine
 import pysnmp.proto.rfc1902 as _rfc1902
 import pysnmp.smi.builder as _builder
 
-from app.types import JsonDict
+if TYPE_CHECKING:
+    from app.types import JsonDict
 
 # True ASN.1 base types (RFC 2578)
 # These are the only fundamental types in ASN.1:
@@ -46,12 +48,36 @@ _EXPECTED_SNMPV2_SMI_TYPES: set[str] = {
     "Opaque",
 }
 
+_MIN_RANGE_COUNT = 2
+
 
 class HasGetSyntax(Protocol):
     """Protocol for syntax objects exposing a PySNMP-style getSyntax method."""
 
-    def getSyntax(self) -> object:  # pylint: disable=invalid-name
+    def getSyntax(self) -> object:  # pylint: disable=invalid-name  # noqa: N802
         """Return the underlying syntax object for this SNMP value type."""
+
+
+class SupportsMibBuilder(Protocol):
+    """Minimal MIB builder surface used by TypeRecorder."""
+
+    mibSymbols: Mapping[str, Mapping[str, object]]  # noqa: N815
+
+    def add_mib_sources(self, *mib_sources: object) -> None:
+        """Register MIB source locations."""
+        raise NotImplementedError
+
+    def load_modules(self, *module_names: str) -> None:
+        """Load named MIB modules."""
+        raise NotImplementedError
+
+
+class SupportsSnmpEngine(Protocol):
+    """Minimal SNMP engine surface used by TypeRecorder."""
+
+    def get_mib_builder(self) -> SupportsMibBuilder:
+        """Return the associated MIB builder."""
+        raise NotImplementedError
 
 
 class TypeEntry(TypedDict):
@@ -82,7 +108,7 @@ class TypeRecorder:
         self,
         compiled_dir: Path,
         progress_callback: Callable[[str], None] | None = None,
-    ):
+    ) -> None:
         """Create a recorder configured for a compiled-MIB directory."""
         self.compiled_dir = compiled_dir
         self._registry: dict[str, TypeEntry] | None = None
@@ -108,18 +134,15 @@ class TypeRecorder:
                 if obj is None:
                     continue
                 # We want classes that are likely SNMP types
-                if inspect.isclass(obj):
-                    # Check if it's a type we care about (has subtypeSpec or is a known type)
-                    if (
-                        hasattr(obj, "subtypeSpec")
-                        or name in TRUE_ASN1_BASE_TYPES
-                        or name in _EXPECTED_SNMPV2_SMI_TYPES
-                    ):
-                        discovered.add(name)
+                if inspect.isclass(obj) and (
+                    hasattr(obj, "subtypeSpec")
+                    or name in TRUE_ASN1_BASE_TYPES
+                    or name in _EXPECTED_SNMPV2_SMI_TYPES
+                ):
+                    discovered.add(name)
 
             # Ensure we at least have the ASN.1 base types and expected SNMP types
-            result = discovered | TRUE_ASN1_BASE_TYPES | _EXPECTED_SNMPV2_SMI_TYPES
-            return result
+            return discovered | TRUE_ASN1_BASE_TYPES | _EXPECTED_SNMPV2_SMI_TYPES
         except (AttributeError, LookupError, OSError, TypeError, ValueError):
             # Fallback to expected types if discovery fails
             return TRUE_ASN1_BASE_TYPES | _EXPECTED_SNMPV2_SMI_TYPES
@@ -170,8 +193,9 @@ class TypeRecorder:
 
     @staticmethod
     def unwrap_syntax(syntax: object) -> tuple[str, str, object]:
-        """Returns:
-          (syntax_type_name, base_type_name, base_syntax_obj)
+        """Return syntax, base type, and base syntax object.
+
+        (syntax_type_name, base_type_name, base_syntax_obj)
 
         - If syntax.getSyntax() exists and returns something, use that as base.
         - Otherwise infer base type from class inheritance (MRO).
@@ -210,7 +234,8 @@ class TypeRecorder:
 
     @staticmethod
     def extract_enums_list(syntax: object) -> list[JsonDict] | None:
-        """Return enums as a numerically ordered list:
+        """Return enums as a numerically ordered list.
+
         [{"value": 1, "name": "true"}, {"value": 2, "name": "false"}]
         """
         candidates = (
@@ -225,11 +250,17 @@ class TypeRecorder:
             items = getattr(candidate, "items", None)
             if not callable(items):
                 continue
+            typed_items = cast("Callable[[], object]", items)
 
             try:
-                pairs = list(items())
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                raw_pairs = typed_items()
+            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
                 continue
+
+            if not isinstance(raw_pairs, Iterable):
+                continue
+
+            pairs = list(raw_pairs)
 
             rows: list[JsonDict] = []
             for name, value in pairs:
@@ -384,7 +415,9 @@ class TypeRecorder:
 
     @staticmethod
     def _is_textual_convention_symbol(sym_obj: object) -> bool:
-        """Compiled MIB textual conventions appear in mibSymbols as classes
+        """Check whether a symbol represents a textual convention class.
+
+        Compiled MIB textual conventions appear in mibSymbols as classes
         (eg class DisplayString(TextualConvention, OctetString): ...)
 
         OBJECT-TYPEs appear as instances (eg MibScalar/MibTableColumn/etc).
@@ -453,7 +486,9 @@ class TypeRecorder:
         *,
         drop_repr: bool,
     ) -> tuple[JsonDict | None, list[JsonDict], str | None]:
-        """Applies your post-processing rules and drops constraints_repr if it could
+        """Apply post-processing and drop potentially misleading repr text.
+
+        Drops constraints_repr if it could
         be misleading relative to the structured constraints.
         """
         raw_constraints = list(constraints)
@@ -517,7 +552,7 @@ class TypeRecorder:
                 continue
             try:
                 syntax_obj = ctor()
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
                 continue
 
             size, constraints, constraints_repr = self.extract_constraints(syntax_obj)
@@ -564,17 +599,16 @@ class TypeRecorder:
 
     @staticmethod
     def _has_single_value_constraint(constraints: list[JsonDict]) -> bool:
-        for c in constraints:
-            if c.get("type") == "SingleValueConstraint":
-                return True
-        return False
+        return any(c.get("type") == "SingleValueConstraint" for c in constraints)
 
     @staticmethod
     def _is_value_range_constraint(c: JsonDict) -> bool:
         return c.get("type") == "ValueRangeConstraint"
 
     @staticmethod
-    def _drop_dominated_value_ranges(constraints: list[JsonDict]) -> list[JsonDict]:
+    def _drop_dominated_value_ranges(  # noqa: C901, PLR0912
+        constraints: list[JsonDict],
+    ) -> list[JsonDict]:
         ranges: list[tuple[int, int]] = []
         for c in constraints:
             if TypeRecorder._is_value_range_constraint(c):
@@ -584,7 +618,7 @@ class TypeRecorder:
                     ranges.append((min_val, max_val))
                 else:
                     ranges.append((int(str(min_val)), int(str(max_val))))
-        if len(ranges) < 2:
+        if len(ranges) < _MIN_RANGE_COUNT:
             return constraints
         dominated: set[tuple[int, int]] = set()
         for a_min, a_max in ranges:
@@ -700,8 +734,8 @@ class TypeRecorder:
         return out
 
     def _load_mib_symbols(self) -> Mapping[str, Mapping[str, object]]:
-        snmp_engine = cast(Any, _engine.SnmpEngine())
-        mib_builder = cast(Any, snmp_engine.get_mib_builder())
+        snmp_engine = cast("SupportsSnmpEngine", _engine.SnmpEngine())
+        mib_builder = snmp_engine.get_mib_builder()
         mib_builder.add_mib_sources(_builder.DirMibSource(str(self.compiled_dir)))
 
         for path in self.compiled_dir.glob("*.py"):
@@ -709,10 +743,10 @@ class TypeRecorder:
                 continue
             try:
                 mib_builder.load_modules(path.stem)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
                 continue
 
-        return cast("Mapping[str, Mapping[str, object]]", mib_builder.mibSymbols)
+        return mib_builder.mibSymbols
 
     def _process_textual_convention_symbol(
         self,
@@ -771,7 +805,7 @@ class TypeRecorder:
         syntax: object,
         base_obj: object,
         base_type_out: str | None,
-        allow_metadata: bool,
+        allow_metadata: bool,  # noqa: FBT001
     ) -> tuple[
         str | None,
         list[JsonDict] | None,
@@ -804,7 +838,7 @@ class TypeRecorder:
 
         return display, enums, size, constraints, constraints_repr
 
-    def _process_object_type_symbol(
+    def _process_object_type_symbol(  # noqa: C901, PLR0912
         self,
         types: dict[str, TypeEntry],
         mib_name: str,
@@ -817,7 +851,7 @@ class TypeRecorder:
         snmp_obj = cast("HasGetSyntax", sym_obj)
         try:
             syntax = snmp_obj.getSyntax()
-        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
             return
 
         if syntax is None:
@@ -927,14 +961,16 @@ class TypeRecorder:
     def registry(self) -> dict[str, TypeEntry]:
         """Return the built registry, raising if build has not run yet."""
         if self._registry is None:
-            raise RuntimeError("TypeRecorder: build() must be called before accessing registry.")
+            msg = "TypeRecorder: build() must be called before accessing registry."
+            raise RuntimeError(msg)
         return self._registry
 
     def export_to_json(self, path: str = "types.json") -> None:
         """Persist the current registry to a JSON file at the provided path."""
         if self._registry is None:
-            raise RuntimeError("TypeRecorder: build() must be called before export.")
-        with open(path, "w", encoding="utf-8") as fh:
+            msg = "TypeRecorder: build() must be called before export."
+            raise RuntimeError(msg)
+        with Path(path).open("w", encoding="utf-8") as fh:
             json.dump(self._registry, fh, indent=2)
 
 
@@ -948,7 +984,7 @@ def main() -> None:
     recorder = TypeRecorder(args.compiled_dir)
     recorder.build()
     recorder.export_to_json(str(args.output))
-    print(f"Wrote {len(recorder.registry)} types to {args.output}")
+    print(f"Wrote {len(recorder.registry)} types to {args.output}")  # noqa: T201
 
 
 if __name__ == "__main__":  # pragma: no cover

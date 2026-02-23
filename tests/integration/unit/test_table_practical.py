@@ -154,7 +154,16 @@ def test_mib_view_can_query_unregistered_table(
         # Try to get the next MIB node - since our table isn't registered,
         # this should skip over our range
         modName, symName, indices = mib_view.getNextMibNode(table_oid)
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except (
+        AssertionError,
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
         pass
 
     # Try to translate the table OID

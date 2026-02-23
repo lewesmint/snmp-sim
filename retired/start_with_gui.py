@@ -4,7 +4,8 @@
 Behavior:
 - Starts `run_agent_with_rest.py` as a subprocess.
 - Waits 5 seconds for the agent to start initializing.
-- Launches the GUI (`ui/snmp_gui.py`) with `--host`/`--port`, `--autoconnect`, and `--connect-delay 5`.
+- Launches the GUI (`ui/snmp_gui.py`) with `--host`/`--port`,
+  `--autoconnect`, and `--connect-delay 5`.
 - The GUI will attempt to connect 5 seconds after it launches.
 - Connection failures are logged without popup dialogs.
 
@@ -66,7 +67,8 @@ def main() -> None:
         subprocess.Popen(gui_cmd)
 
         print(
-            "GUI launched. See logs/gui.log for GUI log output and logs/snmp-agent.log for agent logs."
+            "GUI launched. See logs/gui.log for GUI log output and "
+            "logs/snmp-agent.log for agent logs."
         )
     except KeyboardInterrupt:
         pass

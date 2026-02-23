@@ -5,11 +5,11 @@ from __future__ import annotations
 import sys
 import types
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
-from app.snmp_agent import SNMPAgent
+from app.snmp_agent import JsonValue, SNMPAgent
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,8 +21,8 @@ def test_snmp_agent_init() -> None:
 
     assert agent.host == "127.0.0.1"
     assert agent.port == 161
-    assert agent.snmpEngine is None
-    assert agent.snmpContext is None
+    assert agent.snmp_engine is None
+    assert agent.snmp_context is None
     assert agent.mib_jsons == {}
     assert agent.start_time > 0
     assert agent._shutdown_requested is False
@@ -30,7 +30,10 @@ def test_snmp_agent_init() -> None:
 
 def test_snmp_agent_preloaded_model() -> None:
     """Test SNMPAgent with preloaded model."""
-    preloaded = {"TEST-MIB": {"sysDescr": {"oid": [1, 3, 6, 1], "type": "OctetString"}}}
+    sys_descr: JsonValue = {"oid": [1, 3, 6, 1], "type": "OctetString"}
+    preloaded: dict[str, dict[str, JsonValue]] = {
+        "TEST-MIB": {"sysDescr": sys_descr},
+    }
     agent = SNMPAgent(config_path="agent_config.yaml", preloaded_model=preloaded)
 
     assert agent.preloaded_model == preloaded
@@ -67,8 +70,8 @@ def test_snmp_agent_attributes() -> None:
     assert hasattr(agent, "config_path")
     assert hasattr(agent, "app_config")
     assert hasattr(agent, "logger")
-    assert hasattr(agent, "snmpEngine")
-    assert hasattr(agent, "snmpContext")
+    assert hasattr(agent, "snmp_engine")
+    assert hasattr(agent, "snmp_context")
     assert hasattr(agent, "mib_jsons")
     assert hasattr(agent, "start_time")
     assert hasattr(agent, "preloaded_model")
@@ -109,8 +112,8 @@ def test_shutdown_closes_dispatcher_and_exits(monkeypatch: pytest.MonkeyPatch) -
     dispatcher = DummyDispatcher()
 
     agent = SNMPAgent(preloaded_model={})
-    # Attach fake snmpEngine with a transport_dispatcher
-    agent.snmpEngine = SimpleNamespace(transport_dispatcher=dispatcher)
+    # Attach fake snmp_engine with a transport_dispatcher
+    agent.snmp_engine = cast(Any, SimpleNamespace(transport_dispatcher=dispatcher))
 
     # Patch os._exit so it raises SystemExit we can catch
     def fake_exit(code: int = 0) -> None:
@@ -165,10 +168,10 @@ def test_run_aborts_when_type_registry_validation_fails(
     # Prevent SNMP engine setup from running by patching it and asserting it is not called
     called = {"setup_called": False}
 
-    def fake_setup_snmpEngine(self: SNMPAgent, compiled_dir: str) -> None:
+    def fake_setup_snmp_engine(self: SNMPAgent, compiled_dir: str) -> None:
         called["setup_called"] = True
 
-    monkeypatch.setattr(SNMPAgent, "_setup_snmpEngine", fake_setup_snmpEngine)
+    monkeypatch.setattr(SNMPAgent, "_setup_snmp_engine", fake_setup_snmp_engine)
 
     # Ensure run() completes (should return early due to validation failure)
     agent.run()
@@ -207,7 +210,7 @@ def test_register_mib_objects_creates_registrar_and_calls_register_all() -> None
     try:
         agent.mib_jsons = {"TEST-MIB": {"schema": {}}}
         # Ensure mib_builder exists so _register_mib_objects proceeds (it checks for None)
-        agent.mib_builder = object()
+        agent.mib_builder = cast(Any, object())
         agent._register_mib_objects()
 
         assert hasattr(agent, "mib_registrar")
@@ -259,12 +262,12 @@ def test_decode_value_delegates_and_fallback(monkeypatch: pytest.MonkeyPatch) ->
     assert out2 == "xyz"
 
 
-def test_setup_snmpEngine_loads_compiled_modules(
+def test_setup_snmp_engine_loads_compiled_modules(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Test case for test_setup_snmpEngine_loads_compiled_modules."""
+    """Test case for test_setup_snmp_engine_loads_compiled_modules."""
     # Prepare a fake compiled-mibs directory with one module
     compiled_dir = tmp_path / "compiled-mibs"
     compiled_dir.mkdir()
@@ -356,19 +359,19 @@ def test_setup_snmpEngine_loads_compiled_modules(
 
     agent = SNMPAgent(preloaded_model={})
     caplog.set_level("INFO")
-    agent._setup_snmpEngine(str(compiled_dir))
+    agent._setup_snmp_engine(str(compiled_dir))
 
-    assert agent.snmpEngine is not None
+    assert agent.snmp_engine is not None
     assert agent.mib_builder is not None
     assert "Loaded compiled MIB modules" in caplog.text
 
 
-def test_setup_snmpEngine_handles_no_compiled_modules(
+def test_setup_snmp_engine_handles_no_compiled_modules(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Test case for test_setup_snmpEngine_handles_no_compiled_modules."""
+    """Test case for test_setup_snmp_engine_handles_no_compiled_modules."""
     compiled_dir = tmp_path / "compiled-mibs-absent"
     compiled_dir.mkdir()
 
@@ -449,7 +452,7 @@ def test_setup_snmpEngine_handles_no_compiled_modules(
 
     agent = SNMPAgent(preloaded_model={})
     caplog.set_level("INFO")
-    agent._setup_snmpEngine(str(compiled_dir))
+    agent._setup_snmp_engine(str(compiled_dir))
 
     assert "No compiled MIB modules found" in caplog.text
 
@@ -486,7 +489,16 @@ def test_setup_transport_adds_transport(monkeypatch: pytest.MonkeyPatch) -> None
         cfg_mod = importlib.import_module("pysnmp.entity.config")
         monkeypatch.setattr(cfg_mod, "add_transport", fake_add_transport, raising=False)
         monkeypatch.setattr(cfg_mod, "SNMP_UDP_DOMAIN", "udp", raising=False)
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except (
+        AssertionError,
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
         monkeypatch.setitem(
             sys.modules,
             "pysnmp.entity.config",
@@ -494,13 +506,13 @@ def test_setup_transport_adds_transport(monkeypatch: pytest.MonkeyPatch) -> None
         )
 
     agent = SNMPAgent(preloaded_model={})
-    agent.snmpEngine = types.SimpleNamespace(transport_dispatcher=True)
+    agent.snmp_engine = cast(Any, types.SimpleNamespace(transport_dispatcher=True))
     agent.host = "127.0.0.1"
     agent.port = 9999
 
     agent._setup_transport()
 
-    assert calls.get("engine") == agent.snmpEngine
+    assert calls.get("engine") == agent.snmp_engine
     assert calls.get("addr") == ("127.0.0.1", 9999)
 
 
@@ -530,7 +542,16 @@ def test_setup_responders_registers_responders(monkeypatch: pytest.MonkeyPatch) 
         monkeypatch.setattr(real_cmdrsp, "NextCommandResponder", Dummy, raising=False)
         monkeypatch.setattr(real_cmdrsp, "BulkCommandResponder", Dummy, raising=False)
         monkeypatch.setattr(real_cmdrsp, "SetCommandResponder", Dummy, raising=False)
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except (
+        AssertionError,
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
         monkeypatch.setitem(sys.modules, "pysnmp.entity.rfc3413.cmdrsp", cmdrsp_mod)
 
     agent = SNMPAgent(preloaded_model={})
@@ -539,8 +560,8 @@ def test_setup_responders_registers_responders(monkeypatch: pytest.MonkeyPatch) 
         message_dispatcher=types.SimpleNamespace(register_context_engine_id=lambda *_a, **_k: None),
     )
     context_obj = types.SimpleNamespace(contextEngineId="ctxid")
-    agent.snmpEngine = engine_obj
-    agent.snmpContext = context_obj
+    agent.snmp_engine = cast(Any, engine_obj)
+    agent.snmp_context = cast(Any, context_obj)
 
     agent._setup_responders()
 

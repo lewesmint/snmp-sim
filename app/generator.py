@@ -1,5 +1,6 @@
 """Schema generation from compiled MIB files."""
 
+import contextlib
 import json
 import os
 import re
@@ -33,21 +34,28 @@ class BehaviourGenerator:
     def __init__(
         self,
         output_dir: str = str(AGENT_MODEL_DIR),
+        *,
         load_default_plugins: bool = True,
     ) -> None:
+        """Initialize the generator and load optional default plugins."""
         self.output_dir = output_dir
         self._type_registry: dict[str, Any] = {}
-        os.makedirs(self.output_dir, exist_ok=True)
+        Path(self.output_dir).mkdir(parents=True, exist_ok=True)
 
         # Load plugins on initialization
         if load_default_plugins:
             loaded = load_plugins()
-            logger.info("%s", f"Loaded {len(loaded)} default value plugins: {', '.join(loaded)}")
+            logger.info(
+                "Loaded %d default value plugins: %s",
+                len(loaded),
+                ", ".join(loaded),
+            )
 
-    def generate(
+    def generate(  # noqa: C901, PLR0912, PLR0915
         self,
         compiled_py_path: str,
         mib_name: str | None = None,
+        *,
         force_regenerate: bool = True,
     ) -> str:
         """Generate schema JSON from a compiled MIB Python file.
@@ -76,7 +84,7 @@ class BehaviourGenerator:
 
         json_path = mib_dir / "schema.json"
 
-        if os.path.exists(json_path) and not force_regenerate:
+        if json_path.exists() and not force_regenerate:
             return str(json_path)
 
         # Extract MIB information (now includes objects and traps)
@@ -90,9 +98,8 @@ class BehaviourGenerator:
             # Record type for tables and entries
             if isinstance(symbol_info, dict):
                 symbol_type = symbol_info.get("type", None)
-                if symbol_type == "MibTable" or symbol_type == "MibTableRow":
-                    if "type" not in symbol_info:
-                        symbol_info["type"] = "NoneType"
+                if symbol_type in {"MibTable", "MibTableRow"} and "type" not in symbol_info:
+                    symbol_info["type"] = "NoneType"
                 # Always ensure the table object exists and has a 'rows' field (type-based)
                 if symbol_type == "MibTable":
                     if "rows" not in symbol_info or not isinstance(symbol_info["rows"], list):
@@ -102,16 +109,16 @@ class BehaviourGenerator:
                         # Find the corresponding entry by OID structure
                         entry_info = {}
                         entry_name = None
-                        expected_entry_oid = list(symbol_info["oid"]) + [1]
+                        expected_entry_oid = [*list(symbol_info["oid"]), 1]
                         for other_name, other_data in info.items():
                             if (
                                 isinstance(other_data, dict)
                                 and other_data.get("type") == "MibTableRow"
+                                and list(other_data.get("oid", [])) == expected_entry_oid
                             ):
-                                if list(other_data.get("oid", [])) == expected_entry_oid:
-                                    entry_info = other_data
-                                    entry_name = other_name
-                                    break
+                                entry_info = other_data
+                                entry_name = other_name
+                                break
 
                         # Extract index columns for ALL table entries (including augmented ones)
                         # If not already present, add 'indexes' field to entry_info
@@ -126,7 +133,9 @@ class BehaviourGenerator:
                                 # `DirMibSource` by trying the usual call and falling back.
                                 try:
                                     mib_builder.add_mib_sources(
-                                        builder.DirMibSource(os.path.dirname(compiled_py_path))
+                                        builder.DirMibSource(
+                                            str(Path(compiled_py_path).parent)
+                                        )
                                     )
                                 except (
                                     AttributeError,
@@ -134,20 +143,19 @@ class BehaviourGenerator:
                                     OSError,
                                     TypeError,
                                     ValueError,
+                                    RuntimeError,
                                 ):
                                     # either DirMibSource is missing (AttributeError) or
                                     # the add call failed; call without args (mocks accept it)
-                                    try:
-                                        mib_builder.add_mib_sources()
-                                    except (
+                                    with contextlib.suppress(
                                         AttributeError,
                                         LookupError,
                                         OSError,
                                         TypeError,
                                         ValueError,
+                                        RuntimeError,
                                     ):
-                                        # best-effort: move on if even that fails
-                                        pass
+                                        mib_builder.add_mib_sources()
                                 mib_builder.load_modules(mib_name)
                                 mib_symbols = mib_builder.mibSymbols[mib_name]
                                 entry_obj = mib_symbols.get(entry_name)
@@ -160,6 +168,7 @@ class BehaviourGenerator:
                                 OSError,
                                 TypeError,
                                 ValueError,
+                                RuntimeError,
                             ) as e:
                                 logger.warning(
                                     "Could not extract index columns for %s: %s", entry_name, e
@@ -219,7 +228,7 @@ class BehaviourGenerator:
                                         for c in constraints
                                     )
                                     # Only fix to 1 if constraints require it
-                                    if has_nonzero_constraint or col_type in ("InterfaceIndex",):
+                                    if has_nonzero_constraint or col_type == "InterfaceIndex":
                                         default_value = 1
                                 default_row[col] = default_value
                                 # Don't set col_info["initial"] - table columns
@@ -239,18 +248,22 @@ class BehaviourGenerator:
             "traps": traps,
         }
         tmp_path = json_path.with_suffix(".json.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        with tmp_path.open("w", encoding="utf-8") as f:
             f.write(dumps_with_horizontal_oid_lists(output_data, indent=2))
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp_path, json_path)
+        tmp_path.replace(json_path)
 
-        logger.info("%s", f"Schema JSON written to {json_path} with {len(traps)} trap(s)")
+        logger.info(
+            "Schema JSON written to %s with %d trap(s)",
+            json_path,
+            len(traps),
+        )
         return str(json_path)
 
     def _parse_mib_name_from_py(self, compiled_py_path: str) -> str:
         """Parse the MIB name from the compiled Python file (looks for mibBuilder.exportSymbols)."""
-        with open(compiled_py_path, encoding="utf-8") as f:
+        with Path(compiled_py_path).open(encoding="utf-8") as f:
             for line in f:
                 if "mibBuilder.exportSymbols" in line:
                     m = re.search(
@@ -260,9 +273,13 @@ class BehaviourGenerator:
                     if m:
                         return m.group(1)
         # Fallback: use filename without extension
-        return os.path.splitext(os.path.basename(compiled_py_path))[0]
+        return Path(compiled_py_path).stem
 
-    def _extract_mib_info(self, mib_py_path: str, mib_name: str) -> dict[str, Any]:
+    def _extract_mib_info(  # noqa: C901, PLR0912, PLR0915
+        self,
+        mib_py_path: str,
+        mib_name: str,
+    ) -> dict[str, Any]:
         """Extract MIB symbol information from a compiled MIB Python file.
 
         Args:
@@ -276,12 +293,26 @@ class BehaviourGenerator:
         mib_builder = builder.MibBuilder()
         # Protect against minimal / mocked `builder` objects that lack DirMibSource
         try:
-            mib_builder.add_mib_sources(builder.DirMibSource(os.path.dirname(mib_py_path)))
-        except (AttributeError, LookupError, OSError, TypeError, ValueError):
-            try:
+            mib_builder.add_mib_sources(
+                builder.DirMibSource(str(Path(mib_py_path).parent))
+            )
+        except (
+            AttributeError,
+            LookupError,
+            OSError,
+            TypeError,
+            ValueError,
+            RuntimeError,
+        ):
+            with contextlib.suppress(
+                AttributeError,
+                LookupError,
+                OSError,
+                TypeError,
+                ValueError,
+                RuntimeError,
+            ):
                 mib_builder.add_mib_sources()
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                pass
         mib_builder.load_modules(mib_name)
         mib_symbols = mib_builder.mibSymbols[mib_name]
 
@@ -295,7 +326,8 @@ class BehaviourGenerator:
                 mib_repr,
             )
             # Place a breakpoint on the next line to inspect the value of mib_symbols
-            raise TypeError(f"mib_symbols for {mib_name} is not a dict; cannot extract symbols.")
+            msg = f"mib_symbols for {mib_name} is not a dict; cannot extract symbols."
+            raise TypeError(msg)
 
         result: dict[str, Any] = {}
         for symbol_name, symbol_obj in mib_symbols.items():
@@ -345,8 +377,9 @@ class BehaviourGenerator:
                 # DEBUG
                 if symbol_name_str in ("ifAdminStatus", "ifOperStatus"):
                     logger.warning(
-                        "%s", f"DEBUG {symbol_name_str}: extracted enums = "
-                        f"{extracted_type_info.get('enums')}"
+                        "DEBUG %s: extracted enums = %s",
+                        symbol_name_str,
+                        extracted_type_info.get("enums"),
                     )
                 # Merge extracted enums and constraints into type_info
                 # Extracted info has priority as it comes from the specific symbol
@@ -399,12 +432,21 @@ class BehaviourGenerator:
         # Extract trap/notification definitions
         traps = self._extract_traps(mib_symbols, mib_name)
         if traps:
-            logger.info("%s", f"Found {len(traps)} trap(s) in {mib_name}: {list(traps.keys())}")
+            logger.info(
+                "Found %d trap(s) in %s: %s",
+                len(traps),
+                mib_name,
+                list(traps.keys()),
+            )
 
-        logger.debug("%s", f"Extracted MIB info for {mib_name}: {list(result.keys())}")
+        logger.debug("Extracted MIB info for %s: %s", mib_name, list(result.keys()))
         return {"objects": result, "traps": traps}
 
-    def _extract_traps(self, mib_symbols: dict[str, Any], mib_name: str) -> dict[str, Any]:
+    def _extract_traps(  # noqa: C901
+        self,
+        mib_symbols: dict[str, Any],
+        mib_name: str,
+    ) -> dict[str, Any]:
         """Extract NOTIFICATION-TYPE definitions from MIB symbols.
 
         Args:
@@ -430,18 +472,18 @@ class BehaviourGenerator:
                     objects = []
                     if hasattr(symbol_obj, "getObjects"):
                         obj_refs = symbol_obj.getObjects()
+                        pair_len = 2
                         if obj_refs:
                             for obj_ref in obj_refs:
-                                # obj_ref is a tuple like
-                                # (('IF-MIB', 'ifIndex'), ('IF-MIB', 'ifAdminStatus'))
-                                if isinstance(obj_ref, tuple) and len(obj_ref) >= 2:
+                                # obj_ref holds (mib, name) pairs.
+                                if isinstance(obj_ref, tuple) and len(obj_ref) >= pair_len:
                                     obj_mib = str(obj_ref[0])
                                     obj_name = str(obj_ref[1])
                                     objects.append({"mib": obj_mib, "name": obj_name})
                                 elif hasattr(obj_ref, "__iter__"):
                                     # Handle nested tuples
                                     for sub_ref in obj_ref:
-                                        if isinstance(sub_ref, tuple) and len(sub_ref) >= 2:
+                                        if isinstance(sub_ref, tuple) and len(sub_ref) >= pair_len:
                                             obj_mib = str(sub_ref[0])
                                             obj_name = str(sub_ref[1])
                                             objects.append({"mib": obj_mib, "name": obj_name})
@@ -464,8 +506,10 @@ class BehaviourGenerator:
                         "mib": mib_name,
                     }
                     logger.debug(
-                        "%s", f"Extracted trap {symbol_name_str} with OID {oid} "
-                        f"and {len(objects)} objects"
+                        "Extracted trap %s with OID %s and %d objects",
+                        symbol_name_str,
+                        oid,
+                        len(objects),
                     )
                 except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
                     logger.warning("Failed to extract trap info for %s: %s", symbol_name_str, e)
@@ -474,14 +518,13 @@ class BehaviourGenerator:
 
     def _load_type_registry(self) -> dict[str, Any]:
         """Load the canonical type registry from the exported JSON file."""
-        from pathlib import Path
-
         registry_path = Path(__file__).resolve().parent.parent / "data" / "types.json"
         if not registry_path.exists():
-            raise FileNotFoundError(
+            msg = (
                 f"Type registry JSON not found at {registry_path}. "
                 "Run the type recorder/export step first."
             )
+            raise FileNotFoundError(msg)
         with registry_path.open("r", encoding="utf-8") as f:
             return cast("dict[str, Any]", json.load(f))
 
@@ -526,11 +569,11 @@ class BehaviourGenerator:
                 # Only mark as inherited if there are actually inherited index columns
                 if inherited_indexes and entry_name in result:
                     result[entry_name]["index_from"] = inherited_indexes
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
                 # Skip if we can't detect - not all objects have getIndexNames
                 pass
 
-    def _extract_type_info(self, syntax_obj: Any, syntax_name: str) -> dict[str, Any]:
+    def _extract_type_info(self, syntax_obj: object, syntax_name: str) -> dict[str, Any]:
         """Extract detailed type information from a syntax object.
 
         Returns:
@@ -571,26 +614,29 @@ class BehaviourGenerator:
         }
 
         # Extract named values (enumerations)
-        if hasattr(syntax_obj, "namedValues") and syntax_obj.namedValues:
+        named_values = getattr(syntax_obj, "namedValues", None)
+        if named_values:
             enums = {}
-            for name in syntax_obj.namedValues:
-                value = syntax_obj.namedValues[name]
+            for name in named_values:
+                value = named_values[name]
                 enums[name] = value
             if enums:
                 type_info["enums"] = enums
 
         # Extract constraints
-        if hasattr(syntax_obj, "subtypeSpec") and syntax_obj.subtypeSpec:
+        subtype_spec = getattr(syntax_obj, "subtypeSpec", None)
+        if subtype_spec:
             constraints = []
             try:
                 # Try to get values attribute (for ConstraintsUnion)
-                if hasattr(syntax_obj.subtypeSpec, "values"):
-                    for constraint in syntax_obj.subtypeSpec.values:
+                values = getattr(subtype_spec, "values", None)
+                if values:
+                    for constraint in values:
                         constraint_info = str(constraint)
                         constraints.append(constraint_info)
                 else:
                     # For other constraint types, just convert to string
-                    constraints.append(str(syntax_obj.subtypeSpec))
+                    constraints.append(str(subtype_spec))
             except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 # If we can't extract constraints, just skip them
                 pass
@@ -599,7 +645,11 @@ class BehaviourGenerator:
 
         return type_info
 
-    def _get_default_index_value(self, col_type: str, type_info: dict[str, Any]) -> object:
+    def _get_default_index_value(  # noqa: PLR0911
+        self,
+        col_type: str,
+        type_info: dict[str, Any],
+    ) -> object:
         """Get an appropriate default value for an index column based on its type.
 
         For complex types like IpAddress, returns a representative value.
@@ -647,13 +697,14 @@ class BehaviourGenerator:
 
         # If no plugin handled it, raise an error - this is a configuration problem
         base_type = type_info.get("base_type", "unknown")
-        raise RuntimeError(
+        msg = (
             f"No plugin provided default value for symbol '{symbol_name}' "
             f"(base_type: {base_type}). Please add a plugin to handle this type "
-            f"in the plugins/ directory or ensure the type is properly registered."
+            "in the plugins/ directory or ensure the type is properly registered."
         )
+        raise RuntimeError(msg)
 
-    def _get_default_value(self, syntax: str, symbol_name: str) -> object:
+    def _get_default_value(self, syntax: str, symbol_name: str) -> object:  # noqa: C901, PLR0911
         """Legacy method - kept for compatibility."""
         # This is now handled by _get_default_value_from_type_info
         # but kept as fallback
@@ -680,7 +731,7 @@ class BehaviourGenerator:
         if syntax in ("Counter32", "Counter64"):
             return 0
         if syntax == "IpAddress":
-            return "0.0.0.0"
+            return "0.0.0.0"  # noqa: S104
         if syntax == "TimeTicks":
             return 0
         return None

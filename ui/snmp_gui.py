@@ -1,5 +1,16 @@
-# pylint: disable=broad-exception-caught,protected-access,unused-argument,unused-variable,attribute-defined-outside-init,line-too-long,too-many-lines,missing-module-docstring,missing-class-docstring,too-many-instance-attributes,too-many-locals,too-many-statements,too-many-branches,too-many-nested-blocks,ungrouped-imports,consider-using-dict-items,consider-iterating-dictionary,no-else-return,no-else-break,consider-using-max-builtin,consider-using-in,import-outside-toplevel,use-maxsplit-arg,consider-using-f-string,too-many-return-statements,too-many-arguments,too-many-positional-arguments,superfluous-parens
-# ruff: noqa: ANN401, ARG001, ARG002, ARG005, B007, C901, D100, D101, D107, D401, DTZ005, E501, ERA001, FBT001, FBT003, PERF203, PLR0912, PLR0913, PLR0915, PLR2004, SLF001, TRY300
+# pylint: disable=broad-exception-caught,protected-access,unused-argument
+# pylint: disable=unused-variable,attribute-defined-outside-init,line-too-long
+# pylint: disable=too-many-lines,missing-module-docstring,missing-class-docstring
+# pylint: disable=too-many-instance-attributes,too-many-locals,too-many-statements
+# pylint: disable=too-many-branches,too-many-nested-blocks,ungrouped-imports
+# pylint: disable=consider-using-dict-items,consider-iterating-dictionary
+# pylint: disable=no-else-return,no-else-break,consider-using-max-builtin
+# pylint: disable=consider-using-in,import-outside-toplevel,use-maxsplit-arg
+# pylint: disable=consider-using-f-string,too-many-return-statements
+# pylint: disable=too-many-arguments,too-many-positional-arguments,superfluous-parens
+# ruff: noqa: ANN401, ARG001, ARG002, ARG005, B007, C901, D100, D101, D107
+# ruff: noqa: D401, DTZ005, ERA001, FBT001, FBT003, PERF203
+# ruff: noqa: PLR0912, PLR0913, PLR0915, PLR2004, SLF001, TRY300
 
 from __future__ import annotations
 
@@ -179,7 +190,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
         """Set the initial position of the log window splitter."""
         try:
             window_height = self.root.winfo_height()
-            # Put splitter to give log pane ~120 pixels (enough for 3 lines + label + scrollbars + padding)
+            # Put splitter to give log pane ~120 pixels (enough for 3 lines,
+            # label, scrollbars, and padding).
             sash_pos = window_height - 120 - 20  # 20 for padding
             if sash_pos > 300:  # Ensure main content area gets at least 300 pixels
                 # Use sash_place for tkinter.PanedWindow (not ttk.PanedWindow)
@@ -1210,7 +1222,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
                 ]:
                     type_val += " [INDEX]"
 
-                # For Unknown types with no value, show "Empty Node" in Type column, not Value column
+                # For Unknown types with no value, show "Empty Node" in Type
+                # column, not Value column.
                 if type_val == "Unknown" and not val:
                     type_val = "Empty Node"
                     display_val = ""
@@ -1280,7 +1293,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
                     self._populate_table_instances_immediate(node, oid_str)
                 elif hasattr(self, "table_instances_data"):
                     self._log(
-                        f"Table {oid_str} NOT in table_instances_data (have {len(self.table_instances_data)} tables)",
+                        f"Table {oid_str} NOT in table_instances_data "
+                        f"(have {len(self.table_instances_data)} tables)",
                         "DEBUG",
                     )
                 else:
@@ -1343,14 +1357,15 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
                     )
                 else:
                     self._log(
-                        f"Table {oid_str} has {len(children)} children, refreshing to show latest...",
+                        f"Table {oid_str} has {len(children)} children, "
+                        "refreshing to show latest...",
                         "INFO",
                     )
                 # Always refresh table instances when expanding to show latest data
                 self.executor.submit(self._discover_table_instances, item, oid_str)
 
     def _on_double_click(self, event: Any) -> None:
-        """Handler called when a tree item is double-clicked; allows editing values for writable items."""
+        """Handle tree double-click and allow editing writable values."""
         try:
             item = self.oid_tree.identify_row(event.y)
         except (AttributeError, LookupError, OSError, TypeError, ValueError):
@@ -1390,7 +1405,7 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
         self._show_edit_dialog(full_oid, current_value, item, is_writable)
 
     def _on_tree_select(self, event: Any) -> None:
-        """Handler called when tree selection changes; populates Table View if table or table entry selected."""
+        """Handle tree selection changes and populate Table View."""
         # If this selection wasn't from search, reset search state
         if not self._search_setting_selection:
             self._search_matches.clear()
@@ -1457,7 +1472,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
                     self.enable_table_tab()
                 table_oid = self.oid_tree.set(table_item, "oid")
                 self._log(
-                    f"Table selection: table_oid={table_oid}, selected_instance={selected_instance}",
+                    f"Table selection: table_oid={table_oid}, "
+                    f"selected_instance={selected_instance}",
                     "DEBUG",
                 )
                 self._populate_table_view(table_item, selected_instance)
@@ -2000,7 +2016,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
 
             if data_col_index < 0 or data_col_index >= len(columns):
                 self._log(
-                    f"ERROR: data_col_index {data_col_index} out of bounds (columns len={len(columns)})",
+                    f"ERROR: data_col_index {data_col_index} out of bounds "
+                    f"(columns len={len(columns)})",
                     "ERROR",
                 )
                 messagebox.showerror("Error", "Column index out of bounds")
@@ -2093,7 +2110,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
 
                     if create_resp.status_code == 200:
                         self._log(
-                            f"Updated index {col_name} from {old_index_values[col_name]} to {new_value}",
+                            f"Updated index {col_name} from "
+                            f"{old_index_values[col_name]} to {new_value}",
                         )
                         # Refresh the entire table view
                         if hasattr(self, "_current_table_item") and self._current_table_item:
@@ -2152,7 +2170,9 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
 
                     # Use table-row endpoint to update (creates if doesn't exist)
                     self._log(
-                        f"DEBUG: Calling POST /table-row for cell update (col={col_name}, val={new_value}, new_instance={is_new_instance})",
+                        "DEBUG: Calling POST /table-row for cell update "
+                        f"(col={col_name}, val={new_value}, "
+                        f"new_instance={is_new_instance})",
                         "DEBUG",
                     )
                     resp = requests.post(
@@ -2197,7 +2217,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
                         if table_oid:
                             self._set_pending_oid_focus(table_oid, str(instance_index), col_oid)
 
-                        # If this was a new instance, also refresh the entire table to show the new row
+                        # If this was a new instance, also refresh the entire
+                        # table to show the new row.
                         if (
                             is_new_instance
                             and hasattr(self, "_current_table_item")
@@ -2742,9 +2763,11 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
             parent_col = parent_info.get("column", "Unknown")
             messagebox.showerror(
                 "Cannot Add to Augmented Table",
-                f"This table (indexed by {parent_col}) is an augmented table that inherits instances from {parent_mib}.\n\n"
-                f"You cannot add instances directly to this table. Instead, add instances to the parent table in {parent_mib}, "
-                f"and the new instances will automatically appear here.",
+                f"This table (indexed by {parent_col}) is an augmented table "
+                f"that inherits instances from {parent_mib}.\n\n"
+                "You cannot add instances directly to this table. Instead, "
+                f"add instances to the parent table in {parent_mib}, and the "
+                "new instances will automatically appear here.",
             )
             return
 
@@ -2986,9 +3009,11 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
                         parent_col = parent_info.get("column", "Unknown")
                         messagebox.showerror(
                             "Cannot Remove from Augmented Table",
-                            f"This table (indexed by {parent_col}) is an augmented table that inherits instances from {parent_mib}.\n\n"
-                            f"You cannot remove instances from this table. Instead, remove instances from the parent table in {parent_mib}, "
-                            f"and the instances will automatically be removed from here.",
+                            f"This table (indexed by {parent_col}) is an augmented "
+                            f"table that inherits instances from {parent_mib}.\n\n"
+                            "You cannot remove instances from this table. Instead, "
+                            f"remove instances from the parent table in {parent_mib}, "
+                            "and the instances will automatically be removed from here.",
                         )
                         return
             except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
@@ -3101,9 +3126,9 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
         # dialog.grab_set()  # Commented out for testing multiple dialogs
 
         # Center the dialog
-        dialog.geometry(
-            f"+{self.root.winfo_x() + (self.root.winfo_width() // 2) - 225}+{self.root.winfo_y() + (self.root.winfo_height() // 2) - 150}",
-        )
+        x_pos = self.root.winfo_x() + (self.root.winfo_width() // 2) - 225
+        y_pos = self.root.winfo_y() + (self.root.winfo_height() // 2) - 150
+        dialog.geometry(f"+{x_pos}+{y_pos}")
 
         # Main frame with padding
         main_frame = ctk.CTkFrame(dialog)
@@ -3361,7 +3386,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
 
                     # Call table-row endpoint
                     self._log(
-                        f"Trying table-row endpoint: table_oid={table_oid}, index_values={index_values}, column={column_name}",
+                        f"Trying table-row endpoint: table_oid={table_oid}, "
+                        f"index_values={index_values}, column={column_name}",
                     )
                     resp = requests.post(
                         f"{self.api_url}/table-row",
@@ -3630,7 +3656,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
             else:
                 self._search_setting_selection = False  # Reset flag on failure
                 self._log(
-                    f"Match {match_num}/{total_matches} (could not load): {display_name} ({oid_str})",
+                    f"Match {match_num}/{total_matches} (could not load): "
+                    f"{display_name} ({oid_str})",
                 )
 
         self.root.after(base_wait, attempt_select)
@@ -3859,7 +3886,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
                 instances = [str(inst) for inst in schema.get("instances", [])]
                 index_columns = list(schema.get("index_columns", []))
                 self._log(
-                    f"Table schema loaded for {entry_oid}: found {len(instances)} instances: {instances}, index_columns={index_columns}",
+                    f"Table schema loaded for {entry_oid}: found {len(instances)} "
+                    f"instances: {instances}, index_columns={index_columns}",
                     "INFO",
                 )
             else:
@@ -4121,7 +4149,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
                 if "table-index" in tags:
                     continue
 
-                # Fetch values for scalars (instance = "0") or table columns (instance is numeric or dotted)
+                # Fetch values for scalars (instance = "0") or table columns
+                # (instance is numeric or dotted)
                 if instance_str == "0":
                     fetch_oid = oid_str + ".0"
                 elif instance_str:
@@ -4378,7 +4407,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
                                     # For now, we'll just refresh any table that has index_from
                                     # since it means it's augmented
                                     self._log(
-                                        f"Found augmented table {item_oid} (index_from={index_from})",
+                                        f"Found augmented table {item_oid} "
+                                        f"(index_from={index_from})",
                                         "DEBUG",
                                     )
                                     # Refresh this augmented table
@@ -4588,7 +4618,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
                     len(t.get("instances", [])) for t in self.table_instances_data.values()
                 )
                 self._log(
-                    f"Loaded {len(self.table_instances_data)} tables with {total_instances} total instances",
+                    f"Loaded {len(self.table_instances_data)} tables with "
+                    f"{total_instances} total instances",
                 )
                 if self.table_instances_data:
                     self._log(
@@ -4620,7 +4651,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
             self.connect_button.configure(text="Disconnect")
             self.status_var.set("Connected")
             self._log(
-                f"Connected successfully. Found {len(configured_mibs_list)} MIBs and {len(oids)} OIDs",
+                f"Connected successfully. Found {len(configured_mibs_list)} MIBs "
+                f"and {len(oids)} OIDs",
             )
 
             # Load available traps
@@ -5210,7 +5242,10 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
             selected_preset: list[str | None] = [None]
 
             def on_load() -> None:
-                selection = cast("tuple[int, ...]", preset_listbox.curselection())  # type: ignore[no-untyped-call]
+                selection = cast(
+                    "tuple[int, ...]",
+                    preset_listbox.curselection(),  # type: ignore[no-untyped-call]
+                )
                 if not selection:
                     messagebox.showwarning("No Selection", "Please select a preset")
                     return

@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any, TypeAlias, cast
 
 JsonScalar = str | int | float | bool | None
-JsonValue = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
-JsonObject = dict[str, JsonValue]
-DecodedValue = JsonValue | bytes | bytearray
+# Use Any for recursive type to avoid Pydantic v2 RecursionError during schema generation
+JsonValue: TypeAlias = Any  # str | int | float | bool | None | list | dict (recursive)
+JsonObject = dict[str, Any]
+DecodedValue = Any | bytes | bytearray
 
 MIN_LINK_ENDPOINTS = 2
 MIN_PARENT_OID_LEN = 2

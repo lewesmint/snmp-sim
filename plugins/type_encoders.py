@@ -5,7 +5,6 @@ handling TEXTUAL-CONVENTIONs and special formatting requirements.
 """
 
 import logging
-from typing import Any
 
 from app.types import TypeEncoder
 
@@ -40,7 +39,7 @@ def get_type_encoder(type_name: str) -> TypeEncoder | None:
     return _type_encoders.get(type_name)
 
 
-def encode_value(value: Any, type_name: str) -> Any:
+def encode_value(value: object, type_name: str) -> object:
     """Encode a value using the registered encoder for its type.
 
     Args:

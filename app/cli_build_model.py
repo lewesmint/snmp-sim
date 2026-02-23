@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
+from pathlib import Path
 from typing import Any, cast
 
 from app.app_config import AppConfig
@@ -12,20 +14,20 @@ from app.cli_model_common import print_model_summary as _print_model_summary
 from app.cli_model_common import write_model_output
 from app.model_paths import AGENT_MODEL_DIR
 
+logger = logging.getLogger(__name__)
+
 
 def load_mib_schema(mib_name: str, schema_dir: str) -> dict[str, Any] | None:
     """Load schema.json for a given MIB."""
-    from pathlib import Path
-
     schema_path = Path(schema_dir) / mib_name / "schema.json"
     if not schema_path.exists():
-        print(f"Warning: Schema not found: {schema_path}", file=sys.stderr)
+        logger.warning("Schema not found: %s", schema_path)
         return None
     try:
         with schema_path.open("r", encoding="utf-8") as f:
             return cast("dict[str, Any]", json.load(f))
-    except json.JSONDecodeError as e:
-        print(f"Error: Failed to parse {schema_path}: {e}", file=sys.stderr)
+    except json.JSONDecodeError:
+        logger.exception("Error: Failed to parse %s", schema_path)
         return None
 
 
@@ -46,6 +48,7 @@ def print_model_summary(model: dict[str, dict[str, Any]]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     """Build an internal model from configured MIB schemas."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(
         description="Build an internal model from configured MIB schemas. "
         "Loads schema.json files and creates a combined in-memory model."
@@ -65,30 +68,29 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = AppConfig()
     except FileNotFoundError:
-        print("Error: Config file not found", file=sys.stderr)
+        logger.exception("Error: Config file not found")
         return 1
 
     mibs_raw = config.get("mibs", [])
     mibs = mibs_raw if isinstance(mibs_raw, list) else []
     mibs = [str(mib) for mib in mibs]
     if not mibs:
-        print("No MIBs configured", file=sys.stderr)
+        logger.error("No MIBs configured")
         return 1
 
-    print(f"Building model for {len(mibs)} configured MIBs...")
+    logger.info("Building model for %s configured MIBs...", len(mibs))
     model = build_internal_model(mibs, args.schema_dir)
 
     if not model:
-        print("Error: No schemas could be loaded", file=sys.stderr)
+        logger.error("Error: No schemas could be loaded")
         return 1
 
     print_model_summary(model)
 
-    if args.output:
-        if not write_model_output(model, args.output):
-            return 1
+    if args.output and not write_model_output(model, args.output):
+        return 1
 
-    print("Internal model built successfully.")
+    logger.info("Internal model built successfully.")
     return 0
 
 

@@ -51,16 +51,25 @@ def test_schema_loading() -> None:
     # Test that regular values still work
     row0_values = rows[0].get("values", {})
     name = agent._decode_value(row0_values.get("myTestName"))
-    assert name == "Interface One", f"Expected 'Interface One', got {name}"
+    assert name == "Interface One", f"Expected 'Interface One', got {name!r}"
 
     counter = agent._decode_value(row0_values.get("myTestCounter"))
-    assert counter == 0, f"Expected 0, got {counter}"
+    assert counter == 0, f"Expected 0, got {counter!r}"
 
 
 if __name__ == "__main__":
     try:
         test_schema_loading()
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except (
+        AssertionError,
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
         import traceback
 
         traceback.print_exc()

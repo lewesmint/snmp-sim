@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """CLI tool to manage agent-model presets (scenarios).
 
 This tool allows you to:
@@ -9,12 +8,16 @@ This tool allows you to:
 """
 
 import argparse
+import json
+import logging
 import shutil
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.model_paths import AGENT_MODEL_BACKUPS_DIR, AGENT_MODEL_DIR, AGENT_MODEL_PRESETS_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def list_presets(preset_base: Path) -> list[str]:
@@ -22,42 +25,37 @@ def list_presets(preset_base: Path) -> list[str]:
     if not preset_base.exists():
         return []
 
-    presets = [d.name for d in preset_base.iterdir() if d.is_dir()]
+    presets = [directory.name for directory in preset_base.iterdir() if directory.is_dir()]
     return sorted(presets)
 
 
 def save_preset(schema_dir: Path, preset_base: Path, preset_name: str) -> int:
     """Save current agent-model as a preset."""
     if not schema_dir.exists():
-        print(f"Error: Schema directory {schema_dir} does not exist", file=sys.stderr)
+        logger.error("Error: Schema directory %s does not exist", schema_dir)
         return 1
 
     preset_dir = preset_base / preset_name
-
     if preset_dir.exists():
         response = input(f"Preset '{preset_name}' already exists. Overwrite? (y/N): ")
         if response.lower() != "y":
-            print("Cancelled")
+            logger.info("Cancelled")
             return 1
         shutil.rmtree(preset_dir)
 
-    print(f"Saving preset '{preset_name}'...")
+    logger.info("Saving preset '%s'...", preset_name)
     preset_base.mkdir(parents=True, exist_ok=True)
     shutil.copytree(schema_dir, preset_dir)
 
-    # Save metadata
     metadata = {
         "name": preset_name,
-        "created": datetime.now().isoformat(),
+        "created": datetime.now(tz=timezone.utc).isoformat(),
         "source": str(schema_dir),
     }
+    with (preset_dir / "preset_metadata.json").open("w", encoding="utf-8") as file_obj:
+        json.dump(metadata, file_obj, indent=2)
 
-    import json
-
-    with open(preset_dir / "preset_metadata.json", "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2)
-
-    print(f"✓ Preset '{preset_name}' saved to {preset_dir}")
+    logger.info("✓ Preset '%s' saved to %s", preset_name, preset_dir)
     return 0
 
 
@@ -66,40 +64,37 @@ def load_preset(
     preset_base: Path,
     preset_name: str,
     backup_base: Path,
+    *,
     no_backup: bool,
 ) -> int:
     """Load a preset to replace current agent-model."""
     preset_dir = preset_base / preset_name
 
     if not preset_dir.exists():
-        print(f"Error: Preset '{preset_name}' not found", file=sys.stderr)
-        print(f"Available presets: {', '.join(list_presets(preset_base)) or 'none'}")
+        logger.error("Error: Preset '%s' not found", preset_name)
+        logger.info("Available presets: %s", ", ".join(list_presets(preset_base)) or "none")
         return 1
 
-    # Backup current schemas
     if not no_backup and schema_dir.exists():
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
         backup_dir = backup_base / f"before_preset_{preset_name}_{timestamp}"
-        print(f"Backing up current schemas to {backup_dir}...")
+        logger.info("Backing up current schemas to %s...", backup_dir)
         backup_base.mkdir(parents=True, exist_ok=True)
         shutil.copytree(schema_dir, backup_dir)
-        print("✓ Backup created")
+        logger.info("✓ Backup created")
 
-    # Remove current schemas
     if schema_dir.exists():
-        print(f"Removing current schemas from {schema_dir}...")
+        logger.info("Removing current schemas from %s...", schema_dir)
         shutil.rmtree(schema_dir)
 
-    # Copy preset to schema directory
-    print(f"Loading preset '{preset_name}'...")
+    logger.info("Loading preset '%s'...", preset_name)
     shutil.copytree(preset_dir, schema_dir)
 
-    # Remove metadata file from loaded preset
     metadata_file = schema_dir / "preset_metadata.json"
     if metadata_file.exists():
         metadata_file.unlink()
 
-    print(f"✓ Preset '{preset_name}' loaded successfully")
+    logger.info("✓ Preset '%s' loaded successfully", preset_name)
     return 0
 
 
@@ -108,21 +103,22 @@ def delete_preset(preset_base: Path, preset_name: str) -> int:
     preset_dir = preset_base / preset_name
 
     if not preset_dir.exists():
-        print(f"Error: Preset '{preset_name}' not found", file=sys.stderr)
+        logger.error("Error: Preset '%s' not found", preset_name)
         return 1
 
     response = input(f"Delete preset '{preset_name}'? (y/N): ")
     if response.lower() != "y":
-        print("Cancelled")
+        logger.info("Cancelled")
         return 1
 
     shutil.rmtree(preset_dir)
-    print(f"✓ Preset '{preset_name}' deleted")
+    logger.info("✓ Preset '%s' deleted", preset_name)
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Main entry point for preset management."""
+    """Manage presets."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description="Manage agent-model presets (scenarios)")
     parser.add_argument(
         "action",
@@ -164,22 +160,27 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "list":
         presets = list_presets(preset_base)
         if presets:
-            print("Available presets:")
+            logger.info("Available presets:")
             for preset in presets:
-                print(f"  - {preset}")
+                logger.info("  - %s", preset)
         else:
-            print("No presets found")
+            logger.info("No presets found")
         return 0
 
-    # Other actions require preset_name
     if not args.preset_name:
-        print(f"Error: preset_name required for action '{args.action}'", file=sys.stderr)
+        logger.error("Error: preset_name required for action '%s'", args.action)
         return 1
 
     if args.action == "save":
         return save_preset(schema_dir, preset_base, args.preset_name)
     if args.action == "load":
-        return load_preset(schema_dir, preset_base, args.preset_name, backup_base, args.no_backup)
+        return load_preset(
+            schema_dir,
+            preset_base,
+            args.preset_name,
+            backup_base,
+            no_backup=args.no_backup,
+        )
     if args.action == "delete":
         return delete_preset(preset_base, args.preset_name)
 

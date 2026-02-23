@@ -87,7 +87,16 @@ def test_mib_builder_snmpv2_smi() -> None:
     for type_name in smi_types:
         try:
             mib_builder.import_symbols("SNMPv2-SMI", type_name)[0]
-        except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+        except (
+            AssertionError,
+            AttributeError,
+            ImportError,
+            LookupError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ):
             pytest.fail(f"Failed to import {type_name} from SNMPv2-SMI")
 
 
@@ -118,7 +127,16 @@ def test_mib_builder_snmpv2_tc() -> None:
         try:
             mib_builder.import_symbols("SNMPv2-TC", type_name)[0]
             results[type_name] = True
-        except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+        except (
+            AssertionError,
+            AttributeError,
+            ImportError,
+            LookupError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ):
             results[type_name] = False
 
     # At least the common ones should be available
@@ -153,7 +171,8 @@ def test_create_instances() -> None:
     # Create from MibBuilder
     mib_builder = builder.MibBuilder()
     mib_builder.load_modules("SNMPv2-TC")
-    DisplayString = mib_builder.import_symbols("SNMPv2-TC", "DisplayString")[0]  # pylint: disable=invalid-name
+    # pylint: disable=invalid-name
+    DisplayString = mib_builder.import_symbols("SNMPv2-TC", "DisplayString")[0]
 
     DisplayString("display string")
 
@@ -199,7 +218,8 @@ def test_the_only_way_to_get_displaystring() -> None:
     mib_builder.load_modules("SNMPv2-TC")
 
     # Step 3: Import the symbol
-    DisplayString = mib_builder.import_symbols("SNMPv2-TC", "DisplayString")[0]  # pylint: disable=invalid-name
+    # pylint: disable=invalid-name
+    DisplayString = mib_builder.import_symbols("SNMPv2-TC", "DisplayString")[0]
 
     # Step 4: Use it
     DisplayString("Hello, SNMP!")

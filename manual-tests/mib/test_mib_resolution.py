@@ -42,8 +42,9 @@ async def test_mib_name_resolution() -> None:
         # Try to resolve OID to name
         oid_obj = ObjectIdentity("1.3.6.1.2.1.1.1.0")
         modName, symName, indices = mibView.get_node_name_by_oid(oid_obj)
+        indices_str = ".".join(str(i) for i in indices)
         print(
-            f"OID 1.3.6.1.2.1.1.1.0 resolves to: {modName}::{symName}.{'.'.join([str(i) for i in indices])}"
+            f"OID 1.3.6.1.2.1.1.1.0 resolves to: {modName}::{symName}.{indices_str}"
         )
         print(f"Name: {symName}")
         print(f"Indices: {indices}")

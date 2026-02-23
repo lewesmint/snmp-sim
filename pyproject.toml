@@ -2,6 +2,7 @@
 python_version = "3.10"
 strict = true
 warn_unused_ignores = true
+warn_unused_configs = false
 warn_return_any = true
 warn_unreachable = true
 show_error_codes = true
@@ -15,7 +16,7 @@ ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
-module = ["pysmi", "pysmi.*"]
+module = ["pysmi.*"]
 ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 
@@ -25,7 +26,7 @@ ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
-module = ["customtkinter", "customtkinter.*"]
+module = ["customtkinter"]
 ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 [tool.coverage.run]
@@ -114,7 +115,7 @@ addopts = [
     "--ignore=retired",
     "--ignore=manual-tests",
     "--ignore=logs",
-    "--ignore=snmp-wrapper"
+    "--ignore=snmp_wrapper"
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

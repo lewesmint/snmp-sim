@@ -1,5 +1,6 @@
-"""
-SNMPTypeInitializer: Helper to initialize SNMP values for table columns using type registry and MIB builder.
+"""Helper to initialize SNMP values for table columns.
+
+Uses the type registry and MIB builder to construct values.
 """
 
 from typing import Any, Dict, Optional, Callable
@@ -96,7 +97,9 @@ class SNMPTypeInitializer:
         else:
             if self.logger:
                 self.logger.error(
-                    f"No initializer for type '{type_name}' and no type class found. Please register a custom initializer."
+                    "No initializer for type '%s' and no type class found. "
+                    "Please register a custom initializer.",
+                    type_name,
                 )
             raise RuntimeError(f"Missing initializer for type '{type_name}'")
 

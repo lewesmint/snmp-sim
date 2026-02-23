@@ -86,7 +86,16 @@ class TestTypeRegistryLoading:
         try:
             with open(registry_path) as f:
                 type_registry = json.load(f)
-        except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+        except (
+            AssertionError,
+            AttributeError,
+            ImportError,
+            LookupError,
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ):
             # Should fall back to empty dict
             type_registry = {}
 

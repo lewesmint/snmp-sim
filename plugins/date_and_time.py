@@ -1,8 +1,10 @@
 """DateAndTime TEXTUAL-CONVENTION plugin for proper SNMP octet encoding."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from plugins.type_encoders import register_type_encoder
+
+_MIN_DATE_OCTETS = 8
 
 
 def _format_date_and_time(value: str | bytes | None) -> bytes:
@@ -30,31 +32,32 @@ def _format_date_and_time(value: str | bytes | None) -> bytes:
         value: The value to format (string, bytes, or None)
 
     Returns:
-        11-byte DateAndTime octet string (year, month, day, hour, minute, second, deciseconds, +, 0, 0)
+        11-byte DateAndTime octet string (year, month, day, hour, minute,
+        second, deciseconds, +, 0, 0)
 
     """
     # If already bytes with valid length, return as-is
-    if isinstance(value, bytes) and len(value) >= 8:
+    if isinstance(value, bytes) and len(value) >= _MIN_DATE_OCTETS:
         return value
 
     # Default to current time if unset/None/empty
     if value in [None, "unset", "", "unknown"]:
-        now = datetime.utcnow()
+        now = datetime.now(tz=timezone.utc)
     else:
         # Try to parse the value as a datetime string
         try:
             if isinstance(value, str):
                 # Try ISO format first (handle comma as time separator)
                 now = datetime.fromisoformat(value.replace(",", "T"))
+                if now.tzinfo is None:
+                    now = now.replace(tzinfo=timezone.utc)
             else:
-                now = datetime.utcnow()
+                now = datetime.now(tz=timezone.utc)
         except (ValueError, AttributeError):
             # If parsing fails, use current time
-            now = datetime.utcnow()
+            now = datetime.now(tz=timezone.utc)
 
     # Encode as 11 octets (8 + timezone):
-    # year(2), month(1), day(1), hour(1), minute(1), second(1), deciseconds(1)
-    # plus UTC sign (0x2B for '+'), hours offset (0), minutes offset (0)
     year_bytes = now.year.to_bytes(2, byteorder="big")
     octets = year_bytes + bytes([now.month, now.day, now.hour, now.minute, now.second, 0])
     # Add UTC timezone: '+' (0x2B) for UTC+0:0

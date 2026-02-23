@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
     import tkinter as tk
     from collections.abc import Callable
 
 
+T = TypeVar("T")
+
+
 class Logger:
     """Simple logger that outputs to both console and optional text widget with color coding."""
 
     def __init__(self, log_widget: tk.Text | None = None) -> None:
+        """Create a logger bound to an optional Tk text widget."""
         self.log_widget = log_widget
         self._tags_configured = False
 
@@ -35,10 +40,11 @@ class Logger:
 
     def log(self, message: str, level: str = "INFO") -> None:
         """Log a message with timestamp and level, with color coding."""
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        timestamp = datetime.now(tz=timezone.utc).strftime("%H:%M:%S")
         log_entry = f"[{timestamp}] {level}: {message}\n"
 
         # Print to stdout
+        sys.stdout.write(f"{level}: {message}\n")
 
         # Append to GUI log area if available
         if self.log_widget:
@@ -51,7 +57,7 @@ class Logger:
 
                 self.log_widget.see("end")
                 self.log_widget.configure(state="disabled")
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            except (AttributeError, LookupError, OSError, RuntimeError, TypeError, ValueError):
                 # If log area not available, just print
                 pass
 
@@ -63,21 +69,22 @@ class Logger:
 
 def save_gui_log(log_widget: tk.Text, filename: str = "gui.log") -> None:
     """Save GUI log content to file."""
+    logs_dir = Path("logs")
     try:
-        logs_dir = Path("logs")
         logs_dir.mkdir(parents=True, exist_ok=True)
-        log_path = logs_dir / filename
-        with open(log_path, "w", encoding="utf-8") as f:
-            try:
-                text = log_widget.get("1.0", "end")
-                f.write(text)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                pass
-    except (AttributeError, LookupError, OSError, TypeError, ValueError):
-        pass
+        text = log_widget.get("1.0", "end")
+    except (AttributeError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+        return
+
+    log_path = logs_dir / filename
+    try:
+        with log_path.open("w", encoding="utf-8") as f:
+            f.write(text)
+    except OSError:
+        return
 
 
-def format_snmp_value(value: Any) -> str:
+def format_snmp_value(value: object) -> str:
     """Format SNMP value for display."""
     try:
         # Try to prettyPrint if available (pysnmp objects)
@@ -85,19 +92,19 @@ def format_snmp_value(value: Any) -> str:
             result = value.prettyPrint()
             return str(result)
         return str(value)
-    except (AttributeError, LookupError, OSError, TypeError, ValueError):
+    except (AttributeError, LookupError, OSError, RuntimeError, TypeError, ValueError):
         return str(value)
 
 
 def safe_call(
-    func: Callable[..., Any],
-    default: Any = None,
+    func: Callable[[], T],
+    default: T | None = None,
     logger: Logger | None = None,
-) -> Any:
+) -> T | None:
     """Safely call a function and log errors if logger is provided."""
     try:
         return func()
-    except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+    except (AttributeError, LookupError, OSError, RuntimeError, TypeError, ValueError) as e:
         if logger:
             logger.log(f"Error in {func.__name__}: {e}", "ERROR")
         return default

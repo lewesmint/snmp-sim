@@ -8,17 +8,20 @@ Particularly useful for augmented tables where columns should stay synchronized
 """
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
+_MIN_LINK_ENDPOINTS = 2
+_MIN_COLUMN_OID_LENGTH = 2
 
 
+@dataclass(slots=True)
 class ValueLinkEndpoint:
     """Represents a single link endpoint (table + column)."""
 
-    def __init__(self, table_oid: str | None, column_name: str) -> None:
-        self.table_oid = table_oid
-        self.column_name = column_name
+    table_oid: str | None
+    column_name: str
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the endpoint to a JSON-compatible dictionary."""
@@ -28,26 +31,17 @@ class ValueLinkEndpoint:
         }
 
 
+@dataclass(slots=True)
 class ValueLink:
     """Represents a bidirectional linkage between multiple endpoints."""
 
-    def __init__(
-        self,
-        link_id: str,
-        endpoints: list[ValueLinkEndpoint],
-        scope: str = "per-instance",
-        match: str = "shared-index",
-        source: str = "schema",
-        description: str | None = None,
-        create_missing: bool = False,
-    ) -> None:
-        self.link_id = link_id
-        self.endpoints = endpoints
-        self.scope = scope
-        self.match = match
-        self.source = source
-        self.description = description or ""
-        self.create_missing = create_missing
+    link_id: str
+    endpoints: list[ValueLinkEndpoint]
+    scope: str = "per-instance"
+    match: str = "shared-index"
+    source: str = "schema"
+    description: str = ""
+    create_missing: bool = False
 
     def __repr__(self) -> str:
         """Return a compact debugging representation of the link."""
@@ -61,16 +55,18 @@ class ValueLinkManager:
     """Manages bidirectional value links between OIDs."""
 
     def __init__(self) -> None:
+        """Initialize in-memory link index and update guards."""
         self._links: list[ValueLink] = []
         # Map: column_name -> List[ValueLink] for fast lookup
         self._column_to_links: dict[str, list[ValueLink]] = {}
         # Track in-progress updates to prevent infinite loops
         self._updating: set[str] = set()
 
-    def add_link(
+    def add_link(  # noqa: PLR0913
         self,
         link_id: str,
         endpoints: list[ValueLinkEndpoint],
+        *,
         scope: str = "per-instance",
         match: str = "shared-index",
         source: str = "schema",
@@ -78,7 +74,7 @@ class ValueLinkManager:
         create_missing: bool = False,
     ) -> None:
         """Add a new value link."""
-        if len(endpoints) < 2:
+        if len(endpoints) < _MIN_LINK_ENDPOINTS:
             logger.warning("Link %s has fewer than 2 endpoints, skipping", link_id)
             return
 
@@ -88,7 +84,7 @@ class ValueLinkManager:
             scope=scope,
             match=match,
             source=source,
-            description=description,
+            description=description or "",
             create_missing=create_missing,
         )
         self._links.append(link)
@@ -140,8 +136,8 @@ class ValueLinkManager:
         for col_name in columns:
             if col_name in objects:
                 col_oid = objects[col_name].get("oid", [])
-                if len(col_oid) >= 2:
-                    table_oid_parts = col_oid[:-2]
+                if len(col_oid) >= _MIN_COLUMN_OID_LENGTH:
+                    table_oid_parts = col_oid[:-_MIN_COLUMN_OID_LENGTH]
                     return ".".join(str(x) for x in table_oid_parts)
         return None
 
@@ -227,7 +223,7 @@ class ValueLinkManager:
                 create_missing=create_missing,
             )
 
-    def export_links(self, include_schema: bool = True) -> list[dict[str, Any]]:
+    def export_links(self, *, include_schema: bool = True) -> list[dict[str, Any]]:
         """Export links as JSON-serializable records.
 
         Args:

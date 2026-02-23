@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from collections.abc import Iterable
 from pathlib import Path
@@ -10,19 +11,15 @@ from pathlib import Path
 from app import build_type_registry
 from app.base_type_handler import BaseTypeHandler
 
+logger = logging.getLogger(__name__)
 
-def main(argv: Iterable[str] | None = None) -> int:
-    """Build the SNMP type registry from compiled MIBs and export to JSON.
+_SHORT_STRING_LIMIT = 10
+_MAX_DEFAULT_WIDTH = 15
+_TRUNCATED_DEFAULT_WIDTH = 12
+_TRUNCATED_STRING_PREFIX = 7
 
-    This CLI tool provides a convenient way to register types discovered from
-    compiled MIB files. It dynamically discovers SNMP types from SNMPv2-SMI
-    and builds a comprehensive type registry with constraints, enums, and metadata.
 
-    Example:
-        python -m app.cli_register_types
-        python -m app.cli_register_types --compiled-mibs-dir custom-mibs --output types.json
-
-    """
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Build and export SNMP type registry from compiled MIBs"
     )
@@ -43,117 +40,141 @@ def main(argv: Iterable[str] | None = None) -> int:
         action="store_true",
         help="Show detailed information about discovered types",
     )
+    return parser
 
+
+def _format_default_value(default_value: object, enums: object) -> str:
+    if isinstance(enums, list) and enums and isinstance(default_value, int):
+        enum_name = next(
+            (
+                enum.get("name")
+                for enum in enums
+                if isinstance(enum, dict) and enum.get("value") == default_value
+            ),
+            None,
+        )
+        default_str = f"{default_value}({enum_name})" if enum_name else str(default_value)
+    elif isinstance(default_value, str):
+        default_str = (
+            f'"{default_value}"'
+            if len(default_value) < _SHORT_STRING_LIMIT
+            else f'"{default_value[:_TRUNCATED_STRING_PREFIX]}..."'
+        )
+    elif isinstance(default_value, bytes):
+        decoded = default_value.decode("utf-8", errors="ignore")
+        default_str = f'b"{decoded[:_TRUNCATED_STRING_PREFIX]}..."'
+    else:
+        default_str = str(default_value)
+
+    if len(default_str) > _MAX_DEFAULT_WIDTH:
+        return default_str[:_TRUNCATED_DEFAULT_WIDTH] + "..."
+    return default_str
+
+
+def _resolve_mib_name(type_info: dict[str, object], used_by_list: list[str]) -> str:
+    defined_in = type_info.get("defined_in")
+    if isinstance(defined_in, str) and defined_in:
+        return defined_in
+    if used_by_list:
+        first_usage = used_by_list[0]
+        return first_usage.split("::")[0] if "::" in first_usage else "unknown"
+    return "SNMPv2-SMI"
+
+
+def _log_verbose_registry(registry: dict[str, dict[str, object]]) -> None:
+    handler = BaseTypeHandler(type_registry=registry)
+
+    logger.info("")
+    logger.info("Discovered types:")
+    logger.info(
+        "  %-30s %-20s %-15s %-20s %s",
+        "Type Name",
+        "Base Type",
+        "Default",
+        "MIB",
+        "Used By",
+    )
+    logger.info("  %s %s %s %s %s", "-" * 30, "-" * 20, "-" * 15, "-" * 20, "-" * 8)
+
+    for type_name in sorted(registry.keys()):
+        type_info = registry[type_name]
+        base_type = type_info.get("base_type") or "unknown"
+        used_by_raw = type_info.get("used_by", [])
+        used_by_list = used_by_raw if isinstance(used_by_raw, list) else []
+        used_by_count = len(used_by_list)
+
+        if base_type == "unknown" and used_by_count == 0:
+            continue
+
+        try:
+            default_value = handler.get_default_value(type_name)
+            default_str = _format_default_value(default_value, type_info.get("enums", []))
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            default_str = "N/A"
+
+        mib_name = _resolve_mib_name(type_info, used_by_list)
+        logger.info(
+            "  %-30s %-20s %-15s %-20s %s",
+            type_name,
+            base_type,
+            default_str,
+            mib_name,
+            used_by_count,
+        )
+
+
+def _run(argv: Iterable[str] | None = None) -> int:
+    parser = _build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    # Check if compiled MIBs directory exists
     compiled_dir = Path(args.compiled_mibs_dir)
     if not compiled_dir.exists():
-        print(f"Error: Compiled MIBs directory not found: {compiled_dir}", file=sys.stderr)
-        print(
-            "Please compile MIBs first using: python -m app.cli_compile_mib",
-            file=sys.stderr,
-        )
+        logger.error("Error: Compiled MIBs directory not found: %s", compiled_dir)
+        logger.error("Please compile MIBs first using: python -m app.cli_compile_mib")
         return 1
 
+    logger.info("Building type registry from: %s", compiled_dir)
+    logger.info("")
+
+    def show_progress(mib_name: str) -> None:
+        logger.info("  Parsing MIB: %s", mib_name)
+
+    registry = build_type_registry(
+        compiled_mibs_dir=args.compiled_mibs_dir,
+        output_path=args.output,
+        progress_callback=show_progress,
+    )
+
+    logger.info("")
+    logger.info("✓ Successfully built type registry with %s types", len(registry))
+    logger.info("✓ Exported to: %s", args.output)
+
+    if args.verbose:
+        _log_verbose_registry(registry)
+
+    return 0
+
+
+def main(argv: Iterable[str] | None = None) -> int:
+    """Build the SNMP type registry from compiled MIBs and export to JSON.
+
+    This CLI tool provides a convenient way to register types discovered from
+    compiled MIB files. It dynamically discovers SNMP types from SNMPv2-SMI
+    and builds a comprehensive type registry with constraints, enums, and metadata.
+
+    Example:
+        python -m app.cli_register_types
+        python -m app.cli_register_types --compiled-mibs-dir custom-mibs --output types.json
+
+    """
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
-        print(f"Building type registry from: {compiled_dir}")
-        print()
-
-        # Progress callback to show which MIB is being parsed
-        def show_progress(mib_name: str) -> None:
-            print(f"  Parsing MIB: {mib_name}")
-
-        # Build the type registry
-        registry = build_type_registry(
-            compiled_mibs_dir=args.compiled_mibs_dir,
-            output_path=args.output,
-            progress_callback=show_progress,
-        )
-
-        print()
-        print(f"✓ Successfully built type registry with {len(registry)} types")
-        print(f"✓ Exported to: {args.output}")
-
-        if args.verbose:
-            # Create a BaseTypeHandler to get default values
-            handler = BaseTypeHandler(type_registry=registry)
-
-            print()
-            print("Discovered types:")
-            print(
-                f"  {'Type Name':<30s} {'Base Type':<20s} {'Default':<15s} {'MIB':<20s} {'Used By'}"
-            )
-            print(f"  {'-' * 30} {'-' * 20} {'-' * 15} {'-' * 20} {'-' * 8}")
-
-            for type_name in sorted(registry.keys()):
-                base_type = registry[type_name].get("base_type") or "unknown"
-                used_by_list = registry[type_name].get("used_by", [])
-                used_by_count = len(used_by_list)
-
-                # Skip types with no base_type and no usages (incomplete TC definitions)
-                if base_type == "unknown" and used_by_count == 0:
-                    continue
-
-                # Get default value
-                try:
-                    default_value = handler.get_default_value(type_name)
-
-                    # Check if this is an enum type and format with enum name
-                    enums = registry[type_name].get("enums", [])
-                    if enums and isinstance(default_value, int):
-                        # Find the enum name for this value
-                        enum_name = None
-                        for enum in enums:
-                            if enum.get("value") == default_value:
-                                enum_name = enum.get("name")
-                                break
-                        if enum_name:
-                            default_str = f"{default_value}({enum_name})"
-                        else:
-                            default_str = str(default_value)
-                    # Format default value for display
-                    elif isinstance(default_value, str):
-                        default_str = (
-                            f'"{default_value}"'
-                            if len(default_value) < 10
-                            else f'"{default_value[:7]}..."'
-                        )
-                    elif isinstance(default_value, bytes):
-                        default_str = f'b"{default_value.decode("utf-8", errors="ignore")[:7]}..."'
-                    else:
-                        default_str = str(default_value)
-
-                    if len(default_str) > 15:
-                        default_str = default_str[:12] + "..."
-                except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                    default_str = "N/A"
-
-                # Get MIB where this type is defined (for TCs) or first used
-                defined_in = registry[type_name].get("defined_in")
-                if defined_in:
-                    mib_name = defined_in
-                elif used_by_list:
-                    first_usage = used_by_list[0]
-                    mib_name = first_usage.split("::")[0] if "::" in first_usage else "unknown"
-                else:
-                    mib_name = "SNMPv2-SMI"
-
-                print(
-                    f"  {type_name:<30s} {base_type:<20s} "
-                    f"{default_str:<15s} {mib_name:<20s} {used_by_count}"
-                )
-
-        return 0
-
-    except FileNotFoundError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        return _run(argv)
+    except FileNotFoundError:
+        logger.exception("Type registry input file not found")
         return 1
-    except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-        print(f"Error building type registry: {e}", file=sys.stderr)
-        import traceback
-
-        traceback.print_exc()
+    except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+        logger.exception("Error building type registry")
         return 1
 
 

@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import json
-import sys
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 ModelDict = dict[str, dict[str, object]]
 
 
 def print_model_summary(model: ModelDict) -> None:
     """Print a summary of loaded MIB schemas and table counts."""
-    print(f"Loaded {len(model)} MIB schemas:")
+    logger.info("Loaded %s MIB schemas:", len(model))
     for mib, schema in model.items():
-        if isinstance(schema, dict) and "objects" in schema:
-            objects = schema["objects"]
-        else:
-            objects = schema
+        objects = schema["objects"] if isinstance(schema, dict) and "objects" in schema else schema
 
         object_count = len(objects) if isinstance(objects, dict) else 0
         table_count = (
@@ -27,16 +27,17 @@ def print_model_summary(model: ModelDict) -> None:
             if isinstance(objects, dict)
             else 0
         )
-        print(f"  {mib}: {object_count} objects, {table_count} tables")
+        logger.info("  %s: %s objects, %s tables", mib, object_count, table_count)
 
 
 def write_model_output(model: ModelDict, output_path: str) -> bool:
     """Write model JSON to disk and print result. Return True on success."""
     try:
-        with open(output_path, "w", encoding="utf-8") as file_obj:
+        with Path(output_path).open("w", encoding="utf-8") as file_obj:
             json.dump(model, file_obj, indent=2)
-        print(f"Model saved to {output_path}")
-        return True
-    except OSError as error:
-        print(f"Error: Failed to save model: {error}", file=sys.stderr)
+        logger.info("Model saved to %s", output_path)
+    except OSError:
+        logger.exception("Error: Failed to save model")
         return False
+    else:
+        return True

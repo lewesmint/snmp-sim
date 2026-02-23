@@ -1,4 +1,6 @@
 # pyright: reportAttributeAccessIssue=false, reportCallIssue=false
+# ruff: noqa: INP001
+# pylint: disable=global-statement,too-many-arguments,too-many-positional-arguments
 """Optimized synchronous wrapper for PySNMP 7.x async HLAPI.
 
 Provides two main client patterns:
@@ -14,9 +16,10 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections.abc import Coroutine, Sequence
 from concurrent.futures import Future
 from dataclasses import dataclass, field
-from typing import Any, Optional, Sequence, Tuple, Union
+from typing import Any, TypeVar
 
 # PySNMP imports
 from pysnmp.hlapi.asyncio import (
@@ -28,12 +31,13 @@ from pysnmp.hlapi.asyncio import (
     UdpTransportTarget,
     UsmUserData,
     get_cmd,
-    set_cmd,
     next_cmd,
+    set_cmd,
 )
 
 VarBinds = Sequence[ObjectType]
-GetResult = Tuple[Any, Any, Any, Tuple[ObjectType, ...]]
+GetResult = tuple[object, object, object, tuple[ObjectType, ...]]
+T = TypeVar("T")
 
 
 # ============================================================================
@@ -44,7 +48,6 @@ GetResult = Tuple[Any, Any, Any, Tuple[ObjectType, ...]]
 class SnmpSyncError(Exception):
     """Raised when SNMP operation (GET/SET/GET-NEXT) fails."""
 
-    pass
 
 
 # ============================================================================
@@ -72,13 +75,13 @@ class _LoopThread(threading.Thread):
         self.loop.call_soon_threadsafe(self.loop.stop)
 
 
-_GLOBAL_LOOP_THREAD: Optional[_LoopThread] = None
+_GLOBAL_LOOP_THREAD: _LoopThread | None = None
 _GLOBAL_LOCK = threading.Lock()
 
 
 def _get_global_loop_thread() -> _LoopThread:
     """Get or create the global background loop thread."""
-    global _GLOBAL_LOOP_THREAD
+    global _GLOBAL_LOOP_THREAD  # noqa: PLW0603
     with _GLOBAL_LOCK:
         if _GLOBAL_LOOP_THREAD is None:
             _GLOBAL_LOOP_THREAD = _LoopThread()
@@ -90,7 +93,7 @@ def _get_global_loop_thread() -> _LoopThread:
 # ============================================================================
 
 
-def run_sync(coro: Any) -> Any:
+def run_sync(coro: Coroutine[Any, Any, T]) -> T:
     """Run async coroutine: fresh loop per call.
 
     Each call creates and closes an event loop (slower for multiple ops).
@@ -105,18 +108,18 @@ def run_sync(coro: Any) -> Any:
         return asyncio.run(coro)
 
     loop_thread = _get_global_loop_thread()
-    future: Future[Any] = asyncio.run_coroutine_threadsafe(coro, loop_thread.loop)
+    future: Future[T] = asyncio.run_coroutine_threadsafe(coro, loop_thread.loop)
     return future.result()
 
 
-def run_sync_persistent(coro: Any) -> Any:
+def run_sync_persistent(coro: Coroutine[Any, Any, T]) -> T:
     """Run async coroutine: persistent background loop.
 
     Reuses one event loop across all calls (better for engine reuse).
     Required for PersistentSnmpClient to work properly.
     """
     loop_thread = _get_global_loop_thread()
-    future: Future[Any] = asyncio.run_coroutine_threadsafe(coro, loop_thread.loop)
+    future: Future[T] = asyncio.run_coroutine_threadsafe(coro, loop_thread.loop)
     return future.result()
 
 
@@ -125,14 +128,14 @@ def run_sync_persistent(coro: Any) -> Any:
 # ============================================================================
 
 
-async def _get_async(
+async def _get_async(  # noqa: PLR0913
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
     timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
+    context: ContextData | None = None,
 ) -> GetResult:
     """Async GET operation."""
     if context is None:
@@ -144,14 +147,14 @@ async def _get_async(
     return error_indication, error_status, error_index, result_var_binds
 
 
-async def _set_async(
+async def _set_async(  # noqa: PLR0913
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
     timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
+    context: ContextData | None = None,
 ) -> GetResult:
     """Async SET operation."""
     if context is None:
@@ -163,14 +166,14 @@ async def _set_async(
     return error_indication, error_status, error_index, result_var_binds
 
 
-async def _next_async(
+async def _next_async(  # noqa: PLR0913
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
     timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
+    context: ContextData | None = None,
 ) -> GetResult:
     """Async GET-NEXT operation (for snmpwalk)."""
     if context is None:
@@ -182,13 +185,23 @@ async def _next_async(
     return error_indication, error_status, error_index, result_var_binds
 
 
-def _raise_on_error(error_indication: Any, error_status: Any, error_index: Any) -> None:
+def _raise_on_error(error_indication: object, error_status: object, error_index: object) -> None:
     """Raise if SNMP operation failed."""
     if error_indication:
-        raise SnmpSyncError(f"SNMP error: {error_indication}")
+        msg = f"SNMP error: {error_indication}"
+        raise SnmpSyncError(msg)
     if error_status:
-        idx = int(error_index) if error_index else 0
-        raise SnmpSyncError(f"{error_status.prettyPrint()} at varbind index {idx}")
+        idx = (
+            int(error_index)
+            if isinstance(error_index, (int, str, bytes, bytearray))
+            else 0
+        )
+        if hasattr(error_status, "prettyPrint"):
+            status_text = error_status.prettyPrint()
+        else:
+            status_text = str(error_status)
+        msg = f"{status_text} at varbind index {idx}"
+        raise SnmpSyncError(msg)
 
 
 # ============================================================================
@@ -196,17 +209,17 @@ def _raise_on_error(error_indication: Any, error_status: Any, error_index: Any) 
 # ============================================================================
 
 
-def get_sync(
+def get_sync(  # noqa: PLR0913
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
     timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
-    use_persistent_loop: bool = False,
-) -> Tuple[ObjectType, ...]:
-    """Synchronous SNMP GET.
+    context: ContextData | None = None,
+    use_persistent_loop: bool = False,  # noqa: FBT001, FBT002
+) -> tuple[ObjectType, ...]:
+    """Run a synchronous SNMP GET.
 
     Args:
         engine: SnmpEngine instance
@@ -223,34 +236,47 @@ def get_sync(
 
     Raises:
         SnmpSyncError: If operation fails
+
     """
-    runner = run_sync_persistent if use_persistent_loop else run_sync
-    error_indication, error_status, error_index, result_var_binds = runner(
-        _get_async(
-            engine,
-            auth,
-            address,
-            var_binds,
-            timeout=timeout,
-            retries=retries,
-            context=context,
+    if use_persistent_loop:
+        error_indication, error_status, error_index, result_var_binds = run_sync_persistent(
+            _get_async(
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
         )
-    )
+    else:
+        error_indication, error_status, error_index, result_var_binds = run_sync(
+            _get_async(
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
+        )
     _raise_on_error(error_indication, error_status, error_index)
     return tuple(result_var_binds)
 
 
-def set_sync(
+def set_sync(  # noqa: PLR0913
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
     timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
-    use_persistent_loop: bool = False,
-) -> Tuple[ObjectType, ...]:
-    """Synchronous SNMP SET.
+    context: ContextData | None = None,
+    use_persistent_loop: bool = False,  # noqa: FBT001, FBT002
+) -> tuple[ObjectType, ...]:
+    """Run a synchronous SNMP SET.
 
     Args:
         engine: SnmpEngine instance
@@ -267,34 +293,47 @@ def set_sync(
 
     Raises:
         SnmpSyncError: If operation fails
+
     """
-    runner = run_sync_persistent if use_persistent_loop else run_sync
-    error_indication, error_status, error_index, result_var_binds = runner(
-        _set_async(
-            engine,
-            auth,
-            address,
-            var_binds,
-            timeout=timeout,
-            retries=retries,
-            context=context,
+    if use_persistent_loop:
+        error_indication, error_status, error_index, result_var_binds = run_sync_persistent(
+            _set_async(
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
         )
-    )
+    else:
+        error_indication, error_status, error_index, result_var_binds = run_sync(
+            _set_async(
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
+        )
     _raise_on_error(error_indication, error_status, error_index)
     return tuple(result_var_binds)
 
 
-def get_next_sync(
+def get_next_sync(  # noqa: PLR0913
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
     timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
-    use_persistent_loop: bool = False,
-) -> Tuple[ObjectType, ...]:
-    """Synchronous SNMP GET-NEXT (for snmpwalk).
+    context: ContextData | None = None,
+    use_persistent_loop: bool = False,  # noqa: FBT001, FBT002
+) -> tuple[ObjectType, ...]:
+    """Run a synchronous SNMP GET-NEXT operation.
 
     Args:
         engine: SnmpEngine instance
@@ -311,19 +350,32 @@ def get_next_sync(
 
     Raises:
         SnmpSyncError: If operation fails
+
     """
-    runner = run_sync_persistent if use_persistent_loop else run_sync
-    error_indication, error_status, error_index, result_var_binds = runner(
-        _next_async(
-            engine,
-            auth,
-            address,
-            var_binds,
-            timeout=timeout,
-            retries=retries,
-            context=context,
+    if use_persistent_loop:
+        error_indication, error_status, error_index, result_var_binds = run_sync_persistent(
+            _next_async(
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
         )
-    )
+    else:
+        error_indication, error_status, error_index, result_var_binds = run_sync(
+            _next_async(
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
+        )
     _raise_on_error(error_indication, error_status, error_index)
     return tuple(result_var_binds)
 
@@ -347,16 +399,17 @@ class StatelessSnmpClient:
             address=("192.168.1.1", 161),
         )
         result = client.get(ObjectType(make_oid("1.3.6.1.2.1.1.1.0")))
+
     """
 
-    auth: Union[CommunityData, UsmUserData]
-    address: Tuple[str, int]
+    auth: CommunityData | UsmUserData
+    address: tuple[str, int]
     timeout: float = 1.0
     retries: int = 5
     context: ContextData = field(default_factory=ContextData)
 
-    def get(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
-        """Synchronous GET (fresh engine)."""
+    def get(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
+        """Run a synchronous GET with a fresh engine."""
         engine = SnmpEngine()
         return get_sync(
             engine,
@@ -368,8 +421,8 @@ class StatelessSnmpClient:
             self.context,
         )
 
-    def set(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
-        """Synchronous SET (fresh engine)."""
+    def set(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
+        """Run a synchronous SET with a fresh engine."""
         engine = SnmpEngine()
         return set_sync(
             engine,
@@ -381,8 +434,8 @@ class StatelessSnmpClient:
             self.context,
         )
 
-    def get_next(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
-        """Synchronous GET-NEXT (fresh engine)."""
+    def get_next(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
+        """Run a synchronous GET-NEXT with a fresh engine."""
         engine = SnmpEngine()
         return get_next_sync(
             engine,
@@ -419,14 +472,15 @@ class PersistentSnmpClient:
             current_oid = result[0]
 
         client.shutdown()
+
     """
 
-    auth: Union[CommunityData, UsmUserData]
-    address: Tuple[str, int]
+    auth: CommunityData | UsmUserData
+    address: tuple[str, int]
     timeout: float = 1.0
     retries: int = 5
     context: ContextData = field(default_factory=ContextData)
-    _engine: Optional[SnmpEngine] = field(default=None, init=False, repr=False)
+    _engine: SnmpEngine | None = field(default=None, init=False, repr=False)
 
     def _ensure_engine(self) -> SnmpEngine:
         """Lazily create engine on first use."""
@@ -434,8 +488,8 @@ class PersistentSnmpClient:
             self._engine = SnmpEngine()
         return self._engine
 
-    def get(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
-        """Synchronous GET (reused engine + persistent loop)."""
+    def get(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
+        """Run a synchronous GET with reused engine and persistent loop."""
         engine = self._ensure_engine()
         return get_sync(
             engine,
@@ -448,8 +502,8 @@ class PersistentSnmpClient:
             use_persistent_loop=True,
         )
 
-    def set(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
-        """Synchronous SET (reused engine + persistent loop)."""
+    def set(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
+        """Run a synchronous SET with reused engine and persistent loop."""
         engine = self._ensure_engine()
         return set_sync(
             engine,
@@ -462,8 +516,8 @@ class PersistentSnmpClient:
             use_persistent_loop=True,
         )
 
-    def get_next(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
-        """Synchronous GET-NEXT (reused engine + persistent loop)."""
+    def get_next(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
+        """Run a synchronous GET-NEXT with reused engine and persistent loop."""
         engine = self._ensure_engine()
         return get_next_sync(
             engine,
@@ -488,13 +542,18 @@ class PersistentSnmpClient:
 
 
 def make_oid(oid: str) -> ObjectIdentity:
-    """Create ObjectIdentity from OID string. Example: make_oid("1.3.6.1.2.1.1.1.0")"""
+    """Create an ObjectIdentity from an OID string.
+
+    Example:
+        make_oid("1.3.6.1.2.1.1.1.0")
+
+    """
     return ObjectIdentity(oid)
 
 
 def shutdown_sync_wrapper() -> None:
-    """Optional: shutdown background loop (required for process cleanup)."""
-    global _GLOBAL_LOOP_THREAD
+    """Shut down the background loop used by persistent sync calls."""
+    global _GLOBAL_LOOP_THREAD  # noqa: PLW0603
     with _GLOBAL_LOCK:
         if _GLOBAL_LOOP_THREAD is not None:
             _GLOBAL_LOOP_THREAD.stop()

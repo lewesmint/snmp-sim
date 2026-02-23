@@ -1,5 +1,4 @@
-"""MibTable: Represents a MIB table (collection of rows/columns).
-"""
+"""MibTable: Represents a MIB table (collection of rows/columns)."""
 
 from .mib_object import MibObject
 

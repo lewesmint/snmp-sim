@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
@@ -156,7 +157,7 @@ def convert_index_value(  # noqa: PLR0912
 def load_table_schema_context(
     table_oid: str,
     fallback_index_values: dict[str, Any],
-    logger: Any,  # noqa: ANN401
+    logger: logging.Logger,
 ) -> tuple[dict[str, Any], list[str]]:
     """Load table schema context from the API, falling back to provided index values."""
     try:
@@ -285,7 +286,7 @@ def normalize_and_extract_instances(
     index_columns: list[str],
     columns: dict[str, Any],
     table_name: str,
-    logger: Any,
+    logger: logging.Logger,
 ) -> list[str]:
     """Normalize table rows and extract instance index strings."""
     rows_data = table_info.get("rows", [])

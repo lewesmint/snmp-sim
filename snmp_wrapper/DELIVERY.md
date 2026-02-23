@@ -1,14 +1,14 @@
 # Summary: SNMP Wrapper Optimization & Reorganization
 
 **Date**: Feb 16, 2026  
-**Location**: `/Users/mintz/code/snmp-sim/snmp-wrapper/`
+**Location**: `/Users/mintz/code/snmp-sim/snmp_wrapper/`
 
 ## What Was Done
 
 ### 1. Created Dedicated Workspace
 
 ```
-/Users/mintz/code/snmp-sim/snmp-wrapper/
+/Users/mintz/code/snmp-sim/snmp_wrapper/
 ├── snmp_wrapper.py        (431 lines) - Production wrapper module
 ├── test_wrapper.py        (233 lines) - Optimized test suite
 ├── README.md              (327 lines) - Full documentation

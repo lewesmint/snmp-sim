@@ -35,7 +35,16 @@ def test_agent_table_registration_errors(mocker: Any, mib_name: str, monkeypatch
         agent = SNMPAgent(config_path="agent_config.yaml")
         # If we get here, agent instantiated successfully
         assert agent is not None
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError) as e:
+    except (
+        AssertionError,
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as e:
         # If agent instantiation fails due to config issues, that's a separate concern
         # Just verify the API is correct (no 'app_config' parameter)
         assert "app_config" not in str(e), f"Agent should not expect 'app_config' parameter: {e}"

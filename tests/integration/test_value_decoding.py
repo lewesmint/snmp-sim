@@ -2,8 +2,9 @@
 """Test script to verify value decoding functionality."""
 
 import sys
+from typing import cast
 
-from app.snmp_agent import SNMPAgent
+from app.snmp_agent import JsonValue, SNMPAgent
 
 
 def test_decode_value() -> None:
@@ -13,32 +14,41 @@ def test_decode_value() -> None:
 
     # Test 1: Direct string value
     result = agent._decode_value("hello")
-    assert result == "hello", f"Expected 'hello', got {result}"
+    assert result == "hello", f"Expected 'hello', got {result!r}"
 
     # Test 2: Direct integer value
     result = agent._decode_value(42)
-    assert result == 42, f"Expected 42, got {result}"
+    assert result == 42, f"Expected 42, got {result!r}"
 
     # Test 3: Hex-encoded MAC address
-    mac_value = {"value": "\\x00\\x11\\x22\\x33\\x44\\x55", "encoding": "hex"}
-    result = agent._decode_value(mac_value)
+    mac_value: dict[str, JsonValue] = {
+        "value": "\\x00\\x11\\x22\\x33\\x44\\x55",
+        "encoding": "hex",
+    }
+    result = agent._decode_value(cast("JsonValue", mac_value))
     expected = b"\x00\x11\x22\x33\x44\x55"
     assert result == expected, f"Expected {expected!r}, got {result!r}"
 
     # Test 4: Another hex-encoded value
-    mac_value2 = {"value": "\\xAA\\xBB\\xCC\\xDD\\xEE\\xFF", "encoding": "hex"}
-    result = agent._decode_value(mac_value2)
+    mac_value2: dict[str, JsonValue] = {
+        "value": "\\xAA\\xBB\\xCC\\xDD\\xEE\\xFF",
+        "encoding": "hex",
+    }
+    result = agent._decode_value(cast("JsonValue", mac_value2))
     expected = b"\xaa\xbb\xcc\xdd\xee\xff"
     assert result == expected, f"Expected {expected!r}, got {result!r}"
 
     # Test 5: Dict without encoding (should return as-is)
-    plain_dict = {"foo": "bar"}
-    result = agent._decode_value(plain_dict)
-    assert result == plain_dict, f"Expected {plain_dict}, got {result}"
+    plain_dict: dict[str, JsonValue] = {"foo": "bar"}
+    result = agent._decode_value(cast("JsonValue", plain_dict))
+    assert result == plain_dict, f"Expected {plain_dict!r}, got {result!r}"
 
     # Test 6: All zeros MAC address
-    mac_value3 = {"value": "\\x00\\x00\\x00\\x00\\x00\\x00", "encoding": "hex"}
-    result = agent._decode_value(mac_value3)
+    mac_value3: dict[str, JsonValue] = {
+        "value": "\\x00\\x00\\x00\\x00\\x00\\x00",
+        "encoding": "hex",
+    }
+    result = agent._decode_value(cast("JsonValue", mac_value3))
     expected = b"\x00\x00\x00\x00\x00\x00"
     assert result == expected, f"Expected {expected!r}, got {result!r}"
 
@@ -46,7 +56,16 @@ def test_decode_value() -> None:
 if __name__ == "__main__":
     try:
         test_decode_value()
-    except (AssertionError, AttributeError, ImportError, LookupError, OSError, RuntimeError, TypeError, ValueError):
+    except (
+        AssertionError,
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
         import traceback
 
         traceback.print_exc()

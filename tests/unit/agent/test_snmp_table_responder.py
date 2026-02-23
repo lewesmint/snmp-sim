@@ -101,7 +101,8 @@ def test_short_oid_and_missing_entry_cases() -> None:
     }
     r = SNMPTableResponder(behavior, mib_builder=None)
 
-    # get_table_info for a row belonging to table still returns the table (but _get_oid_value will fail)
+    # get_table_info for a row belonging to table still returns the table,
+    # but _get_oid_value will fail.
     assert r.get_table_info((10, 3, 1)) is not None
     assert r._get_oid_value((10, 3, 1)) is None
 

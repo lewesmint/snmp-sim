@@ -200,10 +200,12 @@ def main() -> int:
         ):
             continue
         rel = fn_item.path.relative_to(root)
-        print(
-            f"score={fn_item.score:4d}  cc={fn_item.complexity:2d}  branches={fn_item.branches:2d}  "
-            f"lines={fn_item.length:4d}  {rel}:{fn_item.lineno}-{fn_item.end_lineno}  {fn_item.name}()"
+        summary = (
+            f"score={fn_item.score:4d}  cc={fn_item.complexity:2d}  "
+            f"branches={fn_item.branches:2d}  lines={fn_item.length:4d}  "
+            f"{rel}:{fn_item.lineno}-{fn_item.end_lineno}  {fn_item.name}()"
         )
+        print(summary)
         shown += 1
         if shown >= args.top_functions:
             break

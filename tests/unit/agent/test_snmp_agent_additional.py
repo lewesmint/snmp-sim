@@ -6,12 +6,12 @@ import os
 import signal
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 import app.snmp_agent as snmp_agent_module
-from app.snmp_agent import SNMPAgent
+from app.snmp_agent import JsonValue, SNMPAgent
 
 
 def test_run_validation_failure_logs_and_returns(
@@ -57,8 +57,8 @@ def test_run_with_preloaded_model_uses_existing_types_json(
     # Prevent starting the SNMP server
     monkeypatch.setattr(
         SNMPAgent,
-        "_setup_snmpEngine",
-        lambda self, _cd: setattr(self, "snmpEngine", None),
+        "_setup_snmp_engine",
+        lambda self, _cd: setattr(self, "snmp_engine", None),
     )
 
     agent.run()
@@ -90,8 +90,8 @@ def test_run_compile_failure_logs_and_continues(
     # Prevent starting the SNMP server
     monkeypatch.setattr(
         SNMPAgent,
-        "_setup_snmpEngine",
-        lambda self, _cd: setattr(self, "snmpEngine", None),
+        "_setup_snmp_engine",
+        lambda self, _cd: setattr(self, "snmp_engine", None),
     )
 
     agent.run()
@@ -139,8 +139,12 @@ def test_run_generator_failure_logged(
         "app.snmp_agent.MibCompiler.compile",
         lambda self, mib_name: os.path.join(compiled_dir, f"{mib_name}.py"),
     )
-    # Ensure run uses our compiled_dir by monkeypatching _setup_snmpEngine to no-op and continue
-    monkeypatch.setattr(agent, "_setup_snmpEngine", lambda _cd: setattr(agent, "snmpEngine", None))
+    # Ensure run uses our compiled_dir by monkeypatching _setup_snmp_engine to no-op and continue
+    monkeypatch.setattr(
+        agent,
+        "_setup_snmp_engine",
+        lambda _cd: setattr(agent, "snmp_engine", None),
+    )
 
     caplog.set_level("ERROR")
     agent.run()
@@ -153,7 +157,7 @@ def test_run_generator_failure_logged(
 def test_setup_transport_raises_when_no_engine() -> None:
     """Test case for test_setup_transport_raises_when_no_engine."""
     agent = SNMPAgent(config_path="agent_config.yaml")
-    agent.snmpEngine = None
+    agent.snmp_engine = None
     with pytest.raises(RuntimeError):
         agent._setup_transport()
 
@@ -161,8 +165,8 @@ def test_setup_transport_raises_when_no_engine() -> None:
 def test_setup_responders_raises_without_context() -> None:
     """Test case for test_setup_responders_raises_without_context."""
     agent = SNMPAgent(config_path="agent_config.yaml")
-    # snmpEngine present but snmpContext missing
-    agent.snmpEngine = object()
+    # snmp_engine present but snmp_context missing
+    agent.snmp_engine = cast(Any, object())
     with pytest.raises(RuntimeError):
         agent._setup_responders()
 
@@ -197,8 +201,8 @@ def test_run_event_loop_keyboard_interrupt_calls_shutdown(
     # Ensure engine is set up and other setup methods are no-ops
     monkeypatch.setattr(
         SNMPAgent,
-        "_setup_snmpEngine",
-        lambda self, _cd: setattr(self, "snmpEngine", FakeEngine()),
+        "_setup_snmp_engine",
+        lambda self, _cd: setattr(self, "snmp_engine", FakeEngine()),
     )
     monkeypatch.setattr(SNMPAgent, "_setup_transport", lambda self: None)
     monkeypatch.setattr(SNMPAgent, "_setup_community", lambda self: None)
@@ -237,7 +241,7 @@ def test_populate_sysor_table_calls_registrar() -> None:
         called.append(mib_jsons)
 
     fake_registrar.populate_sysor_table = record_populate
-    agent.mib_registrar = fake_registrar
+    agent.mib_registrar = cast(Any, fake_registrar)
 
     test_mib_jsons: dict[str, Any] = {"TEST-MIB": {}}
     agent.mib_jsons = test_mib_jsons
@@ -267,7 +271,7 @@ def test_get_scalar_value_finds_and_returns_value() -> None:
         mibSymbols=fake_symbols,
         import_symbols=lambda *args: [MibScalarInstance],
     )
-    agent.mib_builder = fake_builder
+    agent.mib_builder = cast(Any, fake_builder)
 
     result = agent.get_scalar_value((1, 3, 6, 1, 2, 1, 1, 1, 0))
     assert result == "test_value"
@@ -283,7 +287,7 @@ def test_get_scalar_value_raises_when_not_found() -> None:
         mibSymbols=fake_symbols,
         import_symbols=lambda *args: [type("MibScalarInstance", (), {})],
     )
-    agent.mib_builder = fake_builder
+    agent.mib_builder = cast(Any, fake_builder)
 
     with pytest.raises(ValueError, match="Scalar OID .* not found"):
         agent.get_scalar_value((1, 3, 6, 1, 2, 1, 1, 1, 0))
@@ -329,7 +333,7 @@ def test_set_scalar_value_sets_value() -> None:
         mibSymbols=fake_symbols,
         import_symbols=lambda *args: [MibScalarInstance],
     )
-    agent.mib_builder = fake_builder
+    agent.mib_builder = cast(Any, fake_builder)
 
     agent.set_scalar_value((1, 3, 6, 1, 2, 1, 1, 1, 0), "new_value")
     # Type ignore needed because syntax can be either FakeSyntax or the assigned string
@@ -346,7 +350,7 @@ def test_set_scalar_value_raises_when_not_found() -> None:
         mibSymbols=fake_symbols,
         import_symbols=lambda *args: [type("MibScalarInstance", (), {})],
     )
-    agent.mib_builder = fake_builder
+    agent.mib_builder = cast(Any, fake_builder)
 
     with pytest.raises(ValueError, match="Scalar OID .* not found"):
         agent.set_scalar_value((1, 3, 6, 1, 2, 1, 1, 1, 0), "value")
@@ -368,7 +372,7 @@ def test_shutdown_logs_exception_on_error(
     """Test case for test_shutdown_logs_exception_on_error."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
-    # Set up snmpEngine with dispatcher that raises on close
+    # Set up snmp_engine with dispatcher that raises on close
     class BadDispatcher:
         """Test helper class for BadDispatcher."""
 
@@ -377,7 +381,7 @@ def test_shutdown_logs_exception_on_error(
             msg = "close failed"
             raise RuntimeError(msg)
 
-    agent.snmpEngine = SimpleNamespace(transport_dispatcher=BadDispatcher())
+    agent.snmp_engine = cast(Any, SimpleNamespace(transport_dispatcher=BadDispatcher()))
 
     # Mock os._exit to prevent actual exit
     monkeypatch.setattr(os, "_exit", lambda code: None)
@@ -474,8 +478,8 @@ def test_run_success_path_with_mib_compilation_and_generation(
     monkeypatch.setattr("app.generator.BehaviourGenerator", FakeGenerator)
     monkeypatch.setattr(
         SNMPAgent,
-        "_setup_snmpEngine",
-        lambda self, cd: setattr(self, "snmpEngine", None),
+        "_setup_snmp_engine",
+        lambda self, cd: setattr(self, "snmp_engine", None),
     )
 
     with caplog.at_level(logging.DEBUG):
@@ -495,7 +499,7 @@ def test_setup_transport_raises_on_pysnmp_import_error(
     import sys
 
     agent = SNMPAgent(config_path="agent_config.yaml")
-    agent.snmpEngine = object()  # Mock engine
+    agent.snmp_engine = cast(Any, object())  # Mock engine
 
     # Remove pysnmp modules from sys.modules to force reimport (using monkeypatch for cleanup)
     modules_to_remove = [k for k in sys.modules if k.startswith("pysnmp")]
@@ -523,7 +527,7 @@ def test_register_mib_objects_handles_registrar_creation_failure(
 ) -> None:
     """Test case for test_register_mib_objects_handles_registrar_creation_failure."""
     agent = SNMPAgent(config_path="agent_config.yaml")
-    agent.mib_builder = object()  # Mock builder
+    agent.mib_builder = cast(Any, object())  # Mock builder
     agent.mib_jsons = {"TEST-MIB": {}}
 
     # Mock MibRegistrar to raise exception
@@ -645,7 +649,7 @@ def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -
         assert child.indexes == child.inherited_columns
         assert child.indexes == ("sysORIndex",)
 
-    index_values = {"testEnumIndex": 31415}
+    index_values: dict[str, JsonValue] = {"testEnumIndex": 31415}
     instance_oid = agent.add_table_instance(parent_oid, index_values)
     assert instance_oid.endswith(".31415")
     assert "31415" in agent.table_instances[parent_oid]
@@ -656,17 +660,18 @@ def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -
         defaults = child.default_columns or {}
         if defaults:
             sample_col = next(iter(defaults))
-            assert (
-                agent.table_instances[child.table_oid]["31415"]["column_values"][sample_col]
-                == defaults[sample_col]
+            sample_values = agent.table_instances[child.table_oid]["31415"].get(
+                "column_values",
+                {},
             )
+            assert sample_values.get(sample_col) == defaults[sample_col]
 
     agent.delete_table_instance(parent_oid, index_values)
     assert "31415" not in agent.table_instances.get(parent_oid, {})
     for child in children:
         assert "31415" not in agent.table_instances.get(child.table_oid, {})
 
-    sysor_index_values = {"sysORIndex": 8675309}
+    sysor_index_values: dict[str, JsonValue] = {"sysORIndex": 8675309}
     sysor_instance_oid = agent.add_table_instance(
         sysor_parent_oid,
         sysor_index_values,
@@ -685,10 +690,11 @@ def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -
         defaults = child.default_columns or {}
         if defaults:
             sample_col = next(iter(defaults))
-            assert (
-                agent.table_instances[child.table_oid]["8675309"]["column_values"][sample_col]
-                == defaults[sample_col]
+            sample_values = agent.table_instances[child.table_oid]["8675309"].get(
+                "column_values",
+                {},
             )
+            assert sample_values.get(sample_col) == defaults[sample_col]
 
     agent.delete_table_instance(sysor_parent_oid, sysor_index_values)
     assert "8675309" not in agent.table_instances.get(sysor_parent_oid, {})
@@ -702,7 +708,8 @@ def test_oid_helpers_and_index_parser() -> None:
 
     assert agent._normalize_oid_str(" .1..3.6.1. ") == "1.3.6.1"
     assert agent._normalize_oid_str("...") == ""
-    assert agent._oid_list_to_str([1, 3, None, 6, 1]) == "1.3.6.1"
+    oid_with_none = cast(list[int | str], [1, 3, None, 6, 1])
+    assert agent._oid_list_to_str(oid_with_none) == "1.3.6.1"
     assert agent._oid_list_to_str([]) == ""
 
     assert agent._parse_index_from_entry({"mib": "TEST-MIB", "column": "ifIndex"}) == (
@@ -718,7 +725,11 @@ def test_oid_helpers_and_index_parser() -> None:
         "ifIndex",
     )
     assert agent._parse_index_from_entry({"mib": "TEST-MIB"}) is None
-    assert agent._parse_index_from_entry("invalid") is None
+    invalid_entry = cast(
+        dict[str, JsonValue] | list[JsonValue] | tuple[JsonValue, ...],
+        "invalid",
+    )
+    assert agent._parse_index_from_entry(invalid_entry) is None
 
 
 def test_find_table_and_entry_name_by_oid() -> None:
@@ -767,20 +778,21 @@ def test_build_instance_str_from_row_variants() -> None:
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     idx_cols = ["ifIndex", "ipCol"]
-    cols_meta = {
+    cols_meta: dict[str, dict[str, JsonValue]] = {
         "ifIndex": {"type": "Integer32"},
         "ipCol": {"type": "IpAddress"},
     }
 
-    row_with_ip_list = {"ifIndex": 7, "ipCol": [10, 0, 0, 1]}
+    row_with_ip_list: dict[str, JsonValue] = {"ifIndex": 7, "ipCol": [10, 0, 0, 1]}
     assert agent._build_instance_str_from_row(row_with_ip_list, idx_cols, cols_meta) == "7.10.0.0.1"
 
-    row_with_ip_str = {"ifIndex": 8, "ipCol": "192.168.1.10"}
+    row_with_ip_str: dict[str, JsonValue] = {"ifIndex": 8, "ipCol": "192.168.1.10"}
     assert (
         agent._build_instance_str_from_row(row_with_ip_str, idx_cols, cols_meta) == "8.192.168.1.10"
     )
 
-    assert agent._build_instance_str_from_row({"x": 1}, [], {}) == "1"
+    row_single = cast(dict[str, JsonValue], {"x": 1})
+    assert agent._build_instance_str_from_row(row_single, [], {}) == "1"
 
 
 def test_collect_schema_instance_oids_and_filter_deleted(
@@ -891,7 +903,7 @@ def test_normalize_loaded_instances_and_fill_defaults(
     monkeypatch.setattr(agent, "_save_mib_state", lambda: saved.setdefault("called", True))
     agent._fill_missing_table_defaults()
 
-    values = agent.table_instances["1.3.6.1.2.1.2.2"]["1"]["column_values"]
+    values = agent.table_instances["1.3.6.1.2.1.2.2"]["1"].get("column_values", {})
     assert values["ifDescr"] == "default-if"
     assert values["ifAlias"] == "default-alias"
     assert saved.get("called", False) is True
@@ -984,7 +996,7 @@ def test_lookup_symbol_for_dotted_and_get_all_oids() -> None:
             },
         },
     )
-    agent.mib_builder = fake_builder
+    agent.mib_builder = cast(Any, fake_builder)
 
     assert agent._lookup_symbol_for_dotted("1.3.6.1.2.1.1.1.0") == (
         "TEST-MIB",
@@ -994,8 +1006,11 @@ def test_lookup_symbol_for_dotted_and_get_all_oids() -> None:
     assert agent._lookup_symbol_for_dotted("1.3.6.1.4.1") == (None, None)
 
     # get_all_oids expects readable name attributes
-    agent.mib_builder = SimpleNamespace(
-        mibSymbols={"TEST-MIB": {"goodSymbol": GoodObj((1, 3, 6, 1, 2, 1, 1, 1, 0))}},
+    agent.mib_builder = cast(
+        Any,
+        SimpleNamespace(
+            mibSymbols={"TEST-MIB": {"goodSymbol": GoodObj((1, 3, 6, 1, 2, 1, 1, 1, 0))}},
+        ),
     )
     oid_map = agent.get_all_oids()
     assert oid_map["goodSymbol"] == (1, 3, 6, 1, 2, 1, 1, 1, 0)
@@ -1108,7 +1123,7 @@ def test_capture_initial_values_and_writable_detection() -> None:
         import_symbols=lambda *_args: [FakeMibScalarInstance],
         mibSymbols={"TEST-MIB": {"sysContactInst": sym}},
     )
-    agent.mib_builder = fake_builder
+    agent.mib_builder = cast(Any, fake_builder)
     agent.mib_jsons = {"TEST-MIB": {"sysContact": {"access": "read-write"}}}
 
     agent._capture_initial_values()
@@ -1149,7 +1164,7 @@ def test_apply_overrides_applies_and_prunes_invalid(
         import_symbols=lambda *_args: [FakeMibScalarInstance],
         mibSymbols={"TEST-MIB": {"myScalarInst": sym}},
     )
-    agent.mib_builder = fake_builder
+    agent.mib_builder = cast(Any, fake_builder)
     agent.overrides = {
         # Should apply by .0 fallback
         "1.3.6.1.4.1.99999.1": "new",
@@ -1219,7 +1234,7 @@ def test_restore_table_instance_true_and_false(monkeypatch: pytest.MonkeyPatch) 
     )
 
     table_oid = "1.3.6.1.2.1.2.2"
-    idx = {"ifIndex": 7}
+    idx: dict[str, JsonValue] = {"ifIndex": 7}
     instance_oid = f"{table_oid}.7"
 
     agent.deleted_instances = [instance_oid]
@@ -1239,7 +1254,7 @@ def test_delete_table_instance_schema_and_non_schema(
     agent = SNMPAgent(config_path="agent_config.yaml")
     table_oid = " .1..3.6.1.2.1.2.2. "
     norm_table_oid = "1.3.6.1.2.1.2.2"
-    index_values = {"ifIndex": 9}
+    index_values: dict[str, JsonValue] = {"ifIndex": 9}
 
     agent.table_instances = {norm_table_oid: {"9": {"column_values": {"ifDescr": "eth9"}}}}
 

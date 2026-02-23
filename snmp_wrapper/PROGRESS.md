@@ -5,7 +5,7 @@
 This folder contains an optimized, production-ready synchronous wrapper for PySNMP 7.x async HLAPI.
 
 ```
-snmp-wrapper/
+snmp_wrapper/
 ├── snmp_wrapper.py          # Main wrapper module (production use)
 ├── test_wrapper.py          # Comprehensive test suite
 ├── README.md                # Full documentation

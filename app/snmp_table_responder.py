@@ -8,7 +8,7 @@ by returning data from the behavior JSON files, enabling full SNMP queryability
 # pylint: disable=logging-fstring-interpolation,unused-variable
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from pysnmp.smi import builder
 
@@ -72,7 +72,7 @@ class SNMPTableResponder:
             return candidate
 
         matches: list[tuple[tuple[int, ...], dict[str, Any]]] = []
-        for _, other_data in objects.items():
+        for other_data in objects.values():
             if not isinstance(other_data, dict):
                 continue
             if other_data.get("type") != "MibTableRow":
@@ -121,7 +121,7 @@ class SNMPTableResponder:
 
         return None
 
-    def get_next_oid(self, requested_oid: tuple[int, ...]) -> tuple[tuple[int, ...], Any] | None:
+    def get_next_oid(self, requested_oid: tuple[int, ...]) -> tuple[tuple[int, ...], object] | None:
         """Find the next OID after the requested one in lexicographic order.
 
         This supports SNMP GETNEXT operations.
@@ -140,11 +140,11 @@ class SNMPTableResponder:
 
         return None
 
-    def _get_all_table_oids(self) -> list[tuple[int, ...]]:
+    def _get_all_table_oids(self) -> list[tuple[int, ...]]:  # noqa: C901, PLR0912, PLR0915
         """Get all OIDs in tables, sorted lexicographically."""
         oids = []
 
-        for mib_name, mib_json in self.behavior_jsons.items():
+        for mib_json in self.behavior_jsons.values():
             objects = mib_json.get("objects", mib_json) if isinstance(mib_json, dict) else {}
             if not isinstance(objects, dict):
                 continue
@@ -267,13 +267,13 @@ class SNMPTableResponder:
         col_name: str,
         index_columns: list[str],
         instance_str: str,
-    ) -> Any | None:
+    ) -> object | None:
         if not index_columns:
             if instance_str != "1":
                 return None
             for row in rows:
                 if isinstance(row, dict) and col_name in row:
-                    return row[col_name]
+                    return cast("object", row[col_name])
             return None
 
         for row in rows:
@@ -283,7 +283,7 @@ class SNMPTableResponder:
                 continue
             row_idx_str = self._build_row_index_string(row, index_columns)
             if row_idx_str == instance_str:
-                return row[col_name]
+                return cast("object", row[col_name])
         return None
 
     def _lookup_multi_column_value(
@@ -293,7 +293,7 @@ class SNMPTableResponder:
         index_columns: list[str],
         col_id: int,
         instance_str: str,
-    ) -> Any | None:
+    ) -> object | None:
         for col_name, col_info in columns.items():
             if col_info.get("oid", [])[-1] != col_id:
                 continue
@@ -305,11 +305,11 @@ class SNMPTableResponder:
                     continue
                 row_idx_str = self._build_row_index_string(row, index_columns)
                 if row_idx_str == instance_str:
-                    return row[col_name]
+                    return cast("object", row[col_name])
             return None
         return None
 
-    def _get_oid_value(self, oid: tuple[int, ...]) -> Any | None:
+    def _get_oid_value(self, oid: tuple[int, ...]) -> object | None:  # noqa: PLR0911
         """Get the value for a specific OID."""
         table_info = self.get_table_info(oid)
         if not table_info:
@@ -372,10 +372,10 @@ class SNMPTableResponder:
             instance_str=instance_str,
         )
 
-    def handle_get_request(self, oid: tuple[int, ...]) -> Any | None:
+    def handle_get_request(self, oid: tuple[int, ...]) -> object | None:
         """Handle SNMP GET request for an OID."""
         return self._get_oid_value(oid)
 
-    def handle_getnext_request(self, oid: tuple[int, ...]) -> tuple[tuple[int, ...], Any] | None:
+    def handle_getnext_request(self, oid: tuple[int, ...]) -> tuple[tuple[int, ...], object] | None:
         """Handle SNMP GETNEXT request for an OID."""
         return self.get_next_oid(oid)
