@@ -508,7 +508,15 @@ class RegistrarTableBuilder:
                                 mib,
                                 col_name,
                             )
-                        except Exception as e:  # Broad catch for any import failures
+                        except (
+                            AttributeError,
+                            ImportError,
+                            IndexError,
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError,
+                        ) as e:
                             self.logger.warning(
                                 "Failed to find type %s for column %s (tried %s and %s): %s",
                                 col_type_name,
@@ -531,7 +539,8 @@ class RegistrarTableBuilder:
                 col_obj = self.mib_table_column_cls(col_oid, pysnmp_type()).setMaxAccess(col_access)
                 col_is_writable = col_access in ("readwrite", "readcreate")
                 symbols[col_name] = col_obj
-                # Store the resolved base_type (not the original col_type_name) so create_table_instance can find it
+                # Store the resolved base_type (not the original col_type_name)
+                # so create_table_instance can find it.
                 columns_by_name[col_name] = (col_oid, base_type, col_is_writable)
             except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
                 self.logger.warning("Error creating column %s: %s", col_name, e)
@@ -612,7 +621,15 @@ class RegistrarTableBuilder:
                             mib,
                             col_name,
                         )
-                    except Exception as e:
+                    except (
+                        AttributeError,
+                        ImportError,
+                        IndexError,
+                        LookupError,
+                        OSError,
+                        TypeError,
+                        ValueError,
+                    ) as e:
                         self.logger.warning(
                             "Failed to find type %s for instance %s  in MIB %s: %s",
                             base_type,

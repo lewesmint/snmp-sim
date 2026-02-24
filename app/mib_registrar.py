@@ -250,7 +250,10 @@ class MibRegistrar:
                 existing_objects = {}
                 existing_schema["objects"] = existing_objects
 
-            incoming_objects = snmp2.get("objects") if isinstance(snmp2.get("objects"), dict) else snmp2
+            incoming_obj_value = snmp2.get("objects")
+            incoming_objects = (
+                incoming_obj_value if isinstance(incoming_obj_value, dict) else snmp2
+            )
             if isinstance(incoming_objects, dict):
                 incoming_table = incoming_objects.get("sysORTable")
                 if isinstance(incoming_table, dict):
@@ -593,8 +596,8 @@ class MibRegistrar:
             try:
                 table_symbols = self._build_table_symbols(mib, name, info, mib_json, type_registry)
                 export_symbols.update(table_symbols)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError) as e:
-                self.logger.exception("Error building table %s: %s", name, e)
+            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+                self.logger.exception("Error building table %s", name)
                 continue
 
     def _build_mib_symbols(
@@ -722,8 +725,24 @@ class MibRegistrar:
 
         try:
             return self.mib_builder.import_symbols("SNMPv2-SMI", pysnmp_name)[0]
-        except Exception:  # Broad catch for any import failures (SmiError, etc.)
+        except (
+            AttributeError,
+            ImportError,
+            IndexError,
+            LookupError,
+            OSError,
+            TypeError,
+            ValueError,
+        ):
             try:
                 return self.mib_builder.import_symbols("SNMPv2-TC", pysnmp_name)[0]
-            except Exception:  # Broad catch for any import failures
+            except (
+                AttributeError,
+                ImportError,
+                IndexError,
+                LookupError,
+                OSError,
+                TypeError,
+                ValueError,
+            ):
                 return getattr(rfc1902, pysnmp_name, None)
