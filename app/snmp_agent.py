@@ -276,7 +276,7 @@ class SNMPAgent:
 
             oid_value = col_obj.get("oid")
             if oid_value != expected_oid:
-                col_obj["oid"] = expected_oid
+                col_obj["oid"] = cast(JsonValue, expected_oid)
                 changed = True
 
             if not col_obj.get("type"):
@@ -298,7 +298,7 @@ class SNMPAgent:
         objects = schema.get("objects") if isinstance(schema.get("objects"), dict) else schema
         if not isinstance(objects, dict):
             msg = "SNMPv2-MIB schema missing objects container"
-            raise ValueError(msg)
+            raise TypeError(msg)
 
         required_columns: dict[str, tuple[list[int], str, str]] = {
             "sysORIndex": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 1], "Integer32", "not-accessible"),
@@ -311,7 +311,7 @@ class SNMPAgent:
             col_obj = objects.get(col_name)
             if not isinstance(col_obj, dict):
                 msg = f"SNMPv2-MIB core column missing or invalid: {col_name}"
-                raise ValueError(msg)
+                raise TypeError(msg)
 
             oid_value = col_obj.get("oid")
             if oid_value != expected_oid:
@@ -940,8 +940,29 @@ class SNMPAgent:
                         pass
 
                     if initial is None or new_serial != initial:
-                        # Save override
-                        self.overrides[dotted] = new_serial
+                        table_cell = self._resolve_table_cell_context(oid)
+                        if table_cell is not None:
+                            table_oid, instance_str, column_name, index_columns = table_cell
+                            table_data = self.table_instances.setdefault(table_oid, {})
+                            row_data = table_data.setdefault(instance_str, {"column_values": {}})
+                            row_values = row_data.setdefault("column_values", {})
+                            row_values[column_name] = new_serial
+
+                            parts = [part for part in instance_str.split(".") if part]
+                            if parts and len(index_columns) == len(parts):
+                                for idx_name, idx_part in zip(index_columns, parts, strict=True):
+                                    if idx_name in row_values:
+                                        continue
+                                    if idx_part.isdigit():
+                                        row_values[idx_name] = int(idx_part)
+                                    else:
+                                        row_values[idx_name] = idx_part
+
+                            # Table cells are persisted under tables, not scalar overrides.
+                            self.overrides.pop(dotted, None)
+                        else:
+                            self.overrides[dotted] = new_serial
+
                         try:
                             self._save_mib_state()
                         except (AttributeError, LookupError, OSError, TypeError, ValueError):
@@ -1129,6 +1150,7 @@ class SNMPAgent:
         # Extract tables
         self.table_instances = self._coerce_state_tables(mib_state.get("tables"))
         self._normalize_loaded_table_instances()
+        self._materialize_index_columns()
         self._fill_missing_table_defaults()
 
         # Extract deleted instances list
@@ -1396,6 +1418,71 @@ class SNMPAgent:
         if updated:
             self._save_mib_state()
 
+    def _materialize_index_columns(self) -> None:
+        """Ensure index columns are materialized in all table instances.
+
+        For each table instance row, extracts index values from the instance key
+        and stores them as column values, so they're available in SNMP walks.
+        """
+        if not self.mib_jsons or not self.table_instances:
+            return
+
+        updated = False
+
+        for schema in self.mib_jsons.values():
+            objects = self._schema_objects(schema)
+
+            for obj_data in objects.values():
+                if obj_data.get("type") != "MibTable":
+                    continue
+
+                table_oid_list = self._oid_list_parts(obj_data.get("oid"))
+                if not table_oid_list:
+                    continue
+
+                table_oid = ".".join(str(x) for x in table_oid_list)
+                if table_oid not in self.table_instances:
+                    continue
+
+                entry_oid_list = [*table_oid_list, 1]
+                entry_obj = None
+                for other_data in objects.values():
+                    if (
+                        other_data.get("type") == "MibTableRow"
+                        and other_data.get("oid") == entry_oid_list
+                    ):
+                        entry_obj = other_data
+                        break
+
+                if not entry_obj:
+                    continue
+
+                index_columns = self._string_list(entry_obj.get("indexes"))
+                if not index_columns:
+                    continue
+
+                # For each row in this table
+                for instance_str, instance_data in self.table_instances.get(table_oid, {}).items():
+                    col_values = instance_data.get("column_values", {})
+
+                    # Split instance string into parts
+                    parts = [p for p in instance_str.split(".") if p]
+
+                    # Match parts to index columns
+                    if len(parts) == len(index_columns):
+                        for idx_col_name, idx_part in zip(index_columns, parts, strict=True):
+                            # Only set if not already present
+                            if idx_col_name not in col_values:
+                                # Convert to int if it looks like a number
+                                if idx_part.isdigit():
+                                    col_values[idx_col_name] = int(idx_part)
+                                else:
+                                    col_values[idx_col_name] = idx_part
+                                updated = True
+
+        if updated:
+            self._save_mib_state()
+
     def _normalize_oid_str(self, oid: str) -> str:
         """Normalize a dotted OID string (remove extra dots/spaces)."""
         cleaned = oid.strip().strip(".")
@@ -1486,6 +1573,70 @@ class SNMPAgent:
             "table_name": table_name,
             "entry_name": entry_name or "",
         }
+
+    def _resolve_table_cell_context(
+        self,
+        oid: tuple[int, ...],
+    ) -> tuple[str, str, str, list[str]] | None:
+        """Resolve table metadata for a concrete table cell OID.
+
+        Returns:
+            (table_oid_str, instance_str, column_name, index_columns) when OID points to a table cell,
+            otherwise None.
+
+        """
+        if not self.mib_jsons:
+            return None
+
+        for schema in self.mib_jsons.values():
+            objects = self._schema_objects(schema)
+            if not objects:
+                continue
+
+            for obj in objects.values():
+                if obj.get("type") != "MibTable":
+                    continue
+
+                table_oid = self._oid_tuple(obj.get("oid"))
+                if table_oid is None:
+                    continue
+
+                if len(oid) <= len(table_oid) + 2:
+                    continue
+                if oid[: len(table_oid)] != table_oid:
+                    continue
+                if oid[len(table_oid)] != 1:
+                    continue
+
+                entry_oid = table_oid + (1,)
+                entry_obj: dict[str, JsonValue] | None = None
+                for candidate in objects.values():
+                    if candidate.get("type") != "MibTableRow":
+                        continue
+                    if self._oid_tuple(candidate.get("oid")) == entry_oid:
+                        entry_obj = candidate
+                        break
+
+                if not entry_obj:
+                    continue
+
+                column_id = oid[len(table_oid) + 1]
+                column_name: str | None = None
+                for candidate_name, candidate in objects.items():
+                    col_oid = self._oid_tuple(candidate.get("oid"))
+                    if col_oid == entry_oid + (column_id,):
+                        column_name = candidate_name
+                        break
+
+                if not column_name:
+                    continue
+
+                instance_parts = oid[len(table_oid) + 2 :]
+                instance_str = ".".join(str(x) for x in instance_parts) if instance_parts else "1"
+                index_columns = self._string_list(entry_obj.get("indexes"))
+                return self._oid_list_to_str(list(table_oid)), instance_str, column_name, index_columns
+
+        return None
 
     def _build_augmented_index_map(self) -> None:
         """Build parent -> child mappings for tables that AUGMENT indexes."""
@@ -1764,6 +1915,108 @@ class SNMPAgent:
         except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
             self.logger.exception("Failed to save MIB state to %s: %s", path, e)
 
+    def _create_missing_cell_instance(
+        self,
+        column_name: str,
+        cell_oid: tuple[int, ...],
+        value: JsonValue,
+    ) -> bool:
+        """Create a missing MibScalarInstance for a table cell if needed.
+
+        This is called when loading state with instances that weren't in the
+        original schema. We need to create the MibScalarInstance objects so
+        pysnmp can find them during queries.
+
+        Args:
+            column_name: The column name (e.g., "ifDescr")
+            cell_oid: The full cell OID as tuple (e.g., (1, 3, 6, 1, 2, 1, 2, 2, 1, 2, 2))
+            value: The value to set for this cell
+
+        Returns:
+            True if instance was created or already existed, False on error
+
+        """
+        if self.mib_builder is None:
+            return False
+
+        try:
+            MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
+                0
+            ]
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+            self.logger.debug("Could not import MibScalarInstance: %s", e)
+            return False
+
+        # Check if instance already exists
+        for module_name, symbols in self.mib_builder.mibSymbols.items():
+            for symbol_obj in symbols.values():
+                if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == cell_oid:
+                    return True  # Already exists
+
+        # Find an existing MibScalarInstance for the same column (different index)
+        # to use as a template for the type
+        template_instance = None
+        target_module = None
+        column_oid = None
+        for module_name, symbols in self.mib_builder.mibSymbols.items():
+            for symbol_name, symbol_obj in symbols.items():
+                if (
+                    isinstance(symbol_obj, MibScalarInstance)
+                    and symbol_name.startswith(f"{column_name}Inst_")
+                ):
+                    # Found an existing instance for this column
+                    template_instance = symbol_obj
+                    target_module = module_name
+                    if hasattr(symbol_obj, "name") and isinstance(symbol_obj.name, tuple):
+                        # Derive column OID from concrete cell OID by removing
+                        # the current instance suffix from template symbol name.
+                        # Works for single- and multi-component indices.
+                        current_name = symbol_obj.name
+                        suffix = "Inst_"
+                        current_index_str = symbol_name.split(suffix, 1)[1] if suffix in symbol_name else ""
+                        current_index_len = len([p for p in current_index_str.split("_") if p])
+                        if current_index_len > 0 and len(current_name) > current_index_len:
+                            column_oid = current_name[:-current_index_len]
+                        else:
+                            column_oid = current_name[:-1]
+                    break
+            if template_instance:
+                break
+
+        if not template_instance or not target_module or not column_oid:
+            self.logger.debug(
+                "Could not find template instance for column %s to determine type",
+                column_name,
+            )
+            return False
+
+        try:
+            # Clone the syntax from the template instance
+            new_syntax = template_instance.syntax.clone(value)
+            # Extract the index tuple from the cell_oid by removing the column OID prefix
+            index_tuple = cell_oid[len(column_oid) :]
+            # Create instance with proper arguments: (col_oid, index_tuple, syntax)
+            new_instance = MibScalarInstance(column_oid, index_tuple, new_syntax)
+
+            # Generate a unique instance name and export
+            instance_name = f"{column_name}Inst_{'_'.join(str(x) for x in index_tuple)}"
+            self.mib_builder.mibSymbols[target_module][instance_name] = new_instance
+            self.logger.info(
+                "Created missing MibScalarInstance %s for %s = %s",
+                cell_oid,
+                column_name,
+                value,
+            )
+            return True
+
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+            self.logger.debug(
+                "Failed to create MibScalarInstance for %s: %s",
+                cell_oid,
+                e,
+            )
+            return False
+
     def _update_table_cell_values(
         self,
         table_oid: str,
@@ -1909,6 +2162,16 @@ class SNMPAgent:
                                     e,
                                 )
                             break
+
+                # If not found, try to create a missing instance
+                # (for instances loaded from state that weren't in the schema)
+                if not updated:
+                    if self._create_missing_cell_instance(column_name, cell_oid, value):
+                        updated = True
+                        self.logger.info(
+                            "Created missing MibScalarInstance for %s",
+                            cell_oid,
+                        )
 
                 # If update succeeded or we stored in table_instances, propagate to linked columns
                 if updated or stored:

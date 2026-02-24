@@ -25,6 +25,7 @@ class RegistrarCommonDeps:
     decode_value: Callable[[ObjectType], ObjectType]
     encode_value: Callable[[ObjectType, str], ObjectType]
     write_hooks: RegistrarWriteHooks
+    mib_builder: ObjectType
 
 
 @dataclass(frozen=True)
@@ -430,6 +431,7 @@ class RegistrarTableBuilder:
         self._decode_value = deps.common.decode_value
         self._encode_value = deps.common.encode_value
         self._write_hooks = deps.common.write_hooks
+        self.mib_builder = deps.common.mib_builder
 
     def resolve_table_entry(
         self,
@@ -469,6 +471,7 @@ class RegistrarTableBuilder:
         entry_oid: tuple[int, ...],
         type_registry: dict[str, ObjectType],
         symbols: dict[str, ObjectType],
+        mib: str = "",
     ) -> dict[str, tuple[tuple[int, ...], str, bool]]:
         """Collect and create table column symbols."""
         columns_by_name: dict[str, tuple[tuple[int, ...], str, bool]] = {}
@@ -495,14 +498,41 @@ class RegistrarTableBuilder:
             try:
                 pysnmp_type = self._get_pysnmp_type(base_type)
                 if pysnmp_type is None:
-                    continue
+                    # If type not found and mib is provided, try importing from that mib
+                    if mib:
+                        try:
+                            pysnmp_type = self.mib_builder.import_symbols(mib, col_type_name)[0]
+                            self.logger.info(
+                                "Found type %s in MIB %s for column %s",
+                                col_type_name,
+                                mib,
+                                col_name,
+                            )
+                        except Exception as e:  # Broad catch for any import failures
+                            self.logger.warning(
+                                "Failed to find type %s for column %s (tried %s and %s): %s",
+                                col_type_name,
+                                col_name,
+                                base_type,
+                                mib,
+                                e,
+                            )
+                            continue
+                    else:
+                        self.logger.warning(
+                            "Type %s for column %s not found and no mib provided",
+                            col_type_name,
+                            col_name,
+                        )
+                        continue
 
                 col_access_raw = col_info.get("access", "read-only")
                 col_access = self._normalize_access(col_access_raw)
                 col_obj = self.mib_table_column_cls(col_oid, pysnmp_type()).setMaxAccess(col_access)
                 col_is_writable = col_access in ("readwrite", "readcreate")
                 symbols[col_name] = col_obj
-                columns_by_name[col_name] = (col_oid, col_type_name, col_is_writable)
+                # Store the resolved base_type (not the original col_type_name) so create_table_instance can find it
+                columns_by_name[col_name] = (col_oid, base_type, col_is_writable)
             except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
                 self.logger.warning("Error creating column %s: %s", col_name, e)
                 continue
@@ -572,7 +602,27 @@ class RegistrarTableBuilder:
         try:
             pysnmp_type = self._get_pysnmp_type(base_type)
             if pysnmp_type is None:
-                return None
+                # If type not found and mib is provided, try importing from that mib
+                if mib:
+                    try:
+                        pysnmp_type = self.mib_builder.import_symbols(mib, base_type)[0]
+                        self.logger.info(
+                            "Found type %s in MIB %s for instance %s",
+                            base_type,
+                            mib,
+                            col_name,
+                        )
+                    except Exception as e:
+                        self.logger.warning(
+                            "Failed to find type %s for instance %s  in MIB %s: %s",
+                            base_type,
+                            col_name,
+                            mib,
+                            e,
+                        )
+                        return None
+                else:
+                    return None
 
             inst = self.mib_scalar_instance_cls(col_oid, index_tuple, pysnmp_type(value))
             inst_name = f"{col_name}Inst_{'_'.join(map(str, index_tuple))}"
@@ -799,6 +849,7 @@ class RegistrarTableBuilder:
             entry_oid=entry_oid,
             type_registry=type_registry,
             symbols=symbols,
+            mib=mib,
         )
 
         # Create row instances

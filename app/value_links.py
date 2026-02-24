@@ -22,12 +22,14 @@ class ValueLinkEndpoint:
 
     table_oid: str | None
     column_name: str
+    is_base: bool = False  # Mark which endpoint is the BASE (master)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the endpoint to a JSON-compatible dictionary."""
         return {
             "table_oid": self.table_oid,
             "column": self.column_name,
+            "is_base": self.is_base,
         }
 
 
@@ -159,7 +161,11 @@ class ValueLinkManager:
             for entry in link_config.get("endpoints", []):
                 if not isinstance(entry, dict):
                     continue
-                endpoints.append(ValueLinkEndpoint(entry.get("table_oid"), entry.get("column", "")))
+                endpoints.append(ValueLinkEndpoint(
+                    entry.get("table_oid"),
+                    entry.get("column", ""),
+                    entry.get("is_base", False)
+                ))
         else:
             columns = link_config.get("columns", [])
             table_oid = None

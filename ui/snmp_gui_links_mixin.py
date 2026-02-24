@@ -1,6 +1,6 @@
 """Links-tab behaviors for the SNMP GUI controller."""
 
-# ruff: noqa: ANN401, C901, PLC0206, PLR0913, PLR0915, PLR2004
+# ruff: noqa: ANN401, C901, PLR0915, PLR2004
 
 from __future__ import annotations
 
@@ -151,370 +151,345 @@ class SNMPGuiLinksMixin:
             resp.raise_for_status()
             self._refresh_links()
         except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
-            messagebox.showerror("Links", f"Failed to delete link: {exc}")
+            self._log(f"Failed to delete link: {exc}", "WARNING")
 
-    def _parse_endpoints_text(self, text_value: str) -> list[dict[str, Any]]:
-        endpoints: list[dict[str, Any]] = []
-        for line in text_value.splitlines():
-            raw = line.strip()
-            if not raw:
-                continue
-            if ":" in raw:
-                table_oid, column = raw.split(":", 1)
-                endpoints.append({"table_oid": table_oid.strip(), "column": column.strip()})
-                continue
-            parts = raw.split()
-            if len(parts) == 1:
-                endpoints.append({"table_oid": None, "column": parts[0]})
-            else:
-                endpoints.append({"table_oid": parts[0], "column": parts[1]})
-        return endpoints
 
-    @staticmethod
-    def _compute_dialog_endpoint(name: str, parent_oid: str) -> tuple[str | None, str]:
-        column = name.rsplit(".", maxsplit=1)[-1] if "." in name else name
-        table_oid = parent_oid or None
-        return table_oid, column
-
-    def _build_link_available_tree(
-        self,
-        available_tree: ttk.Treeview,
-        scope: str,
-        selected_map: dict[str, tuple[str, str | None, str]],
-    ) -> None:
-        available_tree.delete(*available_tree.get_children())
-
-        if not hasattr(self, "oid_metadata") or not self.oid_metadata:
-            return
-
-        for oid_str, metadata in self.oid_metadata.items():
-            if oid_str in selected_map:
-                continue
-
-            parent_type = metadata.get("parent_type", "")
-            name = metadata.get("name", "")
-
-            if scope == "per-instance" and parent_type == "MibTableRow":
-                parent_oid = metadata.get("parent_oid", "")
-                available_tree.insert("", "end", values=(name, oid_str), tags=(oid_str, parent_oid))
-            elif scope == "global" and parent_type == "MibTable":
-                available_tree.insert("", "end", values=(name, oid_str), tags=(oid_str, ""))
-
-    @staticmethod
-    def _build_link_selected_tree(
-        selected_tree: ttk.Treeview,
-        selected_map: dict[str, tuple[str, str | None, str]],
-    ) -> None:
-        selected_tree.delete(*selected_tree.get_children())
-        for oid_str in list(selected_map.keys()):
-            name, _, _ = selected_map[oid_str]
-            selected_tree.insert("", "end", values=(name, oid_str))
-
-    def _load_existing_link_selected(
-        self,
-        link: dict[str, Any],
-        selected_map: dict[str, tuple[str, str | None, str]],
-    ) -> None:
-        for endpoint in link.get("endpoints", []):
-            table_oid = endpoint.get("table_oid")
-            column = endpoint.get("column", "")
-
-            for oid_str, metadata in (self.oid_metadata or {}).items():
-                if metadata.get("name", "").split(".")[-1] == column:
-                    parent_oid = metadata.get("parent_oid", "")
-                    if (table_oid and parent_oid == table_oid) or (
-                        not table_oid and not parent_oid
-                    ):
-                        name = metadata.get("name", "")
-                        selected_map[oid_str] = (name, table_oid, column)
-                        break
-
-    def _save_link_dialog(
-        self,
-        dialog: tk.Toplevel,
-        selected_map: dict[str, tuple[str, str | None, str]],
-        id_var: ctk.StringVar,
-        scope_var: ctk.StringVar,
-        match_var: ctk.StringVar,
-        desc_var: ctk.StringVar,
-    ) -> None:
-        endpoints: list[dict[str, Any]] = []
-        for oid_str in selected_map:
-            _, table_oid, column = selected_map[oid_str]
-            endpoints.append({"table_oid": table_oid, "column": column})
-
-        if len(endpoints) < 2:
-            messagebox.showerror("Links", "Provide at least two endpoints.")
-            return
-
-        payload = {
-            "id": id_var.get().strip() or None,
-            "scope": scope_var.get(),
-            "type": "bidirectional",
-            "match": match_var.get(),
-            "endpoints": endpoints,
-            "description": desc_var.get().strip() or None,
-            "create_missing": False,
-        }
-        try:
-            resp = requests.post(f"{self.api_url}/links", json=payload, timeout=5)
-            resp.raise_for_status()
-            dialog.destroy()
-            self._refresh_links()
-        except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
-            messagebox.showerror("Links", f"Failed to save link: {exc}")
-
-    def _build_link_dialog_shell(
-        self,
-        link: dict[str, Any] | None,
-    ) -> tuple[
-        tk.Toplevel,
-        ctk.CTkFrame,
-        ctk.StringVar,
-        ctk.StringVar,
-        ctk.StringVar,
-        ctk.StringVar,
-        ttk.Treeview,
-        ttk.Treeview,
-        bool,
-    ]:
+    def _open_link_dialog(self, link: dict[str, Any] | None) -> None:
+        """Link dialog with BASE + LINKED verification."""
         dialog = tk.Toplevel(self.root)
-        dialog.title("Link" if link else "New Link")
-        dialog.geometry("640x420")
+        dialog.title("Link Columns" if link is None else f"Edit Link: {link.get('id')}")
+        dialog.geometry("750x700")
         dialog.transient(self.root)
         dialog.grab_set()
 
         is_state = link is None or link.get("source") == "state"
 
-        frame = ctk.CTkFrame(dialog)
-        frame.pack(fill="both", expand=True, padx=12, pady=12)
+        main_frame = ctk.CTkFrame(dialog)
+        main_frame.pack(fill="both", expand=True, padx=12, pady=12)
 
-        ctk.CTkLabel(frame, text="ID:").grid(row=0, column=0, sticky="w", pady=6)
-        id_var = ctk.StringVar(value="" if link is None else link.get("id", ""))
-        ctk.CTkEntry(frame, textvariable=id_var, width=260).grid(
-            row=0,
-            column=1,
-            sticky="ew",
-            pady=6,
+        # Title
+        title_label = ctk.CTkLabel(
+            main_frame,
+            text="Link Multiple OIDs/Columns with Base Selection",
+            font=("TkDefaultFont", 14, "bold"),
         )
+        title_label.pack(fill="x", pady=(0, 12))
 
-        ctk.CTkLabel(frame, text="Scope:").grid(row=1, column=0, sticky="w", pady=6)
-        scope_var = ctk.StringVar(
-            value="per-instance" if link is None else link.get("scope", "per-instance"),
+        # Help text
+        help_text = ctk.CTkLabel(
+            main_frame,
+            text="1. Enter column names or OIDs below\n"
+            "2. Select one as the BASE (others will sync to it)\n"
+            "3. Verify all are compatible\n"
+            "• For columns: same table, shared index\n"
+            "• For scalars: exact value matching",
+            justify="left",
+            text_color=("gray50", "gray70"),
+            font=("TkDefaultFont", 9),
         )
-        ctk.CTkOptionMenu(frame, values=["per-instance", "global"], variable=scope_var).grid(
-            row=1,
-            column=1,
-            sticky="w",
-            pady=6,
+        help_text.pack(fill="x", pady=(0, 12), padx=0)
+
+        # Endpoints input
+        endpoints_label = ctk.CTkLabel(main_frame, text="OIDs/Columns to Link:")
+        endpoints_label.pack(anchor="w", pady=(6, 2))
+
+        endpoints_text = tk.Text(
+            main_frame,
+            height=6,
+            font=("Courier", 10),
+            bg="#2b2b2b",
+            fg="#ffffff",
+            insertbackground="white",
         )
-
-        ctk.CTkLabel(frame, text="Match:").grid(row=2, column=0, sticky="w", pady=6)
-        match_var = ctk.StringVar(
-            value="shared-index" if link is None else link.get("match", "shared-index"),
-        )
-        ctk.CTkOptionMenu(frame, values=["shared-index"], variable=match_var).grid(
-            row=2,
-            column=1,
-            sticky="w",
-            pady=6,
-        )
-
-        ctk.CTkLabel(frame, text="Description:").grid(row=3, column=0, sticky="w", pady=6)
-        desc_var = ctk.StringVar(value="" if link is None else link.get("description", ""))
-        ctk.CTkEntry(frame, textvariable=desc_var).grid(row=3, column=1, sticky="ew", pady=6)
-
-        ctk.CTkLabel(frame, text="Selected:").grid(row=4, column=0, sticky="nw", pady=6)
-        selected_frame = ctk.CTkFrame(frame)
-        selected_frame.grid(row=4, column=1, sticky="nsew", pady=6)
-
-        selected_tree = ttk.Treeview(
-            selected_frame,
-            columns=("name", "oid"),
-            show="headings",
-            height=4,
-            style="OID.Treeview",
-        )
-        selected_tree.heading("name", text="Name")
-        selected_tree.heading("oid", text="OID")
-        selected_tree.column("name", width=220, minwidth=150, stretch=True, anchor="w")
-        selected_tree.column("oid", width=220, minwidth=150, stretch=True, anchor="w")
-        selected_scroll = ttk.Scrollbar(
-            selected_frame,
-            orient="vertical",
-            command=selected_tree.yview,
-        )
-        selected_tree.configure(yscrollcommand=selected_scroll.set)
-        selected_tree.pack(side="left", fill="both", expand=True)
-        selected_scroll.pack(side="right", fill="y")
-
-        ctk.CTkLabel(frame, text="Available:").grid(row=5, column=0, sticky="nw", pady=6)
-        available_frame = ctk.CTkFrame(frame)
-        available_frame.grid(row=5, column=1, sticky="nsew", pady=6)
-
-        available_tree = ttk.Treeview(
-            available_frame,
-            columns=("name", "oid"),
-            show="headings",
-            height=8,
-            style="OID.Treeview",
-        )
-        available_tree.heading("name", text="Name")
-        available_tree.heading("oid", text="OID")
-        available_tree.column("name", width=220, minwidth=150, stretch=True, anchor="w")
-        available_tree.column("oid", width=220, minwidth=150, stretch=True, anchor="w")
-        available_scroll = ttk.Scrollbar(
-            available_frame,
-            orient="vertical",
-            command=available_tree.yview,
-        )
-        available_tree.configure(yscrollcommand=available_scroll.set)
-        available_tree.pack(side="left", fill="both", expand=True)
-        available_scroll.pack(side="right", fill="y")
-
-        return (
-            dialog,
-            frame,
-            id_var,
-            scope_var,
-            match_var,
-            desc_var,
-            selected_tree,
-            available_tree,
-            is_state,
-        )
-
-    def _open_link_dialog(self, link: dict[str, Any] | None) -> None:
-        (
-            dialog,
-            frame,
-            id_var,
-            scope_var,
-            match_var,
-            desc_var,
-            selected_tree,
-            available_tree,
-            is_state,
-        ) = self._build_link_dialog_shell(link)
-
-        # Track selected endpoints: {oid_str: (name, table_oid, column)}
-        selected_map: dict[str, tuple[str, str | None, str]] = {}
-
-        def _build_available_endpoints() -> None:
-            self._build_link_available_tree(
-                available_tree=available_tree,
-                scope=scope_var.get(),
-                selected_map=selected_map,
-            )
-
-        def _refresh_selected_tree() -> None:
-            self._build_link_selected_tree(selected_tree=selected_tree, selected_map=selected_map)
-
-        def _toggle_selection(event: Any) -> None:
-            """Toggle selection when clicking available endpoint."""
-            if not is_state:
-                return
-
-            tree_widget = event.widget
-            region = tree_widget.identify("region", event.x, event.y)
-            if region != "cell":
-                return
-
-            item = tree_widget.identify_row(event.y)
-            if not item:
-                return
-
-            tags = tree_widget.item(item, "tags")
-            if not tags or len(tags) < 2:
-                return
-
-            oid_str = tags[0]
-            parent_oid = tags[1] if len(tags) > 1 else ""
-            name = tree_widget.item(item, "values")[0]
-
-            table_oid, column = self._compute_dialog_endpoint(str(name), parent_oid)
-
-            # Add to selected
-            selected_map[oid_str] = (name, table_oid, column)
-            _refresh_selected_tree()
-            _build_available_endpoints()
-
-        def _deselect_endpoint(event: Any) -> None:
-            """Remove endpoint when clicking selected endpoint."""
-            if not is_state:
-                return
-
-            tree_widget = event.widget
-            region = tree_widget.identify("region", event.x, event.y)
-            if region != "cell":
-                return
-
-            item = tree_widget.identify_row(event.y)
-            if not item:
-                return
-
-            values = tree_widget.item(item, "values")
-            if values and len(values) >= 2:
-                oid_str = values[1]
-                if oid_str in selected_map:
-                    del selected_map[oid_str]
-                    _refresh_selected_tree()
-                    _build_available_endpoints()
-
-        def _on_scope_change(*_args: Any) -> None:
-            """Handle scope change: filter available list and clear incompatible selections."""
-            scope = scope_var.get()
-            # Clear selected items that don't match new scope
-            to_remove = []
-            for oid_str, (_, table_oid, _) in selected_map.items():
-                if (scope == "per-instance" and table_oid is None) or (
-                    scope == "global" and table_oid is not None
-                ):
-                    to_remove.append(oid_str)
-            for oid_str in to_remove:
-                del selected_map[oid_str]
-            _refresh_selected_tree()
-            _build_available_endpoints()
-
-        scope_var.trace_add("write", _on_scope_change)
-        available_tree.bind("<ButtonRelease-1>", _toggle_selection)
-        selected_tree.bind("<ButtonRelease-1>", _deselect_endpoint)
-
-        # Initialize available endpoints list
-        _build_available_endpoints()
+        endpoints_text.pack(fill="both", expand=False, pady=(0, 12), ipady=6)
 
         if link:
-            self._load_existing_link_selected(link=link, selected_map=selected_map)
-            _refresh_selected_tree()
-            _build_available_endpoints()
+            # Load existing endpoints
+            endpoints_str = "\n".join([ep.get("column", "") for ep in link.get("endpoints", [])])
+            endpoints_text.insert("1.0", endpoints_str)
 
-        if not is_state:
-            # Disable editing for schema links
-            pass
+        # BASE SELECTION FRAME
+        base_frame = ctk.CTkFrame(main_frame, fg_color=("gray90", "gray20"), corner_radius=6)
+        base_frame.pack(fill="x", pady=(0, 12), padx=0, ipady=8, ipadx=8)
 
-        button_frame = ctk.CTkFrame(frame)
-        button_frame.grid(row=6, column=0, columnspan=2, pady=(10, 0), sticky="e")
+        base_label = ctk.CTkLabel(
+            base_frame,
+            text="Select BASE OID (master - all others sync to this):",
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        base_label.pack(anchor="w", pady=(0, 8))
+
+        base_var = tk.StringVar(value="")
+        base_radio_frame = ctk.CTkFrame(base_frame, fg_color="transparent")
+        base_radio_frame.pack(fill="x")
+
+        # File/radio frame will be populated by validation
+        base_radios: list[ctk.CTkRadioButton] = []
+
+        # VERIFICATION FRAME
+        verify_frame = ctk.CTkFrame(main_frame, fg_color=("gray95", "gray15"), corner_radius=6)
+        verify_frame.pack(fill="x", pady=(0, 12), padx=8, ipady=10, ipadx=10)
+
+        verify_label = ctk.CTkLabel(
+            verify_frame,
+            text="Verification: Not configured yet",
+            text_color=("gray70", "gray50"),
+            font=("TkDefaultFont", 9),
+            wraplength=650,
+            justify="left",
+        )
+        verify_label.pack(anchor="w")
+
+        # Description
+        desc_label = ctk.CTkLabel(main_frame, text="Description (optional):")
+        desc_label.pack(anchor="w", pady=(6, 2))
+
+        desc_var = ctk.StringVar(value="" if link is None else link.get("description", ""))
+        ctk.CTkEntry(main_frame, textvariable=desc_var).pack(fill="x", pady=(0, 12))
+
+        # Button frame
+        button_frame = ctk.CTkFrame(main_frame)
+        button_frame.pack(fill="x", pady=(6, 0))
+
+        def _rebuild_base_selection(resolved_endpoints: list[dict[str, Any]]) -> None:
+            """Rebuild the BASE radio buttons based on resolved endpoints."""
+            # Clear existing radios
+            for widget in base_radio_frame.winfo_children():
+                widget.destroy()
+            base_radios.clear()
+            base_var.set("")
+
+            if not resolved_endpoints:
+                empty_label = ctk.CTkLabel(
+                    base_radio_frame,
+                    text="(No valid OIDs entered)",
+                    text_color=("gray70", "gray50"),
+                )
+                empty_label.pack(anchor="w")
+                return
+
+            for i, ep in enumerate(resolved_endpoints):
+                ep_name = ep.get("name", "")
+                ep_type = "Column" if ep.get("is_column") else "Scalar"
+                radio_text = f"{ep_name}  ({ep_type})"
+
+                radio = ctk.CTkRadioButton(
+                    base_radio_frame,
+                    text=radio_text,
+                    variable=base_var,
+                    value=str(i),
+                    font=("TkDefaultFont", 9),
+                )
+                radio.pack(anchor="w", pady=2)
+                base_radios.append(radio)
+
+        def _parse_parts(text: str) -> list[str]:
+            lines = [line.strip() for line in text.split("\n") if line.strip()]
+            parts: list[str] = []
+            for line in lines:
+                if "," in line:
+                    parts.extend([p.strip() for p in line.split(",") if p.strip()])
+                else:
+                    parts.append(line)
+            return parts
+
+        def _resolve_parts(parts: list[str]) -> list[dict[str, Any]]:
+            resolved_endpoints: list[dict[str, Any]] = []
+            metadata = self.oid_metadata or {}
+            for part in parts:
+                matched = next(
+                    (
+                        (oid, meta)
+                        for oid, meta in metadata.items()
+                        if meta.get("name", "") == part
+                    ),
+                    None,
+                )
+                if matched is None:
+                    resolved_endpoints.append(
+                        {
+                            "name": part,
+                            "oid": part,
+                            "type": "Unknown",
+                            "mib": "Unknown",
+                            "is_column": False,
+                        }
+                    )
+                    continue
+
+                oid_str, meta = matched
+                parent_type = meta.get("parent_type")
+                resolved_endpoints.append(
+                    {
+                        "name": part,
+                        "oid": oid_str,
+                        "type": meta.get("type", "Unknown"),
+                        "parent_oid": meta.get("parent_oid"),
+                        "parent_type": parent_type,
+                        "mib": meta.get("mib", "Unknown"),
+                        "is_column": parent_type == "MibTable" if parent_type else False,
+                    }
+                )
+            return resolved_endpoints
+
+        def _set_verify_message(resolved_endpoints: list[dict[str, Any]]) -> None:
+            if len(resolved_endpoints) < 2:
+                verify_label.configure(
+                    text="⚠ Need at least 2 OIDs to create a link",
+                    text_color=("orange", "orange"),
+                )
+                return
+
+            columns = [ep for ep in resolved_endpoints if ep.get("is_column")]
+            scalars = [ep for ep in resolved_endpoints if not ep.get("is_column")]
+
+            if columns and scalars:
+                verify_label.configure(
+                    text="⚠ ERROR: Cannot mix table columns and scalars",
+                    text_color=("red", "red"),
+                )
+                return
+
+            if not columns:
+                scalar_names = ", ".join(str(ep.get("name", "")) for ep in scalars)
+                verify_text = (
+                    f"✓ Valid Scalar Link\n"
+                    f"  • Type: SCALAR VALUES (exact value matching)\n"
+                    f"  • Scalars: {scalar_names}\n"
+                    f"  • Behavior: All values stay synchronized globally"
+                )
+                verify_label.configure(text=verify_text, text_color=("green", "green"))
+                return
+
+            parent_oids = {ep.get("parent_oid") for ep in columns}
+            if len(parent_oids) > 1:
+                err_msg = ", ".join(str(p) for p in parent_oids)
+                verify_label.configure(
+                    text=f"⚠ ERROR: Columns from different tables: {err_msg}",
+                    text_color=("red", "red"),
+                )
+                return
+
+            parent_oid = next(iter(parent_oids))
+            parent_name = next(
+                (
+                    m.get("name", "")
+                    for m in (self.oid_metadata or {}).values()
+                    if m.get("parent_oid") == parent_oid
+                ),
+                "Unknown",
+            )
+            column_names = ", ".join(str(ep.get("name", "")) for ep in columns)
+            verify_text = (
+                f"✓ Valid Column Link\n"
+                f"  • Type: TABLE COLUMNS (shared-index matching)\n"
+                f"  • Table: {parent_name} ({parent_oid})\n"
+                f"  • Columns: {column_names}\n"
+                f"  • Behavior: All column values sync with BASE per row"
+            )
+            verify_label.configure(text=verify_text, text_color=("green", "green"))
+
+        def _on_endpoints_change(*_args: Any) -> None:
+            """Validate and update BASE selection + verification."""
+            text = endpoints_text.get("1.0", "end").strip()
+            if not text:
+                verify_label.configure(
+                    text="Ready. Enter OIDs above.",
+                    text_color=("gray70", "gray50"),
+                )
+                _rebuild_base_selection([])
+                return
+
+            parts = _parse_parts(text)
+            resolved_endpoints = _resolve_parts(parts)
+            _rebuild_base_selection(resolved_endpoints)
+            _set_verify_message(resolved_endpoints)
+
+        # Bind text changes
+        endpoints_text.bind("<KeyRelease>", _on_endpoints_change)
 
         def _save() -> None:
-            self._save_link_dialog(
-                dialog=dialog,
-                selected_map=selected_map,
-                id_var=id_var,
-                scope_var=scope_var,
-                match_var=match_var,
-                desc_var=desc_var,
-            )
+            """Save the link with BASE selection."""
+            text = endpoints_text.get("1.0", "end").strip()
+            if not text:
+                messagebox.showerror("Link", "Enter at least one OID")
+                return
+
+            # Validate BASE selected
+            if not base_var.get():
+                messagebox.showerror("Link", "Select a BASE OID (which endpoints sync to)")
+                return
+
+            parts = _parse_parts(text)
+
+            if len(parts) < 2:
+                messagebox.showerror("Link", "Enter at least two OIDs or column names")
+                return
+
+            # Resolve names to OIDs and table OIDs
+            endpoints: list[dict[str, Any]] = []
+            base_index = int(base_var.get())
+
+            for i, part in enumerate(parts):
+                # Try exact match on column name first
+                matched = False
+                for meta in (self.oid_metadata or {}).values():
+                    if meta.get("name", "") == part:
+                        table_oid = meta.get("parent_oid")
+                        endpoint = {
+                            "table_oid": table_oid,
+                            "column": part,
+                        }
+                        # Mark which is the BASE
+                        if i == base_index:
+                            endpoint["is_base"] = True
+                        endpoints.append(endpoint)
+                        matched = True
+                        break
+
+                if not matched:
+                    # Treat as OID string directly
+                    endpoint = {
+                        "table_oid": None,
+                        "column": part,
+                    }
+                    if i == base_index:
+                        endpoint["is_base"] = True
+                    endpoints.append(endpoint)
+
+            # Determine scope based on whether we have table OIDs
+            has_table_oids = any(ep.get("table_oid") for ep in endpoints)
+            scope = "per-instance" if has_table_oids else "global"
+
+            payload = {
+                "id": link.get("id") if link else None,
+                "scope": scope,
+                "type": "bidirectional",
+                "match": "shared-index" if has_table_oids else "same",
+                "endpoints": endpoints,
+                "description": desc_var.get().strip() or None,
+                "create_missing": False,
+            }
+
+            try:
+                url = f"{self.api_url}/links"
+                resp = requests.post(url, json=payload, timeout=5)
+                resp.raise_for_status()
+                dialog.destroy()
+                self._refresh_links()
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
+                msg = f"Failed to save link: {exc}"
+                messagebox.showerror("Link", msg)
 
         def _close() -> None:
             dialog.destroy()
 
-        save_btn = ctk.CTkButton(button_frame, text="Save", command=_save)
+        save_btn = ctk.CTkButton(button_frame, text="Create Link", command=_save)
         close_btn = ctk.CTkButton(button_frame, text="Close", command=_close)
 
         if is_state:
             save_btn.pack(side="right", padx=(6, 0))
         close_btn.pack(side="right")
 
-        frame.columnconfigure(1, weight=1)
-        frame.rowconfigure(4, weight=2)  # Selected endpoints
-        frame.rowconfigure(5, weight=3)  # Available endpoints
+        # Initial validation
+        _on_endpoints_change()

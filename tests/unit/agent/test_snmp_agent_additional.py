@@ -365,6 +365,78 @@ def test_set_scalar_value_raises_when_no_builder() -> None:
         agent.set_scalar_value((1, 3, 6, 1, 2, 1, 1, 1, 0), "value")
 
 
+def test_set_table_cell_value_persists_into_table_instances() -> None:
+    """Table cell SET should persist under mib_state tables, not scalar overrides."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    class MibScalarInstance:
+        """Test helper class for MibScalarInstance."""
+
+        def __init__(self) -> None:
+            self.name: tuple[int, ...] | None = None
+            self.syntax: Any | None = None
+
+    class FakeSyntax:
+        """Test helper class for FakeSyntax."""
+
+        def __init__(self, value: Any) -> None:
+            self.value = value
+
+        def clone(self, new_value: Any) -> Any:
+            """Test helper clone method."""
+            return new_value
+
+    if_descr_oid = (1, 3, 6, 1, 2, 1, 2, 2, 1, 2, 1)
+    fake_scalar = MibScalarInstance()
+    fake_scalar.name = if_descr_oid
+    fake_scalar.syntax = FakeSyntax("initial")
+    fake_symbols: dict[str, dict[str, Any]] = {"IF-MIB": {"ifDescr": fake_scalar}}
+    fake_builder = SimpleNamespace(
+        mibSymbols=fake_symbols,
+        import_symbols=lambda *args: [MibScalarInstance],
+    )
+
+    agent.mib_builder = cast(Any, fake_builder)
+    agent.mib_jsons = {
+        "IF-MIB": {
+            "objects": {
+                "ifTable": {
+                    "oid": [1, 3, 6, 1, 2, 1, 2, 2],
+                    "type": "MibTable",
+                    "rows": [{"ifIndex": 1, "ifDescr": "unset"}],
+                },
+                "ifEntry": {
+                    "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1],
+                    "type": "MibTableRow",
+                    "indexes": ["ifIndex"],
+                },
+                "ifIndex": {
+                    "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 1],
+                    "type": "Integer32",
+                },
+                "ifDescr": {
+                    "oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2],
+                    "type": "DisplayString",
+                },
+            }
+        }
+    }
+    agent.table_instances = {}
+    agent.overrides = {}
+
+    saved: dict[str, bool] = {}
+    agent._save_mib_state = lambda: saved.setdefault("called", True)  # type: ignore[method-assign]
+
+    agent.set_scalar_value(if_descr_oid, "foo")
+
+    table = agent.table_instances["1.3.6.1.2.1.2.2"]
+    row_values = table["1"]["column_values"]
+    assert row_values["ifDescr"] == "foo"
+    assert row_values["ifIndex"] == 1
+    assert "1.3.6.1.2.1.2.2.1.2.1" not in agent.overrides
+    assert saved.get("called") is True
+
+
 def test_shutdown_logs_exception_on_error(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,

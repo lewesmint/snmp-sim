@@ -89,6 +89,7 @@ class MibRegistrar:
             decode_value=self._value_decoder.decode_value,
             encode_value=encode_value,
             write_hooks=self._write_hooks,
+            mib_builder=self.mib_builder,
         )
         self._scalar_builder = RegistrarScalarBuilder(
             RegistrarScalarDeps(
@@ -116,6 +117,7 @@ class MibRegistrar:
             decode_value=self._value_decoder.decode_value,
             encode_value=encode_value,
             write_hooks=self._write_hooks,
+            mib_builder=self.mib_builder,
         )
         self._scalar_builder = RegistrarScalarBuilder(
             RegistrarScalarDeps(
@@ -312,8 +314,6 @@ class MibRegistrar:
             type_registry = self._load_type_registry(type_registry_path)
             self.register_mib("SNMPv2-MIB", snmp2, type_registry)
 
-            # Persist the updated schema back to disk
-            self._persist_sysor_schema(snmp2)
             self.logger.info("sysORTable successfully populated with MIB implementations")
         except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
             self.logger.exception("Error populating sysORTable")

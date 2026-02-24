@@ -20,6 +20,7 @@ class LinkEndpoint(BaseModel):
 
     table_oid: str | None = None
     column: str
+    is_base: bool = False  # Mark which endpoint is the BASE (UI metadata)
 
 
 class LinkRequest(BaseModel):
@@ -28,7 +29,7 @@ class LinkRequest(BaseModel):
     id: str | None = None
     scope: Literal["per-instance", "global"] = "per-instance"
     type: Literal["bidirectional"] = "bidirectional"
-    match: Literal["shared-index"] = "shared-index"
+    match: Literal["shared-index", "same"] = "shared-index"
     endpoints: list[LinkEndpoint]
     description: str | None = None
     create_missing: bool = False
@@ -161,7 +162,7 @@ def create_or_update_link(request: LinkRequest) -> dict[str, object]:
 
     link_manager.add_link(
         link_id,
-        endpoints=[ValueLinkEndpoint(e.table_oid, e.column) for e in request.endpoints],
+        endpoints=[ValueLinkEndpoint(e.table_oid, e.column, e.is_base) for e in request.endpoints],
         scope=request.scope,
         match=request.match,
         source="state",

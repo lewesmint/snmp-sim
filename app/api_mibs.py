@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
 import anyio
@@ -16,6 +17,54 @@ from app.oid_utils import oid_tuple_to_str
 router = APIRouter()
 
 SCHEMA_DIR = str(AGENT_MODEL_DIR)
+_MIN_COLUMN_OID_LEN = 2  # Minimum OID length to be considered a table column
+
+
+def _iter_schema_objects(
+    schemas: Mapping[str, object],
+) -> list[tuple[str, str, dict[str, object]]]:
+    items: list[tuple[str, str, dict[str, object]]] = []
+    for mib_name, schema in schemas.items():
+        if not isinstance(schema, dict):
+            continue
+        objects = schema.get("objects", schema)
+        if not isinstance(objects, dict):
+            continue
+        for obj_name, obj_data in objects.items():
+            if isinstance(obj_data, dict) and "oid" in obj_data:
+                items.append((mib_name, obj_name, obj_data))
+    return items
+
+
+def _build_table_oid_map(
+    objects: list[tuple[str, str, dict[str, object]]],
+) -> dict[tuple[int, ...], tuple[str, str]]:
+    table_oid_map: dict[tuple[int, ...], tuple[str, str]] = {}
+    for mib_name, obj_name, obj_data in objects:
+        if obj_data.get("type", "") != "MibTable":
+            continue
+        oid_list = obj_data.get("oid", [])
+        if isinstance(oid_list, list):
+            table_oid_map[tuple(oid_list)] = (obj_name, mib_name)
+    return table_oid_map
+
+
+def _get_parent_info(
+    obj_type: str,
+    oid_tuple: tuple[int, ...],
+    table_oid_map: dict[tuple[int, ...], tuple[str, str]],
+) -> tuple[str | None, str | None]:
+    if obj_type == "MibTableRow":
+        parent_tuple = oid_tuple[:-1]
+        if parent_tuple in table_oid_map:
+            return oid_tuple_to_str(parent_tuple), "MibTable"
+
+    if len(oid_tuple) >= _MIN_COLUMN_OID_LEN:
+        potential_table = oid_tuple[:-2]
+        if potential_table in table_oid_map:
+            return oid_tuple_to_str(potential_table), "MibTable"
+
+    return None, None
 
 
 @router.get("/mibs")
@@ -124,29 +173,31 @@ async def get_oid_metadata() -> dict[str, object]:
         raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
 
     schemas = load_all_schemas(schema_dir)
-
+    schema_objects = _iter_schema_objects(schemas)
     metadata_map: dict[str, dict[str, object]] = {}
+    table_oid_map = _build_table_oid_map(schema_objects)
 
-    for mib_name, schema in schemas.items():
-        objects = schema.get("objects", schema)
-        if not isinstance(objects, dict):
+    for mib_name, obj_name, obj_data in schema_objects:
+        oid_value = obj_data.get("oid", [])
+        if not isinstance(oid_value, list):
             continue
+        oid_tuple = tuple(oid_value)
+        oid_str = oid_tuple_to_str(oid_tuple)
+        obj_type = str(obj_data.get("type", ""))
+        parent_oid, parent_type = _get_parent_info(obj_type, oid_tuple, table_oid_map)
 
-        for obj_name, obj_data in objects.items():
-            if isinstance(obj_data, dict) and "oid" in obj_data:
-                oid_tuple = obj_data["oid"]
-                oid_str = oid_tuple_to_str(tuple(oid_tuple))
-
-                metadata_map[oid_str] = {
-                    "oid": oid_tuple,
-                    "oid_str": oid_str,
-                    "name": obj_name,
-                    "type": obj_data.get("type", ""),
-                    "access": obj_data.get("access", ""),
-                    "mib": mib_name,
-                    "initial": obj_data.get("initial"),
-                    "enums": obj_data.get("enums"),
-                    "dynamic_function": obj_data.get("dynamic_function"),
-                }
+        metadata_map[oid_str] = {
+            "oid": oid_tuple,
+            "oid_str": oid_str,
+            "name": obj_name,
+            "type": obj_type,
+            "access": obj_data.get("access", ""),
+            "mib": mib_name,
+            "parent_oid": parent_oid,
+            "parent_type": parent_type,
+            "initial": obj_data.get("initial"),
+            "enums": obj_data.get("enums"),
+            "dynamic_function": obj_data.get("dynamic_function"),
+        }
 
     return {"count": len(metadata_map), "metadata": metadata_map}

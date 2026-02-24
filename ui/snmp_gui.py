@@ -1265,7 +1265,9 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
                 )
                 self.oid_to_item[oid_str] = node
             # Folder/container node
-            elif value.get("__is_table__"):
+            elif value.get("__is_table__") and (
+                str(self.oid_metadata.get(oid_str, {}).get("type", "")) == "MibTable"
+            ):
                 icon_key = "table"
                 display_text = stored_name or str(key)
 
