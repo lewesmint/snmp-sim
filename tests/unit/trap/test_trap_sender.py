@@ -8,7 +8,7 @@ from pysnmp.proto import rfc1902
 from pytest_mock import MockerFixture
 
 from app.cli_trap_sender import main as cli_main
-from app.trap_sender import TrapSender
+from snmp_traps.trap_sender import TrapSender
 
 
 @pytest.fixture
@@ -101,12 +101,12 @@ def test_send_mib_notification_reuses_provided_engine(mocker: MockerFixture) -> 
     )
 
     mocker.patch(
-        "app.trap_sender.UdpTransportTarget.create",
+        "snmp_traps.trap_sender.UdpTransportTarget.create",
         new_callable=mocker.AsyncMock,
         return_value=object(),
     )
     mock_send = mocker.patch(
-        "app.trap_sender.send_notification",
+        "snmp_traps.trap_sender.send_notification",
         new_callable=mocker.AsyncMock,
         return_value=(None, 0, 0, []),
     )
@@ -128,12 +128,12 @@ def test_send_mib_notification_reuses_internal_engine(mocker: MockerFixture) -> 
     sender = TrapSender(dest=("localhost", 162), community="public")
 
     mocker.patch(
-        "app.trap_sender.UdpTransportTarget.create",
+        "snmp_traps.trap_sender.UdpTransportTarget.create",
         new_callable=mocker.AsyncMock,
         return_value=object(),
     )
     mock_send = mocker.patch(
-        "app.trap_sender.send_notification",
+        "snmp_traps.trap_sender.send_notification",
         new_callable=mocker.AsyncMock,
         return_value=(None, 0, 0, []),
     )

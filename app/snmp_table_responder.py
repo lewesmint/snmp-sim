@@ -201,7 +201,9 @@ class SNMPTableResponder:
                             if len(columns) == 1:
                                 col_oid_list = next(iter(columns.values()))
                                 try:
-                                    full_oid = tuple(col_oid_list + [int(p) for p in instance_parts])
+                                    full_oid = tuple(
+                                        col_oid_list + [int(p) for p in instance_parts]
+                                    )
                                 except ValueError:
                                     continue
                                 oids.append(full_oid)
@@ -211,7 +213,9 @@ class SNMPTableResponder:
                                 if self._row_value_with_default(row, col_name, default_row) is None:
                                     continue
                                 try:
-                                    full_oid = tuple(col_oid_list + [int(p) for p in instance_parts])
+                                    full_oid = tuple(
+                                        col_oid_list + [int(p) for p in instance_parts]
+                                    )
                                 except ValueError:
                                     continue
                                 oids.append(full_oid)
@@ -233,9 +237,9 @@ class SNMPTableResponder:
     ) -> object | None:
         """Resolve a row column value, falling back to table defaults."""
         if col_name in row:
-            return row[col_name]
+            return cast("object", row[col_name])
         if col_name in default_row:
-            return default_row[col_name]
+            return cast("object", default_row[col_name])
         return None
 
     @staticmethod
@@ -246,9 +250,9 @@ class SNMPTableResponder:
     ) -> object | None:
         """Resolve an index value from row data with default-row fallback."""
         if index_name in row:
-            return row[index_name]
+            return cast("object", row[index_name])
         if index_name in default_row:
-            return default_row[index_name]
+            return cast("object", default_row[index_name])
         return None
 
     @staticmethod
@@ -313,7 +317,7 @@ class SNMPTableResponder:
                     continue
                 value = self._row_value_with_default(row, col_name, default_row)
                 if value is not None:
-                    return cast("object", value)
+                    return value
             return None
 
         for row in rows:
@@ -322,10 +326,10 @@ class SNMPTableResponder:
             row_idx_str = self._build_row_index_string(row, index_columns, default_row)
             if row_idx_str == instance_str:
                 value = self._row_value_with_default(row, col_name, default_row)
-                return cast("object", value) if value is not None else None
+                return value if value is not None else None
         return None
 
-    def _lookup_multi_column_value(
+    def _lookup_multi_column_value(  # noqa: PLR0913
         self,
         columns: dict[str, dict[str, Any]],
         rows: list[Any],
@@ -344,7 +348,7 @@ class SNMPTableResponder:
                 row_idx_str = self._build_row_index_string(row, index_columns, default_row)
                 if row_idx_str == instance_str:
                     value = self._row_value_with_default(row, col_name, default_row)
-                    return cast("object", value) if value is not None else None
+                    return value if value is not None else None
             return None
         return None
 

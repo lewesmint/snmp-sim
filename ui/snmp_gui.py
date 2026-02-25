@@ -110,7 +110,11 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
         self.main_paned: tk.PanedWindow = tk.PanedWindow(
             self.root,
             orient=tk.VERTICAL,
-            sashwidth=5,
+            sashwidth=10,
+            showhandle=True,
+            handlesize=10,
+            handlepad=2,
+            sashrelief=tk.RAISED,
             bg="#2b2b2b",
         )
         self.main_paned.pack(fill="both", expand=True, padx=10, pady=10)
@@ -4766,6 +4770,9 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
     def _on_close(self) -> None:
         """Save GUI log and configuration then quit."""
         try:
+            with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
+                self._stop_trap_receiver()
+
             # Save GUI log using common utility
             save_gui_log(self.log_text)
 
@@ -4946,39 +4953,33 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
             # Wait a moment for the trap to be received, then check
             time.sleep(0.5)
 
-            # Check if trap was received
+            # Check if trap was received by UI-local receiver
             try:
-                check_response = requests.get(
-                    f"{self.api_url}/trap-receiver/traps?limit=1",
-                    timeout=2,
-                )
-                if check_response.status_code == 200:
-                    check_result = check_response.json()
-                    traps = check_result.get("traps", [])
-                    if traps:
-                        received_trap = traps[0]
-                        recv_timestamp = received_trap.get("timestamp", "")
-                        recv_oid = received_trap.get("trap_oid_str", "unknown")
-                        varbinds = received_trap.get("varbinds", [])
+                traps = self._get_local_received_traps(limit=1)
+                if traps:
+                    received_trap = traps[0]
+                    recv_timestamp = received_trap.get("timestamp", "")
+                    recv_oid = received_trap.get("trap_oid_str", "unknown")
+                    varbinds = received_trap.get("varbinds", [])
 
-                        recv_log_msg = (
-                            f"[{recv_timestamp}] Received trap: {trap_name} (OID: {recv_oid})"
-                        )
-                        self.log_text.insert("end", "\n" + recv_log_msg + "\n")
+                    recv_log_msg = (
+                        f"[{recv_timestamp}] Received trap: {trap_name} (OID: {recv_oid})"
+                    )
+                    self.log_text.insert("end", "\n" + recv_log_msg + "\n")
 
-                        for vb in varbinds:
-                            vb_oid = vb.get("oid_str", "unknown")
-                            vb_value = vb.get("value", "")
-                            self.log_text.insert("end", f"  - {vb_oid} = {vb_value}\n")
+                    for vb in varbinds:
+                        vb_oid = vb.get("oid_str", "unknown")
+                        vb_value = vb.get("value", "")
+                        self.log_text.insert("end", f"  - {vb_oid} = {vb_value}\n")
 
-                        self.log_text.see("end")
-                        self._show_trap_notification(trap_name, recv_oid, recv_timestamp, varbinds)
-                    else:
-                        messagebox.showwarning(
-                            "Trap Sent",
-                            f"Test trap '{trap_name}' was sent to localhost:{port}\n\n"
-                            "But no trap was received. Make sure the receiver is running.",
-                        )
+                    self.log_text.see("end")
+                    self._show_trap_notification(trap_name, recv_oid, recv_timestamp, varbinds)
+                else:
+                    messagebox.showwarning(
+                        "Trap Sent",
+                        f"Test trap '{trap_name}' was sent to localhost:{port}\n\n"
+                        "But no trap was received. Make sure the local UI receiver is running.",
+                    )
             except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 messagebox.showinfo(
                     "Trap Sent",

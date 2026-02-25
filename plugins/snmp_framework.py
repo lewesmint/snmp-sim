@@ -49,10 +49,13 @@ def _generate_stable_engine_id() -> bytes:
 
 def _get_stable_engine_id() -> bytes:
     """Get the cached or newly generated stable engine ID."""
-    global _CACHED_ENGINE_ID
-    if _CACHED_ENGINE_ID is None:
-        _CACHED_ENGINE_ID = _generate_stable_engine_id()
-    return _CACHED_ENGINE_ID
+    cached = globals().get("_CACHED_ENGINE_ID")
+    if isinstance(cached, bytes):
+        return cached
+
+    generated = _generate_stable_engine_id()
+    globals()["_CACHED_ENGINE_ID"] = generated
+    return generated
 
 
 @register_plugin("snmp_framework")

@@ -44,6 +44,9 @@ _STRING_TYPES = {"OctetString", "DisplayString", "SnmpAdminString", "OCTET STRIN
 _OID_TYPES = {"ObjectIdentifier", "AutonomousType", "OBJECT IDENTIFIER"}
 _INTEGER_TYPES = {"Integer32", "Integer", "Gauge32", "Unsigned32", "INTEGER"}
 _PLACEHOLDER_STRINGS = {"", "unset", "default", "none", "null", "n/a"}
+_IPV4_OCTET_COUNT = 4
+_IPV4_MAX_OCTET = 255
+_DEFAULT_IPV4 = "0.0.0.0"  # noqa: S104
 
 
 def _is_mac_symbol(symbol_name: str) -> bool:
@@ -75,47 +78,52 @@ def _is_ip_address_type(type_info: TypeInfo) -> bool:
                 continue
             if constraint.get("type") != "ValueSizeConstraint":
                 continue
-            if constraint.get("min") == 4 and constraint.get("max") == 4:
+            if (
+                constraint.get("min") == _IPV4_OCTET_COUNT
+                and constraint.get("max") == _IPV4_OCTET_COUNT
+            ):
                 return True
 
     return False
 
 
-def _encode_ip_address(value: object) -> str:
+def _encode_ip_address(value: object) -> str:  # noqa: PLR0911
     """Normalize Python value into valid dotted IPv4 syntax for PySNMP IpAddress."""
 
     def _normalize_octet(item: object) -> int | None:
+        if not isinstance(item, (int, float, str, bytes, bytearray)):
+            return None
         try:
             octet = int(item)
         except (TypeError, ValueError):
             return None
-        return octet if 0 <= octet <= 255 else None
+        return octet if 0 <= octet <= _IPV4_MAX_OCTET else None
 
     if isinstance(value, str):
         candidate = value.strip()
         if candidate.lower() in _PLACEHOLDER_STRINGS:
-            return "0.0.0.0"
+            return _DEFAULT_IPV4
         parts = candidate.split(".")
-        if len(parts) != 4:
-            return "0.0.0.0"
+        if len(parts) != _IPV4_OCTET_COUNT:
+            return _DEFAULT_IPV4
         octets: list[int] = []
         for part in parts:
             octet = _normalize_octet(part)
             if octet is None:
-                return "0.0.0.0"
+                return _DEFAULT_IPV4
             octets.append(octet)
         return ".".join(str(octet) for octet in octets)
 
-    if isinstance(value, (list, tuple)) and len(value) == 4:
+    if isinstance(value, (list, tuple)) and len(value) == _IPV4_OCTET_COUNT:
         octets = []
         for part in value:
             octet = _normalize_octet(part)
             if octet is None:
-                return "0.0.0.0"
+                return _DEFAULT_IPV4
             octets.append(octet)
         return ".".join(str(octet) for octet in octets)
 
-    return "0.0.0.0"
+    return _DEFAULT_IPV4
 
 
 def _get_first_enum_value(enums: object) -> object | None:

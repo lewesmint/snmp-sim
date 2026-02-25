@@ -3,7 +3,7 @@
 import time
 from typing import Any
 
-from app.trap_receiver import TrapReceiver
+from snmp_traps.trap_receiver import TrapReceiver
 
 
 def test_trap_receiver_init() -> None:

@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import json
+import logging
 import re
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
@@ -114,6 +115,7 @@ class TypeRecorder:
         self._registry: dict[str, TypeEntry] | None = None
         self._snmpv2_smi_types: set[str] | None = None
         self._progress_callback = progress_callback
+        self.logger = logging.getLogger(__name__)
 
     @staticmethod
     def _discover_snmpv2_smi_types() -> set[str]:
@@ -254,7 +256,11 @@ class TypeRecorder:
 
             try:
                 raw_pairs = typed_items()
-            except Exception:
+            except Exception:  # noqa: BLE001
+                logging.getLogger(__name__).debug(
+                    "Skipping enum extraction for candidate %r",
+                    candidate,
+                )
                 continue
 
             if not isinstance(raw_pairs, Iterable):
@@ -552,7 +558,11 @@ class TypeRecorder:
                 continue
             try:
                 syntax_obj = ctor()
-            except Exception:
+            except Exception:  # noqa: BLE001
+                logging.getLogger(__name__).debug(
+                    "Skipping base type seeding for %s due to constructor error",
+                    name,
+                )
                 continue
 
             size, constraints, constraints_repr = self.extract_constraints(syntax_obj)
@@ -606,18 +616,22 @@ class TypeRecorder:
         return c.get("type") == "ValueRangeConstraint"
 
     @staticmethod
-    def _drop_dominated_value_ranges(  # noqa: C901, PLR0912
+    def _value_range_tuple(constraint: JsonDict) -> tuple[int, int]:
+        min_val = constraint["min"]
+        max_val = constraint["max"]
+        if isinstance(min_val, int) and isinstance(max_val, int):
+            return min_val, max_val
+        return int(str(min_val)), int(str(max_val))
+
+    @staticmethod
+    def _drop_dominated_value_ranges(
         constraints: list[JsonDict],
     ) -> list[JsonDict]:
-        ranges: list[tuple[int, int]] = []
-        for c in constraints:
-            if TypeRecorder._is_value_range_constraint(c):
-                min_val = c["min"]
-                max_val = c["max"]
-                if isinstance(min_val, int) and isinstance(max_val, int):
-                    ranges.append((min_val, max_val))
-                else:
-                    ranges.append((int(str(min_val)), int(str(max_val))))
+        ranges = [
+            TypeRecorder._value_range_tuple(c)
+            for c in constraints
+            if TypeRecorder._is_value_range_constraint(c)
+        ]
         if len(ranges) < _MIN_RANGE_COUNT:
             return constraints
         dominated: set[tuple[int, int]] = set()
@@ -632,12 +646,7 @@ class TypeRecorder:
         out: list[JsonDict] = []
         for c in constraints:
             if TypeRecorder._is_value_range_constraint(c):
-                min_val = c["min"]
-                max_val = c["max"]
-                if isinstance(min_val, int) and isinstance(max_val, int):
-                    rng = (min_val, max_val)
-                else:
-                    rng = (int(str(min_val)), int(str(max_val)))
+                rng = TypeRecorder._value_range_tuple(c)
                 if rng in dominated:
                     continue
             out.append(c)
@@ -658,10 +667,7 @@ class TypeRecorder:
         if not base_entry:
             return constraints
         base_ranges = [
-            (
-                c["min"] if isinstance(c["min"], int) else int(str(c["min"])),
-                c["max"] if isinstance(c["max"], int) else int(str(c["max"])),
-            )
+            TypeRecorder._value_range_tuple(c)
             for c in base_entry.get("constraints", [])
             if c.get("type") == "ValueRangeConstraint"
         ]
@@ -669,10 +675,7 @@ class TypeRecorder:
             return constraints
         # Find all ValueRangeConstraint in constraints
         value_ranges = [
-            (
-                c["min"] if isinstance(c["min"], int) else int(str(c["min"])),
-                c["max"] if isinstance(c["max"], int) else int(str(c["max"])),
-            )
+            TypeRecorder._value_range_tuple(c)
             for c in constraints
             if c.get("type") == "ValueRangeConstraint"
         ]
@@ -680,12 +683,7 @@ class TypeRecorder:
         out = []
         for c in constraints:
             if c.get("type") == "ValueRangeConstraint":
-                min_val = c["min"]
-                max_val = c["max"]
-                if isinstance(min_val, int) and isinstance(max_val, int):
-                    rng = (min_val, max_val)
-                else:
-                    rng = (int(str(min_val)), int(str(max_val)))
+                rng = TypeRecorder._value_range_tuple(c)
                 # If this is a base range and a tighter range exists, drop it
                 if rng in base_ranges and any(
                     (rng != other and other[0] >= rng[0] and other[1] <= rng[1])
@@ -710,10 +708,7 @@ class TypeRecorder:
         if not base_entry:
             return constraints
         base_ranges = {
-            (
-                c["min"] if isinstance(c["min"], int) else int(str(c["min"])),
-                c["max"] if isinstance(c["max"], int) else int(str(c["max"])),
-            )
+            TypeRecorder._value_range_tuple(c)
             for c in base_entry.get("constraints", [])
             if TypeRecorder._is_value_range_constraint(c)
         }
@@ -722,12 +717,7 @@ class TypeRecorder:
         out = []
         for c in constraints:
             if TypeRecorder._is_value_range_constraint(c):
-                min_val = c["min"]
-                max_val = c["max"]
-                if isinstance(min_val, int) and isinstance(max_val, int):
-                    rng = (min_val, max_val)
-                else:
-                    rng = (int(str(min_val)), int(str(max_val)))
+                rng = TypeRecorder._value_range_tuple(c)
                 if rng in base_ranges:
                     continue
             out.append(c)
@@ -743,8 +733,8 @@ class TypeRecorder:
                 continue
             try:
                 mib_builder.load_modules(path.stem)
-            except Exception:
-                continue
+            except Exception:  # noqa: BLE001
+                self.logger.debug("Skipping unloadable compiled MIB %s", path.stem)
 
         return mib_builder.mibSymbols
 
@@ -851,7 +841,7 @@ class TypeRecorder:
         snmp_obj = cast("HasGetSyntax", sym_obj)
         try:
             syntax = snmp_obj.getSyntax()
-        except Exception:
+        except Exception:  # noqa: BLE001
             return
 
         if syntax is None:
@@ -884,13 +874,12 @@ class TypeRecorder:
                 types=types,
             )
             constraints = self._drop_dominated_value_ranges(constraints)
-            if base_type_out is not None:
-                constraints = self._drop_redundant_base_range_for_enums(
-                    base_type=base_type_out,
-                    constraints=constraints,
-                    enums=enums,
-                    types=types,
-                )
+            constraints = self._drop_redundant_base_range_for_enums(
+                base_type=base_type_out,
+                constraints=constraints,
+                enums=enums,
+                types=types,
+            )
 
         is_abstract = self._is_abstract_type(t_name, syntax)
 

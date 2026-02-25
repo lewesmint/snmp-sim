@@ -69,8 +69,8 @@ def test_all_oids_and_get_oid_value_and_getnext() -> None:
     r = SNMPTableResponder(behavior, mib_builder=None)
 
     all_oids = r._get_all_table_oids()
-    assert (1, 2, 3, 1) in all_oids
-    assert (1, 2, 3, 2) in all_oids
+    assert (1, 2, 3, 1, 1) in all_oids
+    assert (1, 2, 3, 1, 2) in all_oids
 
     # Known value
     v1 = r._get_oid_value((1, 2, 3, 1))
@@ -83,11 +83,17 @@ def test_all_oids_and_get_oid_value_and_getnext() -> None:
     nxt = r.get_next_oid((1, 2, 3, 1))
     assert nxt is not None
     next_oid, next_val = nxt
-    assert next_oid == (1, 2, 3, 2)
-    assert next_val == "y"
+    assert next_oid == (1, 2, 3, 1, 1)
+    assert next_val == "x"
+
+    nxt2 = r.get_next_oid((1, 2, 3, 1, 1))
+    assert nxt2 is not None
+    next_oid2, next_val2 = nxt2
+    assert next_oid2 == (1, 2, 3, 1, 2)
+    assert next_val2 == "y"
 
     # No next
-    assert r.get_next_oid((1, 2, 3, 2)) is None
+    assert r.get_next_oid((1, 2, 3, 1, 2)) is None
 
 
 def test_short_oid_and_missing_entry_cases() -> None:
@@ -119,7 +125,7 @@ def test_handle_wrappers() -> None:
 
     nxt = r.handle_getnext_request((1, 2, 3, 1))
     assert nxt is not None
-    assert nxt[0] == (1, 2, 3, 2)
+    assert nxt[0] == (1, 2, 3, 1, 1)
 
 
 if __name__ == "__main__":

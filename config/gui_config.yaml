@@ -1,0 +1,8 @@
+host: 127.0.0.1
+port: '8800'
+selected_trap: authenticationFailure
+trap_destinations:
+- - localhost
+  - 162
+trap_index: '1'
+trap_overrides: {}

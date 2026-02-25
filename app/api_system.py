@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -15,7 +16,7 @@ from app.type_registry_validator import validate_type_registry_file
 router = APIRouter()
 
 
-def _load_type_registry_json() -> dict[str, object]:
+def _load_type_registry_json() -> dict[str, dict[str, Any]]:
     """Load type registry JSON, tolerating trailing garbage bytes.
 
     Some environments can leave trailing NULs or stale bytes after writes.

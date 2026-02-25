@@ -90,6 +90,36 @@ class SNMPGuiLinksMixin:
                 parts.append(str(column))
         return " | ".join(parts)
 
+    def _parse_endpoints_text(self, text: str) -> list[dict[str, Any]]:
+        """Parse endpoint text into endpoint dictionaries.
+
+        Supported input forms per non-empty line (or comma-separated token):
+        - "table_oid column"
+        - "table_oid:column"
+        - "column"
+        """
+        endpoints: list[dict[str, Any]] = []
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        for line in lines:
+            parts = [p.strip() for p in line.split(",") if p.strip()] if "," in line else [line]
+            for part in parts:
+                if ":" in part:
+                    table_oid, column = part.split(":", 1)
+                    endpoints.append(
+                        {"table_oid": table_oid.strip() or None, "column": column.strip()})
+                    continue
+
+                split_part = part.split()
+                if len(split_part) >= 2:
+                    table_oid = split_part[0].strip()
+                    column = " ".join(split_part[1:]).strip()
+                    endpoints.append({"table_oid": table_oid or None, "column": column})
+                    continue
+
+                endpoints.append({"table_oid": None, "column": part.strip()})
+
+        return endpoints
+
     def _refresh_links(self) -> None:
         if not self.connected:
             return

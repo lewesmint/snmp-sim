@@ -538,7 +538,34 @@ def test_run_success_path_with_mib_compilation_and_generation(
             mib_dir = Path(self.json_dir) / mib_name
             mib_dir.mkdir(parents=True, exist_ok=True)
             schema_path = mib_dir / "schema.json"
-            schema_path.write_text(json.dumps({"test": "schema"}), encoding="utf-8")
+            if mib_name == "SNMPv2-MIB":
+                schema = {
+                    "objects": {
+                        "sysORIndex": {
+                            "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 1],
+                            "type": "Integer32",
+                            "access": "not-accessible",
+                        },
+                        "sysORID": {
+                            "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 2],
+                            "type": "ObjectIdentifier",
+                            "access": "read-only",
+                        },
+                        "sysORDescr": {
+                            "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 3],
+                            "type": "DisplayString",
+                            "access": "read-only",
+                        },
+                        "sysORUpTime": {
+                            "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 4],
+                            "type": "TimeStamp",
+                            "access": "read-only",
+                        },
+                    },
+                }
+            else:
+                schema = {"test": "schema"}
+            schema_path.write_text(json.dumps(schema), encoding="utf-8")
 
     # Monkeypatch all the dependencies
     monkeypatch.setattr("app.snmp_agent.MibCompiler", FakeCompiler)

@@ -356,7 +356,7 @@ class TableRegistrar:
             suppress_export=True,
         )
 
-    def _register_row_instances(  # noqa: C901, PLR0912, PLR0913
+    def _register_row_instances(  # noqa: C901, PLR0912, PLR0913, PLR0915
         self,
         _mib: str,
         table_name: str,
@@ -476,13 +476,13 @@ class TableRegistrar:
             return None
         try:
             return self.mib_builder.import_symbols("SNMPv2-SMI", base_type)[0]
-        except Exception:  # Broad catch for any import failures
+        except Exception:  # noqa: BLE001
             try:
                 return self.mib_builder.import_symbols("SNMPv2-TC", base_type)[0]
-            except Exception:  # Broad catch for any import failures
+            except Exception:  # noqa: BLE001
                 try:
                     return getattr(rfc1902, base_type, None)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     return None
 
     @staticmethod

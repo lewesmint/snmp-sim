@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, TypeAlias
 
 from pysnmp.proto import rfc1902
+from pysnmp.smi.error import SmiError
 
 from app import mib_metadata
 from app.json_format import write_json_with_horizontal_oid_lists
@@ -33,6 +34,24 @@ from app.model_paths import AGENT_MODEL_DIR, TYPE_REGISTRY_FILE
 from plugins.type_encoders import encode_value
 
 ObjectType: TypeAlias = Any
+REGISTRAR_EXCEPTIONS = (
+    AttributeError,
+    LookupError,
+    OSError,
+    TypeError,
+    ValueError,
+    RuntimeError,
+)
+TYPE_IMPORT_EXCEPTIONS = (
+    AttributeError,
+    ImportError,
+    IndexError,
+    LookupError,
+    OSError,
+    TypeError,
+    ValueError,
+    SmiError,
+)
 
 
 @dataclass
@@ -81,32 +100,7 @@ class MibRegistrar:
         self.start_time = start_time
         self._value_decoder = RegistrarValueDecoder(self.logger)
         self._write_hooks = RegistrarWriteHooks(self.logger)
-        common_deps = RegistrarCommonDeps(
-            logger=self.logger,
-            get_pysnmp_type=self._get_pysnmp_type,
-            normalize_access=self._normalize_access,
-            preferred_snmp_types=self._preferred_snmp_types,
-            decode_value=self._value_decoder.decode_value,
-            encode_value=encode_value,
-            write_hooks=self._write_hooks,
-            mib_builder=self.mib_builder,
-        )
-        self._scalar_builder = RegistrarScalarBuilder(
-            RegistrarScalarDeps(
-                mib_scalar_instance_cls=self.mib_scalar_instance_cls,
-                start_time=self.start_time,
-                common=common_deps,
-            )
-        )
-        self._table_builder = RegistrarTableBuilder(
-            RegistrarTableDeps(
-                mib_scalar_instance_cls=self.mib_scalar_instance_cls,
-                mib_table_cls=self.mib_table_cls,
-                mib_table_row_cls=self.mib_table_row_cls,
-                mib_table_column_cls=self.mib_table_column_cls,
-                common=common_deps,
-            )
-        )
+        self._sync_builders()
 
     def _sync_builders(self) -> None:
         common_deps = RegistrarCommonDeps(
@@ -160,7 +154,7 @@ class MibRegistrar:
             type_registry_path_obj = Path(type_registry_path)
             with type_registry_path_obj.open(encoding="utf-8") as f:
                 type_registry = json.load(f)
-        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+        except REGISTRAR_EXCEPTIONS:
             self.logger.exception("Failed to load type registry")
             type_registry = {}
 
@@ -178,16 +172,15 @@ class MibRegistrar:
             Type registry dictionary, or empty dict if load fails
 
         """
-        if type_registry_path is None:
-            type_registry_path_obj = Path(TYPE_REGISTRY_FILE)
-        else:
-            type_registry_path_obj = Path(type_registry_path)
+        type_registry_path_obj = (
+            Path(type_registry_path) if type_registry_path is not None else Path(TYPE_REGISTRY_FILE)
+        )
 
         try:
             with type_registry_path_obj.open("r", encoding="utf-8") as f:
                 result = json.load(f)
                 return result if isinstance(result, dict) else {}
-        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+        except REGISTRAR_EXCEPTIONS:
             return {}
 
     def _get_sysor_container(self, snmp2: dict[str, ObjectType]) -> dict[str, ObjectType]:
@@ -200,13 +193,16 @@ class MibRegistrar:
             Dictionary containing objects (either snmp2["objects"] or snmp2 itself)
 
         """
-        if (
-            isinstance(snmp2, dict)
-            and "objects" in snmp2
-            and isinstance(snmp2["objects"], dict)
-        ):
-            return snmp2["objects"]
+        objects = snmp2.get("objects")
+        if isinstance(objects, dict):
+            return objects
         return snmp2
+
+    def _import_snmp_symbol(self, module_name: str, symbol_name: str) -> ObjectType | None:
+        try:
+            return self.mib_builder.import_symbols(module_name, symbol_name)[0]
+        except TYPE_IMPORT_EXCEPTIONS:
+            return None
 
     def _ensure_sysor_table_exists(self, container: dict[str, ObjectType]) -> None:
         """Ensure sysORTable structure exists in container.
@@ -272,7 +268,7 @@ class MibRegistrar:
 
             write_json_with_horizontal_oid_lists(snmp2_schema_file, existing_schema)
             self.logger.info("Persisted updated sysORTable schema to %s", snmp2_schema_file)
-        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError) as e:
+        except REGISTRAR_EXCEPTIONS as e:
             self.logger.warning("Could not persist schema to disk: %s", e)
 
     def populate_sysor_table(
@@ -313,12 +309,15 @@ class MibRegistrar:
             container["sysORTable"]["rows"] = sysor_rows
             self.logger.info("Updated sysORTable with %d rows", len(sysor_rows))
 
+            # Persist updated sysORTable rows for future runs.
+            self._persist_sysor_schema(snmp2)
+
             # Re-register SNMPv2-MIB to apply the updated sysORTable
             type_registry = self._load_type_registry(type_registry_path)
             self.register_mib("SNMPv2-MIB", snmp2, type_registry)
 
             self.logger.info("sysORTable successfully populated with MIB implementations")
-        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+        except REGISTRAR_EXCEPTIONS:
             self.logger.exception("Error populating sysORTable")
 
     def register_mib(
@@ -373,7 +372,7 @@ class MibRegistrar:
                     )
             else:
                 self.logger.warning("No objects to register for %s", mib)
-        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+        except REGISTRAR_EXCEPTIONS:
             self.logger.exception("Error registering MIB %s", mib)
 
     @staticmethod
@@ -596,8 +595,13 @@ class MibRegistrar:
             try:
                 table_symbols = self._build_table_symbols(mib, name, info, mib_json, type_registry)
                 export_symbols.update(table_symbols)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
-                self.logger.exception("Error building table %s", name)
+            except REGISTRAR_EXCEPTIONS as _e:
+                self.logger.error(  # noqa: G201
+                    "Error building table %s: %s",
+                    name,
+                    _e,
+                    exc_info=True,
+                )
                 continue
 
     def _build_mib_symbols(
@@ -723,26 +727,12 @@ class MibRegistrar:
         }
         pysnmp_name = type_map.get(base_type, base_type)
 
-        try:
-            return self.mib_builder.import_symbols("SNMPv2-SMI", pysnmp_name)[0]
-        except (
-            AttributeError,
-            ImportError,
-            IndexError,
-            LookupError,
-            OSError,
-            TypeError,
-            ValueError,
-        ):
-            try:
-                return self.mib_builder.import_symbols("SNMPv2-TC", pysnmp_name)[0]
-            except (
-                AttributeError,
-                ImportError,
-                IndexError,
-                LookupError,
-                OSError,
-                TypeError,
-                ValueError,
-            ):
-                return getattr(rfc1902, pysnmp_name, None)
+        from_smi = self._import_snmp_symbol("SNMPv2-SMI", pysnmp_name)
+        if from_smi is not None:
+            return from_smi
+
+        from_tc = self._import_snmp_symbol("SNMPv2-TC", pysnmp_name)
+        if from_tc is not None:
+            return from_tc
+
+        return getattr(rfc1902, pysnmp_name, None)

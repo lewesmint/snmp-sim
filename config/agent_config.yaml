@@ -1,0 +1,48 @@
+# Logging configuration
+logger:
+  level: DEBUG
+  log_dir: logs
+  log_file: snmp-agent.log
+  console: true
+  max_bytes: 10485760  # 10 MB
+  backup_count: 5
+  rotate_on_startup: true  # If true, archive old log to logs/archive/ with timestamp and create new one; if false, append to existing log
+
+# SNMP Agent Configuration
+snmp:
+  # Agent listening configuration
+  host: 0.0.0.0
+  port: 11161
+
+  # Community strings (see config/snmpd.conf for details)
+  # - public: read-only access (GET, GETNEXT, GETBULK)
+  # - private: read-write access (GET, GETNEXT, GETBULK, SET)
+  rocommunity: public
+  rwcommunity: private
+
+  # System information (initial values, can be changed via SNMP SET)
+  sysLocation: Server Room
+  sysContact: Admin <admin@example.com>
+  sysName: snmp-simulator
+  sysDescr: Simple Python SNMP Agent
+
+# MIB directories (platform-specific)
+system_mib_dir:
+  linux: /usr/share/snmp/mibs
+  darwin: /opt/homebrew/opt/net-snmp/share/snmp/mibs
+  win32: c:\net-snmp\share\snmp\mibs
+
+# MIBs to load and serve
+mibs:
+  - SNMPv2-MIB  # Standard system group (sysDescr, sysContact, etc.)
+  - IF-MIB
+  - HOST-RESOURCES-MIB
+  - HOST-RESOURCES-TYPES
+  - CISCO-ALARM-MIB
+  - TEST-ENUM-MIB
+
+# Trap destinations configuration
+# List of host:port pairs where traps should be sent
+trap_destinations:
+  - host: localhost
+    port: 162

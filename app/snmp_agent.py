@@ -267,7 +267,7 @@ class SNMPAgent:
             col_obj = objects.get(col_name)
             if not isinstance(col_obj, dict):
                 objects[col_name] = {
-                    "oid": expected_oid,
+                    "oid": cast(JsonValue, expected_oid),
                     "type": expected_sysor_types[col_name],
                     "access": expected_sysor_access[col_name],
                 }
@@ -506,8 +506,8 @@ class SNMPAgent:
                     try:
                         with schema_path.open("r", encoding="utf-8") as jf:
                             self.mib_jsons[mib] = json.load(jf)
-                        self._validate_snmpv2_core_schema(mib, self.mib_jsons[mib])
                         self._repair_loaded_schema(mib, self.mib_jsons[mib])
+                        self._validate_snmpv2_core_schema(mib, self.mib_jsons[mib])
                         self.logger.info("Loaded schema for %s from %s", mib, schema_path)
                     except json.JSONDecodeError as e:
                         self.logger.warning(
@@ -532,8 +532,8 @@ class SNMPAgent:
                                 )
                                 with schema_path.open("r", encoding="utf-8") as jf:
                                     self.mib_jsons[mib] = json.load(jf)
-                                self._validate_snmpv2_core_schema(mib, self.mib_jsons[mib])
                                 self._repair_loaded_schema(mib, self.mib_jsons[mib])
+                                self._validate_snmpv2_core_schema(mib, self.mib_jsons[mib])
                                 self.logger.info(
                                     "Successfully regenerated and loaded schema for %s",
                                     mib,
@@ -1975,7 +1975,7 @@ class SNMPAgent:
                         suffix = "Inst_"
                         current_index_str = symbol_name.split(suffix, 1)[1] if suffix in symbol_name else ""
                         current_index_len = len([p for p in current_index_str.split("_") if p])
-                        if current_index_len > 0 and len(current_name) > current_index_len:
+                        if 0 < current_index_len < len(current_name):
                             column_oid = current_name[:-current_index_len]
                         else:
                             column_oid = current_name[:-1]

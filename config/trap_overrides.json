@@ -1,0 +1,12 @@
+{
+  "linkDown": {
+    "IF-MIB::ifAdminStatus.1": {
+      "value": "1",
+      "enabled": false
+    },
+    "IF-MIB::ifOperStatus.1": {
+      "value": "2",
+      "enabled": true
+    }
+  }
+}

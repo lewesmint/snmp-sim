@@ -9,7 +9,7 @@ from app.app_logger import AppLogger
 
 if TYPE_CHECKING:
     from app.snmp_agent import SNMPAgent
-    from app.trap_receiver import TrapReceiver
+    from snmp_traps.trap_receiver import TrapReceiver
 
 
 @dataclass

@@ -13,7 +13,7 @@ from collections.abc import Iterable
 
 from pysnmp.proto import rfc1902
 
-from app.trap_sender import TrapSender, VarBindSpec
+from snmp_traps.trap_sender import TrapSender, VarBindSpec
 
 logger = logging.getLogger(__name__)
 

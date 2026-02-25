@@ -53,9 +53,8 @@ class AppConfig:
             return
 
         # If caller passed the default name, prefer config/agent_config.yaml if present
-        if config_path == "agent_config.yaml":
-            if AGENT_CONFIG_FILE.exists():
-                config_path = str(AGENT_CONFIG_FILE)
+        if config_path == "agent_config.yaml" and AGENT_CONFIG_FILE.exists():
+            config_path = str(AGENT_CONFIG_FILE)
 
         if not Path(config_path).exists():
             raise ConfigFileNotFoundError(config_path)

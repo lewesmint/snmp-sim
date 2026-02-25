@@ -18,10 +18,9 @@ from typing import Any, NoReturn, cast
 
 import uvicorn
 
-from app.app_config import AppConfig
 from app.api_state import set_snmp_agent
-from app.model_paths import AGENT_MODEL_DIR, COMPILED_MIBS_DIR
-from app.model_paths import AGENT_CONFIG_FILE
+from app.app_config import AppConfig
+from app.model_paths import AGENT_CONFIG_FILE, AGENT_MODEL_DIR, COMPILED_MIBS_DIR
 from app.snmp_agent import SNMPAgent
 
 _psutil: Any | None
@@ -290,9 +289,9 @@ def run_snmp_agent(agent: SNMPAgent) -> None:
     asyncio.set_event_loop(loop)
     try:
         agent.run()
-    except Exception:
+    except Exception as err:
         logger.exception("SNMP agent crashed")
-        raise SystemExit(1)
+        raise SystemExit(1) from err
 
 
 def main() -> int:
@@ -303,7 +302,7 @@ def main() -> int:
 
     # Load config to get SNMP port
     config = AppConfig(str(AGENT_CONFIG_FILE))
-    snmp_port: int = int(cast(int | str, config.get("snmp.port", DEFAULT_SNMP_PORT)))
+    snmp_port: int = int(cast("int | str", config.get("snmp.port", DEFAULT_SNMP_PORT)))
 
     # Check SNMP port availability before starting agent
     logger.info("Checking SNMP port %s availability...", snmp_port)

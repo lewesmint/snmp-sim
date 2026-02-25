@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -26,7 +27,7 @@ def restore_snmp_agent() -> Generator[None, None, None]:
 
 def test_trap_varbinds_includes_all_index_column_metadata(monkeypatch: Any, tmp_path: Path) -> None:
     """Trap varbind metadata includes IpAddress+port index types for multi-index tables."""
-    api_state.state.snmp_agent = object()
+    api_state.state.snmp_agent = MagicMock()
 
     monkeypatch.setattr("app.api_traps.SCHEMA_DIR", str(tmp_path))
     tmp_path.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,1276 @@
+************* Module ui.snmp_gui_trap_overrides_mixin
+ui/snmp_gui_trap_overrides_mixin.py:16:0: R0902: Too many instance attributes (9/7) (too-many-instance-attributes)
+ui/snmp_gui_trap_overrides_mixin.py:74:4: R0914: Too many local variables (35/15) (too-many-locals)
+ui/snmp_gui_trap_overrides_mixin.py:74:4: R0915: Too many statements (74/50) (too-many-statements)
+ui/snmp_gui_trap_overrides_mixin.py:299:4: R0914: Too many local variables (16/15) (too-many-locals)
+ui/snmp_gui_trap_overrides_mixin.py:342:8: R1702: Too many nested blocks (6/5) (too-many-nested-blocks)
+ui/snmp_gui_trap_overrides_mixin.py:342:8: R1702: Too many nested blocks (6/5) (too-many-nested-blocks)
+ui/snmp_gui_trap_overrides_mixin.py:339:4: R0912: Too many branches (28/12) (too-many-branches)
+ui/snmp_gui_trap_overrides_mixin.py:339:4: R0915: Too many statements (62/50) (too-many-statements)
+ui/snmp_gui_trap_overrides_mixin.py:412:4: R0912: Too many branches (13/12) (too-many-branches)
+ui/snmp_gui_trap_overrides_mixin.py:736:4: R0914: Too many local variables (23/15) (too-many-locals)
+ui/snmp_gui_trap_overrides_mixin.py:817:4: R0914: Too many local variables (16/15) (too-many-locals)
+ui/snmp_gui_trap_overrides_mixin.py:16:0: R0903: Too few public methods (0/2) (too-few-public-methods)
+************* Module ui.snmp_gui_traps_mixin
+ui/snmp_gui_traps_mixin.py:271:4: R0914: Too many local variables (20/15) (too-many-locals)
+ui/snmp_gui_traps_mixin.py:16:0: R0903: Too few public methods (0/2) (too-few-public-methods)
+************* Module ui.snmp_gui_links_mixin
+ui/snmp_gui_links_mixin.py:187:4: R0914: Too many local variables (29/15) (too-many-locals)
+ui/snmp_gui_links_mixin.py:441:8: R0914: Too many local variables (17/15) (too-many-locals)
+ui/snmp_gui_links_mixin.py:187:4: R0915: Too many statements (136/50) (too-many-statements)
+ui/snmp_gui_links_mixin.py:15:0: R0903: Too few public methods (0/2) (too-few-public-methods)
+************* Module app.api_traps
+app/api_traps.py:129:0: R0914: Too many local variables (37/15) (too-many-locals)
+app/api_traps.py:129:0: R0912: Too many branches (23/12) (too-many-branches)
+app/api_traps.py:129:0: R0915: Too many statements (67/50) (too-many-statements)
+app/api_traps.py:168:4: R1702: Too many nested blocks (11/5) (too-many-nested-blocks)
+app/api_traps.py:285:0: R0914: Too many local variables (18/15) (too-many-locals)
+app/api_traps.py:285:0: R0912: Too many branches (14/12) (too-many-branches)
+************* Module app.compiler
+app/compiler.py:30:0: R0903: Too few public methods (1/2) (too-few-public-methods)
+************* Module app.api_tables
+app/api_tables.py:34:0: R0914: Too many local variables (17/15) (too-many-locals)
+************* Module app.mib_registrar_helpers
+app/mib_registrar_helpers.py:18:0: R0902: Too many instance attributes (8/7) (too-many-instance-attributes)
+app/mib_registrar_helpers.py:51:0: R0903: Too few public methods (1/2) (too-few-public-methods)
+app/mib_registrar_helpers.py:236:4: R0913: Too many arguments (6/5) (too-many-arguments)
+app/mib_registrar_helpers.py:255:0: R0902: Too many instance attributes (9/7) (too-many-instance-attributes)
+app/mib_registrar_helpers.py:369:4: R0914: Too many local variables (17/15) (too-many-locals)
+app/mib_registrar_helpers.py:418:0: R0902: Too many instance attributes (12/7) (too-many-instance-attributes)
+app/mib_registrar_helpers.py:468:4: R0913: Too many arguments (6/5) (too-many-arguments)
+app/mib_registrar_helpers.py:468:4: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+app/mib_registrar_helpers.py:468:4: R0914: Too many local variables (21/15) (too-many-locals)
+app/mib_registrar_helpers.py:597:4: R0914: Too many local variables (17/15) (too-many-locals)
+app/mib_registrar_helpers.py:738:4: R0913: Too many arguments (6/5) (too-many-arguments)
+app/mib_registrar_helpers.py:738:4: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+app/mib_registrar_helpers.py:738:4: R0914: Too many local variables (22/15) (too-many-locals)
+app/mib_registrar_helpers.py:824:4: R0913: Too many arguments (6/5) (too-many-arguments)
+app/mib_registrar_helpers.py:824:4: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+app/mib_registrar_helpers.py:824:4: R0914: Too many local variables (20/15) (too-many-locals)
+************* Module app.api_table_views
+app/api_table_views.py:45:0: R0914: Too many local variables (17/15) (too-many-locals)
+app/api_table_views.py:176:0: R0914: Too many local variables (19/15) (too-many-locals)
+app/api_table_views.py:176:0: R0912: Too many branches (14/12) (too-many-branches)
+app/api_table_views.py:269:0: R0914: Too many local variables (19/15) (too-many-locals)
+app/api_table_views.py:269:0: R0912: Too many branches (15/12) (too-many-branches)
+app/api_table_views.py:375:0: R0914: Too many local variables (46/15) (too-many-locals)
+app/api_table_views.py:414:4: R1702: Too many nested blocks (8/5) (too-many-nested-blocks)
+app/api_table_views.py:414:4: R1702: Too many nested blocks (12/5) (too-many-nested-blocks)
+app/api_table_views.py:414:4: R1702: Too many nested blocks (9/5) (too-many-nested-blocks)
+app/api_table_views.py:414:4: R1702: Too many nested blocks (13/5) (too-many-nested-blocks)
+app/api_table_views.py:414:4: R1702: Too many nested blocks (11/5) (too-many-nested-blocks)
+app/api_table_views.py:414:4: R1702: Too many nested blocks (11/5) (too-many-nested-blocks)
+app/api_table_views.py:414:4: R1702: Too many nested blocks (9/5) (too-many-nested-blocks)
+app/api_table_views.py:414:4: R1702: Too many nested blocks (7/5) (too-many-nested-blocks)
+app/api_table_views.py:375:0: R0912: Too many branches (54/12) (too-many-branches)
+app/api_table_views.py:375:0: R0915: Too many statements (115/50) (too-many-statements)
+************* Module app.mib_registrar
+app/mib_registrar.py:59:0: R0902: Too many instance attributes (11/7) (too-many-instance-attributes)
+app/mib_registrar.py:461:4: R0913: Too many arguments (6/5) (too-many-arguments)
+app/mib_registrar.py:614:4: R0914: Too many local variables (18/15) (too-many-locals)
+app/mib_registrar.py:672:4: R0913: Too many arguments (6/5) (too-many-arguments)
+app/mib_registrar.py:672:4: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+app/mib_registrar.py:688:4: R0913: Too many arguments (6/5) (too-many-arguments)
+app/mib_registrar.py:688:4: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+************* Module app.table_registrar
+app/table_registrar.py:23:4: R0913: Too many arguments (8/5) (too-many-arguments)
+app/table_registrar.py:23:4: R0917: Too many positional arguments (8/5) (too-many-positional-arguments)
+app/table_registrar.py:92:4: R0914: Too many local variables (21/15) (too-many-locals)
+app/table_registrar.py:92:4: R0912: Too many branches (16/12) (too-many-branches)
+app/table_registrar.py:186:4: R0913: Too many arguments (6/5) (too-many-arguments)
+app/table_registrar.py:186:4: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+app/table_registrar.py:186:4: R0914: Too many local variables (19/15) (too-many-locals)
+app/table_registrar.py:266:4: R0913: Too many arguments (6/5) (too-many-arguments)
+app/table_registrar.py:266:4: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+app/table_registrar.py:266:4: R0914: Too many local variables (22/15) (too-many-locals)
+app/table_registrar.py:359:4: R0913: Too many arguments (8/5) (too-many-arguments)
+app/table_registrar.py:359:4: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+app/table_registrar.py:359:4: R0914: Too many local variables (17/15) (too-many-locals)
+app/table_registrar.py:359:4: R0912: Too many branches (16/12) (too-many-branches)
+app/table_registrar.py:359:4: R0915: Too many statements (51/50) (too-many-statements)
+************* Module app.api_table_helpers
+app/api_table_helpers.py:107:0: R0912: Too many branches (13/12) (too-many-branches)
+************* Module app.generator
+app/generator.py:54:4: R0914: Too many local variables (38/15) (too-many-locals)
+app/generator.py:97:8: R1702: Too many nested blocks (6/5) (too-many-nested-blocks)
+app/generator.py:97:8: R1702: Too many nested blocks (7/5) (too-many-nested-blocks)
+app/generator.py:97:8: R1702: Too many nested blocks (6/5) (too-many-nested-blocks)
+app/generator.py:97:8: R1702: Too many nested blocks (8/5) (too-many-nested-blocks)
+app/generator.py:54:4: R0912: Too many branches (28/12) (too-many-branches)
+app/generator.py:54:4: R0915: Too many statements (86/50) (too-many-statements)
+app/generator.py:279:4: R0914: Too many local variables (27/15) (too-many-locals)
+app/generator.py:279:4: R0912: Too many branches (20/12) (too-many-branches)
+app/generator.py:279:4: R0915: Too many statements (72/50) (too-many-statements)
+app/generator.py:444:4: R0914: Too many local variables (18/15) (too-many-locals)
+app/generator.py:461:8: R1702: Too many nested blocks (9/5) (too-many-nested-blocks)
+app/generator.py:575:4: R0914: Too many local variables (18/15) (too-many-locals)
+app/generator.py:647:4: R0911: Too many return statements (7/6) (too-many-return-statements)
+app/generator.py:718:4: R0911: Too many return statements (13/6) (too-many-return-statements)
+app/generator.py:23:0: R0903: Too few public methods (1/2) (too-few-public-methods)
+************* Module app.api_trap_receiver
+app/api_trap_receiver.py:37:4: R1720: Unnecessary "else" after "raise", remove the "else" and de-indent the code inside it (no-else-raise)
+app/api_trap_receiver.py:65:4: R1720: Unnecessary "else" after "raise", remove the "else" and de-indent the code inside it (no-else-raise)
+************* Module app.snmp_table_responder
+app/snmp_table_responder.py:143:4: R0914: Too many local variables (22/15) (too-many-locals)
+app/snmp_table_responder.py:147:8: R1702: Too many nested blocks (6/5) (too-many-nested-blocks)
+app/snmp_table_responder.py:147:8: R1702: Too many nested blocks (8/5) (too-many-nested-blocks)
+app/snmp_table_responder.py:147:8: R1702: Too many nested blocks (7/5) (too-many-nested-blocks)
+app/snmp_table_responder.py:147:8: R1702: Too many nested blocks (7/5) (too-many-nested-blocks)
+app/snmp_table_responder.py:143:4: R0912: Too many branches (25/12) (too-many-branches)
+app/snmp_table_responder.py:143:4: R0915: Too many statements (55/50) (too-many-statements)
+app/snmp_table_responder.py:147:8: R1702: Too many nested blocks (7/5) (too-many-nested-blocks)
+app/snmp_table_responder.py:304:4: R0913: Too many arguments (6/5) (too-many-arguments)
+app/snmp_table_responder.py:304:4: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+app/snmp_table_responder.py:332:4: R0913: Too many arguments (7/5) (too-many-arguments)
+app/snmp_table_responder.py:332:4: R0917: Too many positional arguments (7/5) (too-many-positional-arguments)
+app/snmp_table_responder.py:355:4: R0914: Too many local variables (21/15) (too-many-locals)
+app/snmp_table_responder.py:355:4: R0911: Too many return statements (10/6) (too-many-return-statements)
+************* Module app.value_links
+app/value_links.py:67:4: R0913: Too many arguments (8/5) (too-many-arguments)
+************* Module app.cli_model_common
+app/cli_model_common.py:35:4: R1705: Unnecessary "else" after "return", remove the "else" and de-indent the code inside it (no-else-return)
+************* Module app.mib_dependency_resolver
+app/mib_dependency_resolver.py:240:4: R0914: Too many local variables (17/15) (too-many-locals)
+************* Module app.snmp_agent
+app/snmp_agent.py:1978:27: R1716: Simplify chained comparison between the operands (chained-comparison)
+************* Module snmp_traps.trap_receiver
+snmp_traps/trap_receiver.py:26:22: E0601: Using variable 'Callable' before assignment (used-before-assignment)
+snmp_traps/trap_receiver.py:34:0: R0902: Too many instance attributes (11/7) (too-many-instance-attributes)
+snmp_traps/trap_receiver.py:42:4: R0913: Too many arguments (6/5) (too-many-arguments)
+snmp_traps/trap_receiver.py:42:4: R0917: Too many positional arguments (6/5) (too-many-positional-arguments)
+************* Module plugins.basic_types
+plugins/basic_types.py:90:0: R0911: Too many return statements (7/6) (too-many-return-statements)
+************* Module scripts.fix_missing_docstrings
+scripts/fix_missing_docstrings.py:53:0: R0914: Too many local variables (19/15) (too-many-locals)
+************* Module snmp_wrapper.test_wrapper
+snmp_wrapper/test_wrapper.py:10:0: E0611: No name 'PersistentSnmpClient' in module 'snmp_wrapper' (no-name-in-module)
+snmp_wrapper/test_wrapper.py:10:0: E0611: No name 'SnmpSyncError' in module 'snmp_wrapper' (no-name-in-module)
+snmp_wrapper/test_wrapper.py:10:0: E0611: No name 'StatelessSnmpClient' in module 'snmp_wrapper' (no-name-in-module)
+snmp_wrapper/test_wrapper.py:10:0: E0611: No name 'make_oid' in module 'snmp_wrapper' (no-name-in-module)
+************* Module minimal-for-reference.debug_getnext
+minimal-for-reference/debug_getnext.py:4:0: E0401: Unable to import 'async_wrapper' (import-error)
+************* Module minimal-for-reference.bootstrap_tree_viiew
+minimal-for-reference/bootstrap_tree_viiew.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+minimal-for-reference/bootstrap_tree_viiew.py:15:0: C0115: Missing class docstring (missing-class-docstring)
+minimal-for-reference/bootstrap_tree_viiew.py:30:0: C0115: Missing class docstring (missing-class-docstring)
+minimal-for-reference/bootstrap_tree_viiew.py:189:4: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/bootstrap_tree_viiew.py:198:4: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/bootstrap_tree_viiew.py:212:4: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/bootstrap_tree_viiew.py:219:4: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/bootstrap_tree_viiew.py:246:4: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/bootstrap_tree_viiew.py:250:0: C0116: Missing function or method docstring (missing-function-docstring)
+************* Module minimal-for-reference.send_coldstart_trap
+minimal-for-reference/send_coldstart_trap.py:27:0: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/send_coldstart_trap.py:50:0: C0116: Missing function or method docstring (missing-function-docstring)
+************* Module minimal-for-reference.table_agent
+minimal-for-reference/table_agent.py:122:0: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/table_agent.py:122:0: R0914: Too many local variables (44/15) (too-many-locals)
+minimal-for-reference/table_agent.py:154:4: C0103: Variable name "MibTable" doesn't conform to snake_case naming style (invalid-name)
+minimal-for-reference/table_agent.py:154:14: C0103: Variable name "MibTableRow" doesn't conform to snake_case naming style (invalid-name)
+minimal-for-reference/table_agent.py:154:27: C0103: Variable name "MibTableColumn" doesn't conform to snake_case naming style (invalid-name)
+minimal-for-reference/table_agent.py:154:43: C0103: Variable name "MibScalarInstance" doesn't conform to snake_case naming style (invalid-name)
+minimal-for-reference/table_agent.py:122:0: R0912: Too many branches (15/12) (too-many-branches)
+minimal-for-reference/table_agent.py:122:0: R0915: Too many statements (81/50) (too-many-statements)
+************* Module minimal-for-reference.test_pysnmp7_api
+minimal-for-reference/test_pysnmp7_api.py:27:4: C0103: Variable name "errorIndication" doesn't conform to snake_case naming style (invalid-name)
+minimal-for-reference/test_pysnmp7_api.py:27:21: C0103: Variable name "errorStatus" doesn't conform to snake_case naming style (invalid-name)
+minimal-for-reference/test_pysnmp7_api.py:27:34: C0103: Variable name "errorIndex" doesn't conform to snake_case naming style (invalid-name)
+minimal-for-reference/test_pysnmp7_api.py:27:46: C0103: Variable name "varBinds" doesn't conform to snake_case naming style (invalid-name)
+************* Module minimal-for-reference.test_reused_engine
+minimal-for-reference/test_reused_engine.py:6:0: E0401: Unable to import 'async_wrapper' (import-error)
+************* Module minimal-for-reference.QUICK_REFERENCE
+minimal-for-reference/QUICK_REFERENCE.py:1:0: C0103: Module name "QUICK_REFERENCE" doesn't conform to snake_case naming style (invalid-name)
+minimal-for-reference/QUICK_REFERENCE.py:13:0: E0401: Unable to import 'async_wrapper' (import-error)
+minimal-for-reference/QUICK_REFERENCE.py:32:0: C0413: Import "from pysnmp.hlapi.asyncio import UsmUserData, usmHMACMD5AuthProtocol, usmDESPrivProtocol" should be placed at the top of the module (wrong-import-position)
+minimal-for-reference/QUICK_REFERENCE.py:175:0: C0413: Import "from pysnmp.hlapi.asyncio import ContextData" should be placed at the top of the module (wrong-import-position)
+minimal-for-reference/QUICK_REFERENCE.py:221:0: W0105: String statement has no effect (pointless-string-statement)
+minimal-for-reference/QUICK_REFERENCE.py:263:0: W0105: String statement has no effect (pointless-string-statement)
+************* Module minimal-for-reference.quick_verify
+minimal-for-reference/quick_verify.py:4:0: E0401: Unable to import 'async_wrapper' (import-error)
+minimal-for-reference/quick_verify.py:46:6: W1309: Using an f-string that does not have any interpolated variables (f-string-without-interpolation)
+minimal-for-reference/quick_verify.py:48:6: W1309: Using an f-string that does not have any interpolated variables (f-string-without-interpolation)
+************* Module minimal-for-reference.minimal_trap_receiver
+minimal-for-reference/minimal_trap_receiver.py:36:0: R0913: Too many arguments (7/5) (too-many-arguments)
+minimal-for-reference/minimal_trap_receiver.py:36:0: R0917: Too many positional arguments (7/5) (too-many-positional-arguments)
+************* Module minimal-for-reference.example_usage
+minimal-for-reference/example_usage.py:10:0: E0401: Unable to import 'async_wrapper' (import-error)
+minimal-for-reference/example_usage.py:27:4: R1722: Consider using 'sys.exit' instead (consider-using-sys-exit)
+minimal-for-reference/example_usage.py:133:4: E0401: Unable to import 'async_wrapper' (import-error)
+************* Module minimal-for-reference.test_sync_functions
+minimal-for-reference/test_sync_functions.py:9:0: E0401: Unable to import 'async_wrapper' (import-error)
+************* Module minimal-for-reference.test_async_wrapper_integration
+minimal-for-reference/test_async_wrapper_integration.py:19:0: E0401: Unable to import 'async_wrapper' (import-error)
+minimal-for-reference/test_async_wrapper_integration.py:266:0: C0103: Function name "tearDownModule" doesn't conform to snake_case naming style (invalid-name)
+minimal-for-reference/test_async_wrapper_integration.py:288:8: R1722: Consider using 'sys.exit' instead (consider-using-sys-exit)
+minimal-for-reference/test_async_wrapper_integration.py:17:0: W0611: Unused import pytest (unused-import)
+************* Module minimal-for-reference.test_multi_host
+minimal-for-reference/test_multi_host.py:3:0: E0401: Unable to import 'async_wrapper' (import-error)
+minimal-for-reference/test_multi_host.py:5:0: C0411: standard import "typing.Dict" should be placed before third party imports "async_wrapper.get_sync", "pysnmp.hlapi.asyncio.SnmpEngine" (wrong-import-order)
+************* Module minimal-for-reference.test_both_clients
+minimal-for-reference/test_both_clients.py:5:0: E0401: Unable to import 'async_wrapper' (import-error)
+minimal-for-reference/test_both_clients.py:54:10: W1309: Using an f-string that does not have any interpolated variables (f-string-without-interpolation)
+minimal-for-reference/test_both_clients.py:78:10: W1309: Using an f-string that does not have any interpolated variables (f-string-without-interpolation)
+minimal-for-reference/test_both_clients.py:89:18: W1309: Using an f-string that does not have any interpolated variables (f-string-without-interpolation)
+************* Module minimal-for-reference.simple_test
+minimal-for-reference/simple_test.py:11:0: E0401: Unable to import 'async_wrapper' (import-error)
+************* Module minimal-for-reference.test_enterprise_mib
+minimal-for-reference/test_enterprise_mib.py:9:0: E0401: Unable to import 'async_wrapper' (import-error)
+************* Module minimal-for-reference.test_async_wrapper
+minimal-for-reference/test_async_wrapper.py:14:0: E0401: Unable to import 'async_wrapper' (import-error)
+minimal-for-reference/test_async_wrapper.py:14:0: C0413: Import "from async_wrapper import SnmpSyncError, SyncSnmpClient, _LoopThread, _raise_on_error, get_sync, make_oid, run_sync, set_sync, shutdown_sync_wrapper" should be placed at the top of the module (wrong-import-position)
+minimal-for-reference/test_async_wrapper.py:239:8: E0401: Unable to import 'async_wrapper' (import-error)
+************* Module minimal-for-reference.async_wrapper
+minimal-for-reference/async_wrapper.py:87:4: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/async_wrapper.py:92:4: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/async_wrapper.py:103:4: W0603: Using the global statement (global-statement)
+minimal-for-reference/async_wrapper.py:157:0: R0913: Too many arguments (7/5) (too-many-arguments)
+minimal-for-reference/async_wrapper.py:157:0: R0917: Too many positional arguments (7/5) (too-many-positional-arguments)
+minimal-for-reference/async_wrapper.py:193:0: R0913: Too many arguments (7/5) (too-many-arguments)
+minimal-for-reference/async_wrapper.py:193:0: R0917: Too many positional arguments (7/5) (too-many-positional-arguments)
+minimal-for-reference/async_wrapper.py:229:0: R0913: Too many arguments (7/5) (too-many-arguments)
+minimal-for-reference/async_wrapper.py:229:0: R0917: Too many positional arguments (7/5) (too-many-positional-arguments)
+minimal-for-reference/async_wrapper.py:285:0: R0913: Too many arguments (8/5) (too-many-arguments)
+minimal-for-reference/async_wrapper.py:285:0: R0917: Too many positional arguments (8/5) (too-many-positional-arguments)
+minimal-for-reference/async_wrapper.py:339:0: R0913: Too many arguments (8/5) (too-many-arguments)
+minimal-for-reference/async_wrapper.py:339:0: R0917: Too many positional arguments (8/5) (too-many-positional-arguments)
+minimal-for-reference/async_wrapper.py:393:0: R0913: Too many arguments (8/5) (too-many-arguments)
+minimal-for-reference/async_wrapper.py:393:0: R0917: Too many positional arguments (8/5) (too-many-positional-arguments)
+minimal-for-reference/async_wrapper.py:479:4: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/async_wrapper.py:490:4: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/async_wrapper.py:501:4: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/async_wrapper.py:677:0: C0116: Missing function or method docstring (missing-function-docstring)
+minimal-for-reference/async_wrapper.py:678:4: W0603: Using the global statement (global-statement)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[153:276]
+==snmp_wrapper.snmp_wrapper:[122:190]
+    return future.result()
+
+
+# ============================================================================
+# Internal Async Operations
+# ============================================================================
+
+
+async def _get_async(  # noqa: PLR0913
+    engine: SnmpEngine,
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
+    var_binds: VarBinds,
+    timeout: float = 1.0,
+    retries: int = 5,
+    context: ContextData | None = None,
+) -> GetResult:
+    """Async GET operation."""
+    if context is None:
+        context = ContextData()
+    target = await UdpTransportTarget.create(address, timeout=timeout, retries=retries)
+    error_indication, error_status, error_index, result_var_binds = await get_cmd(
+        engine, auth, target, context, *var_binds
+    )
+    return error_indication, error_status, error_index, result_var_binds
+
+
+async def _set_async(  # noqa: PLR0913
+    engine: SnmpEngine,
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
+    var_binds: VarBinds,
+    timeout: float = 1.0,
+    retries: int = 5,
+    context: ContextData | None = None,
+) -> GetResult:
+    """Async SET operation."""
+    if context is None:
+        context = ContextData()
+    target = await UdpTransportTarget.create(address, timeout=timeout, retries=retries)
+    error_indication, error_status, error_index, result_var_binds = await set_cmd(
+        engine, auth, target, context, *var_binds
+    )
+    return error_indication, error_status, error_index, result_var_binds
+
+
+async def _next_async(  # noqa: PLR0913
+    engine: SnmpEngine,
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
+    var_binds: VarBinds,
+    timeout: float = 1.0,
+    retries: int = 5,
+    context: ContextData | None = None,
+) -> GetResult:
+    """Async GET-NEXT operation (for snmpwalk)."""
+    if context is None:
+        context = ContextData()
+    target = await UdpTransportTarget.create(address, timeout=timeout, retries=retries)
+    error_indication, error_status, error_index, result_var_binds = await next_cmd(
+        engine, auth, target, context, *var_binds
+    )
+    return error_indication, error_status, error_index, result_var_binds
+
+
+def _raise_on_error(error_indication: object, error_status: object, error_index: object) -> None:
+    """Raise if SNMP operation failed."""
+    if error_indication: (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==ui.mib_browser:[166:182]
+==ui.snmp_gui:[432:449]
+            return img
+
+        # Try to load from ui/icons/<name>.png, otherwise generate a simple icon
+        icon_specs = {
+            "folder": ("#f4c542", None),
+            "table": ("#3b82f6", None),
+            "lock": ("#9ca3af", None),
+            "edit": ("#10b981", None),
+            "doc": ("#ffffff", "#e5e7eb"),
+            "chart": ("#a78bfa", None),
+            "key": ("#f97316", None),
+        }
+
+        for name, (color, inner) in icon_specs.items():
+            try:
+                png_path = icons_dir / f"{name}.png"
+                if png_path.exists(): (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[98:132]
+==snmp_wrapper.snmp_wrapper:[78:110]
+_GLOBAL_LOCK = threading.Lock()
+
+
+def _get_global_loop_thread() -> _LoopThread:
+    """Get or create the global background loop thread."""
+    global _GLOBAL_LOOP_THREAD  # noqa: PLW0603
+    with _GLOBAL_LOCK:
+        if _GLOBAL_LOOP_THREAD is None:
+            _GLOBAL_LOOP_THREAD = _LoopThread()
+        return _GLOBAL_LOOP_THREAD
+
+
+# ============================================================================
+# Sync Runners
+# ============================================================================
+
+
+def run_sync(coro: Coroutine[Any, Any, T]) -> T:
+    """Run async coroutine: fresh loop per call.
+
+    Each call creates and closes an event loop (slower for multiple ops).
+    Use when you don't care about engine reuse.
+    """
+    try:
+        running_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        running_loop = None
+
+    if running_loop is None:
+        return asyncio.run(coro)
+
+    loop_thread = _get_global_loop_thread() (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[324:376]
+==snmp_wrapper.snmp_wrapper:[254:297]
+        _get_async(
+            engine,
+            auth,
+            address,
+            var_binds,
+            timeout=timeout,
+            retries=retries,
+            context=context,
+        )
+    )
+    _raise_on_error(error_indication, error_status, error_index)
+    return tuple(result_var_binds)
+
+
+def set_sync(
+    engine: SnmpEngine,
+    auth: Union[CommunityData, UsmUserData],
+    address: Tuple[str, int],
+    var_binds: VarBinds,
+    timeout: float = 1.0,
+    retries: int = 5,
+    context: Optional[ContextData] = None,
+    use_persistent_loop: bool = False,
+) -> Tuple[ObjectType, ...]:
+    """Synchronous SNMP SET operation.
+
+    Blocks until the SET response is received and processed.
+    Handles async UdpTransportTarget creation internally.
+
+    Args:
+        engine: SNMP engine instance
+        auth: Authentication (CommunityData for v2c, UsmUserData for v3)
+        address: Tuple of (hostname, port) for SNMP agent, e.g. ('192.168.1.1', 161)
+        var_binds: Variable bindings to set
+        timeout: Timeout in seconds (default 1.0)
+        retries: Number of retries (default 5)
+        context: Optional SNMP context (defaults to ContextData())
+        use_persistent_loop: If True, uses persistent background loop (required for engine reuse).
+                             If False, creates/closes loop for each call (default).
+
+    Returns:
+        Tuple of ObjectType results from the SET operation.
+
+    Raises:
+        SnmpSyncError: If the operation fails at transport or PDU level.
+
+    Example:
+        >>> engine = SnmpEngine()
+        >>> auth = CommunityData('private', mpModel=1)
+        >>> oid = ObjectType(make_oid('1.3.6.1.2.1.1.4.0'), 'admin@example.com')
+        >>> result = set_sync(engine, auth, ('192.168.1.1', 161), [oid])
+    """ (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.cli_build_model:[54:67]
+==app.cli_load_model:[56:69]
+    )
+    parser.add_argument(
+        "--schema-dir",
+        default=str(AGENT_MODEL_DIR),
+        help="Directory containing MIB schema subdirectories (default: agent-model)",
+    )
+    parser.add_argument(
+        "--output",
+        help="Optional output file to save the model as JSON",
+    )
+
+    args = parser.parse_args(argv)
+ (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[379:430]
+==snmp_wrapper.snmp_wrapper:[255:297]
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
+        )
+    _raise_on_error(error_indication, error_status, error_index)
+    return tuple(result_var_binds)
+
+
+def set_sync(  # noqa: PLR0913
+    engine: SnmpEngine,
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
+    var_binds: VarBinds,
+    timeout: float = 1.0,
+    retries: int = 5,
+    context: ContextData | None = None,
+    use_persistent_loop: bool = False,  # noqa: FBT001, FBT002
+) -> tuple[ObjectType, ...]:
+    """Run a synchronous SNMP SET.
+
+    Args:
+        engine: SnmpEngine instance
+        auth: CommunityData (v2c) or UsmUserData (v3)
+        address: (hostname, port) tuple
+        var_binds: [ObjectType(ObjectIdentity(...), value), ...]
+        timeout: seconds (default 1.0)
+        retries: count (default 5)
+        context: ContextData or None
+        use_persistent_loop: Use persistent background loop (for engine reuse)
+
+    Returns:
+        Tuple of ObjectType results
+
+    Raises:
+        SnmpSyncError: If operation fails
+
+    """ (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[325:376]
+==snmp_wrapper.snmp_wrapper:[312:354]
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
+        )
+    _raise_on_error(error_indication, error_status, error_index)
+    return tuple(result_var_binds)
+
+
+def get_next_sync(  # noqa: PLR0913
+    engine: SnmpEngine,
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
+    var_binds: VarBinds,
+    timeout: float = 1.0,
+    retries: int = 5,
+    context: ContextData | None = None,
+    use_persistent_loop: bool = False,  # noqa: FBT001, FBT002
+) -> tuple[ObjectType, ...]:
+    """Run a synchronous SNMP GET-NEXT operation.
+
+    Args:
+        engine: SnmpEngine instance
+        auth: CommunityData (v2c) or UsmUserData (v3)
+        address: (hostname, port) tuple
+        var_binds: [ObjectType(...), ...]
+        timeout: seconds (default 1.0)
+        retries: count (default 5)
+        context: ContextData or None
+        use_persistent_loop: Use persistent background loop (for engine reuse)
+
+    Returns:
+        Tuple of ObjectType results
+
+    Raises:
+        SnmpSyncError: If operation fails
+
+    """ (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[324:334]
+==snmp_wrapper.snmp_wrapper:[242:252]
+        _get_async(
+            engine,
+            auth,
+            address,
+            var_binds,
+            timeout=timeout,
+            retries=retries,
+            context=context,
+        )
+    ) (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[659:684]
+==snmp_wrapper.snmp_wrapper:[529:560]
+            use_persistent_loop=True,
+        )
+
+    def shutdown(self) -> None:
+        """Clean up engine and background loop when done."""
+        self._engine = None
+        shutdown_sync_wrapper()
+
+
+def make_oid(oid: str) -> ObjectIdentity:
+    """
+    Small helper so callers can do make_oid("1.3.6.1.2.1.1.5.0").
+    """
+    return ObjectIdentity(oid)
+
+
+# Optional: allow explicit shutdown of the background loop if your process needs it.
+def shutdown_sync_wrapper() -> None:
+    global _GLOBAL_LOOP_THREAD
+    with _GLOBAL_LOCK:
+        if _GLOBAL_LOOP_THREAD is not None:
+            _GLOBAL_LOOP_THREAD.stop()
+            _GLOBAL_LOOP_THREAD = None
+
+ (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.cli_bake_state:[240:249]
+==app.cli_preset_manager:[141:150]
+    )
+    parser.add_argument(
+        "--backup-dir",
+        default=str(AGENT_MODEL_BACKUPS_DIR),
+        help="Directory for backups (default: agent-model-backups)",
+    )
+    parser.add_argument(
+        "--no-backup",
+        action="store_true", (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[379:388]
+==snmp_wrapper.snmp_wrapper:[243:252]
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
+        ) (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[325:334]
+==snmp_wrapper.snmp_wrapper:[300:309]
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
+        ) (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.mib_registrar:[738:746]
+==app.mib_registrar_helpers:[510:518]
+                        except (
+                            AttributeError,
+                            ImportError,
+                            IndexError,
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.mib_registrar:[750:758]
+==app.mib_registrar_helpers:[623:631]
+            except (
+                AttributeError,
+                ImportError,
+                IndexError,
+                LookupError,
+                OSError,
+                TypeError,
+                ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.generator:[139:149]
+==app.table_registrar:[428:436]
+                    except (
+                        AttributeError,
+                        LookupError,
+                        OSError,
+                        TypeError,
+                        ValueError,
+                        RuntimeError,
+                    ): (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.base_type_handler:[336:344]
+==app.cli_load_model:[34:42]
+                except (
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                    RuntimeError,
+                ) as e: (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.generator:[164:172]
+==app.snmp_agent:[369:377]
+                            except (
+                                AttributeError,
+                                LookupError,
+                                OSError,
+                                TypeError,
+                                ValueError,
+                                RuntimeError,
+                            ) as e: (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.QUICK_REFERENCE:[54:62]
+==minimal-for-reference.simple_test:[30:38]
+result = get_sync(
+    engine,
+    auth,
+    address,
+    [ObjectType(make_oid("1.3.6.1.2.1.1.1.0"))],  # sysDescr
+    timeout=1.0,
+    retries=2,
+) (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.generator:[138:145]
+==ui.mib_browser:[700:707]
+                                    )
+                                except (
+                                    AttributeError,
+                                    LookupError,
+                                    OSError,
+                                    TypeError,
+                                    ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.snmp_agent:[2148:2155]
+==ui.mib_browser:[664:671]
+                        except (  # noqa: PERF203
+                            AttributeError,
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError,
+                        ) as e: (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.snmp_agent:[2504:2511]
+==ui.mib_browser:[701:709]
+                            except (
+                                AttributeError,
+                                LookupError,
+                                OSError,
+                                TypeError,
+                                ValueError,
+                            ) as e: (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.cli_build_model:[54:61]
+==app.cli_run_agent:[25:32]
+    )
+    parser.add_argument(
+        "--schema-dir",
+        default=str(AGENT_MODEL_DIR),
+        help="Directory containing MIB schema subdirectories (default: agent-model)",
+    )
+    parser.add_argument( (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.cli_build_model:[71:80]
+==app.cli_run_agent:[54:63]
+        return 1
+
+    mibs_raw = config.get("mibs", [])
+    mibs = mibs_raw if isinstance(mibs_raw, list) else []
+    mibs = [str(mib) for mib in mibs]
+    if not mibs:
+        logger.error("No MIBs configured")
+        return 1
+ (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.mib_registrar:[602:609]
+==app.table_registrar:[428:435]
+            except (
+                AttributeError,
+                LookupError,
+                OSError,
+                TypeError,
+                ValueError,
+                RuntimeError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.cli_load_model:[34:41]
+==app.table_registrar:[443:450]
+                    except (
+                        AttributeError,
+                        LookupError,
+                        OSError,
+                        TypeError,
+                        ValueError,
+                        RuntimeError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.generator:[150:157]
+==app.table_registrar:[429:436]
+                                        AttributeError,
+                                        LookupError,
+                                        OSError,
+                                        TypeError,
+                                        ValueError,
+                                        RuntimeError,
+                                    ): (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.generator:[301:308]
+==app.table_registrar:[444:451]
+                AttributeError,
+                LookupError,
+                OSError,
+                TypeError,
+                ValueError,
+                RuntimeError,
+            ): (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.cli_bake_state:[230:237]
+==app.cli_load_model:[56:63]
+    )
+    parser.add_argument(
+        "--schema-dir",
+        default=str(AGENT_MODEL_DIR),
+        help="Directory containing MIB schema subdirectories (default: agent-model)",
+    )
+    parser.add_argument( (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.base_type_handler:[336:343]
+==app.generator:[139:146]
+                except (
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                    RuntimeError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.cli_preset_manager:[131:138]
+==app.cli_schema_upgrade:[25:32]
+    )
+    parser.add_argument(
+        "--schema-dir",
+        default=str(AGENT_MODEL_DIR),
+        help="Directory containing MIB schema subdirectories (default: agent-model)",
+    )
+    parser.add_argument( (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.quick_verify:[16:23]
+==minimal-for-reference.test_reused_engine:[25:32]
+    engine,
+    auth,
+    address,
+    [ObjectType(make_oid("1.3.6.1.4.1.99999.1.1.0"))],
+    timeout=1.0,
+    retries=1,
+) (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.QUICK_REFERENCE:[112:119]
+==minimal-for-reference.simple_test:[29:36]
+try:
+    result = get_sync(
+        engine,
+        auth,
+        address,
+        [ObjectType(make_oid("1.3.6.1.2.1.1.1.0"))],
+        timeout=1.0, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.test_enterprise_mib:[37:44]
+==minimal-for-reference.test_multi_host:[61:69]
+        )
+        for var_bind in result:
+            value = (
+                str(var_bind).split(" = ", 1)[1]
+                if " = " in str(var_bind)
+                else str(var_bind)
+            )
+            # Truncate long output (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==ui.mib_browser:[344:350]
+==ui.snmp_gui:[355:361]
+            background="#1f1f1f" if ctk.get_appearance_mode() == "Dark" else "#e0e0e0",
+            foreground=fg_color,
+            borderwidth=2,
+            relief="groove",
+            padding=5,
+        ) (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.mib_registrar:[602:608]
+==ui.mib_browser:[664:670]
+            except (
+                AttributeError,
+                LookupError,
+                OSError,
+                TypeError,
+                ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.table_registrar:[428:434]
+==ui.mib_browser:[701:707]
+                        except (
+                            AttributeError,
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.table_registrar:[443:449]
+==ui.mib_browser:[715:721]
+                    except (
+                        AttributeError,
+                        LookupError,
+                        OSError,
+                        TypeError,
+                        ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.cli_load_model:[34:40]
+==ui.mib_browser:[785:791]
+                except (  # noqa: PERF203
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.base_type_handler:[336:342]
+==ui.mib_browser:[894:900]
+                except (  # noqa: PERF203
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==snmp_traps.trap_receiver:[272:278]
+==ui.mib_browser:[786:792]
+                AttributeError,
+                LookupError,
+                OSError,
+                TypeError,
+                ValueError,
+            ): (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==ui.snmp_gui:[4785:4791]
+==ui.snmp_gui_trap_overrides_mixin:[476:482]
+                "trap_overrides": self.current_trap_overrides,
+            }
+            try:
+                resp = requests.post(f"{self.api_url}/config", json=cfg, timeout=5)
+                resp.raise_for_status()
+                self._log("Configuration saved to server") (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.api_mibs:[167:175]
+==app.api_traps:[286:295]
+    if state.snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    schema_dir = SCHEMA_DIR
+    if not await anyio.Path(schema_dir).exists():
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
+
+    schemas = load_all_schemas(schema_dir)
+ (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.mib_registrar:[680:695]
+==app.mib_registrar_helpers:[876:882]
+            table_name=table_name,
+            rows_data=rows_data,
+            index_names=index_names,
+            columns_by_name=columns_by_name,
+            mib=mib,
+        ) (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.mib_registrar_helpers:[514:520]
+==app.snmp_agent:[2506:2512]
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError,
+                        ) as e:
+                            self.logger.warning( (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.api_table_views:[428:434]
+==app.table_registrar:[132:138]
+                    if (
+                        isinstance(other_data, dict)
+                        and other_data.get("type") == "MibTableRow"
+                        and list(other_data.get("oid", [])) == expected_entry_oid
+                    ):
+                        entry_name = other_name (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.generator:[150:156]
+==app.mib_registrar:[603:609]
+                                        AttributeError,
+                                        LookupError,
+                                        OSError,
+                                        TypeError,
+                                        ValueError,
+                                        RuntimeError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.cli_load_model:[35:41]
+==app.generator:[301:307]
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                    RuntimeError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.generator:[139:145]
+==app.snmp_agent:[541:547]
+                            except (
+                                AttributeError,
+                                LookupError,
+                                OSError,
+                                TypeError,
+                                ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.generator:[164:170]
+==app.snmp_agent:[2148:2154]
+                            except (
+                                AttributeError,
+                                LookupError,
+                                OSError,
+                                TypeError,
+                                ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.generator:[149:155]
+==snmp_traps.trap_receiver:[271:277]
+                                    with contextlib.suppress(
+                                        AttributeError,
+                                        LookupError,
+                                        OSError,
+                                        TypeError,
+                                        ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[223:258]
+==snmp_wrapper.snmp_wrapper:[144:162]
+        engine, auth, target, context, *var_binds
+    )
+    return error_indication, error_status, error_index, result_var_binds
+
+
+async def _set_async(  # noqa: PLR0913
+    engine: SnmpEngine,
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
+    var_binds: VarBinds,
+    timeout: float = 1.0,
+    retries: int = 5,
+    context: ContextData | None = None,
+) -> GetResult:
+    """Async SET operation."""
+    if context is None:
+        context = ContextData()
+    target = await UdpTransportTarget.create(address, timeout=timeout, retries=retries) (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[187:222]
+==snmp_wrapper.snmp_wrapper:[163:181]
+        engine, auth, target, context, *var_binds
+    )
+    return error_indication, error_status, error_index, result_var_binds
+
+
+async def _set_async(
+    engine: SnmpEngine,
+    auth: Union[CommunityData, UsmUserData],
+    address: Tuple[str, int],
+    var_binds: VarBinds,
+    timeout: float = 1.0,
+    retries: int = 5,
+    context: Optional[ContextData] = None,
+) -> GetResult:
+    """Execute SNMP SET command asynchronously.
+
+    Args:
+        engine: SNMP engine instance
+        auth: Authentication (CommunityData or UsmUserData)
+        address: Tuple of (hostname, port) for SNMP agent
+        var_binds: Variable bindings to set
+        timeout: Timeout in seconds (default 1.0)
+        retries: Number of retries (default 5)
+        context: Optional SNMP context (defaults to ContextData())
+
+    Returns:
+        Tuple of (error_indication, error_status, error_index, result_var_binds)
+    """
+    if context is None:
+        context = ContextData()
+
+    # Create transport target asynchronously (PySNMP 7.x requirement)
+    target = await UdpTransportTarget.create(address, timeout=timeout, retries=retries)
+
+    # set_cmd is a coroutine function that directly returns the result tuple (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.debug_getnext:[14:20]
+==minimal-for-reference.quick_verify:[18:24]
+    address,
+    [ObjectType(make_oid("1.3.6.1.4.1.99999.1.1.0"))],
+    timeout=1.0,
+    retries=1,
+)
+for var_bind in result: (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.QUICK_REFERENCE:[179:185]
+==minimal-for-reference.simple_test:[30:36]
+    result = get_sync(
+        engine,
+        auth,
+        address,
+        [ObjectType(make_oid("1.3.6.1.2.1.1.1.0"))],
+        timeout=1.0, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==ui.mib_browser:[335:340]
+==ui.snmp_gui:[346:351]
+            background=bg_color,
+            foreground=fg_color,
+            fieldbackground=bg_color,
+            borderwidth=2,
+            relief="solid", (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.mib_registrar_helpers:[514:519]
+==ui.mib_browser:[666:671]
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError,
+                        ) as e: (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.mib_registrar_helpers:[627:632]
+==ui.mib_browser:[703:709]
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError,
+                        ) as e:
+                            # Main MIB failed to load (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.generator:[150:155]
+==ui.mib_browser:[665:670]
+                            AttributeError,
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.generator:[301:306]
+==ui.mib_browser:[702:707]
+                            AttributeError,
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==snmp_traps.trap_receiver:[272:277]
+==ui.mib_browser:[716:721]
+                AttributeError,
+                LookupError,
+                OSError,
+                TypeError,
+                ValueError, (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.api_mibs:[27:32]
+==app.api_table_views:[185:191]
+        if not isinstance(schema, dict):
+            continue
+        objects = schema.get("objects", schema)
+        if not isinstance(objects, dict):
+            continue
+ (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.api_mibs:[147:153]
+==app.api_table_views:[413:419]
+        for schema in schemas.values():
+            objects = schema.get("objects", schema)
+            if not isinstance(objects, dict):
+                continue
+
+            for obj_name, obj_data in objects.items(): (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.cli_build_model:[71:77]
+==app.cli_mib_to_json:[103:108]
+        return 1
+
+    mibs_raw = config.get("mibs", [])
+    mibs = mibs_raw if isinstance(mibs_raw, list) else []
+    mibs = [str(mib) for mib in mibs]
+    if not mibs: (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.api_table_views:[306:312]
+==app.snmp_agent:[1249:1255]
+        if not isinstance(rows, list):
+            continue
+
+        for row in rows:
+            if not isinstance(row, dict):
+                continue (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==app.api_table_helpers:[58:65]
+==app.snmp_agent:[2291:2299]
+                i += 1
+            else:
+                break
+
+        if index_parts:
+            return ".".join(index_parts)
+
+        # Legacy single __instance__ support (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[378:388]
+==snmp_wrapper.snmp_wrapper:[299:309]
+        _set_async(
+            engine,
+            auth,
+            address,
+            var_binds,
+            timeout=timeout,
+            retries=retries,
+            context=context,
+        )
+    ) (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[378:430]
+==snmp_wrapper.snmp_wrapper:[311:354]
+            _set_async(
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
+        )
+    _raise_on_error(error_indication, error_status, error_index)
+    return tuple(result_var_binds)
+
+
+def get_next_sync(  # noqa: PLR0913
+    engine: SnmpEngine,
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
+    var_binds: VarBinds,
+    timeout: float = 1.0,
+    retries: int = 5,
+    context: ContextData | None = None,
+    use_persistent_loop: bool = False,  # noqa: FBT001, FBT002
+) -> tuple[ObjectType, ...]:
+    """Run a synchronous SNMP GET-NEXT operation.
+
+    Args:
+        engine: SnmpEngine instance
+        auth: CommunityData (v2c) or UsmUserData (v3)
+        address: (hostname, port) tuple
+        var_binds: [ObjectType(...), ...]
+        timeout: seconds (default 1.0)
+        retries: count (default 5)
+        context: ContextData or None
+        use_persistent_loop: Use persistent background loop (for engine reuse)
+
+    Returns:
+        Tuple of ObjectType results
+
+    Raises:
+        SnmpSyncError: If operation fails
+
+    """ (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[432:442]
+==snmp_wrapper.snmp_wrapper:[356:366]
+            _next_async(
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
+        ) (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[432:447]
+==snmp_wrapper.snmp_wrapper:[368:388]
+            _next_async(
+                engine,
+                auth,
+                address,
+                var_binds,
+                timeout=timeout,
+                retries=retries,
+                context=context,
+            )
+        )
+    _raise_on_error(error_indication, error_status, error_index)
+    return tuple(result_var_binds)
+
+
+# ============================================================================
+# Client Classes
+# ============================================================================
+
+
+@dataclass(slots=True) (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.async_wrapper:[616:624]
+==snmp_wrapper.snmp_wrapper:[486:494]
+        if self._engine is None:
+            self._engine = SnmpEngine()
+        return self._engine
+
+    def get(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
+        """Run a synchronous GET with reused engine and persistent loop."""
+        engine = self._ensure_engine()
+        return get_sync( (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.QUICK_REFERENCE:[132:137]
+==minimal-for-reference.test_multi_host:[22:27]
+    "sysDescr": "1.3.6.1.2.1.1.1.0",
+    "sysObjectID": "1.3.6.1.2.1.1.2.0",
+    "sysUpTime": "1.3.6.1.2.1.1.3.0",
+    "sysContact": "1.3.6.1.2.1.1.4.0",
+    "sysName": "1.3.6.1.2.1.1.5.0", (duplicate-code)
+minimal-for-reference/async_wrapper.py:1:0: R0801: Similar lines in 2 files
+==minimal-for-reference.QUICK_REFERENCE:[112:117]
+==minimal-for-reference.test_multi_host:[53:58]
+try:
+    result = get_sync(
+        engine,
+        auth,
+        address, (duplicate-code)

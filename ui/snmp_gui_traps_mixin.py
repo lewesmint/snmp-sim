@@ -10,6 +10,8 @@ from typing import Any
 import customtkinter as ctk
 import requests
 
+from snmp_traps.trap_receiver import TrapReceiver
+
 
 class SNMPGuiTrapsMixin:
     """Provide trap destination and receiver UI actions."""
@@ -30,6 +32,62 @@ class SNMPGuiTrapsMixin:
 
     _log: Any
     _show_notification: Any
+
+    def _trap_poll_key(self, trap: dict[str, Any]) -> str:
+        """Build a stable key for de-duplicating trap updates in UI polling."""
+        timestamp = str(trap.get("timestamp", ""))
+        trap_oid = str(trap.get("trap_oid_str", "unknown"))
+        source = str(trap.get("source", "unknown"))
+        return f"{timestamp}|{trap_oid}|{source}"
+
+    def _get_local_receiver(self) -> TrapReceiver | None:
+        """Return UI-local trap receiver if initialized."""
+        receiver = getattr(self, "_ui_trap_receiver", None)
+        if isinstance(receiver, TrapReceiver):
+            return receiver
+        return None
+
+    def _on_ui_trap_received(self, trap_data: dict[str, Any]) -> None:
+        """Thread-safe callback for traps received by UI-local receiver."""
+        self.root.after(0, lambda: self._handle_ui_trap_received(trap_data))
+
+    def _handle_ui_trap_received(self, trap_data: dict[str, Any]) -> None:
+        """Handle trap reception on the Tk main thread."""
+        self._log(
+            "Received trap "
+            f"{trap_data.get('trap_oid_str', 'unknown')} "
+            f"from {trap_data.get('source', 'unknown')}"
+        )
+
+    def _get_local_received_traps(self, limit: int | None = None) -> list[dict[str, Any]]:
+        """Return traps from UI-local receiver (most recent first)."""
+        receiver = self._get_local_receiver()
+        if receiver is None:
+            return []
+        traps = receiver.get_received_traps(limit=limit)
+        return [trap for trap in traps if isinstance(trap, dict)]
+
+    def _cancel_trap_polling(self) -> None:
+        """Cancel scheduled trap polling job if present."""
+        poll_job = getattr(self, "_trap_poll_job", None)
+        if poll_job is None:
+            return
+        self.root.after_cancel(poll_job)
+        self._trap_poll_job = None
+
+    def _schedule_trap_polling(self) -> None:
+        """Schedule next trap poll while receiver is running."""
+        return
+
+    def _prime_trap_polling_baseline(self) -> None:
+        """Initialize polling baseline to avoid replaying historical traps in UI."""
+        traps = self._get_local_received_traps(limit=1)
+        if traps:
+            self._last_seen_trap_key = self._trap_poll_key(traps[0])
+
+    def _poll_received_traps(self) -> None:
+        """Poll backend for newly received traps and surface them in UI logs."""
+        return
 
     def _load_trap_destinations(self) -> None:
         """Load trap destinations from app config via API."""
@@ -162,22 +220,28 @@ class SNMPGuiTrapsMixin:
         """Start the trap receiver."""
         try:
             port = int(self.receiver_port_var.get())
-            payload = {"port": port, "community": "public"}
-
-            response = requests.post(f"{self.api_url}/trap-receiver/start", json=payload, timeout=5)
-            response.raise_for_status()
-            result = response.json()
-
-            if result.get("status") in ["started", "already_running"]:
+            receiver = self._get_local_receiver()
+            if receiver and receiver.is_running():
                 self.receiver_status_var.set(f"Receiver: Running on port {port}")
                 self.start_receiver_btn.configure(state="disabled")
                 self.stop_receiver_btn.configure(state="normal")
-                self._log(f"Trap receiver started on port {port}")
-            else:
-                messagebox.showerror(
-                    "Error",
-                    f"Failed to start receiver: {result.get('message', 'Unknown error')}",
-                )
+                self._log(f"Trap receiver already running on port {receiver.port}")
+                return
+
+            receiver = TrapReceiver(
+                host="0.0.0.0",  # noqa: S104
+                port=port,
+                community="public",
+                on_trap_callback=self._on_ui_trap_received,
+            )
+            receiver.start()
+            self._ui_trap_receiver = receiver
+
+            self.receiver_status_var.set(f"Receiver: Running on port {port}")
+            self.start_receiver_btn.configure(state="disabled")
+            self.stop_receiver_btn.configure(state="normal")
+            self._log(f"Trap receiver started locally on 0.0.0.0:{port}")
+            self._prime_trap_polling_baseline()
 
         except ValueError:
             messagebox.showerror("Error", "Invalid port number")
@@ -189,14 +253,15 @@ class SNMPGuiTrapsMixin:
     def _stop_trap_receiver(self) -> None:
         """Stop the trap receiver."""
         try:
-            response = requests.post(f"{self.api_url}/trap-receiver/stop", timeout=5)
-            response.raise_for_status()
-            response.json()
+            receiver = self._get_local_receiver()
+            if receiver and receiver.is_running():
+                receiver.stop()
 
             self.receiver_status_var.set("Receiver: Stopped")
             self.start_receiver_btn.configure(state="normal")
             self.stop_receiver_btn.configure(state="disabled")
-            self._log("Trap receiver stopped")
+            self._cancel_trap_polling()
+            self._log("Trap receiver stopped (local UI receiver)")
 
         except (AttributeError, LookupError, OSError, TypeError, ValueError) as error:
             error_msg = f"Failed to stop trap receiver: {error}"
