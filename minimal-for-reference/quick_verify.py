@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Quick verification that all sync functions work."""
 
 from async_wrapper import get_sync, get_next_sync, make_oid, SyncSnmpClient
@@ -43,9 +42,9 @@ client = SyncSnmpClient(
     engine=engine, auth=auth, address=address, timeout=1.0, retries=1
 )
 result = client.get(ObjectType(make_oid("1.3.6.1.4.1.99999.1.1.0")))
-print(f"   ✓ client.get() works")
+print("   ✓ client.get() works")
 result = client.get_next(ObjectType(make_oid("1.3.6.1.4.1.99999.1.1.0")))
-print(f"   ✓ client.get_next() works")
+print("   ✓ client.get_next() works")
 
 print("\n" + "=" * 60)
 print("✅ All synchronous functions work!")

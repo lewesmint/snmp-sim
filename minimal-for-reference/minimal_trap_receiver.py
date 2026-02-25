@@ -1,10 +1,4 @@
-"""Minimal PySNMP trap receiver example (main + worker thread).
-
-This intentionally keeps the structure simple:
-- Main thread handles lifecycle
-- Worker thread runs an asyncio loop with PySNMP trap receiver
-"""
-
+"""Minimal PySNMP trap receiver (main + worker thread)."""
 from __future__ import annotations
 
 import asyncio
@@ -15,7 +9,6 @@ import signal
 import socket
 import threading
 from collections.abc import Iterable
-from typing import Any
 
 from pysnmp.carrier.asyncio.dgram import udp
 from pysnmp.entity import config
@@ -25,131 +18,199 @@ from pysnmp.hlapi.v3arch.asyncio import SnmpEngine
 HOST = "0.0.0.0"
 PORT = 16662
 COMMUNITY = "public"
-MAX_LOG_QUEUE = 5000
+MAX_LOG_QUEUE = 5_000
 SO_RCVBUF_BYTES = 1_048_576  # 1 MiB (OS may clamp)
 
-
-def _oid_to_str(oid: Iterable[int]) -> str:
-    return ".".join(str(part) for part in oid)
+log = logging.getLogger(__name__)
 
 
-def worker(
-    stop_event: threading.Event,
-    host: str,
-    port: int,
-    community: str,
-    engine_ref: dict[str, Any],
-    log_queue: queue.Queue[str],
-    counters: dict[str, int],
-) -> None:
-    """Run a minimal PySNMP trap listener in a dedicated thread."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+def _pp(obj: object) -> str:
+    """Pretty-print a PySNMP object, falling back to str()."""
+    pretty = getattr(obj, "prettyPrint", None)
+    return str(pretty()) if callable(pretty) else str(obj)
 
-    snmp_engine = SnmpEngine()
-    transport = udp.UdpAsyncioTransport().open_server_mode((host, port))
-    with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
+
+def _render_var_binds(var_binds: Iterable[tuple[object, object]]) -> str:
+    """Render var-binds using PySNMP's pretty-printer when available."""
+    return "trap: " + " | ".join(f"{_pp(oid)}={_pp(val)}" for oid, val in var_binds)
+
+
+class TrapReceiver:
+    """PySNMP trap receiver running in a worker thread.
+
+    Call run() in a dedicated thread; call shutdown() from any thread to stop.
+    Received trap strings are posted to log_queue; None is the shutdown sentinel
+    and is written exclusively by the worker's finally block.
+    """
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        community: str,
+        log_queue: queue.Queue[str | None],
+    ) -> None:
+        self.host = host
+        self.port = port
+        self.community = community
+        self.log_queue = log_queue
+
+        # Simple counters. Safe because they are only mutated in the worker thread
+        # and only read by main after thread.join().
+        self.received = 0
+        self.dropped_log_messages = 0
+        self.callback_errors = 0
+
+        self._engine: SnmpEngine | None = None
+        self._engine_lock = threading.Lock()
+        self._stop_event = threading.Event()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def shutdown(self) -> None:
+        """Signal the receiver to stop. Safe to call from any thread,
+        including signal handlers. Idempotent.
+
+        Does not enqueue the sentinel; that is the worker's job.
+        """
+        self._stop_event.set()
+        with self._engine_lock:
+            engine = self._engine
+
+        if engine is not None:
+            with contextlib.suppress(AttributeError, OSError):
+                engine.transport_dispatcher.close_dispatcher()
+
+    def run(self) -> None:
+        """Run the blocking trap dispatcher. Returns only after shutdown()."""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            engine = SnmpEngine()
+            transport = udp.UdpAsyncioTransport().open_server_mode((self.host, self.port))
+            self._tune_rcvbuf(transport)
+
+            config.add_transport(engine, udp.DOMAIN_NAME, transport)
+            config.add_v1_system(engine, "my-area", self.community)
+            ntfrcv.NotificationReceiver(engine, self._on_trap)
+
+            engine.transport_dispatcher.job_started(1)
+
+            with self._engine_lock:
+                self._engine = engine
+
+            if self._stop_event.is_set():
+                self.shutdown()
+                return
+
+            try:
+                engine.transport_dispatcher.run_dispatcher()
+            finally:
+                self._stop_event.set()
+                with self._engine_lock:
+                    self._engine = None
+
+                with contextlib.suppress(AttributeError, OSError):
+                    engine.transport_dispatcher.job_finished(1)
+                with contextlib.suppress(AttributeError, OSError):
+                    engine.transport_dispatcher.close_dispatcher()
+
+        except Exception:
+            log.exception("Trap receiver worker failed")
+            self._stop_event.set()
+            with self._engine_lock:
+                self._engine = None
+
+        finally:
+            # Sentinel written here and only here, after all trap messages have been
+            # produced. If the queue is full, main is draining, so this will unblock.
+            self.log_queue.put(None)
+
+            asyncio.set_event_loop(None)
+            loop.close()
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _tune_rcvbuf(self, transport: object) -> None:
         sock = getattr(transport, "socket", None)
-        if isinstance(sock, socket.socket):
+        if not isinstance(sock, socket.socket):
+            return
+        try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SO_RCVBUF_BYTES)
-    config.add_transport(
-        snmp_engine,
-        udp.DOMAIN_NAME,
-        transport,
-    )
-    config.add_v1_system(snmp_engine, "my-area", community)
+        except OSError as exc:
+            log.warning("Could not set SO_RCVBUF=%d: %s", SO_RCVBUF_BYTES, exc)
 
-    def _callback(
-        _snmp_engine: object,
-        _state_reference: object,
-        _context_engine_id: object,
-        _context_name: object,
+    def _on_trap(
+        self,
+        _engine: object,
+        _state_ref: object,
+        _ctx_engine_id: object,
+        _ctx_name: object,
         var_binds: Iterable[tuple[object, object]],
         _cb_ctx: object,
     ) -> None:
         try:
-            rendered = []
-            for oid, value in var_binds:
-                if isinstance(oid, Iterable) and not isinstance(oid, (str, bytes, bytearray)):
-                    oid_tuple = tuple(part for part in oid if isinstance(part, int))
-                    oid_str = _oid_to_str(oid_tuple) if oid_tuple else "unknown"
-                else:
-                    oid_str = "unknown"
-                rendered.append(f"{oid_str}={value}")
-            message = "trap: " + " | ".join(rendered)
-            counters["received"] += 1
+            message = _render_var_binds(var_binds)
+            self.received += 1
+
             try:
-                log_queue.put_nowait(message)
+                self.log_queue.put_nowait(message)
             except queue.Full:
-                counters["dropped_log_messages"] += 1
-        except (AttributeError, LookupError, OSError, TypeError, ValueError):
-            counters["callback_errors"] += 1
-            logging.exception("Error handling trap")
+                self.dropped_log_messages += 1
 
-    ntfrcv.NotificationReceiver(snmp_engine, _callback)
-    snmp_engine.transport_dispatcher.job_started(1)
-    engine_ref["engine"] = snmp_engine
-
-    try:
-        # Blocking dispatcher: no polling/spin loop needed.
-        snmp_engine.transport_dispatcher.run_dispatcher()
-    finally:
-        stop_event.set()
-        with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
-            snmp_engine.transport_dispatcher.job_finished(1)
-        with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
-            snmp_engine.transport_dispatcher.close_dispatcher()
-        if not loop.is_closed():
-            loop.close()
+        except Exception:  # noqa: BLE001
+            self.callback_errors += 1
+            log.exception("Unhandled error in trap callback")
 
 
 def main() -> int:
-    """Start minimal PySNMP receiver and keep running until Ctrl+C."""
-    stop_event = threading.Event()
-    engine_ref: dict[str, Any] = {"engine": None}
-    log_queue: queue.Queue[str] = queue.Queue(maxsize=MAX_LOG_QUEUE)
-    counters: dict[str, int] = {
-        "received": 0,
-        "dropped_log_messages": 0,
-        "callback_errors": 0,
-    }
+    """Run trap receiver until interrupted."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    def _shutdown(_signum: int, _frame: object) -> None:
-        stop_event.set()
-        engine = engine_ref.get("engine")
-        if engine is not None:
-            with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
-                engine.transport_dispatcher.close_dispatcher()
+    log_queue: queue.Queue[str | None] = queue.Queue(maxsize=MAX_LOG_QUEUE)
+    receiver = TrapReceiver(HOST, PORT, COMMUNITY, log_queue)
 
-    signal.signal(signal.SIGINT, _shutdown)
-    signal.signal(signal.SIGTERM, _shutdown)
+    def _on_signal(_signum: int, _frame: object) -> None:
+        receiver.shutdown()
 
-    thread = threading.Thread(
-        target=worker,
-        args=(stop_event, HOST, PORT, COMMUNITY, engine_ref, log_queue, counters),
-        daemon=True,
-    )
+    signal.signal(signal.SIGINT, _on_signal)
+    signal.signal(signal.SIGTERM, _on_signal)
+
+    thread = threading.Thread(target=receiver.run, name="snmp-trap-worker", daemon=False)
     thread.start()
 
-    print(f"Listening for SNMP traps on {HOST}:{PORT} (community: {COMMUNITY})", flush=True)
+    log.info("Listening for SNMP traps on %s:%d (community: %s)", HOST, PORT, COMMUNITY)
 
     try:
-        while thread.is_alive() and not stop_event.is_set():
-            try:
-                print(log_queue.get(timeout=0.2), flush=True)
-            except queue.Empty:
-                pass
-
-            thread.join(timeout=0.0)
+        while True:
+            msg = log_queue.get()
+            if msg is None:
+                break
+            log.info(msg)
     finally:
-        stop_event.set()
+        receiver.shutdown()
+        thread.join()
 
-    while True:
-        try:
-            print(log_queue.get_nowait(), flush=True)
-        except queue.Empty:
-            break
+        while True:
+            try:
+                msg = log_queue.get_nowait()
+            except queue.Empty:
+                break
+            if msg is None:
+                break
+            log.info(msg)
 
+    log.info(
+        "Shutdown complete. received=%d dropped_log_messages=%d callback_errors=%d",
+        receiver.received,
+        receiver.dropped_log_messages,
+        receiver.callback_errors,
+    )
     return 0
 
 
