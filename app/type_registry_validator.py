@@ -82,6 +82,6 @@ if __name__ == "__main__":
     if len(sys.argv) != _EXPECTED_ARGC:
         logger.error("Usage: %s <types.json>", sys.argv[0])
         sys.exit(_USAGE_EXIT_CODE)
-    with Path(sys.argv[1]).open(encoding="utf-8") as f:
-        registry = json.load(f)
-    validate_type_registry(registry)
+    with Path(sys.argv[1]).open(encoding="utf-8") as json_file:
+        registry_data = json.load(json_file)
+    validate_type_registry(registry_data)

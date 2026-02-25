@@ -1,0 +1,79 @@
+{
+  "schema_version": "1.0.1",
+  "objects": {
+    "testColour": {
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 1, 1],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 1,
+      "dynamic_function": null,
+      "enums": {
+        "red": 1,
+        "green": 2,
+        "blue": 3,
+        "yellow": 4
+      }
+    },
+    "testPriority": {
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 1, 2],
+      "type": "Integer32",
+      "access": "read-only",
+      "initial": 10,
+      "dynamic_function": null,
+      "enums": {
+        "low": 10,
+        "medium": 20,
+        "high": 30,
+        "critical": 50
+      }
+    },
+    "testEnumTable": {
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2],
+      "type": "MibTable",
+      "access": "not-accessible",
+      "rows": [
+        {
+          "testEnumIndex": 1,
+          "testRowColour": 1,
+          "testRowPriority": 10
+        }
+      ]
+    },
+    "testEnumEntry": {
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1],
+      "type": "MibTableRow",
+      "access": "not-accessible",
+      "indexes": [
+        "testEnumIndex"
+      ]
+    },
+    "testEnumIndex": {
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1, 1],
+      "type": "Unsigned32",
+      "access": "not-accessible"
+    },
+    "testRowColour": {
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1, 2],
+      "type": "Integer32",
+      "access": "read-only",
+      "enums": {
+        "red": 1,
+        "green": 2,
+        "blue": 3,
+        "yellow": 4
+      }
+    },
+    "testRowPriority": {
+      "oid": [1, 3, 6, 1, 4, 1, 99998, 1, 2, 1, 3],
+      "type": "Integer32",
+      "access": "read-only",
+      "enums": {
+        "low": 10,
+        "medium": 20,
+        "high": 30,
+        "critical": 50
+      }
+    }
+  },
+  "traps": {}
+}

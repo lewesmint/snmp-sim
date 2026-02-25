@@ -1,6 +1,5 @@
 """Configuration, state, and preset endpoints."""
 
-# ruff: noqa: I001
 
 from __future__ import annotations
 
@@ -14,7 +13,7 @@ import yaml
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.api_shared import JsonObject  # noqa: TC001
+from app.api_shared import JsonObject
 from app.api_state import logger, state
 from app.app_config import AppConfig
 from app.cli_bake_state import backup_schemas, bake_state_into_schemas, load_mib_state
@@ -69,7 +68,7 @@ def _clear_agent_state() -> None:
         state.snmp_agent.table_instances = {}
         state.snmp_agent.deleted_instances = []
         with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
-            state.snmp_agent._save_mib_state()  # noqa: SLF001
+            state.snmp_agent._save_mib_state()
 
 
 @router.get("/config")

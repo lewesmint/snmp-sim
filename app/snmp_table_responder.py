@@ -140,7 +140,7 @@ class SNMPTableResponder:
 
         return None
 
-    def _get_all_table_oids(self) -> list[tuple[int, ...]]:  # noqa: C901, PLR0912, PLR0915
+    def _get_all_table_oids(self) -> list[tuple[int, ...]]:
         """Get all OIDs in tables, sorted lexicographically."""
         oids = []
 
@@ -329,7 +329,7 @@ class SNMPTableResponder:
                 return value if value is not None else None
         return None
 
-    def _lookup_multi_column_value(  # noqa: PLR0913
+    def _lookup_multi_column_value(
         self,
         columns: dict[str, dict[str, Any]],
         rows: list[Any],
@@ -352,7 +352,7 @@ class SNMPTableResponder:
             return None
         return None
 
-    def _get_oid_value(self, oid: tuple[int, ...]) -> object | None:  # noqa: PLR0911
+    def _get_oid_value(self, oid: tuple[int, ...]) -> object | None:
         """Get the value for a specific OID."""
         table_info = self.get_table_info(oid)
         if not table_info:

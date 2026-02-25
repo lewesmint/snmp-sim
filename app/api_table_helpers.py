@@ -12,7 +12,7 @@ from app.cli_load_model import load_all_schemas
 from app.model_paths import AGENT_MODEL_DIR
 
 
-def extract_schema_objects(schema: Any) -> dict[str, Any]:  # noqa: ANN401
+def extract_schema_objects(schema: Any) -> dict[str, Any]:
     """Extract objects dictionary from schema, handling both flat and nested formats."""
     if not isinstance(schema, dict):
         return {}
@@ -40,7 +40,7 @@ def get_default_row_from_schemas(schemas: dict[str, Any], table_oid: str) -> dic
     return {}
 
 
-def should_use_default_value(val: Any) -> bool:  # noqa: ANN401
+def should_use_default_value(val: Any) -> bool:
     """Check if a value should be replaced with a default value."""
     return (
         val is None
@@ -104,7 +104,7 @@ def merge_column_defaults(
     return merged
 
 
-def convert_index_value(  # noqa: PLR0912
+def convert_index_value(
     col_name: str,
     value: str | int,
     columns: dict[str, Any],

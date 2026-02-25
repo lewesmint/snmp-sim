@@ -126,7 +126,7 @@ def clear_trap_overrides(trap_name: str) -> dict[str, object]:
 
 
 @router.get("/trap-varbinds/{trap_name}")
-def get_trap_varbinds(trap_name: str) -> dict[str, object]:  # noqa: C901, PLR0912, PLR0915
+def get_trap_varbinds(trap_name: str) -> dict[str, object]:
     """Get detailed varbind metadata for a specific trap."""
     if state.snmp_agent is None:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
@@ -282,7 +282,7 @@ class TrapSendRequest(BaseModel):
 
 
 @router.post("/send-trap")
-async def send_trap(request: TrapSendRequest) -> dict[str, object]:  # noqa: C901, PLR0912
+async def send_trap(request: TrapSendRequest) -> dict[str, object]:
     """Send an SNMP trap/notification."""
     if state.snmp_agent is None:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")

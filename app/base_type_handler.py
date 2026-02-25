@@ -205,7 +205,7 @@ class BaseTypeHandler:
         """
         # Check if it's a special type
         if type_name == "IpAddress":
-            return "0.0.0.0"  # noqa: S104
+            return "0.0.0.0"
         if "address" in type_name.lower() and "mac" in type_name.lower():
             return "00:00:00:00:00:00"
         # BITS type - return empty bits

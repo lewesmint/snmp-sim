@@ -110,13 +110,8 @@ max-complexity = 12
 [tool.pylint.messages_control]
 disable = [
     "broad-exception-caught",
-    "import-outside-toplevel",
-    "logging-fstring-interpolation",
     "protected-access",
     "raise-missing-from",
-    "redefined-outer-name",
-    "reimported",
-    "unused-variable",
 ]
 
 [tool.pylint.main]
@@ -148,6 +143,9 @@ filterwarnings = [
 
 [tool.pyright]
 pythonVersion = "3.13"
+venvPath = "."
+venv = ".venv"
+reportMissingTypeStubs = "none"
 exclude = [
     "**/node_modules",
     "**/__pycache__",

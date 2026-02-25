@@ -1,0 +1,1448 @@
+﻿I001 [*] Import block is un-sorted or un-formatted
+  --> app\snmp_agent.py:3:1
+   |
+ 1 |   """SNMPAgent: Main orchestrator for the SNMP agent (initial workflow)."""
+ 2 |
+ 3 | / from __future__ import annotations
+ 4 | |
+ 5 | | # pylint: disable=invalid-name,line-too-long,too-many-lines,missing-class-docstring
+ 6 | | # pylint: disable=too-many-instance-attributes,too-many-locals,too-many-branches
+ 7 | | # pylint: disable=too-many-statements,too-many-nested-blocks,too-many-return-statements
+ 8 | |
+ 9 | | import importlib
+10 | | import json
+11 | | import logging
+12 | | import os
+13 | | import signal
+14 | | import sys
+15 | | import time
+16 | | import traceback
+17 | | from types import FrameType
+18 | | from dataclasses import dataclass
+19 | | from pathlib import Path
+20 | | from typing import Optional, TypeAlias, TypedDict, cast
+21 | |
+22 | | from pysnmp import debug as pysnmp_debug
+23 | | from pysnmp.carrier.asyncio.dgram import udp
+24 | | from pysnmp.carrier.asyncio.dispatch import AsyncioDispatcher
+25 | | from pysnmp.entity import config, engine
+26 | | from pysnmp.entity.engine import SnmpEngine
+27 | | from pysnmp.entity.rfc3413 import cmdrsp, context
+28 | | from pysnmp.entity.rfc3413.context import SnmpContext
+29 | | from pysnmp.smi import builder as snmp_builder
+30 | | from pysnmp.smi.builder import MibBuilder
+31 | |
+32 | | # Load type converter plugins
+33 | | import plugins.date_and_time  # noqa: F401  # pylint: disable=unused-import
+34 | | from app.app_config import AppConfig
+35 | | from app.app_logger import AppLogger
+36 | | from app.compiler import MibCompiler
+37 | | from app.mib_registrar import MibRegistrar, SNMPContext
+38 | | from app.model_paths import TYPE_REGISTRY_FILE, agent_model_dir, compiled_mibs_dir, mib_state_file
+39 | | from app.value_links import get_link_manager
+40 | | from app.generator import BehaviourGenerator
+41 | | from app.type_registry_validator import validate_type_registry_file
+42 | | from app.type_registry import TypeRegistry
+   | |__________________________________________^
+   |
+help: Organize imports
+
+TC002 Move third-party import `pysnmp.entity.engine.SnmpEngine` into a type-checking block
+  --> app\snmp_agent.py:26:34
+   |
+24 | from pysnmp.carrier.asyncio.dispatch import AsyncioDispatcher
+25 | from pysnmp.entity import config, engine
+26 | from pysnmp.entity.engine import SnmpEngine
+   |                                  ^^^^^^^^^^
+27 | from pysnmp.entity.rfc3413 import cmdrsp, context
+28 | from pysnmp.entity.rfc3413.context import SnmpContext
+   |
+help: Move into type-checking block
+
+TC002 Move third-party import `pysnmp.entity.rfc3413.context.SnmpContext` into a type-checking block
+  --> app\snmp_agent.py:28:43
+   |
+26 | from pysnmp.entity.engine import SnmpEngine
+27 | from pysnmp.entity.rfc3413 import cmdrsp, context
+28 | from pysnmp.entity.rfc3413.context import SnmpContext
+   |                                           ^^^^^^^^^^^
+29 | from pysnmp.smi import builder as snmp_builder
+30 | from pysnmp.smi.builder import MibBuilder
+   |
+help: Move into type-checking block
+
+TC002 Move third-party import `pysnmp.smi.builder.MibBuilder` into a type-checking block
+  --> app\snmp_agent.py:30:32
+   |
+28 | from pysnmp.entity.rfc3413.context import SnmpContext
+29 | from pysnmp.smi import builder as snmp_builder
+30 | from pysnmp.smi.builder import MibBuilder
+   |                                ^^^^^^^^^^
+31 |
+32 | # Load type converter plugins
+   |
+help: Move into type-checking block
+
+UP037 [*] Remove quotes from type annotation
+  --> app\snmp_agent.py:54:32
+   |
+52 |     inherited_columns: tuple[str, ...]
+53 |
+54 |     default_columns: dict[str, "JsonValue"]
+   |                                ^^^^^^^^^^^
+   |
+help: Remove quotes
+
+D101 Missing docstring in public class
+  --> app\snmp_agent.py:62:7
+   |
+62 | class TableInstance(TypedDict, total=False):
+   |       ^^^^^^^^^^^^^
+63 |     column_values: dict[str, JsonValue]
+64 |     index_values: dict[str, JsonValue]
+   |
+
+D107 Missing docstring in `__init__`
+  --> app\snmp_agent.py:70:9
+   |
+68 |     """SNMP agent implementation for responding to SNMP requests."""
+69 |
+70 |     def __init__(
+   |         ^^^^^^^^
+71 |         self,
+72 |         host: str = "0.0.0.0",
+   |
+
+S104 Possible binding to all interfaces
+  --> app\snmp_agent.py:72:21
+   |
+70 |     def __init__(
+71 |         self,
+72 |         host: str = "0.0.0.0",
+   |                     ^^^^^^^^^
+73 |         port: int = 11161,
+74 |         config_path: str = "agent_config.yaml",
+   |
+
+SLF001 Private member accessed: `_configured`
+  --> app\snmp_agent.py:78:16
+   |
+76 |     ) -> None:
+77 |         # Set up logging and config
+78 |         if not AppLogger._configured:
+   |                ^^^^^^^^^^^^^^^^^^^^^
+79 |             self.app_config = AppConfig(config_path)
+80 |             AppLogger.configure(self.app_config)
+   |
+
+TRY401 Redundant exception object included in `logging.exception` call
+   --> app\snmp_agent.py:162:64
+    |
+160 |             self.logger.info("Shutdown complete")
+161 |         except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError) as e:
+162 |             self.logger.exception("Error during shutdown: %s", e)
+    |                                                                ^
+163 |         finally:
+164 |             # Exit cleanly - use os._exit to ensure termination
+    |
+
+UP045 [*] Use `X | None` for type annotations
+   --> app\snmp_agent.py:167:55
+    |
+165 |             os._exit(0)
+166 |
+167 |     def _find_source_mib_file(self, mib_name: str) -> Optional["Path"]:
+    |                                                       ^^^^^^^^^^^^^^^^
+168 |         """Find the source .mib file for a given MIB name.
+    |
+help: Convert to `X | None`
+
+UP037 [*] Remove quotes from type annotation
+   --> app\snmp_agent.py:167:64
+    |
+165 |             os._exit(0)
+166 |
+167 |     def _find_source_mib_file(self, mib_name: str) -> Optional["Path"]:
+    |                                                                ^^^^^^
+168 |         """Find the source .mib file for a given MIB name.
+    |
+help: Remove quotes
+
+UP037 [*] Remove quotes from type annotation
+   --> app\snmp_agent.py:194:63
+    |
+192 |         return None
+193 |
+194 |     def _should_recompile(self, mib_name: str, compiled_file: "Path | str") -> bool:
+    |                                                               ^^^^^^^^^^^^
+195 |         """Check if a MIB should be recompiled based on timestamp comparison.
+    |
+help: Remove quotes
+
+C901 `_repair_loaded_schema` is too complex (13 > 12)
+   --> app\snmp_agent.py:225:9
+    |
+223 |         return False
+224 |
+225 |     def _repair_loaded_schema(self, mib: str, schema: dict[str, JsonValue]) -> None:
+    |         ^^^^^^^^^^^^^^^^^^^^^
+226 |         """Repair known schema metadata gaps in-place after loading from disk."""
+227 |         if mib != "SNMPv2-MIB":
+    |
+
+TC006 [*] Add quotes to type expression in `typing.cast()`
+   --> app\snmp_agent.py:272:33
+    |
+270 |             if not isinstance(col_obj, dict):
+271 |                 objects[col_name] = {
+272 |                     "oid": cast(JsonValue, expected_oid),
+    |                                 ^^^^^^^^^
+273 |                     "type": expected_sysor_types[col_name],
+274 |                     "access": expected_sysor_access[col_name],
+    |
+help: Add quotes
+
+TC006 [*] Add quotes to type expression in `typing.cast()`
+   --> app\snmp_agent.py:281:39
+    |
+279 |             oid_value = col_obj.get("oid")
+280 |             if oid_value != expected_oid:
+281 |                 col_obj["oid"] = cast(JsonValue, expected_oid)
+    |                                       ^^^^^^^^^
+282 |                 changed = True
+    |
+help: Add quotes
+
+C901 `run` is too complex (33 > 12)
+   --> app\snmp_agent.py:342:9
+    |
+340 |                 raise ValueError(msg)
+341 |
+342 |     def run(self) -> None:
+    |         ^^^
+343 |         """Compile/load MIB assets, register symbols, and start the SNMP dispatcher."""
+344 |         self.logger.info("Starting SNMP Agent setup workflow...")
+    |
+
+PLR0912 Too many branches (40 > 12)
+   --> app\snmp_agent.py:342:9
+    |
+340 |                 raise ValueError(msg)
+341 |
+342 |     def run(self) -> None:
+    |         ^^^
+343 |         """Compile/load MIB assets, register symbols, and start the SNMP dispatcher."""
+344 |         self.logger.info("Starting SNMP Agent setup workflow...")
+    |
+
+PLR0915 Too many statements (152 > 50)
+   --> app\snmp_agent.py:342:9
+    |
+340 |                 raise ValueError(msg)
+341 |
+342 |     def run(self) -> None:
+    |         ^^^
+343 |         """Compile/load MIB assets, register symbols, and start the SNMP dispatcher."""
+344 |         self.logger.info("Starting SNMP Agent setup workflow...")
+    |
+
+TRY401 Redundant exception object included in `logging.exception` call
+   --> app\snmp_agent.py:377:81
+    |
+375 |                     RuntimeError,
+376 |                 ) as e:
+377 |                     self.logger.exception("Failed to compile %s: %s", mib_name, e)
+    |                                                                                 ^
+378 |                     continue
+379 |             else:
+    |
+
+SLF001 Private member accessed: `_registry`
+   --> app\snmp_agent.py:392:17
+    |
+390 |                     type_registry_data = json.load(f)
+391 |                 type_registry = TypeRegistry(Path())  # dummy
+392 |                 type_registry._registry = type_registry_data
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^
+393 |             except json.JSONDecodeError as e:
+394 |                 self.logger.warning(
+    |
+
+TRY401 Redundant exception object included in `logging.exception` call
+   --> app\snmp_agent.py:474:80
+    |
+472 |                 except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+473 |                     self.logger.exception(
+474 |                         "Failed to generate schema JSON for %s: %s", mib_name, e,
+    |                                                                                ^
+475 |                     )
+    |
+
+TRY401 Redundant exception object included in `logging.exception` call
+   --> app\snmp_agent.py:550:37
+    |
+548 | ΓÇª                         "Failed to regenerate schema for %s: %s",
+549 | ΓÇª                         mib,
+550 | ΓÇª                         regen_error,
+    |                           ^^^^^^^^^^^
+551 | ΓÇª                     )
+    |
+
+B007 Loop control variable `mib_name` not used within loop body
+   --> app\snmp_agent.py:573:13
+    |
+571 |         link_manager = get_link_manager()
+572 |         link_manager.clear()  # Clear any existing links
+573 |         for mib_name, schema in self.mib_jsons.items():
+    |             ^^^^^^^^
+574 |             link_manager.load_links_from_schema(schema)
+    |
+help: Rename unused `mib_name` to `_mib_name`
+
+TRY401 Redundant exception object included in `logging.exception` call
+   --> app\snmp_agent.py:595:71
+    |
+593 |                 self._apply_table_instances()  # Apply loaded table instance values to MIB cells
+594 |             except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+595 |                 self.logger.exception("Error applying overrides: %s", e)
+    |                                                                       ^
+596 |             self._populate_sysor_table()  # Populate sysORTable with actual MIBs
+597 |             self.logger.info("SNMP Agent is now listening for SNMP requests.")
+    |
+
+TRY401 Redundant exception object included in `logging.exception` call
+   --> app\snmp_agent.py:607:68
+    |
+605 |                 self._shutdown()
+606 |             except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+607 |                 self.logger.exception("SNMP event loop error: %s", e)
+    |                                                                    ^
+608 |                 self._shutdown()
+609 |         else:
+    |
+
+N806 Variable `_MibScalar` in function should be lowercase
+   --> app\snmp_agent.py:637:13
+    |
+635 |         # Import MIB classes from SNMPv2-SMI
+636 |         (
+637 |             _MibScalar,
+    |             ^^^^^^^^^^
+638 |             MibScalarInstance,
+639 |             MibTable,
+    |
+
+N806 Variable `MibScalarInstance` in function should be lowercase
+   --> app\snmp_agent.py:638:13
+    |
+636 |         (
+637 |             _MibScalar,
+638 |             MibScalarInstance,
+    |             ^^^^^^^^^^^^^^^^^
+639 |             MibTable,
+640 |             MibTableRow,
+    |
+
+N806 Variable `MibTable` in function should be lowercase
+   --> app\snmp_agent.py:639:13
+    |
+637 |             _MibScalar,
+638 |             MibScalarInstance,
+639 |             MibTable,
+    |             ^^^^^^^^
+640 |             MibTableRow,
+641 |             MibTableColumn,
+    |
+
+N806 Variable `MibTableRow` in function should be lowercase
+   --> app\snmp_agent.py:640:13
+    |
+638 |             MibScalarInstance,
+639 |             MibTable,
+640 |             MibTableRow,
+    |             ^^^^^^^^^^^
+641 |             MibTableColumn,
+642 |         ) = self.mib_builder.import_symbols(
+    |
+
+N806 Variable `MibTableColumn` in function should be lowercase
+   --> app\snmp_agent.py:641:13
+    |
+639 |             MibTable,
+640 |             MibTableRow,
+641 |             MibTableColumn,
+    |             ^^^^^^^^^^^^^^
+642 |         ) = self.mib_builder.import_symbols(
+643 |             "SNMPv2-SMI",
+    |
+
+TRY003 Avoid specifying long messages outside the exception class
+   --> app\snmp_agent.py:669:19
+    |
+667 |     def _setup_transport(self) -> None:
+668 |         if self.snmp_engine is None:
+669 |             raise RuntimeError("snmp_engine is not initialized.") from None
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+670 |
+671 |         # Use UdpAsyncioTransport for asyncio dispatcher
+    |
+
+EM101 Exception must not use a string literal, assign to variable first
+   --> app\snmp_agent.py:669:32
+    |
+667 |     def _setup_transport(self) -> None:
+668 |         if self.snmp_engine is None:
+669 |             raise RuntimeError("snmp_engine is not initialized.") from None
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+670 |
+671 |         # Use UdpAsyncioTransport for asyncio dispatcher
+    |
+help: Assign to variable; remove string literal
+
+TRY003 Avoid specifying long messages outside the exception class
+   --> app\snmp_agent.py:681:19
+    |
+679 |     def _setup_community(self) -> None:
+680 |         if self.snmp_engine is None:
+681 |             raise RuntimeError("snmp_engine is not initialized.")
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+682 |
+683 |         # Add read-only community "public"
+    |
+
+EM101 Exception must not use a string literal, assign to variable first
+   --> app\snmp_agent.py:681:32
+    |
+679 |     def _setup_community(self) -> None:
+680 |         if self.snmp_engine is None:
+681 |             raise RuntimeError("snmp_engine is not initialized.")
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+682 |
+683 |         # Add read-only community "public"
+    |
+help: Assign to variable; remove string literal
+
+TRY003 Avoid specifying long messages outside the exception class
+   --> app\snmp_agent.py:730:19
+    |
+728 |     def _setup_responders(self) -> None:
+729 |         if self.snmp_engine is None:
+730 |             raise RuntimeError("snmp_engine is not initialized.")
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+731 |         if not hasattr(self, "snmp_context") or self.snmp_context is None:
+732 |             raise RuntimeError("snmp_context is not initialized.")
+    |
+
+EM101 Exception must not use a string literal, assign to variable first
+   --> app\snmp_agent.py:730:32
+    |
+728 |     def _setup_responders(self) -> None:
+729 |         if self.snmp_engine is None:
+730 |             raise RuntimeError("snmp_engine is not initialized.")
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+731 |         if not hasattr(self, "snmp_context") or self.snmp_context is None:
+732 |             raise RuntimeError("snmp_context is not initialized.")
+    |
+help: Assign to variable; remove string literal
+
+TRY003 Avoid specifying long messages outside the exception class
+   --> app\snmp_agent.py:732:19
+    |
+730 |             raise RuntimeError("snmp_engine is not initialized.")
+731 |         if not hasattr(self, "snmp_context") or self.snmp_context is None:
+732 |             raise RuntimeError("snmp_context is not initialized.")
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+733 |
+734 |         # Use the context created in _setup_snmp_engine
+    |
+
+EM101 Exception must not use a string literal, assign to variable first
+   --> app\snmp_agent.py:732:32
+    |
+730 |             raise RuntimeError("snmp_engine is not initialized.")
+731 |         if not hasattr(self, "snmp_context") or self.snmp_context is None:
+732 |             raise RuntimeError("snmp_context is not initialized.")
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+733 |
+734 |         # Use the context created in _setup_snmp_engine
+    |
+help: Assign to variable; remove string literal
+
+S101 Use of `assert` detected
+   --> app\snmp_agent.py:792:9
+    |
+790 |             self.logger.warning("Cannot populate sysORTable: mib_registrar is not initialized")
+791 |             return
+792 |         assert registrar is not None
+    |         ^^^^^^
+793 |         registrar.populate_sysor_table(self.mib_jsons)
+    |
+
+SLF001 Private member accessed: `_decode_value`
+   --> app\snmp_agent.py:827:23
+    |
+825 |                     start_time=self.start_time,
+826 |                 )
+827 |             decoded = temp._decode_value(value)
+    |                       ^^^^^^^^^^^^^^^^^^
+828 |             if isinstance(decoded, (str, int, float, bool, list, dict, bytes, bytearray)):
+829 |                 return cast("DecodedValue", decoded)
+    |
+
+TRY300 Consider moving this statement to an `else` block
+   --> app\snmp_agent.py:832:13
+    |
+830 |             if decoded is None:
+831 |                 return None
+832 |             return value
+    |             ^^^^^^^^^^^^
+833 |         except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+834 |             # As a last resort, return the value unchanged
+    |
+
+TRY003 Avoid specifying long messages outside the exception class
+   --> app\snmp_agent.py:851:19
+    |
+849 |         """
+850 |         if self.mib_builder is None:
+851 |             raise RuntimeError("MIB builder not initialized")
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+852 |
+853 |         # Import MibScalarInstance for type checking
+    |
+
+EM101 Exception must not use a string literal, assign to variable first
+   --> app\snmp_agent.py:851:32
+    |
+849 |         """
+850 |         if self.mib_builder is None:
+851 |             raise RuntimeError("MIB builder not initialized")
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+852 |
+853 |         # Import MibScalarInstance for type checking
+    |
+help: Assign to variable; remove string literal
+
+N806 Variable `MibScalarInstance` in function should be lowercase
+   --> app\snmp_agent.py:854:9
+    |
+853 |         # Import MibScalarInstance for type checking
+854 |         MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
+    |         ^^^^^^^^^^^^^^^^^
+855 |
+856 |         # Search through all MIB modules and symbols
+    |
+
+TC006 [*] Add quotes to type expression in `typing.cast()`
+   --> app\snmp_agent.py:860:33
+    |
+858 |             for symbol_obj in symbols.values():
+859 |                 if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == oid:
+860 |                     return cast(DecodedValue, symbol_obj.syntax)
+    |                                 ^^^^^^^^^^^^
+861 |
+862 |         raise ValueError(f"Scalar OID {oid} not found")
+    |
+help: Add quotes
+
+TRY003 Avoid specifying long messages outside the exception class
+   --> app\snmp_agent.py:862:15
+    |
+860 |                     return cast(DecodedValue, symbol_obj.syntax)
+861 |
+862 |         raise ValueError(f"Scalar OID {oid} not found")
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+863 |
+864 |     def set_scalar_value(self, oid: tuple[int, ...], value: DecodedValue) -> None:
+    |
+
+EM102 Exception must not use an f-string literal, assign to variable first
+   --> app\snmp_agent.py:862:26
+    |
+860 |                     return cast(DecodedValue, symbol_obj.syntax)
+861 |
+862 |         raise ValueError(f"Scalar OID {oid} not found")
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+863 |
+864 |     def set_scalar_value(self, oid: tuple[int, ...], value: DecodedValue) -> None:
+    |
+help: Assign to variable; remove f-string literal
+
+C901 `set_scalar_value` is too complex (16 > 12)
+   --> app\snmp_agent.py:864:9
+    |
+862 |         raise ValueError(f"Scalar OID {oid} not found")
+863 |
+864 |     def set_scalar_value(self, oid: tuple[int, ...], value: DecodedValue) -> None:
+    |         ^^^^^^^^^^^^^^^^
+865 |         """Set the value of a scalar MIB object by OID.
+    |
+
+PLR0912 Too many branches (17 > 12)
+   --> app\snmp_agent.py:864:9
+    |
+862 |         raise ValueError(f"Scalar OID {oid} not found")
+863 |
+864 |     def set_scalar_value(self, oid: tuple[int, ...], value: DecodedValue) -> None:
+    |         ^^^^^^^^^^^^^^^^
+865 |         """Set the value of a scalar MIB object by OID.
+    |
+
+TRY003 Avoid specifying long messages outside the exception class
+   --> app\snmp_agent.py:876:19
+    |
+874 |         """
+875 |         if self.mib_builder is None:
+876 |             raise RuntimeError("MIB builder not initialized")
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+877 |
+878 |         # Import MibScalarInstance for type checking
+    |
+
+EM101 Exception must not use a string literal, assign to variable first
+   --> app\snmp_agent.py:876:32
+    |
+874 |         """
+875 |         if self.mib_builder is None:
+876 |             raise RuntimeError("MIB builder not initialized")
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+877 |
+878 |         # Import MibScalarInstance for type checking
+    |
+help: Assign to variable; remove string literal
+
+N806 Variable `MibScalarInstance` in function should be lowercase
+   --> app\snmp_agent.py:879:9
+    |
+878 |         # Import MibScalarInstance for type checking
+879 |         MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
+    |         ^^^^^^^^^^^^^^^^^
+880 |
+881 |         # Search through all MIB modules and symbols
+    |
+
+PERF102 When using only the values of a dict use the `values()` method
+   --> app\snmp_agent.py:882:38
+    |
+881 |         # Search through all MIB modules and symbols
+882 |         for _module_name, symbols in self.mib_builder.mibSymbols.items():
+    |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+883 |             for _symbol_name, symbol_obj in symbols.items():
+884 |                 if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == oid:
+    |
+help: Replace `.items()` with `.values()`
+
+PERF102 When using only the values of a dict use the `values()` method
+   --> app\snmp_agent.py:883:45
+    |
+881 |         # Search through all MIB modules and symbols
+882 |         for _module_name, symbols in self.mib_builder.mibSymbols.items():
+883 |             for _symbol_name, symbol_obj in symbols.items():
+    |                                             ^^^^^^^^^^^^^
+884 |                 if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == oid:
+885 |                     # Update in-memory value - must use clone() to preserve pysnmp type
+    |
+help: Replace `.items()` with `.values()`
+
+TRY400 Use `logging.exception` instead of `logging.error`
+   --> app\snmp_agent.py:890:25
+    |
+888 |                           symbol_obj.syntax = new_syntax
+889 |                       except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+890 | /                         self.logger.error(
+891 | |                             "%s", f"Failed to update scalar {oid} with value {value!r} "
+892 | |                             f"(type: {type(value).__name__}): {e}"
+893 | |                         )
+    | |_________________________^
+894 |
+895 |                       # Persist override if different from initial
+    |
+help: Replace with `exception`
+
+TRY003 Avoid specifying long messages outside the exception class
+   --> app\snmp_agent.py:960:15
+    |
+958 |                     return
+959 |
+960 |         raise ValueError(f"Scalar OID {oid} not found")
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+961 |
+962 |     def get_all_oids(self) -> dict[str, tuple[int, ...]]:
+    |
+
+EM102 Exception must not use an f-string literal, assign to variable first
+   --> app\snmp_agent.py:960:26
+    |
+958 |                     return
+959 |
+960 |         raise ValueError(f"Scalar OID {oid} not found")
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+961 |
+962 |     def get_all_oids(self) -> dict[str, tuple[int, ...]]:
+    |
+help: Assign to variable; remove f-string literal
+
+TRY003 Avoid specifying long messages outside the exception class
+   --> app\snmp_agent.py:970:19
+    |
+968 |         """
+969 |         if self.mib_builder is None:
+970 |             raise RuntimeError("MIB builder not initialized")
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+971 |
+972 |         oid_map = {}
+    |
+
+EM101 Exception must not use a string literal, assign to variable first
+   --> app\snmp_agent.py:970:32
+    |
+968 |         """
+969 |         if self.mib_builder is None:
+970 |             raise RuntimeError("MIB builder not initialized")
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+971 |
+972 |         oid_map = {}
+    |
+help: Assign to variable; remove string literal
+
+PERF102 When using only the values of a dict use the `values()` method
+   --> app\snmp_agent.py:975:38
+    |
+974 |         # Iterate through all MIB modules and symbols
+975 |         for _module_name, symbols in self.mib_builder.mibSymbols.items():
+    |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+976 |             for symbol_name, symbol_obj in symbols.items():
+977 |                 # Check if it has a name attribute (OID)
+    |
+help: Replace `.items()` with `.values()`
+
+SIM102 Use a single `if` statement instead of nested `if` statements
+    --> app\snmp_agent.py:998:21
+     |
+ 996 |               for symbol_name, symbol_obj in symbols.items():
+ 997 |                   try:
+ 998 | /                     if hasattr(symbol_obj, "name") and symbol_obj.name:
+ 999 | |                         if tuple(symbol_obj.name) == target_oid:
+     | |________________________________________________________________^
+1000 |                               return module_name, symbol_name
+1001 |                   except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+     |
+help: Combine `if` statements using `and`
+
+PERF203 `try`-`except` within a loop incurs performance overhead
+    --> app\snmp_agent.py:1001:17
+     |
+ 999 |                           if tuple(symbol_obj.name) == target_oid:
+1000 |                               return module_name, symbol_name
+1001 | /                 except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+1002 | |                     continue
+     | |____________________________^
+1003 |           return None, None
+     |
+
+PERF403 Use a dictionary comprehension instead of a for-loop
+    --> app\snmp_agent.py:1021:17
+     |
+1019 |         for name, obj in raw_objects.items():
+1020 |             if isinstance(name, str) and isinstance(obj, dict):
+1021 |                 objects[name] = obj
+     |                 ^^^^^^^^^^^^^^^^^^^
+1022 |         return objects
+     |
+help: Replace for loop with dict comprehension
+
+C901 `_collect_schema_instance_oids` is too complex (15 > 12)
+    --> app\snmp_agent.py:1186:9
+     |
+1184 |             )
+1185 |
+1186 |     def _collect_schema_instance_oids(self) -> tuple[set[str], bool]:
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1187 |         """Collect all instance OIDs that are defined in schema table rows."""
+1188 |         instance_oids: set[str] = set()
+     |
+
+PLR0912 Too many branches (14 > 12)
+    --> app\snmp_agent.py:1186:9
+     |
+1184 |             )
+1185 |
+1186 |     def _collect_schema_instance_oids(self) -> tuple[set[str], bool]:
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1187 |         """Collect all instance OIDs that are defined in schema table rows."""
+1188 |         instance_oids: set[str] = set()
+     |
+
+C901 `_instance_defined_in_schema` is too complex (17 > 12)
+    --> app\snmp_agent.py:1270:9
+     |
+1268 |         return ".".join(p for p in parts if p != "")
+1269 |
+1270 |     def _instance_defined_in_schema(
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1271 |         self,
+1272 |         table_oid: str,
+     |
+
+PLR0912 Too many branches (16 > 12)
+    --> app\snmp_agent.py:1270:9
+     |
+1268 |         return ".".join(p for p in parts if p != "")
+1269 |
+1270 |     def _instance_defined_in_schema(
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1271 |         self,
+1272 |         table_oid: str,
+     |
+
+C901 `_fill_missing_table_defaults` is too complex (17 > 12)
+    --> app\snmp_agent.py:1340:9
+     |
+1338 |         self.table_instances = normalized
+1339 |
+1340 |     def _fill_missing_table_defaults(self) -> None:
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1341 |         """Fill missing or "unset" values in table instances using schema defaults."""
+1342 |         if not self.mib_jsons or not self.table_instances:
+     |
+
+PLR0912 Too many branches (16 > 12)
+    --> app\snmp_agent.py:1340:9
+     |
+1338 |         self.table_instances = normalized
+1339 |
+1340 |     def _fill_missing_table_defaults(self) -> None:
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1341 |         """Fill missing or "unset" values in table instances using schema defaults."""
+1342 |         if not self.mib_jsons or not self.table_instances:
+     |
+
+C901 `_materialize_index_columns` is too complex (17 > 12)
+    --> app\snmp_agent.py:1401:9
+     |
+1399 |             self._save_mib_state()
+1400 |
+1401 |     def _materialize_index_columns(self) -> None:
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+1402 |         """Ensure index columns are materialized in all table instances.
+     |
+
+PLR0912 Too many branches (17 > 12)
+    --> app\snmp_agent.py:1401:9
+     |
+1399 |             self._save_mib_state()
+1400 |
+1401 |     def _materialize_index_columns(self) -> None:
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+1402 |         """Ensure index columns are materialized in all table instances.
+     |
+
+PLR2004 Magic value used in comparison, consider replacing `2` with a constant variable
+    --> app\snmp_agent.py:1491:63
+     |
+1489 |                 return mib, column
+1490 |             return None
+1491 |         if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+     |                                                               ^
+1492 |             mib = entry[0]
+1493 |             column = entry[-1]
+     |
+
+PLR2004 Magic value used in comparison, consider replacing `2` with a constant variable
+    --> app\snmp_agent.py:1542:52
+     |
+1540 |             return None
+1541 |         column_oid = self._oid_tuple(column_obj.get("oid"))
+1542 |         if column_oid is None or len(column_oid) < 2:
+     |                                                    ^
+1543 |             return None
+     |
+
+C901 `_resolve_table_cell_context` is too complex (17 > 12)
+    --> app\snmp_agent.py:1557:9
+     |
+1555 |         }
+1556 |
+1557 |     def _resolve_table_cell_context(
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1558 |         self,
+1559 |         oid: tuple[int, ...],
+     |
+
+PLR0912 Too many branches (16 > 12)
+    --> app\snmp_agent.py:1557:9
+     |
+1555 |         }
+1556 |
+1557 |     def _resolve_table_cell_context(
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1558 |         self,
+1559 |         oid: tuple[int, ...],
+     |
+
+E501 Line too long (102 > 100)
+    --> app\snmp_agent.py:1564:101
+     |
+1563 |         Returns:
+1564 |             (table_oid_str, instance_str, column_name, index_columns) when OID points to a table cell,
+     |                                                                                                     ^^
+1565 |             otherwise None.
+     |
+
+RUF005 Consider `(*table_oid, 1)` instead of concatenation
+    --> app\snmp_agent.py:1591:29
+     |
+1589 |                     continue
+1590 |
+1591 |                 entry_oid = table_oid + (1,)
+     |                             ^^^^^^^^^^^^^^^^
+1592 |                 entry_obj: dict[str, JsonValue] | None = None
+1593 |                 for candidate in objects.values():
+     |
+help: Replace with `(*table_oid, 1)`
+
+RUF005 Consider `(*entry_oid, column_id)` instead of concatenation
+    --> app\snmp_agent.py:1607:35
+     |
+1605 |                 for candidate_name, candidate in objects.items():
+1606 |                     col_oid = self._oid_tuple(candidate.get("oid"))
+1607 |                     if col_oid == entry_oid + (column_id,):
+     |                                   ^^^^^^^^^^^^^^^^^^^^^^^^
+1608 |                         column_name = candidate_name
+1609 |                         break
+     |
+help: Replace with `(*entry_oid, column_id)`
+
+E501 Line too long (103 > 100)
+    --> app\snmp_agent.py:1617:101
+     |
+1615 |                 instance_str = ".".join(str(x) for x in instance_parts) if instance_parts else "1"
+1616 |                 index_columns = self._string_list(entry_obj.get("indexes"))
+1617 |                 return self._oid_list_to_str(list(table_oid)), instance_str, column_name, index_columns
+     |                                                                                                     ^^^
+1618 |
+1619 |         return None
+     |
+
+C901 `_build_augmented_index_map` is too complex (27 > 12)
+    --> app\snmp_agent.py:1621:9
+     |
+1619 |         return None
+1620 |
+1621 |     def _build_augmented_index_map(self) -> None:
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+1622 |         """Build parent -> child mappings for tables that AUGMENT indexes."""
+1623 |         self._augmented_parents.clear()
+     |
+
+PLR0912 Too many branches (26 > 12)
+    --> app\snmp_agent.py:1621:9
+     |
+1619 |         return None
+1620 |
+1621 |     def _build_augmented_index_map(self) -> None:
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+1622 |         """Build parent -> child mappings for tables that AUGMENT indexes."""
+1623 |         self._augmented_parents.clear()
+     |
+
+PLR0915 Too many statements (74 > 50)
+    --> app\snmp_agent.py:1621:9
+     |
+1619 |         return None
+1620 |
+1621 |     def _build_augmented_index_map(self) -> None:
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+1622 |         """Build parent -> child mappings for tables that AUGMENT indexes."""
+1623 |         self._augmented_parents.clear()
+     |
+
+TRY401 Redundant exception object included in `logging.exception` call
+    --> app\snmp_agent.py:1789:21
+     |
+1787 |                     "Failed to add augmented row for %s: %s",
+1788 |                     child.table_oid,
+1789 |                     exc,
+     |                     ^^^
+1790 |                 )
+     |
+
+TRY401 Redundant exception object included in `logging.exception` call
+    --> app\snmp_agent.py:1836:21
+     |
+1834 |                     "Failed to delete augmented row for %s: %s",
+1835 |                     child.table_oid,
+1836 |                     exc,
+     |                     ^^^
+1837 |                 )
+     |
+
+TRY401 Redundant exception object included in `logging.exception` call
+    --> app\snmp_agent.py:1896:79
+     |
+1894 |             self.logger.debug("Saved MIB state to %s", path)
+1895 |         except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+1896 |             self.logger.exception("Failed to save MIB state to %s: %s", path, e)
+     |                                                                               ^
+1897 |
+1898 |     def _create_missing_cell_instance(
+     |
+
+C901 `_create_missing_cell_instance` is too complex (14 > 12)
+    --> app\snmp_agent.py:1898:9
+     |
+1896 |             self.logger.exception("Failed to save MIB state to %s: %s", path, e)
+1897 |
+1898 |     def _create_missing_cell_instance(
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1899 |         self,
+1900 |         column_name: str,
+     |
+
+PLR0912 Too many branches (14 > 12)
+    --> app\snmp_agent.py:1898:9
+     |
+1896 |             self.logger.exception("Failed to save MIB state to %s: %s", path, e)
+1897 |
+1898 |     def _create_missing_cell_instance(
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1899 |         self,
+1900 |         column_name: str,
+     |
+
+N806 Variable `MibScalarInstance` in function should be lowercase
+    --> app\snmp_agent.py:1923:13
+     |
+1922 |         try:
+1923 |             MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
+     |             ^^^^^^^^^^^^^^^^^
+1924 |                 0
+1925 |             ]
+     |
+
+B007 Loop control variable `module_name` not used within loop body
+    --> app\snmp_agent.py:1931:13
+     |
+1930 |         # Check if instance already exists
+1931 |         for module_name, symbols in self.mib_builder.mibSymbols.items():
+     |             ^^^^^^^^^^^
+1932 |             for symbol_obj in symbols.values():
+1933 |                 if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == cell_oid:
+     |
+help: Rename unused `module_name` to `_module_name`
+
+E501 Line too long (108 > 100)
+    --> app\snmp_agent.py:1956:101
+     |
+1954 |                         current_name = symbol_obj.name
+1955 |                         suffix = "Inst_"
+1956 |                         current_index_str = symbol_name.split(suffix, 1)[1] if suffix in symbol_name else ""
+     |                                                                                                     ^^^^^^^^
+1957 |                         current_index_len = len([p for p in current_index_str.split("_") if p])
+1958 |                         if 0 < current_index_len < len(current_name):
+     |
+
+TRY300 Consider moving this statement to an `else` block
+    --> app\snmp_agent.py:1990:13
+     |
+1988 |                 value,
+1989 |             )
+1990 |             return True
+     |             ^^^^^^^^^^^
+1991 |
+1992 |         except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+     |
+
+C901 `_update_table_cell_values` is too complex (26 > 12)
+    --> app\snmp_agent.py:2000:9
+     |
+1998 |             return False
+1999 |
+2000 |     def _update_table_cell_values(
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+2001 |         self,
+2002 |         table_oid: str,
+     |
+
+PLR0912 Too many branches (26 > 12)
+    --> app\snmp_agent.py:2000:9
+     |
+1998 |             return False
+1999 |
+2000 |     def _update_table_cell_values(
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+2001 |         self,
+2002 |         table_oid: str,
+     |
+
+PLR0915 Too many statements (71 > 50)
+    --> app\snmp_agent.py:2000:9
+     |
+1998 |             return False
+1999 |
+2000 |     def _update_table_cell_values(
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+2001 |         self,
+2002 |         table_oid: str,
+     |
+
+N806 Variable `MibScalarInstance` in function should be lowercase
+    --> app\snmp_agent.py:2025:13
+     |
+2023 |         # Import MibScalarInstance for type checking
+2024 |         try:
+2025 |             MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
+     |             ^^^^^^^^^^^^^^^^^
+2026 |                 0
+2027 |             ]
+     |
+
+TRY400 Use `logging.exception` instead of `logging.error`
+    --> app\snmp_agent.py:2029:13
+     |
+2027 |             ]
+2028 |         except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+2029 |             self.logger.error("Failed to import MibScalarInstance: %s", e)
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2030 |             return
+     |
+help: Replace with `exception`
+
+RUF005 Consider `(*table_parts, 1)` instead of concatenation
+    --> app\snmp_agent.py:2034:21
+     |
+2032 |         # Parse table OID
+2033 |         table_parts = tuple(int(x) for x in table_oid.split("."))
+2034 |         entry_oid = table_parts + (1,)  # Entry is table + .1
+     |                     ^^^^^^^^^^^^^^^^^^
+2035 |
+2036 |         # Parse instance string to tuple
+     |
+help: Replace with `(*table_parts, 1)`
+
+PLW2901 `for` loop variable `value` overwritten by assignment target
+    --> app\snmp_agent.py:2073:25
+     |
+2071 |                     if isinstance(value, list):
+2072 |                         # Convert list to dot-notation OID string
+2073 |                         value = ".".join(str(x) for x in value)
+     |                         ^^^^^
+2074 |                     elif isinstance(value, dict):
+2075 |                         # Convert dict to string representation
+     |
+
+PLW2901 `for` loop variable `value` overwritten by assignment target
+    --> app\snmp_agent.py:2076:25
+     |
+2074 |                     elif isinstance(value, dict):
+2075 |                         # Convert dict to string representation
+2076 |                         value = str(value)
+     |                         ^^^^^
+2077 |
+2078 |                 # Keep table_instances in sync for API reads
+     |
+
+PERF102 When using only the values of a dict use the `values()` method
+    --> app\snmp_agent.py:2091:46
+     |
+2089 |                 # Search through MIB symbols to find the column by name
+2090 |                 column_oid = None
+2091 |                 for _module_name, symbols in self.mib_builder.mibSymbols.items():
+     |                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2092 |                     if column_name in symbols:
+2093 |                         col_obj = symbols[column_name]
+     |
+help: Replace `.items()` with `.values()`
+
+SIM102 Use a single `if` statement instead of nested `if` statements
+    --> app\snmp_agent.py:2094:25
+     |
+2092 |                       if column_name in symbols:
+2093 |                           col_obj = symbols[column_name]
+2094 | /                         if hasattr(col_obj, "name") and isinstance(col_obj.name, tuple):
+2095 | |                             # Check if this column belongs to our table (starts with entry_oid)
+2096 | |                             if (
+2097 | |                                 len(col_obj.name) > len(entry_oid)
+2098 | |                                 and col_obj.name[: len(entry_oid)] == entry_oid
+2099 | |                             ):
+     | |______________________________^
+2100 |                                   column_oid = col_obj.name
+2101 |                                   break
+     |
+help: Combine `if` statements using `and`
+
+PERF102 When using only the values of a dict use the `values()` method
+    --> app\snmp_agent.py:2112:46
+     |
+2110 |                 # Find and update the MibScalarInstance for this cell
+2111 |                 updated = False
+2112 |                 for _module_name, symbols in self.mib_builder.mibSymbols.items():
+     |                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2113 |                     for _symbol_name, symbol_obj in symbols.items():
+2114 |                         if (
+     |
+help: Replace `.items()` with `.values()`
+
+PERF102 When using only the values of a dict use the `values()` method
+    --> app\snmp_agent.py:2113:53
+     |
+2111 |                 updated = False
+2112 |                 for _module_name, symbols in self.mib_builder.mibSymbols.items():
+2113 |                     for _symbol_name, symbol_obj in symbols.items():
+     |                                                     ^^^^^^^^^^^^^
+2114 |                         if (
+2115 |                             isinstance(symbol_obj, MibScalarInstance)
+     |
+help: Replace `.items()` with `.values()`
+
+TRY400 Use `logging.exception` instead of `logging.error`
+    --> app\snmp_agent.py:2136:33
+     |
+2134 |   ΓÇª                         ValueError,
+2135 |   ΓÇª                     ) as e:
+2136 | / ΓÇª                         self.logger.error(
+2137 | | ΓÇª                             "Failed to update MibScalarInstance %s with value %r "
+2138 | | ΓÇª                             "(type: %s): %s",
+2139 | | ΓÇª                             cell_oid,
+2140 | | ΓÇª                             value,
+2141 | | ΓÇª                             type(value).__name__,
+2142 | | ΓÇª                             e,
+2143 | | ΓÇª                         )
+     | |___________________________^
+2144 |   ΓÇª                     break
+     |
+help: Replace with `exception`
+
+SIM102 Use a single `if` statement instead of nested `if` statements
+    --> app\snmp_agent.py:2148:17
+     |
+2146 |                   # If not found, try to create a missing instance
+2147 |                   # (for instances loaded from state that weren't in the schema)
+2148 | /                 if not updated:
+2149 | |                     if self._create_missing_cell_instance(column_name, cell_oid, value):
+     | |________________________________________________________________________________________^
+2150 |                           updated = True
+2151 |                           self.logger.info(
+     |
+help: Combine `if` statements using `and`
+
+TRY401 Redundant exception object included in `logging.exception` call
+    --> app\snmp_agent.py:2177:84
+     |
+2176 |             except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+2177 |                 self.logger.exception("Error updating column %s: %s", column_name, e)
+     |                                                                                    ^
+2178 |             finally:
+2179 |                 # Always clear the update marker
+     |
+
+FBT001 Boolean-typed positional argument in function definition
+    --> app\snmp_agent.py:2187:9
+     |
+2185 |         index_values: dict[str, JsonValue],
+2186 |         column_values: dict[str, JsonValue] | None = None,
+2187 |         propagate_augments: bool = True,
+     |         ^^^^^^^^^^^^^^^^^^
+2188 |         _augment_path: set[str] | None = None,
+2189 |     ) -> str:
+     |
+help: Consider adding `@typing.override` if changing the function signature would violate the Liskov Substitution Principle
+
+FBT002 Boolean default positional argument in function definition
+    --> app\snmp_agent.py:2187:9
+     |
+2185 |         index_values: dict[str, JsonValue],
+2186 |         column_values: dict[str, JsonValue] | None = None,
+2187 |         propagate_augments: bool = True,
+     |         ^^^^^^^^^^^^^^^^^^
+2188 |         _augment_path: set[str] | None = None,
+2189 |     ) -> str:
+     |
+help: Consider adding `@typing.override` if changing the function signature would violate the Liskov Substitution Principle
+
+FBT001 Boolean-typed positional argument in function definition
+    --> app\snmp_agent.py:2290:9
+     |
+2288 |         table_oid: str,
+2289 |         index_values: dict[str, JsonValue],
+2290 |         propagate_augments: bool = True,
+     |         ^^^^^^^^^^^^^^^^^^
+2291 |         _augment_path: set[str] | None = None,
+2292 |     ) -> bool:
+     |
+help: Consider adding `@typing.override` if changing the function signature would violate the Liskov Substitution Principle
+
+FBT002 Boolean default positional argument in function definition
+    --> app\snmp_agent.py:2290:9
+     |
+2288 |         table_oid: str,
+2289 |         index_values: dict[str, JsonValue],
+2290 |         propagate_augments: bool = True,
+     |         ^^^^^^^^^^^^^^^^^^
+2291 |         _augment_path: set[str] | None = None,
+2292 |     ) -> bool:
+     |
+help: Consider adding `@typing.override` if changing the function signature would violate the Liskov Substitution Principle
+
+PLR0911 Too many return statements (7 > 6)
+    --> app\snmp_agent.py:2354:9
+     |
+2352 |         return False
+2353 |
+2354 |     def _serialize_value(self, value: DecodedValue) -> JsonValue:
+     |         ^^^^^^^^^^^^^^^^
+2355 |         # Convert pysnmp types and other non-JSON-friendly values into JSON-serializable forms
+2356 |         try:
+     |
+
+TRY300 Consider moving this statement to an `else` block
+    --> app\snmp_agent.py:2371:17
+     |
+2369 |             try:
+2370 |                 s = str(value)
+2371 |                 return s
+     |                 ^^^^^^^^
+2372 |             except (AttributeError, LookupError, OSError, TypeError, ValueError):
+2373 |                 return repr(value)
+     |
+
+RET504 Unnecessary assignment to `s` before `return` statement
+    --> app\snmp_agent.py:2371:24
+     |
+2369 |             try:
+2370 |                 s = str(value)
+2371 |                 return s
+     |                        ^
+2372 |             except (AttributeError, LookupError, OSError, TypeError, ValueError):
+2373 |                 return repr(value)
+     |
+help: Remove unnecessary assignment
+
+C901 `_capture_initial_values` is too complex (15 > 12)
+    --> app\snmp_agent.py:2377:9
+     |
+2375 |             return str(value)
+2376 |
+2377 |     def _capture_initial_values(self) -> None:
+     |         ^^^^^^^^^^^^^^^^^^^^^^^
+2378 |         """Capture the initial scalar values after MIB registration for comparison."""
+2379 |         self._initial_values = {}
+     |
+
+PLR0912 Too many branches (15 > 12)
+    --> app\snmp_agent.py:2377:9
+     |
+2375 |             return str(value)
+2376 |
+2377 |     def _capture_initial_values(self) -> None:
+     |         ^^^^^^^^^^^^^^^^^^^^^^^
+2378 |         """Capture the initial scalar values after MIB registration for comparison."""
+2379 |         self._initial_values = {}
+     |
+
+N806 Variable `MibScalarInstance` in function should be lowercase
+    --> app\snmp_agent.py:2383:13
+     |
+2381 |             return
+2382 |         try:
+2383 |             MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
+     |             ^^^^^^^^^^^^^^^^^
+2384 |                 0
+2385 |             ]
+     |
+
+PERF203 `try`-`except` within a loop incurs performance overhead
+    --> app\snmp_agent.py:2437:17
+     |
+2435 |                           except (AttributeError, LookupError, OSError, TypeError, ValueError):
+2436 |                               pass
+2437 | /                 except (AttributeError, LookupError, OSError, TypeError, ValueError):
+2438 | |                     continue
+     | |____________________________^
+2439 |
+2440 |           self.logger.info("%s", f"Captured {len(self._initial_values)} initial scalar values")
+     |
+
+C901 `_apply_overrides` is too complex (18 > 12)
+    --> app\snmp_agent.py:2442:9
+     |
+2440 |         self.logger.info("%s", f"Captured {len(self._initial_values)} initial scalar values")
+2441 |
+2442 |     def _apply_overrides(self) -> None:
+     |         ^^^^^^^^^^^^^^^^
+2443 |         """Apply loaded overrides to the in-memory MIB scalar instances."""
+2444 |         if not self.overrides:
+     |
+
+PLR0912 Too many branches (17 > 12)
+    --> app\snmp_agent.py:2442:9
+     |
+2440 |         self.logger.info("%s", f"Captured {len(self._initial_values)} initial scalar values")
+2441 |
+2442 |     def _apply_overrides(self) -> None:
+     |         ^^^^^^^^^^^^^^^^
+2443 |         """Apply loaded overrides to the in-memory MIB scalar instances."""
+2444 |         if not self.overrides:
+     |
+
+N806 Variable `MibScalarInstance` in function should be lowercase
+    --> app\snmp_agent.py:2449:13
+     |
+2447 |             return
+2448 |         try:
+2449 |             MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
+     |             ^^^^^^^^^^^^^^^^^
+2450 |                 0
+2451 |             ]
+     |
+
+RUF005 Consider `(*oid, 0)` instead of concatenation
+    --> app\snmp_agent.py:2471:43
+     |
+2469 |             try:
+2470 |                 if oid[-1] != 0:
+2471 |                     candidate_oids.append(oid + (0,))
+     |                                           ^^^^^^^^^^
+2472 |             except (AttributeError, LookupError, OSError, TypeError, ValueError):
+2473 |                 pass
+     |
+help: Replace with `(*oid, 0)`
+
+PERF102 When using only the values of a dict use the `values()` method
+    --> app\snmp_agent.py:2474:42
+     |
+2472 |             except (AttributeError, LookupError, OSError, TypeError, ValueError):
+2473 |                 pass
+2474 |             for _module_name, symbols in self.mib_builder.mibSymbols.items():
+     |                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2475 |                 for _symbol_name, symbol_obj in symbols.items():
+2476 |                     try:
+     |
+help: Replace `.items()` with `.values()`
+
+PERF102 When using only the values of a dict use the `values()` method
+    --> app\snmp_agent.py:2475:49
+     |
+2473 |                 pass
+2474 |             for _module_name, symbols in self.mib_builder.mibSymbols.items():
+2475 |                 for _symbol_name, symbol_obj in symbols.items():
+     |                                                 ^^^^^^^^^^^^^
+2476 |                     try:
+2477 |                         if (
+     |
+help: Replace `.items()` with `.values()`
+
+T201 `print` found
+    --> app\snmp_agent.py:2548:9
+     |
+2546 |         agent.run()
+2547 |     except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+2548 |         print(f"\nERROR: {type(e).__name__}: {e}", file=sys.stderr)
+     |         ^^^^^
+2549 |         traceback.print_exc()
+2550 |         sys.exit(1)
+     |
+help: Remove `print`
+
+Found 125 errors.
+[*] 8 fixable with the `--fix` option (28 hidden fixes can be enabled with the `--unsafe-fixes` option).

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import contextlib
 import logging
 import signal
@@ -44,7 +43,7 @@ class TrapReceiver:
 
     def __init__(
         self,
-        host: str = "127.0.0.1",
+        host: str = "0.0.0.0",
         port: int = 16662,
         community: str = "public",
         logger: logging.Logger | None = None,
@@ -60,7 +59,6 @@ class TrapReceiver:
         self.snmp_engine: SnmpEngine | None = None
         self.running = False
         self.thread: Thread | None = None
-        self.loop: asyncio.AbstractEventLoop | None = None
 
         self.received_traps: list[dict[str, object]] = []
         self.max_traps = 100
@@ -82,61 +80,141 @@ class TrapReceiver:
             return
 
         self.running = False
+        if self.snmp_engine:
+            dispatcher = getattr(self.snmp_engine, "transport_dispatcher", None)
+            close_dispatcher = (
+                getattr(dispatcher, "close_dispatcher", None)
+                if dispatcher is not None
+                else None
+            )
+            if not callable(close_dispatcher) and dispatcher is not None:
+                close_dispatcher = getattr(dispatcher, "closeDispatcher", None)
+            if callable(close_dispatcher):
+                with contextlib.suppress(
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                ):
+                    close_dispatcher()
         if self.thread:
             self.thread.join(timeout=3.0)
 
         self.logger.info("Trap receiver stopped")
 
     def _run_receiver(self) -> None:
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
-
         try:
-            self.loop.run_until_complete(self._async_receiver())
+            self.snmp_engine = SnmpEngine()
+            add_transport = getattr(config, "add_transport", None)
+            if not callable(add_transport):
+                add_transport = getattr(config, "addTransport", None)
+            if not callable(add_transport):
+                raise RuntimeError("pysnmp config missing add_transport")
+
+            self._add_udp_transport(
+                add_transport=add_transport,
+                transport_module=udp,
+                bind_host=self.host,
+                bind_port=self.port,
+            )
+
+            add_v1_system = getattr(config, "add_v1_system", None)
+            if not callable(add_v1_system):
+                add_v1_system = getattr(config, "addV1System", None)
+            if not callable(add_v1_system):
+                raise RuntimeError("pysnmp config missing add_v1_system")
+
+            add_v1_system(self.snmp_engine, "my-area", self.community)
+            ntfrcv.NotificationReceiver(self.snmp_engine, self._trap_callback)
+
+            self.logger.info("%s", f"Listening for traps on UDP port {self.port}")
+
+            dispatcher = getattr(self.snmp_engine, "transport_dispatcher", None)
+            if dispatcher is None:
+                dispatcher = getattr(self.snmp_engine, "transportDispatcher", None)
+            if dispatcher is None:
+                raise RuntimeError("pysnmp engine missing transport dispatcher")
+
+            job_started = getattr(dispatcher, "job_started", None)
+            if not callable(job_started):
+                job_started = getattr(dispatcher, "jobStarted", None)
+            if callable(job_started):
+                job_started(1)
+
+            run_dispatcher = getattr(dispatcher, "run_dispatcher", None)
+            if not callable(run_dispatcher):
+                run_dispatcher = getattr(dispatcher, "runDispatcher", None)
+            if not callable(run_dispatcher):
+                raise RuntimeError("pysnmp dispatcher missing run_dispatcher")
+
+            run_dispatcher()
         except RuntimeError as error:
             if "Event loop stopped before Future completed" not in str(error):
                 self.logger.exception("Trap receiver error")
         except (AttributeError, LookupError, OSError, TypeError, ValueError):
             self.logger.exception("Trap receiver error")
         finally:
-            try:
-                pending = asyncio.all_tasks(self.loop)
-                for task in pending:
-                    task.cancel()
-                self.loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-            except (RuntimeError, AttributeError):
-                pass
-            finally:
-                if self.loop and not self.loop.is_closed():
-                    self.loop.close()
-
-    async def _async_receiver(self) -> None:
-        self.snmp_engine = SnmpEngine()
-
-        config.addTransport(
-            self.snmp_engine,
-            udp.domainName,
-            udp.UdpTransport().openServerMode((self.host, self.port)),
-        )
-
-        config.addV1System(self.snmp_engine, "my-area", self.community)
-        ntfrcv.NotificationReceiver(self.snmp_engine, self._trap_callback)
-
-        self.logger.info("%s", f"Listening for traps on UDP port {self.port}")
-        self.snmp_engine.transportDispatcher.jobStarted(1)
-
-        try:
-            while self.running:
-                await asyncio.sleep(0.1)
-                self.snmp_engine.transportDispatcher.runDispatcher(timeout=0.1)
-        finally:
             if self.snmp_engine:
-                with contextlib.suppress(
-                    AttributeError, LookupError, OSError, TypeError, ValueError):
-                    self.snmp_engine.transportDispatcher.jobFinished(1)
-                with contextlib.suppress(
-                    AttributeError, LookupError, OSError, TypeError, ValueError):
-                    self.snmp_engine.transportDispatcher.closeDispatcher()
+                dispatcher = getattr(self.snmp_engine, "transport_dispatcher", None)
+                if dispatcher is None:
+                    dispatcher = getattr(self.snmp_engine, "transportDispatcher", None)
+                if dispatcher is not None:
+                    job_finished = getattr(dispatcher, "job_finished", None)
+                    if not callable(job_finished):
+                        job_finished = getattr(dispatcher, "jobFinished", None)
+                    if callable(job_finished):
+                        with contextlib.suppress(
+                            AttributeError,
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError,
+                        ):
+                            job_finished(1)
+                    close_dispatcher = getattr(dispatcher, "close_dispatcher", None)
+                    if not callable(close_dispatcher):
+                        close_dispatcher = getattr(dispatcher, "closeDispatcher", None)
+                    if callable(close_dispatcher):
+                        with contextlib.suppress(
+                            AttributeError,
+                            LookupError,
+                            OSError,
+                            TypeError,
+                            ValueError,
+                        ):
+                            close_dispatcher()
+            self.running = False
+
+    def _add_udp_transport(
+        self,
+        *,
+        add_transport: Callable[[SnmpEngine, object, object], None],
+        transport_module: object,
+        bind_host: str,
+        bind_port: int,
+    ) -> None:
+        transport_cls = getattr(transport_module, "UdpAsyncioTransport", None)
+        if transport_cls is None:
+            transport_cls = getattr(transport_module, "UdpTransport", None)
+        if transport_cls is None:
+            raise RuntimeError("No compatible UDP transport found for pysnmp")
+
+        transport = transport_cls()
+        open_server_mode = getattr(transport, "open_server_mode", None)
+        if not callable(open_server_mode):
+            open_server_mode = getattr(transport, "openServerMode", None)
+        if not callable(open_server_mode):
+            raise RuntimeError("UDP transport missing open_server_mode")
+
+        transport = open_server_mode((bind_host, bind_port))
+
+        domain_name = getattr(transport_module, "DOMAIN_NAME", None)
+        if domain_name is None:
+            domain_name = getattr(transport_module, "domainName", None)
+
+        add_transport(self.snmp_engine, domain_name, transport)
+
 
     def _trap_callback(
         self,

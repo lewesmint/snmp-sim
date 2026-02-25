@@ -64,7 +64,7 @@ class ValueLinkManager:
         # Track in-progress updates to prevent infinite loops
         self._updating: set[str] = set()
 
-    def add_link(  # noqa: PLR0913
+    def add_link(
         self,
         link_id: str,
         endpoints: list[ValueLinkEndpoint],

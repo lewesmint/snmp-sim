@@ -193,17 +193,17 @@ class AppLogger:
         return logging.getLogger(name)
 
     @staticmethod
-    def warning(msg: str, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+    def warning(msg: str, *args: Any, **kwargs: Any) -> None:
         """Log a warning message."""
         logging.getLogger().warning(msg, *args, **kwargs)
 
     @staticmethod
-    def error(msg: str, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+    def error(msg: str, *args: Any, **kwargs: Any) -> None:
         """Log an error message."""
         logging.getLogger().error(msg, *args, **kwargs)
 
     @staticmethod
-    def info(msg: str, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+    def info(msg: str, *args: Any, **kwargs: Any) -> None:
         """Log an info message."""
         logging.getLogger().info(msg, *args, **kwargs)
 

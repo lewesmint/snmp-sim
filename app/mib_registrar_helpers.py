@@ -139,7 +139,7 @@ class RegistrarWriteHooks:
         self,
         dotted: str,
         friendly: str,
-        is_writable: bool,  # noqa: FBT001
+        is_writable: bool,
         original_write: ObjectType,
     ) -> WriteHookWrapper:
         """Build the writeCommit wrapper function."""
@@ -211,7 +211,7 @@ class RegistrarWriteHooks:
         self,
         dotted: str,
         friendly: str,
-        is_writable: bool,  # noqa: FBT001
+        is_writable: bool,
     ) -> WriteHookWrapper:
         """Build the writeTest wrapper function."""
         registrar_logger = self.logger

@@ -408,7 +408,7 @@ class MibRegistrar:
         self,
         dotted: str,
         friendly: str,
-        is_writable: bool,  # noqa: FBT001
+        is_writable: bool,
         original_write: ObjectType,
     ) -> Callable[..., None]:
         """Build the writeCommit wrapper function.
@@ -434,7 +434,7 @@ class MibRegistrar:
         self,
         dotted: str,
         friendly: str,
-        is_writable: bool,  # noqa: FBT001
+        is_writable: bool,
     ) -> Callable[..., None]:
         """Build the writeTest wrapper function.
 
@@ -596,7 +596,7 @@ class MibRegistrar:
                 table_symbols = self._build_table_symbols(mib, name, info, mib_json, type_registry)
                 export_symbols.update(table_symbols)
             except REGISTRAR_EXCEPTIONS as _e:
-                self.logger.error(  # noqa: G201
+                self.logger.error(
                     "Error building table %s: %s",
                     name,
                     _e,

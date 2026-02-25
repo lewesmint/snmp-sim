@@ -173,7 +173,7 @@ def _try_get_table_cell_value(parts: tuple[int, ...]) -> DecodedValue | None:
     )
 
 
-def _resolve_table_cell_context(  # noqa: C901, PLR0912
+def _resolve_table_cell_context(
     parts: tuple[int, ...],
     schemas: dict[str, JsonValue],
 ) -> tuple[str, tuple[int, ...], str, str] | None:
@@ -266,7 +266,7 @@ def _row_matches_instance(row: JsonObject, index_columns: list[str], instance_st
     return row_instance_str == instance_str
 
 
-def _try_schema_row_value(  # noqa: C901, PLR0912
+def _try_schema_row_value(
     schemas: dict[str, JsonValue],
     table_parts: tuple[int, ...],
     instance_str: str,
@@ -372,7 +372,7 @@ def set_oid_value(update: OIDValueUpdate) -> dict[str, object]:
 
 
 @router.get("/tree/bulk")
-def get_tree_bulk_data() -> dict[str, object]:  # noqa: C901, PLR0912, PLR0915
+def get_tree_bulk_data() -> dict[str, object]:
     """Get complete tree data including all table instances for efficient GUI loading."""
     if state.snmp_agent is None:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")

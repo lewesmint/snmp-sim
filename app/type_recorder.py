@@ -1,7 +1,6 @@
 """Build a canonical SNMP type registry by introspecting compiled MIB symbols."""
 
 # pylint: disable=broad-exception-caught,redefined-outer-name,reimported,too-few-public-methods,too-many-locals,too-many-branches
-# ruff: noqa: D205, D401
 
 from __future__ import annotations
 
@@ -55,14 +54,14 @@ _MIN_RANGE_COUNT = 2
 class HasGetSyntax(Protocol):
     """Protocol for syntax objects exposing a PySNMP-style getSyntax method."""
 
-    def getSyntax(self) -> object:  # pylint: disable=invalid-name  # noqa: N802
+    def getSyntax(self) -> object:  # pylint: disable=invalid-name
         """Return the underlying syntax object for this SNMP value type."""
 
 
 class SupportsMibBuilder(Protocol):
     """Minimal MIB builder surface used by TypeRecorder."""
 
-    mibSymbols: Mapping[str, Mapping[str, object]]  # noqa: N815
+    mibSymbols: Mapping[str, Mapping[str, object]]
 
     def add_mib_sources(self, *mib_sources: object) -> None:
         """Register MIB source locations."""
@@ -256,7 +255,7 @@ class TypeRecorder:
 
             try:
                 raw_pairs = typed_items()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logging.getLogger(__name__).debug(
                     "Skipping enum extraction for candidate %r",
                     candidate,
@@ -558,7 +557,7 @@ class TypeRecorder:
                 continue
             try:
                 syntax_obj = ctor()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logging.getLogger(__name__).debug(
                     "Skipping base type seeding for %s due to constructor error",
                     name,
@@ -733,7 +732,7 @@ class TypeRecorder:
                 continue
             try:
                 mib_builder.load_modules(path.stem)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 self.logger.debug("Skipping unloadable compiled MIB %s", path.stem)
 
         return mib_builder.mibSymbols
@@ -795,7 +794,7 @@ class TypeRecorder:
         syntax: object,
         base_obj: object,
         base_type_out: str | None,
-        allow_metadata: bool,  # noqa: FBT001
+        allow_metadata: bool,
     ) -> tuple[
         str | None,
         list[JsonDict] | None,
@@ -828,7 +827,7 @@ class TypeRecorder:
 
         return display, enums, size, constraints, constraints_repr
 
-    def _process_object_type_symbol(  # noqa: C901, PLR0912
+    def _process_object_type_symbol(
         self,
         types: dict[str, TypeEntry],
         mib_name: str,
@@ -841,7 +840,7 @@ class TypeRecorder:
         snmp_obj = cast("HasGetSyntax", sym_obj)
         try:
             syntax = snmp_obj.getSyntax()
-        except Exception:  # noqa: BLE001
+        except Exception:
             return
 
         if syntax is None:
@@ -973,7 +972,7 @@ def main() -> None:
     recorder = TypeRecorder(args.compiled_dir)
     recorder.build()
     recorder.export_to_json(str(args.output))
-    print(f"Wrote {len(recorder.registry)} types to {args.output}")  # noqa: T201
+    print(f"Wrote {len(recorder.registry)} types to {args.output}")
 
 
 if __name__ == "__main__":  # pragma: no cover

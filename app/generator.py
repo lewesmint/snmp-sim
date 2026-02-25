@@ -51,7 +51,7 @@ class BehaviourGenerator:
                 ", ".join(loaded),
             )
 
-    def generate(  # noqa: C901, PLR0912, PLR0915
+    def generate(
         self,
         compiled_py_path: str,
         mib_name: str | None = None,
@@ -162,7 +162,7 @@ class BehaviourGenerator:
                                 if entry_obj and hasattr(entry_obj, "getIndexNames"):
                                     index_names = [idx[2] for idx in entry_obj.getIndexNames()]
                                     entry_info["indexes"] = index_names
-                            except Exception as e:  # noqa: BLE001
+                            except Exception as e:
                                 logger.warning(
                                     "Could not extract index columns for %s: %s", entry_name, e
                                 )
@@ -269,7 +269,7 @@ class BehaviourGenerator:
         # Fallback: use filename without extension
         return Path(compiled_py_path).stem
 
-    def _extract_mib_info(  # noqa: C901, PLR0912, PLR0915
+    def _extract_mib_info(
         self,
         mib_py_path: str,
         mib_name: str,
@@ -290,7 +290,7 @@ class BehaviourGenerator:
             mib_builder.add_mib_sources(
                 builder.DirMibSource(str(Path(mib_py_path).parent))
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             with contextlib.suppress(Exception):
                 mib_builder.add_mib_sources()
         mib_builder.load_modules(mib_name)
@@ -427,7 +427,7 @@ class BehaviourGenerator:
         logger.debug("Extracted MIB info for %s: %s", mib_name, list(result.keys()))
         return {"objects": result, "traps": traps}
 
-    def _extract_traps(  # noqa: C901
+    def _extract_traps(
         self,
         mib_symbols: dict[str, Any],
         mib_name: str,
@@ -554,7 +554,7 @@ class BehaviourGenerator:
                 # Only mark as inherited if there are actually inherited index columns
                 if inherited_indexes and entry_name in result:
                     result[entry_name]["index_from"] = inherited_indexes
-            except Exception:  # noqa: BLE001
+            except Exception:
                 # Skip if we can't detect - not all objects have getIndexNames
                 logger.debug("Skipping inherited-index detection for %s", entry_name)
 
@@ -630,7 +630,7 @@ class BehaviourGenerator:
 
         return type_info
 
-    def _get_default_index_value(  # noqa: PLR0911
+    def _get_default_index_value(
         self,
         col_type: str,
         type_info: dict[str, Any],
@@ -701,7 +701,7 @@ class BehaviourGenerator:
             return normalized
         return type_info
 
-    def _get_default_value(self, syntax: str, symbol_name: str) -> object:  # noqa: C901, PLR0911
+    def _get_default_value(self, syntax: str, symbol_name: str) -> object:
         """Legacy method - kept for compatibility."""
         # This is now handled by _get_default_value_from_type_info
         # but kept as fallback
@@ -728,7 +728,7 @@ class BehaviourGenerator:
         if syntax in ("Counter32", "Counter64"):
             return 0
         if syntax == "IpAddress":
-            return "0.0.0.0"  # noqa: S104
+            return "0.0.0.0"
         if syntax == "TimeTicks":
             return 0
         return None

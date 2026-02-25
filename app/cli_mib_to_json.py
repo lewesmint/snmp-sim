@@ -21,7 +21,7 @@ _EXPECTED_FROM_PARTS = 2
 def check_imported_mibs(mib_txt_path: str, compiled_dir: str) -> None:
     """Parse IMPORTS in a MIB text file and warn about missing compiled MIBs."""
     if not Path(mib_txt_path).exists():
-        print(f"WARNING: MIB source file {mib_txt_path} not found for import check.")  # noqa: T201
+        print(f"WARNING: MIB source file {mib_txt_path} not found for import check.")
         return
 
     with Path(mib_txt_path).open(encoding="utf-8") as f:
@@ -49,7 +49,7 @@ def check_imported_mibs(mib_txt_path: str, compiled_dir: str) -> None:
     for mib in imported_mibs:
         py_path = Path(compiled_dir) / f"{mib}.py"
         if not py_path.exists():
-            print(  # noqa: T201
+            print(
                 f"WARNING: MIB imports {mib}, but {py_path} is missing. "
                 "Compile this MIB to avoid runtime errors."
             )
@@ -97,7 +97,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         try:
             config = AppConfig()
         except FileNotFoundError:
-            print(  # noqa: T201
+            print(
                 "Error: Config file not found, and no MIB specified",
                 file=sys.stderr,
             )
@@ -106,22 +106,22 @@ def main(argv: Iterable[str] | None = None) -> int:
         mibs = mibs_raw if isinstance(mibs_raw, list) else []
         mibs = [str(mib) for mib in mibs]
         if not mibs:
-            print("No MIBs configured", file=sys.stderr)  # noqa: T201
+            print("No MIBs configured", file=sys.stderr)
             return 1
         for mib in mibs:
             compiled_path = Path("compiled-mibs") / f"{mib}.py"
             if not compiled_path.exists():
-                print(  # noqa: T201
+                print(
                     f"Warning: Compiled MIB not found: {compiled_path}",
                     file=sys.stderr,
                 )
                 continue
             json_path = generator.generate(str(compiled_path), mib_name=mib, force_regenerate=True)
-            print(f"Schema JSON written to {json_path}")  # noqa: T201
+            print(f"Schema JSON written to {json_path}")
     else:
         # Process single MIB
         if not Path(args.compiled_mib_py).exists():
-            print(  # noqa: T201
+            print(
                 f"Error: compiled MIB not found: {args.compiled_mib_py}",
                 file=sys.stderr,
             )
@@ -137,7 +137,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             force_regenerate=True,
         )
 
-        print(f"Schema JSON written to {json_path}")  # noqa: T201
+        print(f"Schema JSON written to {json_path}")
     return 0
 
 

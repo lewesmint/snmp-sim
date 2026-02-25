@@ -7,7 +7,7 @@ from typing import cast
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.api_shared import JsonValue  # noqa: TC001
+from app.api_shared import JsonValue
 from app.api_state import logger, state
 from app.api_table_helpers import (
     build_instance_index_string,

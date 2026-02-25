@@ -11,18 +11,27 @@ from __future__ import annotations
 # ruff: noqa: RUF059,RUF100,S101,S104,SIM102,SLF001,T201,TC002,TC003,TC006,TRY003
 # ruff: noqa: TRY300,TRY400,TRY401,UP037,UP045
 
+import importlib
 import json
+import logging
+import os
 import signal
 import sys
 import time
+import traceback
 from types import FrameType
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, TypeAlias, TypedDict, cast
 
 from pysnmp import debug as pysnmp_debug
+from pysnmp.carrier.asyncio.dgram import udp
+from pysnmp.carrier.asyncio.dispatch import AsyncioDispatcher
+from pysnmp.entity import config, engine
 from pysnmp.entity.engine import SnmpEngine
+from pysnmp.entity.rfc3413 import cmdrsp, context
 from pysnmp.entity.rfc3413.context import SnmpContext
+from pysnmp.smi import builder as snmp_builder
 from pysnmp.smi.builder import MibBuilder
 
 # Load type converter plugins
@@ -33,6 +42,9 @@ from app.compiler import MibCompiler
 from app.mib_registrar import MibRegistrar, SNMPContext
 from app.model_paths import TYPE_REGISTRY_FILE, agent_model_dir, compiled_mibs_dir, mib_state_file
 from app.value_links import get_link_manager
+from app.generator import BehaviourGenerator
+from app.type_registry_validator import validate_type_registry_file
+from app.type_registry import TypeRegistry
 
 
 @dataclass
@@ -109,8 +121,6 @@ class SNMPAgent:
 
     def _setup_signal_handlers(self) -> None:
         """Set up signal handlers for graceful shutdown."""
-        import os
-
         def signal_handler(signum: int, _frame: FrameType | None) -> None:
             # Get signal name; use fallback on Windows where signal.Signals may not have all signals
             try:
@@ -136,8 +146,6 @@ class SNMPAgent:
 
     def _shutdown(self) -> None:
         """Perform graceful shutdown of the SNMP agent."""
-        import os
-
         self.logger.info("Starting graceful shutdown...")
 
         try:
@@ -151,8 +159,6 @@ class SNMPAgent:
 
             # Flush and close log handlers
             self.logger.info("Flushing log handlers...")
-            import logging
-
             for handler in logging.getLogger().handlers:
                 handler.flush()
 
@@ -169,8 +175,6 @@ class SNMPAgent:
         Searches in data/mibs and all its subdirectories.
         Returns the Path to the .mib file if found, None otherwise.
         """
-        from pathlib import Path
-
         mib_data_dir = Path(__file__).resolve().parent.parent / "data" / "mibs"
         if not mib_data_dir.exists():
             return None
@@ -199,8 +203,6 @@ class SNMPAgent:
         - The compiled file doesn't exist, OR
         - The source .mib file is newer than the compiled .py file
         """
-        from pathlib import Path
-
         compiled_path = Path(compiled_file)
         if not compiled_path.exists():
             return True
@@ -351,9 +353,6 @@ class SNMPAgent:
         json_dir = agent_model_dir(__file__)
         json_dir.mkdir(parents=True, exist_ok=True)
 
-        # Build and export the canonical type registry
-        from app.type_registry import TypeRegistry
-
         compiled_mib_paths: list[str] = []
         compiler = MibCompiler(str(compiled_dir), self.app_config)
 
@@ -422,8 +421,6 @@ class SNMPAgent:
 
         # Validate types
         self.logger.info("Validating type registry...")
-        from app.type_registry_validator import validate_type_registry_file
-
         is_valid, errors, type_count = validate_type_registry_file(str(types_json_path))
         if not is_valid:
             self.logger.error("Type registry validation failed: %s", errors)
@@ -435,7 +432,6 @@ class SNMPAgent:
             self.logger.info("Using preloaded model for schemas")
         else:
             # Generate schema JSON for each MIB
-            from app.generator import BehaviourGenerator
 
             generator = BehaviourGenerator(str(json_dir))
             # Build a map of MIB name -> compiled Python path
@@ -619,11 +615,6 @@ class SNMPAgent:
             self.logger.error("snmp_engine is not initialized. SNMP agent will not start.")
 
     def _setup_snmp_engine(self, compiled_dir: str) -> None:
-        from pysnmp.carrier.asyncio.dispatch import AsyncioDispatcher
-        from pysnmp.entity import engine
-        from pysnmp.entity.rfc3413 import context
-        from pysnmp.smi import builder as snmp_builder
-
         self.logger.info("Setting up SNMP engine...")
         self.snmp_engine = engine.SnmpEngine()
 
@@ -648,7 +639,7 @@ class SNMPAgent:
 
         # Import MIB classes from SNMPv2-SMI
         (
-            MibScalar,
+            _MibScalar,
             MibScalarInstance,
             MibTable,
             MibTableRow,
@@ -679,11 +670,6 @@ class SNMPAgent:
         self.logger.info("SNMP engine and MIB classes initialized")
 
     def _setup_transport(self) -> None:
-        try:
-            from pysnmp.carrier.asyncio.dgram import udp
-            from pysnmp.entity import config
-        except ImportError as err:
-            raise RuntimeError("pysnmp is not installed or not available.") from err
         if self.snmp_engine is None:
             raise RuntimeError("snmp_engine is not initialized.") from None
 
@@ -696,8 +682,6 @@ class SNMPAgent:
         self.logger.info("%s", f"Transport opened on {self.host}:{self.port}")
 
     def _setup_community(self) -> None:
-        from pysnmp.entity import config
-
         if self.snmp_engine is None:
             raise RuntimeError("snmp_engine is not initialized.")
 
@@ -747,8 +731,6 @@ class SNMPAgent:
         )
 
     def _setup_responders(self) -> None:
-        from pysnmp.entity.rfc3413 import cmdrsp
-
         if self.snmp_engine is None:
             raise RuntimeError("snmp_engine is not initialized.")
         if not hasattr(self, "snmp_context") or self.snmp_context is None:
@@ -770,8 +752,7 @@ class SNMPAgent:
         registrar = getattr(self, "mib_registrar", None)
         if registrar is None:
             try:
-                import importlib
-
+                # pylint: disable=import-outside-toplevel
                 mib_registrar_module = importlib.import_module("app.mib_registrar")
 
                 registrar_cls = mib_registrar_module.MibRegistrar
@@ -824,8 +805,7 @@ class SNMPAgent:
         MibRegistrar instance which implements the decoding logic.
         """
         try:
-            import importlib
-
+            # pylint: disable=import-outside-toplevel
             mib_registrar_module = importlib.import_module("app.mib_registrar")
 
             registrar_cls = mib_registrar_module.MibRegistrar
@@ -904,8 +884,8 @@ class SNMPAgent:
         MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
 
         # Search through all MIB modules and symbols
-        for module_name, symbols in self.mib_builder.mibSymbols.items():
-            for symbol_name, symbol_obj in symbols.items():
+        for _module_name, symbols in self.mib_builder.mibSymbols.items():
+            for _symbol_name, symbol_obj in symbols.items():
                 if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == oid:
                     # Update in-memory value - must use clone() to preserve pysnmp type
                     try:
@@ -997,7 +977,7 @@ class SNMPAgent:
         oid_map = {}
 
         # Iterate through all MIB modules and symbols
-        for module_name, symbols in self.mib_builder.mibSymbols.items():
+        for _module_name, symbols in self.mib_builder.mibSymbols.items():
             for symbol_name, symbol_obj in symbols.items():
                 # Check if it has a name attribute (OID)
                 if hasattr(symbol_obj, "name") and symbol_obj.name:
@@ -2113,7 +2093,7 @@ class SNMPAgent:
 
                 # Search through MIB symbols to find the column by name
                 column_oid = None
-                for module_name, symbols in self.mib_builder.mibSymbols.items():
+                for _module_name, symbols in self.mib_builder.mibSymbols.items():
                     if column_name in symbols:
                         col_obj = symbols[column_name]
                         if hasattr(col_obj, "name") and isinstance(col_obj.name, tuple):
@@ -2134,8 +2114,8 @@ class SNMPAgent:
 
                 # Find and update the MibScalarInstance for this cell
                 updated = False
-                for module_name, symbols in self.mib_builder.mibSymbols.items():
-                    for symbol_name, symbol_obj in symbols.items():
+                for _module_name, symbols in self.mib_builder.mibSymbols.items():
+                    for _symbol_name, symbol_obj in symbols.items():
                         if (
                             isinstance(symbol_obj, MibScalarInstance)
                             and symbol_obj.name == cell_oid
@@ -2496,8 +2476,8 @@ class SNMPAgent:
                     candidate_oids.append(oid + (0,))
             except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 pass
-            for module_name, symbols in self.mib_builder.mibSymbols.items():
-                for symbol_name, symbol_obj in symbols.items():
+            for _module_name, symbols in self.mib_builder.mibSymbols.items():
+                for _symbol_name, symbol_obj in symbols.items():
                     try:
                         if (
                             isinstance(symbol_obj, MibScalarInstance)
@@ -2570,8 +2550,6 @@ if __name__ == "__main__":  # pragma: no cover
         agent = SNMPAgent()
         agent.run()
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-        import traceback
-
         print(f"\nERROR: {type(e).__name__}: {e}", file=sys.stderr)
         traceback.print_exc()
         sys.exit(1)
