@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ruff: noqa: B007, BLE001, ERA001, EXE001, PLC0415, PLR2004, PT018, S101, T201
+# ruff: noqa: BLE001, ERA001, EXE001, PLC0415, PLR2004, PT018, S101, T201
 """Optimized tests for SNMP wrapper: get_sync, set_sync, get_next_sync."""
 
 import sys
@@ -51,9 +51,11 @@ def test_stateless_client_get() -> None:
     )
 
     # Validate each result
-    for i, (oid, name, expected_str) in enumerate(oids):
+    for i, oid_tuple in enumerate(oids):
         obj_type = result[i]
         value_str = str(obj_type[1])
+        name = oid_tuple[1]
+        expected_str = oid_tuple[2]
         assert expected_str in value_str, (
             f"Expected '{expected_str}' in {name} value, got: {value_str}"
         )
@@ -214,7 +216,7 @@ def test_performance_comparison() -> None:
         auth=PUBLIC_AUTH, address=PARROT_ADDRESS, timeout=1.0, retries=1
     )
     start = time.time()
-    for i in range(iterations):
+    for _ in range(iterations):
         client_stateless.get(oid)
     stateless_time = time.time() - start
     stateless_msg = (
@@ -230,7 +232,7 @@ def test_performance_comparison() -> None:
     )
     try:
         start = time.time()
-        for i in range(iterations):
+        for _ in range(iterations):
             client_persistent.get(oid)
         persistent_time = time.time() - start
         persistent_msg = (
