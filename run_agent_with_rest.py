@@ -15,7 +15,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Any, NoReturn, cast
+from typing import Any, NoReturn, Protocol, cast
 
 import uvicorn
 
@@ -24,13 +24,19 @@ from app.app_config import AppConfig
 from app.model_paths import AGENT_CONFIG_FILE, AGENT_MODEL_DIR, COMPILED_MIBS_DIR
 from app.snmp_agent import SNMPAgent
 
-_PSUTIL: Any | None
+class _PsutilModule(Protocol):
+    Error: type[BaseException]
+
+    def net_connections(self, kind: str = "inet") -> list[Any]: ...
+
+
+_PSUTIL: _PsutilModule | None
 try:
-    _PSUTIL = importlib.import_module("psutil")
+    _PSUTIL = cast("_PsutilModule", importlib.import_module("psutil"))
 except ImportError:
     _PSUTIL = None
 
-psutil_module: Any | None = _PSUTIL
+psutil_module: _PsutilModule | None = _PSUTIL
 
 logger = logging.getLogger(__name__)
 
