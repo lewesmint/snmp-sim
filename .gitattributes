@@ -1,0 +1,21 @@
+* text=auto eol=lf
+
+# Common binary formats (never normalize line endings)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.bz2 binary
+*.xz binary
+*.7z binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+
+# Windows command scripts should use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
