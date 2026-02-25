@@ -256,6 +256,6 @@ A: Not needed for most workloads. If you need >1000 ops/sec, consider:
 
 **Status**: ✅ Production-ready (v1.0)  
 **Date**: Feb 2026  
-**Tested**: Python 3.10+, PySNMP 7.x  
+**Tested**: Python 3.13+, PySNMP 7.x  
 **Linting**: mypy strict ✅, ruff ✅, pyright ✅  
 **Tests**: 7/7 passing ✅

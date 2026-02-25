@@ -214,7 +214,7 @@ Total: 30 KB (highly optimized)
 
 - Single file design means zero dependencies beyond PySNMP
 - Pure Python (no C extensions needed)
-- Works with Python 3.10+
+- Works with Python 3+
 
 ---
 

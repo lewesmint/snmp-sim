@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import contextlib
+import importlib
 import logging
 import os
 import platform
@@ -23,13 +24,13 @@ from app.app_config import AppConfig
 from app.model_paths import AGENT_CONFIG_FILE, AGENT_MODEL_DIR, COMPILED_MIBS_DIR
 from app.snmp_agent import SNMPAgent
 
-_psutil: Any | None
+_PSUTIL: Any | None
 try:
-    import psutil as _psutil
+    _PSUTIL = importlib.import_module("psutil")
 except ImportError:
-    _psutil = None
+    _PSUTIL = None
 
-psutil_module: Any | None = _psutil
+psutil_module: Any | None = _PSUTIL
 
 logger = logging.getLogger(__name__)
 

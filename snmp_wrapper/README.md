@@ -323,5 +323,5 @@ Same as your project. This wrapper is self-contained and can be copied into any 
 ---
 
 **Version**: 1.0 (Feb 2026)  
-**Tested with**: PySNMP 7.x, Python 3.10+  
+**Tested with**: PySNMP 7.x, Python 3.13+  
 **Status**: Production-ready
