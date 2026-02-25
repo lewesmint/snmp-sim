@@ -112,7 +112,11 @@ class SNMPAgent:
         import os
 
         def signal_handler(signum: int, _frame: FrameType | None) -> None:
-            sig_name = signal.Signals(signum).name
+            # Get signal name; use fallback on Windows where signal.Signals may not have all signals
+            try:
+                sig_name = signal.Signals(signum).name
+            except (ValueError, AttributeError):
+                sig_name = f"SIGNAL({signum})"
             self.logger.info(
                 "Received signal %s (%s), terminating immediately...",
                 sig_name,
@@ -125,9 +129,11 @@ class SNMPAgent:
         signal.signal(signal.SIGTERM, signal_handler)
         signal.signal(signal.SIGINT, signal_handler)
 
-        # On Unix systems, also handle SIGHUP
-        if hasattr(signal, "SIGHUP"):
-            signal.signal(signal.SIGHUP, signal_handler)
+        # On Unix systems, also handle SIGHUP (not available on Windows)
+        try:
+            signal.signal(signal.SIGHUP, signal_handler)  # type: ignore[attr-defined]
+        except AttributeError:
+            pass
 
     def _shutdown(self) -> None:
         """Perform graceful shutdown of the SNMP agent."""

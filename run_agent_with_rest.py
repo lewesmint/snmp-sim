@@ -225,7 +225,7 @@ def _kill_pids_posix(pids: list[int]) -> None:
     for pid in pids:
         with contextlib.suppress(OSError, PermissionError):
             os.kill(pid, 0)
-            os.kill(pid, signal.SIGKILL)
+            os.kill(pid, signal.SIGKILL) # pyright: ignore[reportAttributeAccessIssue]
 
 
 def _kill_pids(pids: list[int]) -> None:
