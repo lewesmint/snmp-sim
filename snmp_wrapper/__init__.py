@@ -21,4 +21,3 @@ __all__ = [
     "set_sync",
     "shutdown_sync_wrapper",
 ]
-
