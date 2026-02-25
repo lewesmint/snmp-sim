@@ -11,7 +11,6 @@ from __future__ import annotations
 # ruff: noqa: RUF059,RUF100,S101,S104,SIM102,SLF001,T201,TC002,TC003,TC006,TRY003
 # ruff: noqa: TRY300,TRY400,TRY401,UP037,UP045
 
-import contextlib
 import json
 import signal
 import sys
@@ -131,8 +130,9 @@ class SNMPAgent:
         signal.signal(signal.SIGINT, signal_handler)
 
         # On Unix systems, also handle SIGHUP (not available on Windows)
-        with contextlib.suppress(AttributeError):
-            signal.signal(signal.SIGHUP, signal_handler)
+        sighup = getattr(signal, "SIGHUP", None)
+        if isinstance(sighup, int):
+            signal.signal(sighup, signal_handler)
 
     def _shutdown(self) -> None:
         """Perform graceful shutdown of the SNMP agent."""
