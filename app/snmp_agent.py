@@ -35,7 +35,6 @@ from pysnmp.smi import builder as snmp_builder
 from pysnmp.smi.builder import MibBuilder
 
 # Load type converter plugins
-import plugins.date_and_time  # noqa: F401  # pylint: disable=unused-import
 from app.app_config import AppConfig
 from app.app_logger import AppLogger
 from app.compiler import MibCompiler

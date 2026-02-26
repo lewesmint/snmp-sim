@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
 from tkinter import StringVar
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
+
+pytest.importorskip("_tkinter")
 
 import ui.mib_browser as mib_browser_module
 from ui.common import Logger

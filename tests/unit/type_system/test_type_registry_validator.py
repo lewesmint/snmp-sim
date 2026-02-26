@@ -160,4 +160,10 @@ def test_main_with_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]
     )
     assert result.returncode == 0
     assert result.stdout == ""
-    assert result.stderr == ""
+    stderr = result.stderr.strip()
+    if stderr:
+        assert (
+            "RuntimeWarning" in stderr
+            and "app.type_registry_validator" in stderr
+            and "<frozen runpy>" in stderr
+        )

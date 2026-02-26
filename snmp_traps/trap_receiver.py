@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import logging
 import signal
@@ -104,7 +105,10 @@ class TrapReceiver:
         self.logger.info("Trap receiver stopped")
 
     def _run_receiver(self) -> None:
+        event_loop: asyncio.AbstractEventLoop | None = None
         try:
+            event_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(event_loop)
             self.snmp_engine = SnmpEngine()
             add_transport = getattr(config, "add_transport", None)
             if not callable(add_transport):
@@ -184,6 +188,10 @@ class TrapReceiver:
                             ValueError,
                         ):
                             close_dispatcher()
+            if event_loop is not None:
+                with contextlib.suppress(RuntimeError):
+                    if not event_loop.is_closed():
+                        event_loop.close()
             self.running = False
 
     def _add_udp_transport(

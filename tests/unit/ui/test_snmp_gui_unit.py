@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+import pytest
+
+pytest.importorskip("_tkinter")
+
 import ui.snmp_gui as sg
 
 

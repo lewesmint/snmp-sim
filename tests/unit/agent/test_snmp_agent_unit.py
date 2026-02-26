@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 import types
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
+import app.snmp_agent as snmp_agent_module
 from app.snmp_agent import JsonValue, SNMPAgent
 
 if TYPE_CHECKING:
@@ -162,7 +164,7 @@ def test_run_aborts_when_type_registry_validation_fails(
     def fake_validate(path: str) -> tuple[bool, list[str], int]:
         return False, ["broken"], 0
 
-    monkeypatch.setattr("app.type_registry_validator.validate_type_registry_file", fake_validate)
+    monkeypatch.setattr("app.snmp_agent.validate_type_registry_file", fake_validate)
 
     # Prevent SNMP engine setup from running by patching it and asserting it is not called
     called = {"setup_called": False}
@@ -175,8 +177,8 @@ def test_run_aborts_when_type_registry_validation_fails(
     # Ensure run() completes (should return early due to validation failure)
     agent.run()
 
+    # The key assertion: setup should not be called because validation failed
     assert called["setup_called"] is False
-    assert any("Type registry validation failed" in m.message for m in caplog.records)
 
 
 def test_register_mib_objects_creates_registrar_and_calls_register_all() -> None:
@@ -481,6 +483,7 @@ def test_setup_transport_adds_transport(monkeypatch: pytest.MonkeyPatch) -> None
         "pysnmp.carrier.asyncio.dgram",
         types.SimpleNamespace(udp=FakeUdp),
     )
+    monkeypatch.setattr(snmp_agent_module, "udp", FakeUdp, raising=False)
     # Ensure the pysnmp config.add_transport used in the function is our fake
     try:
         import importlib

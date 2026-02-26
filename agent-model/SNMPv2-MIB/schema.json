@@ -1,25 +1,5 @@
 {
   "objects": {
-    "sysORIndex": {
-      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 1],
-      "type": "Integer32",
-      "access": "not-accessible"
-    },
-    "sysORID": {
-      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 2],
-      "type": "ObjectIdentifier",
-      "access": "read-only"
-    },
-    "sysORDescr": {
-      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 3],
-      "type": "DisplayString",
-      "access": "read-only"
-    },
-    "sysORUpTime": {
-      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 4],
-      "type": "TimeStamp",
-      "access": "read-only"
-    },
     "sysORTable": {
       "oid": [1, 3, 6, 1, 2, 1, 1, 9],
       "type": "MibTable",

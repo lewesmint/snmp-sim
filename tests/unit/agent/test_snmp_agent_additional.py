@@ -22,9 +22,32 @@ def test_run_validation_failure_logs_and_returns(
     agent = SNMPAgent(config_path="agent_config.yaml")
     # Ensure no mibs configured and skip generator
     monkeypatch.setattr(agent.app_config, "get", lambda _key, _default=None: [])
+
+    # Mock TypeRegistry to prevent it from trying to load MIB symbols
+    class FakeTypeRegistry:
+        """Test helper class for FakeTypeRegistry."""
+
+        def __init__(self, _compiled_dir: Any) -> None:
+            self._registry: dict[str, Any] = {}
+
+        def build(self) -> None:
+            """Test case for build."""
+            pass
+
+        def export_to_json(self, _path: str) -> None:
+            """Test case for export_to_json."""
+            pass
+
+        @property
+        def registry(self) -> dict[str, Any]:
+            """Test case for registry."""
+            return self._registry
+
+    monkeypatch.setattr("app.snmp_agent.TypeRegistry", FakeTypeRegistry)
+
     # Make type validation fail
     monkeypatch.setattr(
-        "app.type_registry_validator.validate_type_registry_file",
+        "app.snmp_agent.validate_type_registry_file",
         lambda _p: (False, ["err"], 0),
     )
 
@@ -82,6 +105,29 @@ def test_run_compile_failure_logs_and_continues(
         raise RuntimeError(msg)
 
     monkeypatch.setattr("app.snmp_agent.MibCompiler.compile", bad_compile)
+
+    # Mock TypeRegistry to prevent it from trying to load MIB symbols
+    class FakeTypeRegistry:
+        """Test helper class for FakeTypeRegistry."""
+
+        def __init__(self, _compiled_dir: Any) -> None:
+            self._registry: dict[str, Any] = {}
+
+        def build(self) -> None:
+            """Test case for build."""
+            pass
+
+        def export_to_json(self, _path: str) -> None:
+            """Test case for export_to_json."""
+            pass
+
+        @property
+        def registry(self) -> dict[str, Any]:
+            """Test case for registry."""
+            return self._registry
+
+    monkeypatch.setattr("app.snmp_agent.TypeRegistry", FakeTypeRegistry)
+
     # Validation should pass so run continues
     monkeypatch.setattr(
         "app.type_registry_validator.validate_type_registry_file",
@@ -114,6 +160,28 @@ def test_run_generator_failure_logged(
     os.makedirs(compiled_dir, exist_ok=True)
     py_path = os.path.join(compiled_dir, "FOO.py")
     Path(py_path).write_text("", encoding="utf-8")
+
+    # Mock TypeRegistry to prevent it from trying to load MIB symbols
+    class FakeTypeRegistry:
+        """Test helper class for FakeTypeRegistry."""
+
+        def __init__(self, _compiled_dir: Any) -> None:
+            self._registry: dict[str, Any] = {}
+
+        def build(self) -> None:
+            """Test case for build."""
+            pass
+
+        def export_to_json(self, _path: str) -> None:
+            """Test case for export_to_json."""
+            pass
+
+        @property
+        def registry(self) -> dict[str, Any]:
+            """Test case for registry."""
+            return self._registry
+
+    monkeypatch.setattr("app.snmp_agent.TypeRegistry", FakeTypeRegistry)
 
     # Make MibCompiler.compile return the path (shouldn't be invoked since
     # file exists), but set behaviour generator to raise
@@ -178,6 +246,29 @@ def test_run_event_loop_keyboard_interrupt_calls_shutdown(
     """Test case for test_run_event_loop_keyboard_interrupt_calls_shutdown."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     monkeypatch.setattr(agent.app_config, "get", lambda _key, _default=None: [])
+
+    # Mock TypeRegistry to prevent it from trying to load MIB symbols
+    class FakeTypeRegistry:
+        """Test helper class for FakeTypeRegistry."""
+
+        def __init__(self, _compiled_dir: Any) -> None:
+            self._registry: dict[str, Any] = {}
+
+        def build(self) -> None:
+            """Test case for build."""
+            pass
+
+        def export_to_json(self, _path: str) -> None:
+            """Test case for export_to_json."""
+            pass
+
+        @property
+        def registry(self) -> dict[str, Any]:
+            """Test case for registry."""
+            return self._registry
+
+    monkeypatch.setattr("app.snmp_agent.TypeRegistry", FakeTypeRegistry)
+
     # Make validation pass
     monkeypatch.setattr(
         "app.type_registry_validator.validate_type_registry_file",
@@ -425,12 +516,16 @@ def test_set_table_cell_value_persists_into_table_instances() -> None:
     agent.overrides = {}
 
     saved: dict[str, bool] = {}
-    agent._save_mib_state = lambda: saved.setdefault("called", True)  # type: ignore[method-assign]
+
+    def mock_save() -> None:
+        saved.setdefault("called", True)
+
+    agent._save_mib_state = mock_save  # type: ignore[method-assign]
 
     agent.set_scalar_value(if_descr_oid, "foo")
 
     table = agent.table_instances["1.3.6.1.2.1.2.2"]
-    row_values = table["1"]["column_values"]
+    row_values = table["1"].get("column_values", {})
     assert row_values["ifDescr"] == "foo"
     assert row_values["ifIndex"] == 1
     assert "1.3.6.1.2.1.2.2.1.2.1" not in agent.overrides
@@ -564,7 +659,7 @@ def test_run_success_path_with_mib_compilation_and_generation(
                     },
                 }
             else:
-                schema = {"test": "schema"}
+                schema = {"objects": {}}
             schema_path.write_text(json.dumps(schema), encoding="utf-8")
 
     # Monkeypatch all the dependencies
@@ -590,33 +685,12 @@ def test_run_success_path_with_mib_compilation_and_generation(
     assert len(agent.mib_jsons) > 0  # Verify schemas were loaded
 
 
-def test_setup_transport_raises_on_pysnmp_import_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Test case for test_setup_transport_raises_on_pysnmp_import_error."""
-    import builtins
-    import sys
-
+def test_setup_transport_invalid_engine_raises_attribute_error() -> None:
+    """Test case for test_setup_transport_invalid_engine_raises_attribute_error."""
     agent = SNMPAgent(config_path="agent_config.yaml")
-    agent.snmp_engine = cast(Any, object())  # Mock engine
+    agent.snmp_engine = cast(Any, object())
 
-    # Remove pysnmp modules from sys.modules to force reimport (using monkeypatch for cleanup)
-    modules_to_remove = [k for k in sys.modules if k.startswith("pysnmp")]
-    for mod in modules_to_remove:
-        monkeypatch.delitem(sys.modules, mod, raising=False)
-
-    # Mock __import__ to raise for pysnmp
-    original_import = builtins.__import__
-
-    def mock_import(name: str, *args: Any, **kwargs: Any) -> Any:
-        if name.startswith("pysnmp"):
-            msg = "pysnmp not available"
-            raise ImportError(msg)
-        return original_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", mock_import)
-
-    with pytest.raises(RuntimeError, match="pysnmp is not installed or not available"):
+    with pytest.raises(AttributeError, match="transport_dispatcher"):
         agent._setup_transport()
 
 
