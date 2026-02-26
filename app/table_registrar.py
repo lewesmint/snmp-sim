@@ -7,14 +7,14 @@ and making table registration behavior clearer and more maintainable.
 # pylint: disable=invalid-name
 
 import logging
-from typing import Any, TypeAlias
+from typing import Any
 
 from pysnmp.proto import rfc1902
 
 from app.base_type_handler import BaseTypeHandler
 from app.types import TypeInfo, TypeRegistry
 
-ObjectType: TypeAlias = Any
+type ObjectType = Any
 
 
 class TableRegistrar:

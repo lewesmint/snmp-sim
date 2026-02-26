@@ -12,7 +12,7 @@ import json
 import logging
 import shutil
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -183,7 +183,7 @@ def _bake_tables(objects: dict[str, Any], tables: dict[str, Any]) -> int:
 
 def backup_schemas(schema_dir: Path, backup_base: Path) -> Path:
     """Backup existing schema directory with timestamp."""
-    timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
     backup_dir = backup_base / timestamp
 
     if schema_dir.exists():

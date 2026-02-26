@@ -3,9 +3,9 @@
 import sys
 from pathlib import Path
 from threading import Lock
+from typing import Self
 
 from dynaconf import Dynaconf
-from typing_extensions import Self
 
 from app.model_paths import AGENT_CONFIG_FILE
 

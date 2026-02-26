@@ -22,7 +22,7 @@ import traceback
 from types import FrameType
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, TypeAlias, TypedDict, cast
+from typing import Optional, TypedDict, cast
 
 from pysnmp import debug as pysnmp_debug
 from pysnmp.carrier.asyncio.dgram import udp
@@ -58,9 +58,9 @@ class AugmentedTableChild:
     default_columns: dict[str, "JsonValue"]
 
 
-JsonScalar: TypeAlias = str | int | float | bool | None
-JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
-DecodedValue: TypeAlias = JsonValue | bytes | bytearray
+type JsonScalar = str | int | float | bool | None
+type JsonValue = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
+type DecodedValue = JsonValue | bytes | bytearray
 
 
 class TableInstance(TypedDict, total=False):

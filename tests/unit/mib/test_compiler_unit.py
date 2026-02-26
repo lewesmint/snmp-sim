@@ -49,14 +49,16 @@ def test_compiler_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     compiled_path = tmp_path / "TEST-MIB.py"
     compiled_path.write_text("# compiled")
 
-    def fake_exists(path: str) -> bool:
-        if path == "data/mibs":
-            return False
-        if path == str(compiled_path):
-            return True
-        return os.path.exists(path)
+    original_exists = Path.exists
 
-    monkeypatch.setattr("app.compiler.os.path.exists", fake_exists)
+    def fake_exists(self: Path) -> bool:
+        if str(self) == "data/mibs" or self == Path("data") / "mibs":
+            return False
+        if self == compiled_path:
+            return True
+        return original_exists(self)
+
+    monkeypatch.setattr(Path, "exists", fake_exists)
 
     output = compiler.compile("/tmp/TEST-MIB.txt")
     assert output == str(compiled_path)
@@ -68,7 +70,7 @@ def test_compiler_missing_dependencies(tmp_path: Path, monkeypatch: pytest.Monke
     _patch_compiler(monkeypatch, results)
 
     compiler = MibCompiler(output_dir=str(tmp_path))
-    monkeypatch.setattr("app.compiler.os.path.exists", lambda _path: False)
+    monkeypatch.setattr(Path, "exists", lambda self: False)
 
     with pytest.raises(MibCompilationError) as excinfo:
         compiler.compile("/tmp/TEST-MIB.txt")
@@ -82,7 +84,7 @@ def test_compiler_failed_mib(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     _patch_compiler(monkeypatch, results)
 
     compiler = MibCompiler(output_dir=str(tmp_path))
-    monkeypatch.setattr("app.compiler.os.path.exists", lambda _path: False)
+    monkeypatch.setattr(Path, "exists", lambda self: False)
 
     with pytest.raises(MibCompilationError) as excinfo:
         compiler.compile("/tmp/TEST-MIB.txt")
@@ -95,7 +97,7 @@ def test_compiler_no_results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     _patch_compiler(monkeypatch, results)
 
     compiler = MibCompiler(output_dir=str(tmp_path))
-    monkeypatch.setattr("app.compiler.os.path.exists", lambda _path: False)
+    monkeypatch.setattr(Path, "exists", lambda self: False)
 
     with pytest.raises(MibCompilationError) as excinfo:
         compiler.compile("/tmp/TEST-MIB.txt")
@@ -108,7 +110,7 @@ def test_compiler_output_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     _patch_compiler(monkeypatch, results)
 
     compiler = MibCompiler(output_dir=str(tmp_path))
-    monkeypatch.setattr("app.compiler.os.path.exists", lambda _path: False)
+    monkeypatch.setattr(Path, "exists", lambda self: False)
 
     with pytest.raises(MibCompilationError) as excinfo:
         compiler.compile("/tmp/TEST-MIB.txt")

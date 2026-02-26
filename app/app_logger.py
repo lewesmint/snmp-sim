@@ -10,7 +10,7 @@ import re
 import shutil
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -117,7 +117,7 @@ def _archive_log_file(log_path: Path) -> None:
     # If we couldn't extract timestamp from first line, use file modification time
     if timestamp_str is None:
         mtime = log_path.stat().st_mtime
-        dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
+        dt = datetime.fromtimestamp(mtime, tz=UTC)
         timestamp_str = dt.strftime("%Y-%m-%d %H:%M:%S")
 
     # Convert timestamp to filename-safe format: YYYY-MM-DD_HH-MM-SS

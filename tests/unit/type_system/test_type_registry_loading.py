@@ -74,9 +74,9 @@ class TestTypeRegistryLoading:
     def test_type_registry_default_path(self) -> None:
         """Test that default type registry path is consistent."""
         # This tests the pattern used in multiple files
-        default_path = os.path.join("config", "types.json")
+        default_path = Path("config") / "types.json"
 
-        assert default_path == "config/types.json"
+        assert default_path.as_posix() == "config/types.json"
 
     def test_load_registry_with_error_handling(self, temp_dir: Path) -> None:
         """Test loading registry with proper error handling."""

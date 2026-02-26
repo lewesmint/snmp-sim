@@ -1302,7 +1302,9 @@ def test_populate_sysor_table_persist_warning_on_write_failure(
 
     def fake_path_open(self: Path, *args: Any, **kwargs: Any) -> Any:
         mode = kwargs.get("mode", args[0] if args else "r")
-        if str(self).endswith("agent-model/SNMPv2-MIB/schema.json") and "w" in mode:
+        # Use Path for cross-platform path comparison
+        target_path = Path("agent-model") / "SNMPv2-MIB" / "schema.json"
+        if Path(self).as_posix().endswith(target_path.as_posix()) and "w" in mode:
             msg = "disk full"
             raise OSError(msg)
         return real_path_open(self, *args, **kwargs)

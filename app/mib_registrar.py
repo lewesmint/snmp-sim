@@ -14,7 +14,7 @@ import logging
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import Any
 
 from pysnmp.proto import rfc1902
 from pysnmp.smi.error import SmiError
@@ -33,7 +33,7 @@ from app.mib_registrar_helpers import (
 from app.model_paths import AGENT_MODEL_DIR, TYPE_REGISTRY_FILE
 from plugins.type_encoders import encode_value
 
-ObjectType: TypeAlias = Any
+type ObjectType = Any
 REGISTRAR_EXCEPTIONS = (
     AttributeError,
     LookupError,

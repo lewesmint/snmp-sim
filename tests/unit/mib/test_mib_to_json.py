@@ -191,13 +191,19 @@ def test_cli_no_args_processes_available_mibs_and_skips_missing(
     output = capsys.readouterr()
 
     assert exit_code == 0
-    assert "Warning: Compiled MIB not found: compiled-mibs/MISSING-MIB.py" in output.err
-    assert "Schema JSON written to agent-model/PRESENT-MIB/schema.json" in output.out
-    mock_generator.generate.assert_called_once_with(
-        "compiled-mibs/PRESENT-MIB.py",
-        mib_name="PRESENT-MIB",
-        force_regenerate=True,
-    )
+    # Normalize paths for cross-platform compatibility
+    assert "Warning: Compiled MIB not found:" in output.err and "MISSING-MIB.py" in output.err
+    assert "Schema JSON written to" in output.out and "PRESENT-MIB" in output.out and "schema.json" in output.out
+    
+    # Check mock was called correctly with path normalization
+    call_args = mock_generator.generate.call_args
+    assert call_args is not None
+    assert len(call_args.args) > 0
+    # Compare just the relative parts (parent directory name and filename)
+    actual_path = Path(call_args.args[0])
+    assert actual_path.parent.name == "compiled-mibs"
+    assert actual_path.name == "PRESENT-MIB.py"
+    assert call_args.kwargs == {"mib_name": "PRESENT-MIB", "force_regenerate": True}
 
 
 def test_check_imported_mibs_ignores_already_compiled_dependency(

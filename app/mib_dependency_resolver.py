@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any, cast
 
+from app.model_paths import COMPILED_MIBS_DIR, PROJECT_ROOT
+
 
 class MibDependencyResolver:
     """Resolves MIB dependencies by parsing IMPORTS sections."""
@@ -21,9 +23,9 @@ class MibDependencyResolver:
 
         """
         self.mib_source_dirs = mib_source_dirs or [
-            "data/mibs_reference",
-            "data/mibs",
-            "compiled-mibs",  # Fallback to compiled MIBs if source not found
+            str(PROJECT_ROOT / "data" / "mibs_reference"),
+            str(PROJECT_ROOT / "data" / "mibs"),
+            str(COMPILED_MIBS_DIR),  # Fallback to compiled MIBs if source not found
         ]
         self._dependency_cache: dict[str, set[str]] = {}
         self._mib_file_cache: dict[str, str | None] = {}

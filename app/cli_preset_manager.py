@@ -12,7 +12,7 @@ import json
 import logging
 import shutil
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.model_paths import AGENT_MODEL_BACKUPS_DIR, AGENT_MODEL_DIR, AGENT_MODEL_PRESETS_DIR
@@ -49,7 +49,7 @@ def save_preset(schema_dir: Path, preset_base: Path, preset_name: str) -> int:
 
     metadata = {
         "name": preset_name,
-        "created": datetime.now(tz=timezone.utc).isoformat(),
+        "created": datetime.now(tz=UTC).isoformat(),
         "source": str(schema_dir),
     }
     with (preset_dir / "preset_metadata.json").open("w", encoding="utf-8") as file_obj:
@@ -76,7 +76,7 @@ def load_preset(
         return 1
 
     if not no_backup and schema_dir.exists():
-        timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
         backup_dir = backup_base / f"before_preset_{preset_name}_{timestamp}"
         logger.info("Backing up current schemas to %s...", backup_dir)
         backup_base.mkdir(parents=True, exist_ok=True)

@@ -54,14 +54,14 @@ _MIN_RANGE_COUNT = 2
 class HasGetSyntax(Protocol):
     """Protocol for syntax objects exposing a PySNMP-style getSyntax method."""
 
-    def getSyntax(self) -> object:  # pylint: disable=invalid-name
+    def getSyntax(self) -> object:  # noqa: N802 (matches PySNMP interface)
         """Return the underlying syntax object for this SNMP value type."""
 
 
 class SupportsMibBuilder(Protocol):
     """Minimal MIB builder surface used by TypeRecorder."""
 
-    mibSymbols: Mapping[str, Mapping[str, object]]
+    mibSymbols: Mapping[str, Mapping[str, object]]  # noqa: N815 (matches PySNMP interface)
 
     def add_mib_sources(self, *mib_sources: object) -> None:
         """Register MIB source locations."""
@@ -972,7 +972,7 @@ def main() -> None:
     recorder = TypeRecorder(args.compiled_dir)
     recorder.build()
     recorder.export_to_json(str(args.output))
-    print(f"Wrote {len(recorder.registry)} types to {args.output}")
+    logging.info("Wrote %d types to %s", len(recorder.registry), args.output)
 
 
 if __name__ == "__main__":  # pragma: no cover

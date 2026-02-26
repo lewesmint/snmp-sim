@@ -1,6 +1,5 @@
 """MIB compilation utilities using pysmi."""
 
-import os
 import re
 from pathlib import Path
 from typing import cast
@@ -43,12 +42,13 @@ class MibCompiler:
         compiler.addSources(FileReader(mib_dir))
         compiler.addSources(FileReader("."))
 
-        mib_data_dir = Path("data/mibs")
+        mib_data_dir = Path("data") / "mibs"
         if mib_data_dir.exists():
             compiler.addSources(FileReader(str(mib_data_dir)))
-            for root, _dirs, _files in os.walk(mib_data_dir):
-                if str(root) != str(mib_data_dir):
-                    compiler.addSources(FileReader(root))
+            # Use Path.iterdir() for subdirectories
+            for subdir in mib_data_dir.iterdir():
+                if subdir.is_dir():
+                    compiler.addSources(FileReader(str(subdir)))
 
         system_mib_dir = (
             self.app_config.get_platform_setting("system_mib_dir")

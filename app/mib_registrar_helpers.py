@@ -8,10 +8,10 @@ import time
 import types
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, TypeAlias
+from typing import Any
 
-ObjectType: TypeAlias = Any
-WriteHookWrapper: TypeAlias = Callable[..., None]
+type ObjectType = Any
+type WriteHookWrapper = Callable[..., None]
 
 
 @dataclass(frozen=True)

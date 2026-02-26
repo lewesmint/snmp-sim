@@ -88,7 +88,8 @@ def test_cli_mib_to_json_with_mib_name(tmp_path: Path, mocker: Any) -> None:
 
     # Should be called with the file and mib_name as positional args
     call_args = mock_instance.generate.call_args
-    assert str(mib_py) in str(call_args[0])  # Check that path is in args
+    # Normalize paths for cross-platform comparison
+    assert Path(mib_py).name in str(call_args[0]) or str(mib_py) in str(call_args[0])
 
 
 def test_cli_compile_mib_config_not_found(tmp_path: Path, mocker: Any) -> None:
