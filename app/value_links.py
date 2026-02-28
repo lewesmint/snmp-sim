@@ -9,11 +9,12 @@ Particularly useful for augmented tables where columns should stay synchronized
 
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 logger = logging.getLogger(__name__)
 _MIN_LINK_ENDPOINTS = 2
 _MIN_COLUMN_OID_LENGTH = 2
+
+type JsonObject = dict[str, object]
 
 
 @dataclass(slots=True)
@@ -24,7 +25,7 @@ class ValueLinkEndpoint:
     column_name: str
     is_base: bool = False  # Mark which endpoint is the BASE (master)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         """Serialize the endpoint to a JSON-compatible dictionary."""
         return {
             "table_oid": self.table_oid,
@@ -132,12 +133,15 @@ class ValueLinkManager:
     def _table_oid_from_columns(
         self,
         columns: list[str],
-        objects: dict[str, Any],
+        objects: JsonObject,
     ) -> str | None:
         """Infer table OID from object metadata for the given columns."""
         for col_name in columns:
             if col_name in objects:
-                col_oid = objects[col_name].get("oid", [])
+                col_data = objects[col_name]
+                if not isinstance(col_data, dict):
+                    continue
+                col_oid = col_data.get("oid", [])
                 if len(col_oid) >= _MIN_COLUMN_OID_LENGTH:
                     table_oid_parts = col_oid[:-_MIN_COLUMN_OID_LENGTH]
                     return ".".join(str(x) for x in table_oid_parts)
@@ -145,29 +149,44 @@ class ValueLinkManager:
 
     def _parse_link_config(
         self,
-        link_config: dict[str, Any],
-        objects: dict[str, Any] | None,
+        link_config: JsonObject,
+        objects: JsonObject | None,
     ) -> tuple[str, list[ValueLinkEndpoint], str, str, str, str | None, bool]:
         """Parse one link config entry into normalized link construction fields."""
-        link_id = link_config.get("id") or ""
-        scope = link_config.get("scope", "per-instance")
-        match = link_config.get("match", "shared-index")
-        source = link_config.get("source", "schema")
-        description = link_config.get("description")
+        raw_link_id = link_config.get("id")
+        link_id = raw_link_id if isinstance(raw_link_id, str) else ""
+
+        raw_scope = link_config.get("scope")
+        scope = raw_scope if isinstance(raw_scope, str) else "per-instance"
+
+        raw_match = link_config.get("match")
+        match = raw_match if isinstance(raw_match, str) else "shared-index"
+
+        raw_source = link_config.get("source")
+        source = raw_source if isinstance(raw_source, str) else "schema"
+
+        raw_description = link_config.get("description")
+        description = raw_description if isinstance(raw_description, str) else None
+
         create_missing = bool(link_config.get("create_missing", False))
 
         endpoints: list[ValueLinkEndpoint] = []
-        if "endpoints" in link_config:
-            for entry in link_config.get("endpoints", []):
+        endpoints_raw = link_config.get("endpoints")
+        if isinstance(endpoints_raw, list):
+            for entry in endpoints_raw:
                 if not isinstance(entry, dict):
                     continue
+                table_oid = entry.get("table_oid")
+                column_name = entry.get("column")
+                is_base = entry.get("is_base", False)
                 endpoints.append(ValueLinkEndpoint(
-                    entry.get("table_oid"),
-                    entry.get("column", ""),
-                    entry.get("is_base", False)
+                    table_oid if isinstance(table_oid, str) else None,
+                    column_name if isinstance(column_name, str) else "",
+                    bool(is_base),
                 ))
         else:
-            columns = link_config.get("columns", [])
+            columns_raw = link_config.get("columns")
+            columns = [col for col in columns_raw if isinstance(col, str)] if isinstance(columns_raw, list) else []
             table_oid = None
             if scope == "per-instance" and objects:
                 table_oid = self._table_oid_from_columns(columns, objects)
@@ -176,10 +195,10 @@ class ValueLinkManager:
         endpoints = [e for e in endpoints if e.column_name]
         return link_id, endpoints, scope, match, source, description, create_missing
 
-    def load_links_from_schema(self, schema: dict[str, Any]) -> None:
+    def load_links_from_schema(self, schema: JsonObject) -> None:
         """Load value links from schema JSON."""
         links_config = schema.get("links", [])
-        if not links_config:
+        if not isinstance(links_config, list) or not links_config:
             return
 
         objects = schema.get("objects", schema)
@@ -207,7 +226,7 @@ class ValueLinkManager:
                 create_missing=create_missing,
             )
 
-    def load_links_from_state(self, link_configs: list[dict[str, Any]]) -> None:
+    def load_links_from_state(self, link_configs: list[JsonObject]) -> None:
         """Load persisted runtime links from state JSON records."""
         if not link_configs:
             return
@@ -229,14 +248,14 @@ class ValueLinkManager:
                 create_missing=create_missing,
             )
 
-    def export_links(self, *, include_schema: bool = True) -> list[dict[str, Any]]:
+    def export_links(self, *, include_schema: bool = True) -> list[JsonObject]:
         """Export links as JSON-serializable records.
 
         Args:
             include_schema: When False, include only state-origin links.
 
         """
-        links: list[dict[str, Any]] = []
+        links: list[JsonObject] = []
         for link in self._links:
             if not include_schema and link.source != "state":
                 continue
@@ -254,7 +273,7 @@ class ValueLinkManager:
             )
         return links
 
-    def export_state_links(self) -> list[dict[str, Any]]:
+    def export_state_links(self) -> list[JsonObject]:
         """Export only links that should be persisted in runtime state."""
         return self.export_links(include_schema=False)
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -64,6 +62,9 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, object]:
         if not index_columns:
             index_str = extract_instance_index_str(request.index_values)
             parsed_index_values = parse_index_values(index_str)
+            parsed_index_values_json: dict[str, JsonValue] = {
+                key: value for key, value in parsed_index_values.items()
+            }
 
             default_row = get_default_row_from_schemas(schemas, request.table_oid)
             incoming_values = request.column_values or {}
@@ -73,11 +74,14 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, object]:
                 default_row=default_row,
                 excluded_columns=set(parsed_index_values.keys()),
             )
+            merged_values_simple_json: dict[str, JsonValue] = {
+                key: value for key, value in merged_values_simple.items()
+            }
 
             instance_oid = state.snmp_agent.add_table_instance(
                 table_oid=request.table_oid,
-                index_values=cast("dict[str, JsonValue]", parsed_index_values),
-                column_values=merged_values_simple,
+                index_values=parsed_index_values_json,
+                column_values=merged_values_simple_json,
             )
             logger.info("Successfully created table instance: %s", instance_oid)
             return {
@@ -105,11 +109,14 @@ def create_table_row(request: CreateTableRowRequest) -> dict[str, object]:
             default_row=default_row,
             excluded_columns=set(index_columns),
         )
+        merged_values_json: dict[str, JsonValue] = {
+            key: value for key, value in merged_values.items()
+        }
 
         instance_oid = state.snmp_agent.add_table_instance(
             table_oid=request.table_oid,
             index_values=request.index_values,
-            column_values=merged_values,
+            column_values=merged_values_json,
         )
 
         logger.info("Successfully created table instance: %s", instance_oid)
@@ -136,10 +143,13 @@ def delete_table_row(request: CreateTableRowRequest) -> dict[str, object]:
         index_values = request.index_values or {}
         index_str = extract_instance_index_str(index_values)
         parsed_index_values = parse_index_values(index_str)
+        parsed_index_values_json: dict[str, JsonValue] = {
+            key: value for key, value in parsed_index_values.items()
+        }
 
         success = state.snmp_agent.delete_table_instance(
             table_oid=request.table_oid,
-            index_values=cast("dict[str, JsonValue]", parsed_index_values),
+            index_values=parsed_index_values_json,
         )
 
         if success:

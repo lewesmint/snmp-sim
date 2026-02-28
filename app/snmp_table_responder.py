@@ -8,11 +8,13 @@ by returning data from the behavior JSON files, enabling full SNMP queryability
 # pylint: disable=logging-fstring-interpolation,unused-variable
 
 import logging
-from typing import Any, cast
 
 from pysnmp.smi import builder
 
 logger = logging.getLogger(__name__)
+
+type JsonObject = dict[str, object]
+type BehaviorJsonMap = dict[str, JsonObject]
 
 
 class SNMPTableResponder:
@@ -24,7 +26,7 @@ class SNMPTableResponder:
 
     def __init__(
         self,
-        behavior_jsons: dict[str, dict[str, Any]],
+        behavior_jsons: BehaviorJsonMap,
         mib_builder: builder.MibBuilder | None,
     ) -> None:
         """Initialize the table responder.
@@ -39,7 +41,7 @@ class SNMPTableResponder:
         self.logger = logging.getLogger(__name__)
 
         # Build a map of table OIDs to table info for fast lookup
-        self.table_oid_map: dict[tuple[int, ...], tuple[str, str, dict[str, Any]]] = {}
+        self.table_oid_map: dict[tuple[int, ...], tuple[str, str, JsonObject]] = {}
         self._build_table_oid_map()
 
     def _build_table_oid_map(self) -> None:
@@ -56,12 +58,27 @@ class SNMPTableResponder:
                         "Registered table responder for %s.%s OID=%s", mib_name, obj_name, table_oid
                     )
 
+    @staticmethod
+    def _as_int_list(value: object) -> list[int] | None:
+        if not isinstance(value, list):
+            return None
+        if not all(isinstance(item, int) for item in value):
+            return None
+        return value
+
+    @classmethod
+    def _oid_tuple_from_entry(cls, entry: JsonObject) -> tuple[int, ...]:
+        oid_list = cls._as_int_list(entry.get("oid", []))
+        if oid_list is None:
+            return ()
+        return tuple(oid_list)
+
     def _find_entry_for_table(
         self,
-        objects: dict[str, Any],
+        objects: JsonObject,
         table_oid: tuple[int, ...],
         table_name: str,
-    ) -> dict[str, Any] | None:
+    ) -> JsonObject | None:
         """Find table entry metadata for a table OID.
 
         Supports canonical tableEntry naming and OID-prefix matching.
@@ -71,7 +88,7 @@ class SNMPTableResponder:
         if isinstance(candidate, dict) and candidate.get("type") == "MibTableRow":
             return candidate
 
-        matches: list[tuple[tuple[int, ...], dict[str, Any]]] = []
+        matches: list[tuple[tuple[int, ...], JsonObject]] = []
         for other_data in objects.values():
             if not isinstance(other_data, dict):
                 continue
@@ -104,7 +121,7 @@ class SNMPTableResponder:
 
     def get_table_info(
         self, oid: tuple[int, ...]
-    ) -> tuple[str, str, dict[str, Any], tuple[int, ...]] | None:
+    ) -> tuple[str, str, JsonObject, tuple[int, ...]] | None:
         """Get table info for an OID.
 
         Returns: (mib_name, table_name, table_data, table_oid) or None
@@ -161,7 +178,7 @@ class SNMPTableResponder:
                             continue
                         default_row = self._default_row(rows)
 
-                        entry_oid = tuple(entry_data.get("oid", []))
+                        entry_oid = self._oid_tuple_from_entry(entry_data)
                         index_columns = entry_data.get("indexes", [])
                         if not isinstance(index_columns, list):
                             index_columns = []
@@ -223,7 +240,7 @@ class SNMPTableResponder:
         return sorted(oids)
 
     @staticmethod
-    def _default_row(rows: list[Any]) -> dict[str, Any]:
+    def _default_row(rows: list[object]) -> JsonObject:
         """Return the table default row (first dict row), if present."""
         if rows and isinstance(rows[0], dict):
             return rows[0]
@@ -231,36 +248,36 @@ class SNMPTableResponder:
 
     @staticmethod
     def _row_value_with_default(
-        row: dict[str, Any],
+        row: JsonObject,
         col_name: str,
-        default_row: dict[str, Any],
+        default_row: JsonObject,
     ) -> object | None:
         """Resolve a row column value, falling back to table defaults."""
         if col_name in row:
-            return cast("object", row[col_name])
+            return row[col_name]
         if col_name in default_row:
-            return cast("object", default_row[col_name])
+            return default_row[col_name]
         return None
 
     @staticmethod
     def _index_value_with_default(
-        row: dict[str, Any],
+        row: JsonObject,
         index_name: str,
-        default_row: dict[str, Any],
+        default_row: JsonObject,
     ) -> object | None:
         """Resolve an index value from row data with default-row fallback."""
         if index_name in row:
-            return cast("object", row[index_name])
+            return row[index_name]
         if index_name in default_row:
-            return cast("object", default_row[index_name])
+            return default_row[index_name]
         return None
 
     @staticmethod
     def _collect_entry_columns(
-        objects: dict[str, Any],
+        objects: JsonObject,
         entry_oid: tuple[int, ...],
-    ) -> dict[str, dict[str, Any]]:
-        columns: dict[str, dict[str, Any]] = {}
+    ) -> dict[str, JsonObject]:
+        columns: dict[str, JsonObject] = {}
         for col_name, col_info in objects.items():
             if not isinstance(col_info, dict):
                 continue
@@ -279,9 +296,9 @@ class SNMPTableResponder:
 
     @staticmethod
     def _build_row_index_string(
-        row: dict[str, Any],
+        row: JsonObject,
         index_columns: list[str],
-        default_row: dict[str, Any],
+        default_row: JsonObject,
     ) -> str | None:
         if not index_columns:
             return "1"
@@ -303,11 +320,11 @@ class SNMPTableResponder:
 
     def _lookup_single_column_value(
         self,
-        rows: list[Any],
+        rows: list[object],
         col_name: str,
         index_columns: list[str],
         instance_str: str,
-        default_row: dict[str, Any],
+        default_row: JsonObject,
     ) -> object | None:
         if not index_columns:
             if instance_str != "1":
@@ -331,15 +348,16 @@ class SNMPTableResponder:
 
     def _lookup_multi_column_value(
         self,
-        columns: dict[str, dict[str, Any]],
-        rows: list[Any],
+        columns: dict[str, JsonObject],
+        rows: list[object],
         index_columns: list[str],
         col_id: int,
         instance_str: str,
-        default_row: dict[str, Any],
+        default_row: JsonObject,
     ) -> object | None:
         for col_name, col_info in columns.items():
-            if col_info.get("oid", [])[-1] != col_id:
+            col_oid = self._as_int_list(col_info.get("oid", []))
+            if not col_oid or col_oid[-1] != col_id:
                 continue
 
             for row in rows:
@@ -374,7 +392,7 @@ class SNMPTableResponder:
         if not entry_data:
             return None
 
-        entry_oid = tuple(entry_data.get("oid", []))
+        entry_oid = self._oid_tuple_from_entry(entry_data)
         if not entry_oid:
             return None
 
@@ -389,7 +407,7 @@ class SNMPTableResponder:
 
         if len(columns) == 1:
             col_name, col_info = next(iter(columns.items()))
-            col_oid = tuple(col_info.get("oid", []))
+            col_oid = self._oid_tuple_from_entry(col_info)
             if col_oid and len(oid) >= len(col_oid) + 1 and oid[: len(col_oid)] == col_oid:
                 instance_parts = oid[len(col_oid) :]
             elif len(oid) >= len(entry_oid) + 1 and oid[: len(entry_oid)] == entry_oid:

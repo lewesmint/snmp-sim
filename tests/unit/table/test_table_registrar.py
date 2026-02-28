@@ -7,7 +7,6 @@ from typing import Any
 import pytest
 from pytest_mock import MockerFixture
 
-import app.table_registrar as table_registrar_module
 from app.table_registrar import TableRegistrar
 from app.types import TypeRegistry
 
@@ -393,20 +392,16 @@ def test_register_row_instances_empty_columns(
 
 def test_resolve_snmp_type_import_error(
     table_registrar: TableRegistrar,
-    monkeypatch: pytest.MonkeyPatch,
+    mocker: MockerFixture,
 ) -> None:
     """Test case for test_resolve_snmp_type_import_error."""
-    table_registrar.mib_builder.import_symbols.side_effect = Exception("fail")
+    resolver = mocker.MagicMock()
+    resolver.resolve_type_factory.return_value = None
+    table_registrar.snmp_type_resolver = resolver
 
-    class FailingRfc1902:
-        """Test helper class for failing rfc1902 fallback."""
-
-        def __getattr__(self, _name: str) -> Any:
-            msg = "boom"
-            raise ImportError(msg)
-
-    monkeypatch.setattr(table_registrar_module, "rfc1902", FailingRfc1902())
     result = table_registrar._resolve_snmp_type("Integer32", "col", "table")
+
+    resolver.resolve_type_factory.assert_called_once_with("Integer32", table_registrar.mib_builder)
     assert result is None
 
 
@@ -484,7 +479,7 @@ def test_resolve_snmp_type_tries_multiple_modules(
     # Setup mock to fail on first attempt, succeed on second
     mock_type = mocker.MagicMock()
     table_registrar.mib_builder.import_symbols.side_effect = [
-        Exception("Not in SNMPv2-SMI"),
+        TypeError("Not in SNMPv2-SMI"),
         (mock_type,),
     ]
 

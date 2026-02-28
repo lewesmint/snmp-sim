@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 import httpx
 from fastapi import HTTPException
 
+from app.api_shared import JsonValue
 from app.cli_load_model import load_all_schemas
 from app.model_paths import AGENT_MODEL_DIR
 
+type JsonObject = dict[str, JsonValue]
+type SchemaMap = dict[str, JsonObject]
+type TableColumns = dict[str, JsonObject]
 
-def extract_schema_objects(schema: Any) -> dict[str, Any]:
+
+def extract_schema_objects(schema: object) -> JsonObject:
     """Extract objects dictionary from schema, handling both flat and nested formats."""
     if not isinstance(schema, dict):
         return {}
@@ -20,12 +24,13 @@ def extract_schema_objects(schema: Any) -> dict[str, Any]:
     return objects if isinstance(objects, dict) else {}
 
 
-def load_all_agent_schemas() -> dict[str, Any]:
+def load_all_agent_schemas() -> SchemaMap:
     """Load all schemas from the agent-model directory."""
-    return load_all_schemas(str(AGENT_MODEL_DIR))
+    loaded = load_all_schemas(str(AGENT_MODEL_DIR))
+    return {name: value for name, value in loaded.items() if isinstance(value, dict)}
 
 
-def get_default_row_from_schemas(schemas: dict[str, Any], table_oid: str) -> dict[str, Any]:
+def get_default_row_from_schemas(schemas: SchemaMap, table_oid: str) -> JsonObject:
     """Get the first default row from a table in the schemas."""
     parts = tuple(int(x) for x in table_oid.split(".")) if table_oid else ()
     for schema in schemas.values():
@@ -40,7 +45,7 @@ def get_default_row_from_schemas(schemas: dict[str, Any], table_oid: str) -> dic
     return {}
 
 
-def should_use_default_value(val: Any) -> bool:
+def should_use_default_value(val: object) -> bool:
     """Check if a value should be replaced with a default value."""
     return (
         val is None
@@ -48,7 +53,7 @@ def should_use_default_value(val: Any) -> bool:
     )
 
 
-def extract_instance_index_str(values: dict[str, Any]) -> str:
+def extract_instance_index_str(values: JsonObject) -> str:
     """Extract instance index string from values dictionary containing __index__ keys."""
     index_parts = []
     i = 1
@@ -82,13 +87,13 @@ def parse_index_values(index_str: str) -> dict[str, str]:
 
 
 def merge_column_defaults(
-    columns: dict[str, Any],
-    incoming_values: dict[str, Any],
-    default_row: dict[str, Any],
+    columns: TableColumns,
+    incoming_values: JsonObject,
+    default_row: JsonObject,
     excluded_columns: set[str],
-) -> dict[str, Any]:
+) -> JsonObject:
     """Merge incoming values with defaults from schema and default row."""
-    merged: dict[str, Any] = {}
+    merged: JsonObject = {}
     for col_name, col_meta in columns.items():
         if col_name in excluded_columns:
             continue
@@ -106,8 +111,8 @@ def merge_column_defaults(
 
 def convert_index_value(
     col_name: str,
-    value: str | int,
-    columns: dict[str, Any],
+    value: object,
+    columns: TableColumns,
 ) -> int | tuple[int, ...] | str:
     """Convert an index value to the appropriate type based on column metadata."""
     result: int | tuple[int, ...] | str
@@ -115,15 +120,20 @@ def convert_index_value(
     if col_name not in columns:
         if isinstance(value, int):
             result = value
-        else:
+        elif isinstance(value, float):
+            result = int(value)
+        elif isinstance(value, str):
             try:
                 result = int(value)
             except (ValueError, TypeError):
                 result = str(value)
+        else:
+            result = str(value)
         return result
 
     col_info = columns[col_name]
-    col_type = col_info.get("type", "") if isinstance(col_info, dict) else ""
+    col_type_obj = col_info.get("type", "") if isinstance(col_info, dict) else ""
+    col_type = str(col_type_obj)
 
     if col_type == "IpAddress" or "IpAddress" in col_type:
         if isinstance(value, str):
@@ -131,8 +141,10 @@ def convert_index_value(
                 result = tuple(int(p) for p in value.split("."))
             except (ValueError, AttributeError):
                 result = str(value)
+        elif isinstance(value, (list, tuple)) and all(isinstance(v, int) for v in value):
+            result = tuple(value)
         else:
-            result = value
+            result = str(value)
     elif "Integer" in col_type or col_type in (
         "Integer32",
         "Integer64",
@@ -143,11 +155,15 @@ def convert_index_value(
     ):
         if isinstance(value, int):
             result = value
-        else:
+        elif isinstance(value, float):
+            result = int(value)
+        elif isinstance(value, str):
             try:
                 result = int(value)
             except (ValueError, TypeError):
                 result = str(value)
+        else:
+            result = str(value)
     else:
         result = str(value) if not isinstance(value, str) else value
 
@@ -156,9 +172,9 @@ def convert_index_value(
 
 def load_table_schema_context(
     table_oid: str,
-    fallback_index_values: dict[str, Any],
+    fallback_index_values: JsonObject,
     logger: logging.Logger,
-) -> tuple[dict[str, Any], list[str]]:
+) -> tuple[TableColumns, list[str]]:
     """Load table schema context from the API, falling back to provided index values."""
     try:
         schema_response = httpx.get(
@@ -180,8 +196,8 @@ def load_table_schema_context(
 
 def build_instance_index_string(
     index_columns: list[str],
-    request_index_values: dict[str, Any],
-    columns: dict[str, Any],
+    request_index_values: JsonObject,
+    columns: TableColumns,
     entry_oid: tuple[int, ...],
 ) -> str:
     """Build an instance index string from index column values."""
@@ -218,8 +234,15 @@ def build_instance_index_string(
 
 def find_table_and_entry(
     parts: tuple[int, ...],
-    schemas: dict[str, Any],
-) -> tuple[Any, Any, Any, Any, Any, list[tuple[str, tuple[int, ...]]]]:
+    schemas: SchemaMap,
+) -> tuple[
+    JsonObject | None,
+    str | None,
+    str | None,
+    JsonObject | None,
+    str | None,
+    list[tuple[str, tuple[int, ...]]],
+]:
     """Find table and entry information from schemas based on OID parts."""
     table_info = None
     table_name = None
@@ -255,13 +278,13 @@ def find_table_and_entry(
 
 
 def collect_table_columns(
-    schemas: dict[str, Any],
+    schemas: SchemaMap,
     entry_oid: tuple[int, ...],
     index_columns: list[str],
     foreign_keys: list[str],
-) -> dict[str, Any]:
+) -> TableColumns:
     """Collect all column metadata for a table from schemas."""
-    columns: dict[str, Any] = {}
+    columns: TableColumns = {}
     for schema in schemas.values():
         objects = extract_schema_objects(schema)
         for obj_name, obj_data in objects.items():
@@ -282,14 +305,17 @@ def collect_table_columns(
 
 
 def normalize_and_extract_instances(
-    table_info: dict[str, Any],
+    table_info: JsonObject,
     index_columns: list[str],
-    columns: dict[str, Any],
+    columns: TableColumns,
     table_name: str,
     logger: logging.Logger,
 ) -> list[str]:
     """Normalize table rows and extract instance index strings."""
-    rows_data = table_info.get("rows", [])
+    rows_raw = table_info.get("rows", [])
+    if not isinstance(rows_raw, list):
+        return []
+    rows_data = rows_raw
     instances: list[str] = []
 
     for row_data in rows_data:
@@ -322,7 +348,7 @@ def normalize_and_extract_instances(
 
 
 def inject_virtual_index_columns(
-    columns: dict[str, Any],
+    columns: TableColumns,
     instances: list[str],
     index_columns: list[str],
 ) -> list[str]:

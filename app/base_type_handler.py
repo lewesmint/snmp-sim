@@ -14,15 +14,8 @@ from typing import ClassVar, Protocol, cast
 
 from pysnmp.proto import rfc1902
 
+from app.interface_types import SupportsMibBuilder
 from app.types import TypeInfo, TypeRegistry
-
-
-class MibBuilder(Protocol):  # pylint: disable=too-few-public-methods
-    """Protocol for pysnmp MIB builder interface."""
-
-    def import_symbols(self, module: str, *symbols: str) -> tuple[object, ...]:
-        """Import symbols from a MIB module."""
-        ...  # pylint: disable=unnecessary-ellipsis
 
 
 class TypeFactory(Protocol):  # pylint: disable=too-few-public-methods
@@ -312,7 +305,7 @@ class BaseTypeHandler:
         type_name: str,
         *,
         value: int | str | bytes | tuple[int, ...] | bool,
-        mib_builder: MibBuilder | None = None,
+        mib_builder: SupportsMibBuilder | None = None,
     ) -> object:
         """Create a PySNMP value object for the given type and value.
 
@@ -367,7 +360,7 @@ class BaseTypeHandler:
     def _get_pysnmp_type_class(
         self,
         type_name: str,
-        mib_builder: MibBuilder,
+        mib_builder: SupportsMibBuilder,
     ) -> TypeFactory | None:
         """Import PySNMP type class from MIB builder or rfc1902.
 
@@ -406,7 +399,7 @@ class BaseTypeHandler:
             self,
             module: str,
             type_name: str,
-            mib_builder: MibBuilder,
+            mib_builder: SupportsMibBuilder,
     ) -> TypeFactory | None:
         """Import type from a MIB module.
 

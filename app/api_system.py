@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -11,12 +10,25 @@ from pydantic import BaseModel
 from app.api_state import logger, state
 from app.base_type_handler import BaseTypeHandler
 from app.model_paths import TYPE_REGISTRY_FILE
+from app.types import TypeRegistry
 from app.type_registry_validator import validate_type_registry_file
 
 router = APIRouter()
 
 
-def _load_type_registry_json() -> dict[str, dict[str, Any]]:
+def _coerce_type_registry(value: object) -> TypeRegistry:
+    """Coerce raw JSON payload into a string-keyed type registry mapping."""
+    if not isinstance(value, dict):
+        return {}
+
+    registry: TypeRegistry = {}
+    for key, entry in value.items():
+        if isinstance(key, str) and isinstance(entry, dict):
+            registry[key] = entry
+    return registry
+
+
+def _load_type_registry_json() -> TypeRegistry:
     """Load type registry JSON, tolerating trailing garbage bytes.
 
     Some environments can leave trailing NULs or stale bytes after writes.
@@ -25,13 +37,12 @@ def _load_type_registry_json() -> dict[str, dict[str, Any]]:
     """
     raw_text = TYPE_REGISTRY_FILE.read_text(encoding="utf-8", errors="ignore")
     try:
-        loaded = json.loads(raw_text)
-        return loaded if isinstance(loaded, dict) else {}
+        return _coerce_type_registry(json.loads(raw_text))
     except json.JSONDecodeError:
         cleaned = raw_text.rstrip("\x00 \t\r\n")
         decoder = json.JSONDecoder()
         loaded, _ = decoder.raw_decode(cleaned)
-        return loaded if isinstance(loaded, dict) else {}
+        return _coerce_type_registry(loaded)
 
 
 class SysDescrUpdate(BaseModel):

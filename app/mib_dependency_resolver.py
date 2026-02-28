@@ -4,9 +4,44 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, cast
+from typing import TypedDict
 
 from app.model_paths import COMPILED_MIBS_DIR, PROJECT_ROOT
+
+
+class DependencyNode(TypedDict):
+    """Dependency details for one MIB."""
+
+    direct_deps: list[str]
+    transitive_deps: list[str]
+    all_deps: list[str]
+    is_configured: bool
+
+
+class DependencySummary(TypedDict):
+    """Aggregate counts for dependency output."""
+
+    configured_count: int
+    transitive_count: int
+    total_count: int
+
+
+class ConfiguredDependencyResult(TypedDict):
+    """UI-ready dependency payload for configured MIBs."""
+
+    configured_mibs: list[str]
+    transitive_dependencies: list[str]
+    tree: dict[str, DependencyNode]
+    summary: DependencySummary
+
+
+class MermaidDiagramResult(TypedDict):
+    """Mermaid diagram payload with related metadata."""
+
+    mermaid_code: str
+    configured_mibs: list[str]
+    transitive_dependencies: list[str]
+    summary: DependencySummary
 
 
 class MibDependencyResolver:
@@ -158,7 +193,7 @@ class MibDependencyResolver:
 
         return all_deps
 
-    def build_dependency_tree(self, mib_names: list[str]) -> dict[str, dict[str, Any]]:
+    def build_dependency_tree(self, mib_names: list[str]) -> dict[str, DependencyNode]:
         """Build a hierarchical dependency tree for a list of MIBs.
 
         Args:
@@ -176,7 +211,7 @@ class MibDependencyResolver:
             }
 
         """
-        tree: dict[str, dict[str, Any]] = {}
+        tree: dict[str, DependencyNode] = {}
 
         # Process each configured MIB
         for mib_name in mib_names:
@@ -207,7 +242,7 @@ class MibDependencyResolver:
 
         return tree
 
-    def get_configured_mibs_with_deps(self, mib_names: list[str]) -> dict[str, Any]:
+    def get_configured_mibs_with_deps(self, mib_names: list[str]) -> ConfiguredDependencyResult:
         """Get a hierarchical structure of configured MIBs with their dependencies.
 
         Args:
@@ -250,7 +285,7 @@ class MibDependencyResolver:
 
         """
         dependency_info = self.get_configured_mibs_with_deps(mib_names)
-        tree = cast("dict[str, dict[str, Any]]", dependency_info.get("tree", {}))
+        tree = dependency_info["tree"]
 
         lines: list[str] = ["graph TD"]
         added_nodes: set[str] = set()
@@ -260,7 +295,7 @@ class MibDependencyResolver:
         for mib_name in tree:
             if mib_name not in added_nodes:
                 mib_data = tree[mib_name]
-                is_configured = mib_data.get("is_configured", False)
+                is_configured = mib_data["is_configured"]
                 if is_configured:
                     # Configured MIBs: normal styling
                     safe_name = mib_name.replace("-", "_")
@@ -279,7 +314,7 @@ class MibDependencyResolver:
 
         # Add edges for direct dependencies
         for mib_name, mib_info in tree.items():
-            direct_deps = cast("list[str]", mib_info.get("direct_deps", []))
+            direct_deps = mib_info["direct_deps"]
             for dep in direct_deps:
                 edge_key = f"{mib_name}->{dep}"
                 if edge_key not in added_edges:
@@ -290,7 +325,7 @@ class MibDependencyResolver:
 
         return "\n".join(lines)
 
-    def generate_mermaid_diagram_json(self, mib_names: list[str]) -> dict[str, Any]:
+    def generate_mermaid_diagram_json(self, mib_names: list[str]) -> MermaidDiagramResult:
         """Generate a Mermaid diagram and return with metadata.
 
         Args:
@@ -305,7 +340,7 @@ class MibDependencyResolver:
 
         return {
             "mermaid_code": diagram,
-            "configured_mibs": dependency_info.get("configured_mibs", []),
-            "transitive_dependencies": dependency_info.get("transitive_dependencies", []),
-            "summary": dependency_info.get("summary", {}),
+            "configured_mibs": dependency_info["configured_mibs"],
+            "transitive_dependencies": dependency_info["transitive_dependencies"],
+            "summary": dependency_info["summary"],
         }

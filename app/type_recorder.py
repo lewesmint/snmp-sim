@@ -13,7 +13,6 @@ from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
-    Protocol,
     TypedDict,
     cast,
 )
@@ -22,8 +21,11 @@ import pysnmp.entity.engine as _engine
 import pysnmp.proto.rfc1902 as _rfc1902
 import pysnmp.smi.builder as _builder
 
+from pysnmp_type_wrapper.pysnmp_rfc1902_adapter import PysnmpRfc1902Adapter
+
 if TYPE_CHECKING:
     from app.types import JsonDict
+    from pysnmp_type_wrapper.raw_boundary_types import MibSymbolMap, SupportsBoundarySnmpEngine
 
 # True ASN.1 base types (RFC 2578)
 # These are the only fundamental types in ASN.1:
@@ -49,35 +51,6 @@ _EXPECTED_SNMPV2_SMI_TYPES: set[str] = {
 }
 
 _MIN_RANGE_COUNT = 2
-
-
-class HasGetSyntax(Protocol):
-    """Protocol for syntax objects exposing a PySNMP-style getSyntax method."""
-
-    def getSyntax(self) -> object:  # noqa: N802 (matches PySNMP interface)
-        """Return the underlying syntax object for this SNMP value type."""
-
-
-class SupportsMibBuilder(Protocol):
-    """Minimal MIB builder surface used by TypeRecorder."""
-
-    mibSymbols: Mapping[str, Mapping[str, object]]  # noqa: N815 (matches PySNMP interface)
-
-    def add_mib_sources(self, *mib_sources: object) -> None:
-        """Register MIB source locations."""
-        raise NotImplementedError
-
-    def load_modules(self, *module_names: str) -> None:
-        """Load named MIB modules."""
-        raise NotImplementedError
-
-
-class SupportsSnmpEngine(Protocol):
-    """Minimal SNMP engine surface used by TypeRecorder."""
-
-    def get_mib_builder(self) -> SupportsMibBuilder:
-        """Return the associated MIB builder."""
-        raise NotImplementedError
 
 
 class TypeEntry(TypedDict):
@@ -117,6 +90,10 @@ class TypeRecorder:
         self.logger = logging.getLogger(__name__)
 
     @staticmethod
+    def _get_rfc1902_adapter() -> PysnmpRfc1902Adapter:
+        return PysnmpRfc1902Adapter(_rfc1902)
+
+    @staticmethod
     def _discover_snmpv2_smi_types() -> set[str]:
         """Dynamically discover SNMP application types from SNMPv2-SMI.
 
@@ -126,17 +103,12 @@ class TypeRecorder:
         Includes all types, even abstract ones (they'll be flagged as abstract separately).
         """
         try:
-            # Import from pysnmp.proto.rfc1902 which contains the compiled SNMPv2-SMI types
+            adapter = TypeRecorder._get_rfc1902_adapter()
             discovered = set()
-            for name in dir(_rfc1902):
-                if name.startswith("_"):
-                    continue
-                obj = getattr(_rfc1902, name, None)
-                if obj is None:
-                    continue
+            for name, obj in adapter.iter_public_symbols():
                 # We want classes that are likely SNMP types
                 if inspect.isclass(obj) and (
-                    hasattr(obj, "subtypeSpec")
+                    adapter.has_attribute(obj, "subtypeSpec")
                     or name in TRUE_ASN1_BASE_TYPES
                     or name in _EXPECTED_SNMPV2_SMI_TYPES
                 ):
@@ -155,14 +127,13 @@ class TypeRecorder:
         return self._snmpv2_smi_types
 
     @staticmethod
-    def safe_call_zero_arg(obj: object, name: str) -> object | None:
-        """Call a named zero-argument callable on an object if available and safe."""
+    def _resolve_zero_arg_callable(obj: object, name: str) -> Callable[[], object] | None:
+        """Return a safe-to-call zero-arg callable for a named attribute when available."""
         fn_obj = getattr(obj, name, None)
         if not callable(fn_obj):
             return None
-        fn = cast("Callable[..., object]", fn_obj)
         try:
-            sig = inspect.signature(fn)
+            sig = inspect.signature(fn_obj)
         except (TypeError, ValueError):
             return None
         required = [
@@ -171,6 +142,14 @@ class TypeRecorder:
             if p.default is p.empty and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
         ]
         if required:
+            return None
+        return cast("Callable[[], object]", fn_obj)
+
+    @staticmethod
+    def safe_call_zero_arg(obj: object, name: str) -> object | None:
+        """Call a named zero-argument callable on an object if available and safe."""
+        fn = TypeRecorder._resolve_zero_arg_callable(obj, name)
+        if fn is None:
             return None
         try:
             return fn()
@@ -248,13 +227,12 @@ class TypeRecorder:
             if candidate is None:
                 continue
 
-            items = getattr(candidate, "items", None)
-            if not callable(items):
+            items = TypeRecorder._resolve_zero_arg_callable(candidate, "items")
+            if items is None:
                 continue
-            typed_items = cast("Callable[[], object]", items)
 
             try:
-                raw_pairs = typed_items()
+                raw_pairs = items()
             except Exception:
                 logging.getLogger(__name__).debug(
                     "Skipping enum extraction for candidate %r",
@@ -550,9 +528,10 @@ class TypeRecorder:
         """
         seeded: dict[str, TypeEntry] = {}
         snmp_types = self.get_snmpv2_smi_types()
+        adapter = self._get_rfc1902_adapter()
 
         for name in sorted(snmp_types):
-            ctor = getattr(_rfc1902, name, None)
+            ctor = adapter.get_symbol(name)
             if ctor is None or not callable(ctor):
                 continue
             try:
@@ -577,10 +556,9 @@ class TypeRecorder:
             is_abstract = self._is_abstract_type(name, ctor)
 
             # Infer the ASN.1 base type from the class MRO
-            if inspect.isclass(ctor):
+            asn1_base_type = "INTEGER"  # Fallback
+            if isinstance(ctor, type):
                 asn1_base_type = self._infer_asn1_base_type(name, ctor)
-            else:
-                asn1_base_type = "INTEGER"  # Fallback
 
             seeded[name] = {
                 "base_type": asn1_base_type,  # Use ASN.1 base type instead of circular reference
@@ -722,8 +700,8 @@ class TypeRecorder:
             out.append(c)
         return out
 
-    def _load_mib_symbols(self) -> Mapping[str, Mapping[str, object]]:
-        snmp_engine = cast("SupportsSnmpEngine", _engine.SnmpEngine())
+    def _load_mib_symbols(self) -> MibSymbolMap:
+        snmp_engine = cast("SupportsBoundarySnmpEngine", _engine.SnmpEngine())
         mib_builder = snmp_engine.get_mib_builder()
         mib_builder.add_mib_sources(_builder.DirMibSource(str(self.compiled_dir)))
 
@@ -834,12 +812,11 @@ class TypeRecorder:
         sym_name: str,
         sym_obj: object,
     ) -> None:
-        if not hasattr(sym_obj, "getSyntax"):
+        get_syntax = self._resolve_zero_arg_callable(sym_obj, "getSyntax")
+        if get_syntax is None:
             return
-
-        snmp_obj = cast("HasGetSyntax", sym_obj)
         try:
-            syntax = snmp_obj.getSyntax()
+            syntax = get_syntax()
         except Exception:
             return
 

@@ -7,14 +7,25 @@ and making table registration behavior clearer and more maintainable.
 # pylint: disable=invalid-name
 
 import logging
-from typing import Any
-
-from pysnmp.proto import rfc1902
+from collections.abc import Callable
+from typing import TYPE_CHECKING, cast
 
 from app.base_type_handler import BaseTypeHandler
+from app.interface_types import (
+    ColumnMeta,
+    InterfaceObject,
+    MibJsonMap,
+    MibJsonObject,
+    SnmpTypeFactory,
+    SupportsMibBuilder,
+    SupportsSnmpTypeResolver,
+    TableData,
+)
 from app.types import TypeInfo, TypeRegistry
+from pysnmp_type_wrapper.pysnmp_type_resolver import PysnmpTypeResolver
 
-type ObjectType = Any
+if TYPE_CHECKING:
+    from app.interface_types import EntryMeta, TableMeta
 
 
 class TableRegistrar:
@@ -22,13 +33,14 @@ class TableRegistrar:
 
     def __init__(
         self,
-        mib_builder: ObjectType,
-        mib_scalar_instance: ObjectType,
-        mib_table: ObjectType,
-        mib_table_row: ObjectType,
-        mib_table_column: ObjectType,
+        mib_builder: SupportsMibBuilder | None,
+        mib_scalar_instance: Callable[[], InterfaceObject] | None,
+        mib_table: Callable[[tuple[int, ...]], InterfaceObject] | None,
+        mib_table_row: Callable[[tuple[int, ...]], InterfaceObject] | None,
+        mib_table_column: Callable[[tuple[int, ...], InterfaceObject], InterfaceObject] | None,
         logger: logging.Logger,
         type_registry: TypeRegistry | None = None,
+        snmp_type_resolver: SupportsSnmpTypeResolver | None = None,
     ) -> None:
         """Initialize the TableRegistrar.
 
@@ -40,6 +52,7 @@ class TableRegistrar:
             mib_table_column: PySNMP MibTableColumn class
             logger: Logger instance for debug/error messages
             type_registry: Type registry dict mapping type names to type info
+            snmp_type_resolver: Adapter for dynamic PySNMP type resolution
 
         """
         if type_registry is None:
@@ -50,9 +63,10 @@ class TableRegistrar:
         self.mib_table_row = mib_table_row
         self.mib_table_column = mib_table_column
         self.logger = logger
+        self.snmp_type_resolver = snmp_type_resolver or PysnmpTypeResolver()
         self.type_handler = BaseTypeHandler(type_registry=type_registry, logger=logger)
 
-    def find_table_related_objects(self, mib_json: dict[str, ObjectType]) -> set[str]:
+    def find_table_related_objects(self, mib_json: MibJsonObject) -> set[str]:
         """Return set of table-related object names (tables, entries, columns).
 
         Identifies all objects in the MIB JSON that are part of table structures,
@@ -92,9 +106,9 @@ class TableRegistrar:
     def register_tables(
         self,
         mib: str,
-        mib_json: dict[str, ObjectType],
+        mib_json: MibJsonObject,
         type_registry: TypeRegistry,
-        mib_jsons: dict[str, dict[str, ObjectType]],
+        mib_jsons: MibJsonMap,
     ) -> None:
         """Detect and register all tables in the MIB.
 
@@ -115,7 +129,7 @@ class TableRegistrar:
             return
 
         # Find all tables by looking for objects ending in "Table"
-        tables: dict[str, dict[str, ObjectType]] = {}
+        tables: dict[str, TableData] = {}
 
         for name, info in mib_json.items():
             if not isinstance(info, dict):
@@ -144,7 +158,11 @@ class TableRegistrar:
 
                 # Collect all columns for this table by checking OID hierarchy
                 # Columns must be direct children of the entry OID
-                columns: dict[str, dict[str, ObjectType]] = {}
+                entry_data = mib_json[entry_name]
+                if not isinstance(entry_data, dict):
+                    continue
+
+                columns: dict[str, ColumnMeta] = {}
                 for col_name, col_info in mib_json.items():
                     if not isinstance(col_info, dict):
                         continue
@@ -158,12 +176,14 @@ class TableRegistrar:
                         len(col_oid) == len(entry_oid) + 1
                         and col_oid[: len(entry_oid)] == entry_oid
                     ):
-                        columns[col_name] = col_info
+                        columns[col_name] = cast("ColumnMeta", col_info)
 
                 if columns:
+                    table_meta = cast("TableMeta", info)
+                    entry_meta = cast("EntryMeta", entry_data)
                     tables[name] = {
-                        "table": info,
-                        "entry": mib_json[entry_name],
+                        "table": table_meta,
+                        "entry": entry_meta,
                         "columns": columns,
                     }
 
@@ -187,9 +207,9 @@ class TableRegistrar:
         self,
         mib: str,
         table_name: str,
-        table_data: dict[str, ObjectType],
+        table_data: TableData,
         type_registry: TypeRegistry,
-        mib_jsons: dict[str, dict[str, ObjectType]],
+        mib_jsons: MibJsonMap,
     ) -> None:
         """Register a single table by adding a row to the JSON model and PySNMP MIB tree.
 
@@ -209,9 +229,6 @@ class TableRegistrar:
         # Check if this is an augmented table (has index_from in entry)
         # Augmented tables should not have rows created here - they use parent table rows
         entry = table_data["entry"]
-        if not isinstance(entry, dict):
-            self.logger.error("Table entry metadata missing for %s", table_name)
-            return
         if entry.get("index_from"):
             self.logger.debug(
                 "Skipping row creation for augmented table %s - it uses index_from", table_name
@@ -233,14 +250,9 @@ class TableRegistrar:
             table_json["rows"] = []
 
         # Build a new row with initial values for all columns (including index columns)
-        new_row = {}
-        columns = table_data.get("columns")
-        if not isinstance(columns, dict):
-            self.logger.error("Missing columns metadata for %s", table_name)
-            return
+        new_row: MibJsonObject = {}
+        columns = table_data["columns"]
         for col_name, col_info in columns.items():
-            if not isinstance(col_info, dict):
-                continue
             type_name = col_info.get("type", "")
             type_info = type_registry.get(type_name, {}) if type_name else {}
             base_type = type_info.get("base_type") or type_name
@@ -254,7 +266,11 @@ class TableRegistrar:
                 new_row[idx_col] = 1
 
         # Add the row to the table JSON
-        table_json["rows"].append(new_row)
+        rows: object = table_json.get("rows")
+        if not isinstance(rows, list):
+            table_json["rows"] = []
+            rows = table_json["rows"]
+        rows.append(new_row)
         self.logger.info(
             "%s",
             f"Created row in {table_name} for MIB {mib} with {len(new_row)} columns: {new_row}",
@@ -267,9 +283,9 @@ class TableRegistrar:
         self,
         mib: str,
         table_name: str,
-        table_data: dict[str, ObjectType],
+        table_data: TableData,
         type_registry: TypeRegistry,
-        new_row: dict[str, ObjectType],
+        new_row: MibJsonObject,
     ) -> None:
         """Register table structures in PySNMP.
 
@@ -286,20 +302,18 @@ class TableRegistrar:
             self.logger.warning("mib_builder not available for table %s", table_name)
             return
 
-        table_obj = table_data.get("table")
-        entry_obj = table_data.get("entry")
-        columns = table_data.get("columns")
-        if not isinstance(table_obj, dict) or not isinstance(entry_obj, dict):
-            self.logger.warning("Table metadata missing for %s", table_name)
-            return
-        if not isinstance(columns, dict):
-            self.logger.warning("Table columns missing for %s", table_name)
-            return
+        table_obj = table_data["table"]
+        entry_obj = table_data["entry"]
+        columns = table_data["columns"]
 
         table_oid = self._oid_tuple(table_obj.get("oid"))
         entry_oid = self._oid_tuple(entry_obj.get("oid"))
         if table_oid is None or entry_oid is None:
             self.logger.warning("Table OID metadata invalid for %s", table_name)
+            return
+
+        if self.mib_table is None or self.mib_table_row is None or self.mib_table_column is None:
+            self.logger.warning("MIB table factories missing for table %s", table_name)
             return
 
         # Create Table, Row, and Column objects
@@ -311,8 +325,6 @@ class TableRegistrar:
         self.logger.debug("Registering table: %s OID=%s", table_name, table_oid)
         self.logger.debug("Registering row: %sEntry OID=%s", table_name, entry_oid)
         for col_name, col_info in columns.items():
-            if not isinstance(col_info, dict):
-                continue
             col_oid = self._oid_tuple(col_info.get("oid"))
             if col_oid is None:
                 continue
@@ -360,10 +372,10 @@ class TableRegistrar:
         self,
         _mib: str,
         table_name: str,
-        table_data: dict[str, ObjectType],
+        table_data: TableData,
         type_registry: TypeRegistry,
         col_names: list[str],
-        new_row: dict[str, ObjectType],
+        new_row: MibJsonObject,
         *,
         suppress_export: bool = False,
     ) -> None:
@@ -387,22 +399,19 @@ class TableRegistrar:
                 except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
                     self.logger.exception("Error exporting")
 
+            if self.mib_scalar_instance is None:
+                self.logger.warning("No scalar instance factory available for %s", table_name)
+                return
+
             created_any = False
 
             missing_column: str | None = None
-            columns = table_data.get("columns")
-            if not isinstance(columns, dict):
-                self.logger.error("Missing columns metadata for %s", table_name)
-                return
+            columns = table_data["columns"]
             for col_name in col_names:
                 try:
                     # Fetch column info; missing column is treated as an outer error
                     col_info = columns.get(col_name)
                     if not col_info:
-                        missing_column = col_name
-                        break
-
-                    if not isinstance(col_info, dict):
                         missing_column = col_name
                         break
 
@@ -460,7 +469,7 @@ class TableRegistrar:
 
     def _resolve_snmp_type(
         self, base_type: str, _col_name: str, _table_name: str
-    ) -> ObjectType | None:
+    ) -> SnmpTypeFactory | None:
         """Resolve an SNMP type class from its base type name.
 
         Args:
@@ -474,19 +483,10 @@ class TableRegistrar:
         """
         if not base_type:
             return None
-        try:
-            return self.mib_builder.import_symbols("SNMPv2-SMI", base_type)[0]
-        except Exception:
-            try:
-                return self.mib_builder.import_symbols("SNMPv2-TC", base_type)[0]
-            except Exception:
-                try:
-                    return getattr(rfc1902, base_type, None)
-                except Exception:
-                    return None
+        return self.snmp_type_resolver.resolve_type_factory(base_type, self.mib_builder)
 
     @staticmethod
-    def _oid_tuple(value: ObjectType) -> tuple[int, ...] | None:
+    def _oid_tuple(value: InterfaceObject) -> tuple[int, ...] | None:
         if isinstance(value, tuple) and all(isinstance(part, int) for part in value):
             return value
         if isinstance(value, list) and all(isinstance(part, int) for part in value):
@@ -495,11 +495,11 @@ class TableRegistrar:
 
     def _get_default_value_for_type(
         self,
-        col_info: dict[str, ObjectType],
+        col_info: ColumnMeta,
         type_name: str,
         type_info: TypeInfo,
         _base_type: str,
-    ) -> ObjectType:
+    ) -> InterfaceObject:
         """Determine a sensible default value for a type using BaseTypeHandler.
 
         Args:

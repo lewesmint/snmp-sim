@@ -12,7 +12,23 @@ Design rule:
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypedDict, runtime_checkable
+
+from pysnmp_type_wrapper.interfaces import (
+    MutableScalarInstance as _MutableScalarInstance,
+    SupportsClone as _SupportsClone,
+    SupportsMibSymbolsAdapter as _SupportsMibSymbolsAdapter,
+    SupportsSnmpTypeResolver as _SupportsSnmpTypeResolver,
+)
+
+type InterfaceObject = object
+type MibJsonObject = dict[str, InterfaceObject]
+type MibJsonMap = dict[str, MibJsonObject]
+
+MutableScalarInstance = _MutableScalarInstance
+SupportsClone = _SupportsClone
+SupportsMibSymbolsAdapter = _SupportsMibSymbolsAdapter
+SupportsSnmpTypeResolver = _SupportsSnmpTypeResolver
 
 
 @runtime_checkable
@@ -124,3 +140,39 @@ class HasValues(Protocol):
     """Objects exposing values iterable for union-like constraints."""
 
     values: Iterable[object]
+
+
+class ColumnMeta(TypedDict, total=False):
+    """Known schema fields for table column metadata."""
+
+    oid: list[int]
+    type: str
+    access: str
+    initial: InterfaceObject
+
+
+class EntryMeta(TypedDict, total=False):
+    """Known schema fields for table entry metadata."""
+
+    oid: list[int]
+    type: str
+    indexes: list[str]
+    index_from: str | list[str]
+
+
+class TableMeta(TypedDict, total=False):
+    """Known schema fields for table metadata."""
+
+    oid: list[int]
+    type: str
+    access: str
+    rows: list[MibJsonObject]
+
+
+class TableData(TypedDict):
+    """Normalized table bundle passed between registrar methods."""
+
+    table: TableMeta
+    entry: EntryMeta
+    columns: dict[str, ColumnMeta]
+

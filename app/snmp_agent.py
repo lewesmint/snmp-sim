@@ -11,7 +11,6 @@ from __future__ import annotations
 # ruff: noqa: RUF059,RUF100,S101,S104,SIM102,SLF001,T201,TC002,TC003,TC006,TRY003
 # ruff: noqa: TRY300,TRY400,TRY401,UP037,UP045
 
-import importlib
 import json
 import logging
 import os
@@ -19,10 +18,11 @@ import signal
 import sys
 import time
 import traceback
+from collections.abc import Callable
 from types import FrameType
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, TypedDict, cast
+from typing import TYPE_CHECKING, Optional, TypedDict, cast
 
 from pysnmp import debug as pysnmp_debug
 from pysnmp.carrier.asyncio.dgram import udp
@@ -39,11 +39,22 @@ from app.app_config import AppConfig
 from app.app_logger import AppLogger
 from app.compiler import MibCompiler
 from app.mib_registrar import MibRegistrar, SNMPContext
+from pysnmp_type_wrapper.mib_registrar_runtime_adapter import (
+    ADAPTER_EXCEPTIONS as RUNTIME_ADAPTER_EXCEPTIONS,
+    RuntimeSnmpContextArgs,
+    create_runtime_mib_registrar,
+    decode_value_with_runtime_registrar,
+)
 from app.model_paths import TYPE_REGISTRY_FILE, agent_model_dir, compiled_mibs_dir, mib_state_file
+from pysnmp_type_wrapper.pysnmp_mib_symbols_adapter import PysnmpMibSymbolsAdapter
 from app.value_links import get_link_manager
 from app.generator import BehaviourGenerator
 from app.type_registry_validator import validate_type_registry_file
 from app.type_registry import TypeRegistry
+
+if TYPE_CHECKING:
+    from pysnmp_type_wrapper.interfaces import SupportsClone, SupportsMibSymbolsAdapter
+    from pysnmp_type_wrapper.raw_boundary_types import SupportsBoundaryMibBuilder
 
 
 @dataclass
@@ -95,6 +106,8 @@ class SNMPAgent:
         self.snmp_context: SnmpContext | None = None
         self.mib_builder: MibBuilder | None = None
         self.mib_registrar: MibRegistrar | None = None
+        self.mib_symbols_adapter: SupportsMibSymbolsAdapter | None = None
+        self._mib_symbols_adapter_builder: object | None = None
         self.mib_jsons: dict[str, dict[str, JsonValue]] = {}
         # Track agent start time for sysUpTime
         self.start_time = time.time()
@@ -575,7 +588,7 @@ class SNMPAgent:
         link_manager = get_link_manager()
         link_manager.clear()  # Clear any existing links
         for mib_name, schema in self.mib_jsons.items():
-            link_manager.load_links_from_schema(schema)
+            link_manager.load_links_from_schema(cast("dict[str, object]", schema))
 
         self.logger.info("Value links loaded from schemas")
 
@@ -625,6 +638,10 @@ class SNMPAgent:
         self.snmp_context = context.SnmpContext(self.snmp_engine)
         mib_instrum = self.snmp_context.get_mib_instrum()
         self.mib_builder = mib_instrum.get_mib_builder()
+        self.mib_symbols_adapter = PysnmpMibSymbolsAdapter(
+            cast("SupportsBoundaryMibBuilder", self.mib_builder)
+        )
+        self._mib_symbols_adapter_builder = self.mib_builder
 
         # Ensure compiled MIBs are discoverable and loaded into the builder
         compiled_path = Path(compiled_dir)
@@ -751,36 +768,23 @@ class SNMPAgent:
         registrar = getattr(self, "mib_registrar", None)
         if registrar is None:
             try:
-                # pylint: disable=import-outside-toplevel
-                mib_registrar_module = importlib.import_module("app.mib_registrar")
-
-                registrar_cls = mib_registrar_module.MibRegistrar
-                snmp_context_cls = getattr(mib_registrar_module, "SNMPContext", None)
-
-                if snmp_context_cls is not None:
-                    snmp_context = snmp_context_cls(
+                registrar = create_runtime_mib_registrar(
+                    logger=self.logger,
+                    start_time=self.start_time,
+                    context_args=RuntimeSnmpContextArgs(
                         mib_builder=getattr(self, "mib_builder", None),
                         mib_scalar_instance=getattr(self, "MibScalarInstance", None),
                         mib_table=getattr(self, "MibTable", None),
                         mib_table_row=getattr(self, "MibTableRow", None),
                         mib_table_column=getattr(self, "MibTableColumn", None),
-                    )
-                    registrar = registrar_cls(
-                        snmp_context=snmp_context,
-                        logger=self.logger,
-                        start_time=self.start_time,
-                    )
-                else:
-                    registrar = registrar_cls(
-                        logger=self.logger,
-                        start_time=self.start_time,
-                    )
-                self.mib_registrar = registrar
-            except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+                    ),
+                )
+                self.mib_registrar = cast("MibRegistrar", registrar)
+            except RUNTIME_ADAPTER_EXCEPTIONS:
                 self.logger.exception("Failed to create MibRegistrar")
                 return
 
-        registrar.register_all_mibs(self.mib_jsons)
+        registrar.register_all_mibs(cast("dict[str, dict[str, object]]", self.mib_jsons))
 
     def _populate_sysor_table(self) -> None:
         """Populate sysORTable with the MIBs being served by this agent.
@@ -804,39 +808,33 @@ class SNMPAgent:
         MibRegistrar instance which implements the decoding logic.
         """
         try:
-            # pylint: disable=import-outside-toplevel
-            mib_registrar_module = importlib.import_module("app.mib_registrar")
-
-            registrar_cls = mib_registrar_module.MibRegistrar
-            snmp_context_cls = getattr(mib_registrar_module, "SNMPContext", None)
-
-            if snmp_context_cls is not None:
-                snmp_context = snmp_context_cls(
-                    mib_builder=None,
-                    mib_scalar_instance=None,
-                    mib_table=None,
-                    mib_table_row=None,
-                    mib_table_column=None,
-                )
-                temp = registrar_cls(
-                    snmp_context=snmp_context,
-                    logger=self.logger,
-                    start_time=self.start_time,
-                )
-            else:
-                temp = registrar_cls(
-                    logger=self.logger,
-                    start_time=self.start_time,
-                )
-            decoded = temp._decode_value(value)
+            decoded = decode_value_with_runtime_registrar(
+                value,
+                logger=self.logger,
+                start_time=self.start_time,
+            )
             if isinstance(decoded, (str, int, float, bool, list, dict, bytes, bytearray)):
                 return cast("DecodedValue", decoded)
             if decoded is None:
                 return None
             return value
-        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+        except RUNTIME_ADAPTER_EXCEPTIONS:
             # As a last resort, return the value unchanged
             return value
+
+    def _get_mib_symbols_adapter(self) -> SupportsMibSymbolsAdapter:
+        """Return symbols adapter bound to the current MIB builder."""
+        if self.mib_builder is None:
+            raise RuntimeError("MIB builder not initialized")
+        if (
+            self.mib_symbols_adapter is None
+            or self._mib_symbols_adapter_builder is not self.mib_builder
+        ):
+            self.mib_symbols_adapter = PysnmpMibSymbolsAdapter(
+                cast("SupportsBoundaryMibBuilder", self.mib_builder)
+            )
+            self._mib_symbols_adapter_builder = self.mib_builder
+        return self.mib_symbols_adapter
 
     def get_scalar_value(self, oid: tuple[int, ...]) -> DecodedValue:
         """Get the value of a scalar MIB object by OID.
@@ -854,14 +852,16 @@ class SNMPAgent:
         if self.mib_builder is None:
             raise RuntimeError("MIB builder not initialized")
 
-        # Import MibScalarInstance for type checking
-        MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
-
-        # Search through all MIB modules and symbols
-        for symbols in self.mib_builder.mibSymbols.values():
-            for symbol_obj in symbols.values():
-                if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == oid:
-                    return cast(DecodedValue, symbol_obj.syntax)
+        symbols_adapter = self._get_mib_symbols_adapter()
+        mib_scalar_instance_cls = symbols_adapter.load_symbol_class("SNMPv2-SMI", "MibScalarInstance")
+        if mib_scalar_instance_cls is None:
+            raise RuntimeError("MibScalarInstance class unavailable")
+        symbol_obj = symbols_adapter.find_scalar_instance_by_oid(
+            oid,
+            mib_scalar_instance_cls,
+        )
+        if symbol_obj is not None:
+            return cast(DecodedValue, symbol_obj.syntax)
 
         raise ValueError(f"Scalar OID {oid} not found")
 
@@ -879,87 +879,89 @@ class SNMPAgent:
         if self.mib_builder is None:
             raise RuntimeError("MIB builder not initialized")
 
-        # Import MibScalarInstance for type checking
-        MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[0]
+        symbols_adapter = self._get_mib_symbols_adapter()
+        mib_scalar_instance_cls = symbols_adapter.load_symbol_class("SNMPv2-SMI", "MibScalarInstance")
+        if mib_scalar_instance_cls is None:
+            raise RuntimeError("MibScalarInstance class unavailable")
+        symbol_obj = symbols_adapter.find_scalar_instance_by_oid(
+            oid,
+            mib_scalar_instance_cls,
+        )
+        if symbol_obj is not None:
+            # Update in-memory value - must use clone() to preserve pysnmp type
+            try:
+                new_syntax = cast("SupportsClone", symbol_obj.syntax).clone(value)
+                symbol_obj.syntax = new_syntax
+            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+                self.logger.error(
+                    "%s", f"Failed to update scalar {oid} with value {value!r} "
+                    f"(type: {type(value).__name__}): {e}"
+                )
 
-        # Search through all MIB modules and symbols
-        for _module_name, symbols in self.mib_builder.mibSymbols.items():
-            for _symbol_name, symbol_obj in symbols.items():
-                if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == oid:
-                    # Update in-memory value - must use clone() to preserve pysnmp type
-                    try:
-                        new_syntax = symbol_obj.syntax.clone(value)
-                        symbol_obj.syntax = new_syntax
-                    except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-                        self.logger.error(
-                            "%s", f"Failed to update scalar {oid} with value {value!r} "
-                            f"(type: {type(value).__name__}): {e}"
-                        )
+            # Persist override if different from initial
+            dotted = ".".join(str(x) for x in oid)
+            new_serial = self._serialize_value(symbol_obj.syntax)
+            initial = self._initial_values.get(dotted)
+            # Log the set operation for debugging and info-level visibility
+            try:
+                # INFO so it's visible with default logging configuration
+                mod, sym = self._lookup_symbol_for_dotted(dotted)
+                name = f"{mod}:{sym}" if mod and sym else dotted
+                self.logger.info(
+                    "SNMP SET received for %s (%s): initial=%r new=%r",
+                    dotted,
+                    name,
+                    initial,
+                    new_serial,
+                )
+                # Also emit a DEBUG-level detailed message
+                self.logger.debug(
+                    "(debug) SNMP SET for %s (%s): initial=%r new=%r",
+                    dotted,
+                    name,
+                    initial,
+                    new_serial,
+                )
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                pass
 
-                    # Persist override if different from initial
-                    dotted = ".".join(str(x) for x in oid)
-                    new_serial = self._serialize_value(symbol_obj.syntax)
-                    initial = self._initial_values.get(dotted)
-                    # Log the set operation for debugging and info-level visibility
-                    try:
-                        # INFO so it's visible with default logging configuration
-                        mod, sym = self._lookup_symbol_for_dotted(dotted)
-                        name = f"{mod}:{sym}" if mod and sym else dotted
-                        self.logger.info(
-                            "SNMP SET received for %s (%s): initial=%r new=%r",
-                            dotted,
-                            name,
-                            initial,
-                            new_serial,
-                        )
-                        # Also emit a DEBUG-level detailed message
-                        self.logger.debug(
-                            "(debug) SNMP SET for %s (%s): initial=%r new=%r",
-                            dotted,
-                            name,
-                            initial,
-                            new_serial,
-                        )
-                    except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                        pass
+            if initial is None or new_serial != initial:
+                table_cell = self._resolve_table_cell_context(oid)
+                if table_cell is not None:
+                    table_oid, instance_str, column_name, index_columns = table_cell
+                    table_data = self.table_instances.setdefault(table_oid, {})
+                    row_data = table_data.setdefault(instance_str, {"column_values": {}})
+                    row_values = row_data.setdefault("column_values", {})
+                    row_values[column_name] = new_serial
 
-                    if initial is None or new_serial != initial:
-                        table_cell = self._resolve_table_cell_context(oid)
-                        if table_cell is not None:
-                            table_oid, instance_str, column_name, index_columns = table_cell
-                            table_data = self.table_instances.setdefault(table_oid, {})
-                            row_data = table_data.setdefault(instance_str, {"column_values": {}})
-                            row_values = row_data.setdefault("column_values", {})
-                            row_values[column_name] = new_serial
+                    parts = [part for part in instance_str.split(".") if part]
+                    if parts and len(index_columns) == len(parts):
+                        for idx_name, idx_part in zip(index_columns, parts, strict=True):
+                            if idx_name in row_values:
+                                continue
+                            if idx_part.isdigit():
+                                row_values[idx_name] = int(idx_part)
+                            else:
+                                row_values[idx_name] = idx_part
 
-                            parts = [part for part in instance_str.split(".") if part]
-                            if parts and len(index_columns) == len(parts):
-                                for idx_name, idx_part in zip(index_columns, parts, strict=True):
-                                    if idx_name in row_values:
-                                        continue
-                                    if idx_part.isdigit():
-                                        row_values[idx_name] = int(idx_part)
-                                    else:
-                                        row_values[idx_name] = idx_part
+                    # Table cells are persisted under tables, not scalar overrides.
+                    self.overrides.pop(dotted, None)
+                else:
+                    self.overrides[dotted] = new_serial
 
-                            # Table cells are persisted under tables, not scalar overrides.
-                            self.overrides.pop(dotted, None)
-                        else:
-                            self.overrides[dotted] = new_serial
+                try:
+                    self._save_mib_state()
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                    self.logger.exception("Failed to save MIB state")
+            # If we've reverted to initial, remove any existing override
+            elif dotted in self.overrides:
+                self.overrides.pop(dotted, None)
+                try:
+                    self._save_mib_state()
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                    self.logger.exception("Failed to save MIB state")
 
-                        try:
-                            self._save_mib_state()
-                        except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                            self.logger.exception("Failed to save MIB state")
-                    # If we've reverted to initial, remove any existing override
-                    elif dotted in self.overrides:
-                        self.overrides.pop(dotted, None)
-                        try:
-                            self._save_mib_state()
-                        except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                            self.logger.exception("Failed to save MIB state")
-
-                    return
+            return
 
         raise ValueError(f"Scalar OID {oid} not found")
 
@@ -973,16 +975,7 @@ class SNMPAgent:
         if self.mib_builder is None:
             raise RuntimeError("MIB builder not initialized")
 
-        oid_map = {}
-
-        # Iterate through all MIB modules and symbols
-        for _module_name, symbols in self.mib_builder.mibSymbols.items():
-            for symbol_name, symbol_obj in symbols.items():
-                # Check if it has a name attribute (OID)
-                if hasattr(symbol_obj, "name") and symbol_obj.name:
-                    oid_map[symbol_name] = symbol_obj.name
-
-        return oid_map
+        return self._get_mib_symbols_adapter().get_all_named_oids()
 
     def _lookup_symbol_for_dotted(self, dotted: str) -> tuple[str | None, str | None]:
         """Return (module_name, symbol_name) for a dotted OID string if known.
@@ -996,15 +989,7 @@ class SNMPAgent:
         except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
             return None, None
 
-        for module_name, symbols in self.mib_builder.mibSymbols.items():
-            for symbol_name, symbol_obj in symbols.items():
-                try:
-                    if hasattr(symbol_obj, "name") and symbol_obj.name:
-                        if tuple(symbol_obj.name) == target_oid:
-                            return module_name, symbol_name
-                except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
-                    continue
-        return None, None
+        return self._get_mib_symbols_adapter().lookup_symbol_for_oid(target_oid)
 
     # ---- Overrides persistence helpers ----
     def _state_file_path(self) -> str:
@@ -1923,68 +1908,52 @@ class SNMPAgent:
         if self.mib_builder is None:
             return False
 
-        try:
-            MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
-                0
-            ]
-        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-            self.logger.debug("Could not import MibScalarInstance: %s", e)
+        symbols_adapter = self._get_mib_symbols_adapter()
+
+        mib_scalar_instance_cls = symbols_adapter.load_symbol_class("SNMPv2-SMI", "MibScalarInstance")
+        if mib_scalar_instance_cls is None:
+            self.logger.debug("Could not import MibScalarInstance")
             return False
 
-        # Check if instance already exists
-        for module_name, symbols in self.mib_builder.mibSymbols.items():
-            for symbol_obj in symbols.values():
-                if isinstance(symbol_obj, MibScalarInstance) and symbol_obj.name == cell_oid:
-                    return True  # Already exists
+        existing = symbols_adapter.find_scalar_instance_by_oid(
+            cell_oid,
+            mib_scalar_instance_cls,
+        )
+        if existing is not None:
+            return True
 
         # Find an existing MibScalarInstance for the same column (different index)
         # to use as a template for the type
-        template_instance = None
-        target_module = None
-        column_oid = None
-        for module_name, symbols in self.mib_builder.mibSymbols.items():
-            for symbol_name, symbol_obj in symbols.items():
-                if (
-                    isinstance(symbol_obj, MibScalarInstance)
-                    and symbol_name.startswith(f"{column_name}Inst_")
-                ):
-                    # Found an existing instance for this column
-                    template_instance = symbol_obj
-                    target_module = module_name
-                    if hasattr(symbol_obj, "name") and isinstance(symbol_obj.name, tuple):
-                        # Derive column OID from concrete cell OID by removing
-                        # the current instance suffix from template symbol name.
-                        # Works for single- and multi-component indices.
-                        current_name = symbol_obj.name
-                        suffix = "Inst_"
-                        current_index_str = symbol_name.split(suffix, 1)[1] if suffix in symbol_name else ""
-                        current_index_len = len([p for p in current_index_str.split("_") if p])
-                        if 0 < current_index_len < len(current_name):
-                            column_oid = current_name[:-current_index_len]
-                        else:
-                            column_oid = current_name[:-1]
-                    break
-            if template_instance:
-                break
+        template_data = symbols_adapter.find_template_instance_for_column(
+            column_name,
+            mib_scalar_instance_cls,
+        )
 
-        if not template_instance or not target_module or not column_oid:
+        if template_data is None:
             self.logger.debug(
                 "Could not find template instance for column %s to determine type",
                 column_name,
             )
             return False
 
+        target_module, template_instance, column_oid = template_data
+
         try:
             # Clone the syntax from the template instance
-            new_syntax = template_instance.syntax.clone(value)
+            new_syntax = cast("SupportsClone", template_instance.syntax).clone(value)
             # Extract the index tuple from the cell_oid by removing the column OID prefix
             index_tuple = cell_oid[len(column_oid) :]
             # Create instance with proper arguments: (col_oid, index_tuple, syntax)
-            new_instance = MibScalarInstance(column_oid, index_tuple, new_syntax)
+            instance_ctor: Callable[..., object] = cast(
+                "Callable[..., object]", mib_scalar_instance_cls
+            )
+            new_instance = instance_ctor(column_oid, index_tuple, new_syntax)
 
             # Generate a unique instance name and export
             instance_name = f"{column_name}Inst_{'_'.join(str(x) for x in index_tuple)}"
-            self.mib_builder.mibSymbols[target_module][instance_name] = new_instance
+            if not symbols_adapter.upsert_symbol(target_module, instance_name, new_instance):
+                self.logger.debug("Could not upsert new instance %s into module %s", instance_name, target_module)
+                return False
             self.logger.info(
                 "Created missing MibScalarInstance %s for %s = %s",
                 cell_oid,
@@ -2020,17 +1989,15 @@ class SNMPAgent:
         if self.mib_builder is None:
             return
 
+        symbols_adapter = self._get_mib_symbols_adapter()
+
         # Initialize processed set for top-level call
         if _processed is None:
             _processed = set()
 
-        # Import MibScalarInstance for type checking
-        try:
-            MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
-                0
-            ]
-        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-            self.logger.error("Failed to import MibScalarInstance: %s", e)
+        mib_scalar_instance_cls = symbols_adapter.load_symbol_class("SNMPv2-SMI", "MibScalarInstance")
+        if mib_scalar_instance_cls is None:
+            self.logger.error("Failed to import MibScalarInstance")
             return
 
         # Parse table OID
@@ -2090,19 +2057,8 @@ class SNMPAgent:
                     ] = value
                     stored = True
 
-                # Search through MIB symbols to find the column by name
-                column_oid = None
-                for _module_name, symbols in self.mib_builder.mibSymbols.items():
-                    if column_name in symbols:
-                        col_obj = symbols[column_name]
-                        if hasattr(col_obj, "name") and isinstance(col_obj.name, tuple):
-                            # Check if this column belongs to our table (starts with entry_oid)
-                            if (
-                                len(col_obj.name) > len(entry_oid)
-                                and col_obj.name[: len(entry_oid)] == entry_oid
-                            ):
-                                column_oid = col_obj.name
-                                break
+                # Resolve column OID using boundary adapter
+                column_oid = symbols_adapter.find_column_oid_for_entry(column_name, entry_oid)
 
                 if not column_oid:
                     self.logger.debug("Could not find column OID for %s", column_name)
@@ -2113,39 +2069,37 @@ class SNMPAgent:
 
                 # Find and update the MibScalarInstance for this cell
                 updated = False
-                for _module_name, symbols in self.mib_builder.mibSymbols.items():
-                    for _symbol_name, symbol_obj in symbols.items():
-                        if (
-                            isinstance(symbol_obj, MibScalarInstance)
-                            and symbol_obj.name == cell_oid
-                        ):
-                            # Update the value - must always use proper pysnmp type object
-                            try:
-                                # Clone the existing syntax object to preserve type constraints
-                                new_syntax = symbol_obj.syntax.clone(value)
-                                symbol_obj.syntax = new_syntax
-                                self.logger.debug(
-                                    "Updated MibScalarInstance %s = %s",
-                                    cell_oid,
-                                    value,
-                                )
-                                updated = True
-                            except (
-                                AttributeError,
-                                LookupError,
-                                OSError,
-                                TypeError,
-                                ValueError,
-                            ) as e:
-                                self.logger.error(
-                                    "Failed to update MibScalarInstance %s with value %r "
-                                    "(type: %s): %s",
-                                    cell_oid,
-                                    value,
-                                    type(value).__name__,
-                                    e,
-                                )
-                            break
+                symbol_obj = symbols_adapter.find_scalar_instance_by_oid(
+                    cell_oid,
+                    mib_scalar_instance_cls,
+                )
+                if symbol_obj is not None:
+                    # Update the value - must always use proper pysnmp type object
+                    try:
+                        # Clone the existing syntax object to preserve type constraints
+                        new_syntax = cast("SupportsClone", symbol_obj.syntax).clone(value)
+                        symbol_obj.syntax = new_syntax
+                        self.logger.debug(
+                            "Updated MibScalarInstance %s = %s",
+                            cell_oid,
+                            value,
+                        )
+                        updated = True
+                    except (
+                        AttributeError,
+                        LookupError,
+                        OSError,
+                        TypeError,
+                        ValueError,
+                    ) as e:
+                        self.logger.error(
+                            "Failed to update MibScalarInstance %s with value %r "
+                            "(type: %s): %s",
+                            cell_oid,
+                            value,
+                            type(value).__name__,
+                            e,
+                        )
 
                 # If not found, try to create a missing instance
                 # (for instances loaded from state that weren't in the schema)
@@ -2355,7 +2309,7 @@ class SNMPAgent:
 
         return False
 
-    def _serialize_value(self, value: DecodedValue) -> JsonValue:
+    def _serialize_value(self, value: object) -> JsonValue:
         # Convert pysnmp types and other non-JSON-friendly values into JSON-serializable forms
         try:
             # Primitive types pass-through
@@ -2383,63 +2337,52 @@ class SNMPAgent:
         self._initial_values = {}
         if self.mib_builder is None:
             return
-        try:
-            MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
-                0
-            ]
-        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+        symbols_adapter = self._get_mib_symbols_adapter()
+        mib_scalar_instance_cls = symbols_adapter.load_symbol_class("SNMPv2-SMI", "MibScalarInstance")
+        if mib_scalar_instance_cls is None:
             return
 
-        for module_name, symbols in self.mib_builder.mibSymbols.items():
-            for symbol_name, symbol_obj in symbols.items():
+        for module_name, symbol_name, symbol_obj in symbols_adapter.iter_scalar_instances(
+            mib_scalar_instance_cls
+        ):
+            try:
+                dotted = ".".join(str(x) for x in symbol_obj.name)
+                self._initial_values[dotted] = self._serialize_value(symbol_obj.syntax)
+                # detect writable scalars by consulting loaded mib_jsons when possible
                 try:
-                    if (
-                        isinstance(symbol_obj, MibScalarInstance)
-                        and hasattr(symbol_obj, "name")
-                        and symbol_obj.name
-                    ):
-                        dotted = ".".join(str(x) for x in symbol_obj.name)
-                        self._initial_values[dotted] = self._serialize_value(symbol_obj.syntax)
-                        # detect writable scalars by consulting loaded mib_jsons when possible
-                        try:
-                            added = False
-                            # Prefer schema-based access info if available. The registrar
-                            # exports scalar symbols with an "Inst" suffix (e.g. sysContactInst),
-                            # whereas the schema keys are the base names (e.g. sysContact).
-                            module_json = self.mib_jsons.get(module_name, {})
-                            base_name = symbol_name
-                            base_name = base_name.removesuffix("Inst")
-                            if isinstance(module_json, dict):
-                                symbol_meta = module_json.get(base_name)
-                                if isinstance(symbol_meta, dict):
-                                    access_field = symbol_meta.get("access")
-                                else:
-                                    access_field = None
-                                if (
-                                    isinstance(access_field, str)
-                                    and access_field.lower() == "read-write"
-                                ):
-                                    self._writable_oids.add(dotted)
-                                    added = True
-                                    self.logger.debug(
-                                        "Marked writable via schema: %s -> %s.%s",
-                                        dotted,
-                                        module_name,
-                                        base_name,
-                                    )
-                            if not added:
-                                # Fallback to inspecting symbol object if it exposes access
-                                access = None
-                                if hasattr(symbol_obj, "getMaxAccess"):
-                                    access = symbol_obj.getMaxAccess()
-                                elif hasattr(symbol_obj, "maxAccess"):
-                                    access = symbol_obj.maxAccess
-                                if access and str(access).lower().startswith("readwrite"):
-                                    self._writable_oids.add(dotted)
-                        except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                            pass
+                    added = False
+                    # Prefer schema-based access info if available. The registrar
+                    # exports scalar symbols with an "Inst" suffix (e.g. sysContactInst),
+                    # whereas the schema keys are the base names (e.g. sysContact).
+                    module_json = self.mib_jsons.get(module_name, {})
+                    base_name = symbol_name
+                    base_name = base_name.removesuffix("Inst")
+                    if isinstance(module_json, dict):
+                        symbol_meta = module_json.get(base_name)
+                        if isinstance(symbol_meta, dict):
+                            access_field = symbol_meta.get("access")
+                        else:
+                            access_field = None
+                        if (
+                            isinstance(access_field, str)
+                            and access_field.lower() == "read-write"
+                        ):
+                            self._writable_oids.add(dotted)
+                            added = True
+                            self.logger.debug(
+                                "Marked writable via schema: %s -> %s.%s",
+                                dotted,
+                                module_name,
+                                base_name,
+                            )
+                    if not added:
+                        access = symbols_adapter.get_symbol_access(symbol_obj)
+                        if access and access.lower().startswith("readwrite"):
+                            self._writable_oids.add(dotted)
                 except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                    continue
+                    pass
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                continue
 
         self.logger.info("%s", f"Captured {len(self._initial_values)} initial scalar values")
 
@@ -2449,11 +2392,9 @@ class SNMPAgent:
             return
         if self.mib_builder is None:
             return
-        try:
-            MibScalarInstance = self.mib_builder.import_symbols("SNMPv2-SMI", "MibScalarInstance")[
-                0
-            ]
-        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+        symbols_adapter = self._get_mib_symbols_adapter()
+        mib_scalar_instance_cls = symbols_adapter.load_symbol_class("SNMPv2-SMI", "MibScalarInstance")
+        if mib_scalar_instance_cls is None:
             return
 
         removed_invalid: list[str] = []
@@ -2475,36 +2416,28 @@ class SNMPAgent:
                     candidate_oids.append(oid + (0,))
             except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 pass
-            for _module_name, symbols in self.mib_builder.mibSymbols.items():
-                for _symbol_name, symbol_obj in symbols.items():
-                    try:
-                        if (
-                            isinstance(symbol_obj, MibScalarInstance)
-                            and tuple(symbol_obj.name) in candidate_oids
-                        ):
-                            # Update value using clone() to preserve pysnmp type
-                            try:
-                                new_syntax = symbol_obj.syntax.clone(stored)
-                                symbol_obj.syntax = new_syntax
-                            except (
-                                AttributeError,
-                                LookupError,
-                                OSError,
-                                TypeError,
-                                ValueError,
-                            ) as e:
-                                self.logger.warning(
-                                    "%s", f"Failed to apply override for {dotted} "
-                                    f"with value {stored!r}: {e}"
-                                )
-                                continue
-
-                            applied = True
-                            break
-                    except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                        continue
-                if applied:
-                    break
+            symbol_obj = symbols_adapter.find_scalar_instance_by_candidate_oids(
+                candidate_oids,
+                mib_scalar_instance_cls,
+            )
+            if symbol_obj is not None:
+                # Update value using clone() to preserve pysnmp type
+                try:
+                    new_syntax = cast("SupportsClone", symbol_obj.syntax).clone(stored)
+                    symbol_obj.syntax = new_syntax
+                except (
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                ) as e:
+                    self.logger.warning(
+                        "%s", f"Failed to apply override for {dotted} "
+                        f"with value {stored!r}: {e}"
+                    )
+                else:
+                    applied = True
 
             if not applied:
                 # No matching scalar instance found; mark for removal
