@@ -24,6 +24,7 @@ from app.app_config import AppConfig
 from app.model_paths import AGENT_CONFIG_FILE, AGENT_MODEL_DIR, COMPILED_MIBS_DIR
 from app.snmp_agent import SNMPAgent
 
+
 class _PsutilModule(Protocol):
     Error: type[BaseException]
 

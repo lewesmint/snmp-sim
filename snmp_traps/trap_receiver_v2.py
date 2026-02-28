@@ -28,7 +28,7 @@ import threading
 from collections import deque
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pysnmp.carrier.asyncio.dgram import udp
@@ -267,7 +267,7 @@ class TrapReceiver:
     ) -> None:
         """Worker-thread callback: capture minimal data and enqueue quickly."""
         try:
-            captured_at_utc = datetime.now(tz=timezone.utc).isoformat()
+            captured_at_utc = datetime.now(tz=UTC).isoformat()
             transport_domain: object = "unknown"
             transport_address: object = "unknown"
             # Best-effort transport info extraction; keep it cheap.
@@ -327,11 +327,9 @@ class TrapReceiver:
                 item = self._queue.get(timeout=poll_interval_s)
             except queue.Empty:
                 return (None, True)
-            else:
-                return (item, False)
-        else:
-            item = self._queue.get()
             return (item, False)
+        item = self._queue.get()
+        return (item, False)
 
     def _process_trap_item(self, item: TrapEvent) -> None:
         """Process a single trap item."""

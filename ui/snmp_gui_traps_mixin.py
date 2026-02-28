@@ -1,6 +1,6 @@
 """Trap destination and receiver behaviors for the SNMP GUI controller."""
 
-# ruff: noqa: PERF203, PLR2004
+# ruff: noqa: PLR2004
 
 from __future__ import annotations
 

@@ -1510,6 +1510,33 @@ files = [
 ]
 
 [[package]]
+name = "types-pyyaml"
+version = "6.0.12.20250915"
+description = "Typing stubs for PyYAML"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "types_pyyaml-6.0.12.20250915-py3-none-any.whl", hash = "sha256:e7d4d9e064e89a3b3cae120b4990cd370874d2bf12fa5f46c97018dd5d3c9ab6"},
+    {file = "types_pyyaml-6.0.12.20250915.tar.gz", hash = "sha256:0f8b54a528c303f0e6f7165687dd33fafa81c807fcac23f632b63aa624ced1d3"},
+]
+
+[[package]]
+name = "types-requests"
+version = "2.32.4.20260107"
+description = "Typing stubs for requests"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "types_requests-2.32.4.20260107-py3-none-any.whl", hash = "sha256:b703fe72f8ce5b31ef031264fe9395cac8f46a04661a79f7ed31a80fb308730d"},
+    {file = "types_requests-2.32.4.20260107.tar.gz", hash = "sha256:018a11ac158f801bfa84857ddec1650750e393df8a004a8a9ae2a9bec6fcb24f"},
+]
+
+[package.dependencies]
+urllib3 = ">=2"
+
+[[package]]
 name = "typing-extensions"
 version = "4.15.0"
 description = "Backported and Experimental Type Hints for Python 3.9+"
@@ -1576,4 +1603,4 @@ standard = ["colorama (>=0.4) ; sys_platform == \"win32\"", "httptools (>=0.6.3)
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "05c968786e52c2b4022a67ad10a7eb464ef058ebe7c19b5c614732fe0accca62"
+content-hash = "87aea6356b12044e8224b64f11b9043bc305dfe160f315332b25f2b18f9d2f86"

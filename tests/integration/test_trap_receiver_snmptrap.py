@@ -1,5 +1,6 @@
 """Integration test for trap receiver using net-snmp command-line tool."""
 
+import shutil
 import subprocess
 import time
 from typing import Any
@@ -9,7 +10,13 @@ import pytest
 from snmp_traps.trap_receiver import TrapReceiver
 
 
-@pytest.mark.skip(reason="Requires net-snmp command-line tools to be installed")
+requires_snmptrap = pytest.mark.skipif(
+    shutil.which("snmptrap") is None,
+    reason="Requires net-snmp snmptrap command-line tool to be installed",
+)
+
+
+@requires_snmptrap
 def test_receive_trap_from_snmptrap_command() -> None:
     """Test receiving a trap sent via net-snmp snmptrap command-line tool."""
     test_port = 16666
@@ -75,7 +82,7 @@ def test_receive_trap_from_snmptrap_command() -> None:
         receiver.stop()
 
 
-@pytest.mark.skip(reason="Requires net-snmp command-line tools to be installed")
+@requires_snmptrap
 def test_receive_multiple_traps_from_snmptrap() -> None:
     """Test receiving multiple traps from snmptrap command."""
     test_port = 16667

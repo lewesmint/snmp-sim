@@ -21,39 +21,35 @@ pysmi = "^1.6.3"
 pysnmp = "^7.1.22"
 requests = "^2.32.5"
 uvicorn = "^0.41.0"
-
+types-requests = "^2.32.4.20260107"
+types-pyyaml = "^6.0.12.20250915"
 
 [tool.mypy]
 python_version = "3.13"
 strict = true
 warn_unused_ignores = true
-warn_unused_configs = false
+warn_unused_configs = true
 warn_return_any = true
 warn_unreachable = true
 show_error_codes = true
 ignore_missing_imports = false
 
-exclude = '(^|/)(retired|compiled-mibs-test|compiled-mibs|minimal-for-reference|manual-tests|logs|tests)/'
+# Exclude generated, test, and scratch folders anywhere in the tree
+exclude = '(^|.*/)(retired|compiled-mibs-test|compiled-mibs|minimal-for-reference|manual-tests|logs|tests|snmp_wrapper)/'
 
+# Ignore missing stubs only for selected third party modules that tend to be untyped.
+# Add or remove entries here as you encounter them.
 [[tool.mypy.overrides]]
-module = ["pysnmp", "pysnmp.*"]
+module = [
+    "customtkinter.*",
+    "dynaconf.*",
+    "pysnmp.*",
+    "pysmi.*",
+    "pyasn1.*",
+]
 ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 
-[[tool.mypy.overrides]]
-module = ["pysmi.*"]
-ignore_missing_imports = true
-disable_error_code = ["import-untyped"]
-
-[[tool.mypy.overrides]]
-module = ["dynaconf", "dynaconf.*"]
-ignore_missing_imports = true
-disable_error_code = ["import-untyped"]
-
-[[tool.mypy.overrides]]
-module = ["customtkinter"]
-ignore_missing_imports = true
-disable_error_code = ["import-untyped"]
 [tool.coverage.run]
 source = ["app", "plugins", "ui"]
 branch = true
@@ -66,6 +62,7 @@ omit = [
     "retired/**",
     "logs/**",
     "ui/logs/**",
+    "snmp_wrapper/**",
     "**/.venv/**",
     "**/.pyenv/**",
 ]
@@ -86,6 +83,7 @@ exclude = [
     "manual-tests/**",
     "logs/**",
     "ui/logs/**",
+    "snmp_wrapper/**",
     "build/**",
     "dist/**",
     "**/.venv/**",
@@ -98,10 +96,10 @@ quote-style = "double"
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    "D203",  # incompatible with D211
-    "D213",  # incompatible with D212
+    "D203",    # incompatible with D211
+    "D213",    # incompatible with D212
     "COM812",  # conflicts with ruff formatter
-    "TC003",  # false positive: logging/Iterator used at runtime with from __future__ import annotations
+    "TC003",   # false positive: some runtime-only typing imports
 ]
 
 [tool.ruff.lint.mccabe]
@@ -115,13 +113,14 @@ disable = [
 ]
 
 [tool.pylint.main]
-ignore = ["retired", "compiled-mibs", "compiled-mibs-test", "manual-tests", "tests"]
+ignore = ["retired", "compiled-mibs", "compiled-mibs-test", "manual-tests", "tests", "snmp_wrapper"]
 ignore-paths = [
     "(^|.*/)retired/.*",
     "(^|.*/)compiled-mibs/.*",
     "(^|.*/)compiled-mibs-test/.*",
     "(^|.*/)manual-tests/.*",
     "(^|.*/)tests/.*",
+    "(^|.*/)snmp_wrapper/.*",
 ]
 
 [tool.pytest.ini_options]
@@ -134,7 +133,7 @@ addopts = [
     "--ignore=retired",
     "--ignore=manual-tests",
     "--ignore=logs",
-    "--ignore=snmp_wrapper"
+    "--ignore=snmp_wrapper",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
@@ -158,7 +157,8 @@ exclude = [
     "minimal-for-reference",
     "manual-tests",
     "logs",
-    "ui/logs"
+    "ui/logs",
+    "snmp_wrapper",
 ]
 
 [[tool.pyright.executionEnvironments]]
@@ -174,9 +174,6 @@ mypy = "^1.19.1"
 mypy_extensions = "^1.1.0"
 pytest = "^9.0.2"
 pytest-mock = "^3.15.1"
-authors = "^0.5"
-python-version = "^0.0.2"
-strict = "^0.1a0"
 pylint = "^4.0.5"
 coverage = "^7.13.4"
 pytest-cov = "^7.0.0"

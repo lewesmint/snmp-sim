@@ -283,3 +283,52 @@ def test_get_pysnmp_type_class_rfc1902_exception(
         # Restore original
         if original_rfc1902 is not None:
             proto_mod.rfc1902 = original_rfc1902  # type: ignore[attr-defined]
+
+
+def test_get_default_integer_value_handles_non_range_and_partial_bounds() -> None:
+    """Exercise integer constraint branches for non-range and partial range entries."""
+    type_info = {
+        "base_type": "Integer32",
+        "constraints": [
+            {"type": "ValueSizeConstraint", "min": 1, "max": 8},
+            {"type": "ValueRangeConstraint", "min": 5},
+            {"type": "ValueRangeConstraint", "max": 10},
+        ],
+    }
+    handler = BaseTypeHandler(type_registry={"MyInt": type_info})
+    assert handler.get_default_value("MyInt") == 5
+
+
+@pytest.mark.parametrize(
+    ("type_name", "raw_value", "expected"),
+    [
+        ("OctetString", "abc", b"abc"),
+        ("ObjectIdentifier", (1, 3, 6), (1, 3, 6)),
+    ],
+)
+def test_create_pysnmp_value_fallback_octet_and_oid(
+    handler: BaseTypeHandler,
+    mocker: MockerFixture,
+    type_name: str,
+    raw_value: str | tuple[int, ...],
+    expected: object,
+) -> None:
+    """Cover OCTET STRING and OBJECT IDENTIFIER fallback constructor branches."""
+    mocker.patch.object(handler, "_get_pysnmp_type_class", return_value=None)
+
+    mock_rfc1902 = mocker.MagicMock()
+    mock_rfc1902.OctetString.side_effect = lambda value: value
+    mock_rfc1902.ObjectIdentifier.side_effect = lambda value: value
+    mocker.patch("app.base_type_handler.rfc1902", mock_rfc1902)
+
+    result = handler.create_pysnmp_value(type_name, value=raw_value, mib_builder=mocker.MagicMock())
+    assert result == expected
+
+
+def test_validate_value_unknown_base_type_returns_true(
+    handler: BaseTypeHandler,
+    mocker: MockerFixture,
+) -> None:
+    """Unknown base type should use permissive fallback in validate_value."""
+    mocker.patch.object(handler, "resolve_to_base_type", return_value="UNKNOWN")
+    assert handler.validate_value("SomeType", object()) is True

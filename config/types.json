@@ -248,7 +248,13 @@
       "TEST-ENUM-MIB::testColour",
       "TEST-ENUM-MIB::testPriority",
       "TEST-ENUM-MIB::testRowColour",
-      "TEST-ENUM-MIB::testRowPriority"
+      "TEST-ENUM-MIB::testRowPriority",
+      "TEST-ENUM-MIB::testNoIndexValueA",
+      "TEST-ENUM-MIB::testNoIndexValueB",
+      "TEST-ENUM-MIB::testAugBase01Int",
+      "TEST-ENUM-MIB::testAugExt01Status",
+      "TEST-ENUM-MIB::testAugExt02Counter",
+      "TEST-ENUM-MIB::testAugExt09Flag"
     ],
     "defined_in": "SNMPv2-SMI",
     "abstract": false
@@ -272,7 +278,10 @@
     "constraints_repr": null,
     "enums": null,
     "used_by": [
-      "SNMP-COMMUNITY-MIB::snmpTrapAddress"
+      "SNMP-COMMUNITY-MIB::snmpTrapAddress",
+      "TEST-ENUM-MIB::endPointIpAddress",
+      "TEST-ENUM-MIB::testAugBase04Address",
+      "TEST-ENUM-MIB::testAugExt07Address"
     ],
     "defined_in": "SNMPv2-SMI",
     "abstract": false
@@ -362,7 +371,9 @@
       "SNMP-COMMUNITY-MIB::snmpTrapCommunity",
       "SNMP-USER-BASED-SM-MIB::usmUserPublic",
       "HOST-RESOURCES-MIB::hrPrinterDetectedErrorState",
-      "HOST-RESOURCES-MIB::hrPartitionID"
+      "HOST-RESOURCES-MIB::hrPartitionID",
+      "TEST-ENUM-MIB::testAugBase05Payload",
+      "TEST-ENUM-MIB::testAugExt08Payload"
     ],
     "defined_in": "SNMPv2-SMI",
     "abstract": false
@@ -439,7 +450,13 @@
     "constraints_repr": null,
     "enums": null,
     "used_by": [
-      "TEST-ENUM-MIB::testEnumIndex"
+      "TEST-ENUM-MIB::testEnumIndex",
+      "TEST-ENUM-MIB::endPointPort",
+      "TEST-ENUM-MIB::testAugBaseIndex",
+      "TEST-ENUM-MIB::testAugBase02Unsigned",
+      "TEST-ENUM-MIB::testAugExt03Rate",
+      "TEST-ENUM-MIB::testAugExt04LastChange",
+      "TEST-ENUM-MIB::testAugExt10Code"
     ],
     "defined_in": "SNMPv2-SMI",
     "abstract": false
@@ -479,7 +496,12 @@
       "CISCO-ALARM-MIB::coiAlarmType",
       "CISCO-ALARM-MIB::coiAlarmDescription",
       "HOST-RESOURCES-MIB::hrStorageDescr",
-      "HOST-RESOURCES-MIB::hrDeviceDescr"
+      "HOST-RESOURCES-MIB::hrDeviceDescr",
+      "TEST-ENUM-MIB::endPointName",
+      "TEST-ENUM-MIB::endPointNotes",
+      "TEST-ENUM-MIB::testAugBase03Name",
+      "TEST-ENUM-MIB::testAugExt05Owner",
+      "TEST-ENUM-MIB::testAugExt06Tag"
     ],
     "defined_in": "SNMPv2-TC",
     "abstract": false

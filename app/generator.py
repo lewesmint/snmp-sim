@@ -4,6 +4,7 @@ import contextlib
 import json
 import os
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, cast
 
@@ -11,7 +12,18 @@ from pysnmp.smi import builder
 
 from app.app_logger import AppLogger
 from app.default_value_plugins import get_default_value
+from app.interface_types import (
+    HasDescription,
+    HasGetIndexNames,
+    HasIndexNames,
+    HasNamedValues,
+    HasObjects,
+    HasStatus,
+    HasSubtypeSpec,
+    HasValues,
+)
 from app.json_format import dumps_with_horizontal_oid_lists
+from app.mib_builder_adapters import extract_symbol_snapshot
 from app.model_paths import AGENT_MODEL_DIR, TYPE_REGISTRY_FILE
 from app.plugin_loader import load_plugins
 
@@ -159,7 +171,7 @@ class BehaviourGenerator:
                                 mib_builder.load_modules(mib_name)
                                 mib_symbols = mib_builder.mibSymbols[mib_name]
                                 entry_obj = mib_symbols.get(entry_name)
-                                if entry_obj and hasattr(entry_obj, "getIndexNames"):
+                                if isinstance(entry_obj, HasIndexNames):
                                     index_names = [idx[2] for idx in entry_obj.getIndexNames()]
                                     entry_info["indexes"] = index_names
                             except Exception as e:
@@ -311,22 +323,20 @@ class BehaviourGenerator:
 
         result: dict[str, Any] = {}
         for symbol_name, symbol_obj in mib_symbols.items():
-            symbol_name_str: str = str(cast("object", symbol_name))
-            if not (hasattr(symbol_obj, "getName") and hasattr(symbol_obj, "getSyntax")):
+            symbol_name_str = str(symbol_name)
+            snapshot = extract_symbol_snapshot(symbol_obj)
+            if snapshot is None:
                 continue
 
-            if symbol_obj.__class__.__name__ == "MibScalarInstance":
+            if snapshot.class_name == "MibScalarInstance":
                 continue
 
-            try:
-                oid = symbol_obj.getName()
-                syntax_obj = symbol_obj.getSyntax()
-                access = getattr(symbol_obj, "getMaxAccess", lambda: "unknown")()
-            except TypeError:
-                continue
+            oid = snapshot.oid
+            syntax_obj = snapshot.syntax_obj
+            access = snapshot.access
 
             # Check if this is a structural type (table, row, column)
-            symbol_type = symbol_obj.__class__.__name__
+            symbol_type = snapshot.class_name
             is_structural = symbol_type in ("MibTable", "MibTableRow", "MibTableColumn")
 
             # Get the syntax type for non-structural elements
@@ -388,7 +398,7 @@ class BehaviourGenerator:
                 )
                 dynamic_func = self._get_dynamic_function(symbol_name_str)
 
-            entry = {
+            entry: dict[str, Any] = {
                 "oid": oid,
                 "type": type_name,
                 "access": access,
@@ -410,7 +420,7 @@ class BehaviourGenerator:
         # Detect tables that inherit their index from another table (AUGMENTS pattern)
         # This needs to be done after all symbols are collected
         table_entries = {
-            name: obj for name, obj in mib_symbols.items() if hasattr(obj, "getIndexNames")
+            name: obj for name, obj in mib_symbols.items() if isinstance(obj, HasGetIndexNames)
         }
         self._detect_inherited_indexes(result, table_entries, mib_name)
 
@@ -445,7 +455,7 @@ class BehaviourGenerator:
         traps: dict[str, Any] = {}
 
         for symbol_name, symbol_obj in mib_symbols.items():
-            symbol_name_str: str = str(cast("object", symbol_name))
+            symbol_name_str = str(symbol_name)
 
             # Check if this is a NotificationType
             if symbol_obj.__class__.__name__ == "NotificationType":
@@ -455,7 +465,7 @@ class BehaviourGenerator:
 
                     # Get the OBJECTS list (varbinds that will be sent with the trap)
                     objects = []
-                    if hasattr(symbol_obj, "getObjects"):
+                    if isinstance(symbol_obj, HasObjects):
                         obj_refs = symbol_obj.getObjects()
                         pair_len = 2
                         if obj_refs:
@@ -465,7 +475,7 @@ class BehaviourGenerator:
                                     obj_mib = str(obj_ref[0])
                                     obj_name = str(obj_ref[1])
                                     objects.append({"mib": obj_mib, "name": obj_name})
-                                elif hasattr(obj_ref, "__iter__"):
+                                elif isinstance(obj_ref, Iterable):
                                     # Handle nested tuples
                                     for sub_ref in obj_ref:
                                         if isinstance(sub_ref, tuple) and len(sub_ref) >= pair_len:
@@ -475,12 +485,12 @@ class BehaviourGenerator:
 
                     # Get the description if available
                     description = ""
-                    if hasattr(symbol_obj, "getDescription"):
+                    if isinstance(symbol_obj, HasDescription):
                         description = symbol_obj.getDescription() or ""
 
                     # Get the status
                     status = "current"
-                    if hasattr(symbol_obj, "getStatus"):
+                    if isinstance(symbol_obj, HasStatus):
                         status = symbol_obj.getStatus() or "current"
 
                     traps[symbol_name_str] = {
@@ -514,7 +524,10 @@ class BehaviourGenerator:
             return cast("dict[str, Any]", json.load(f))
 
     def _detect_inherited_indexes(
-        self, result: dict[str, Any], table_entries: dict[str, Any], _mib_name: str
+        self,
+        result: dict[str, Any],
+        table_entries: dict[str, HasGetIndexNames],
+        _mib_name: str,
     ) -> None:
         """Detect tables that inherit their index from another table (AUGMENTS pattern).
 
@@ -599,7 +612,7 @@ class BehaviourGenerator:
         }
 
         # Extract named values (enumerations)
-        named_values = getattr(syntax_obj, "namedValues", None)
+        named_values = syntax_obj.namedValues if isinstance(syntax_obj, HasNamedValues) else None
         if named_values:
             enums = {}
             for name in named_values:
@@ -609,12 +622,12 @@ class BehaviourGenerator:
                 type_info["enums"] = enums
 
         # Extract constraints
-        subtype_spec = getattr(syntax_obj, "subtypeSpec", None)
+        subtype_spec = syntax_obj.subtypeSpec if isinstance(syntax_obj, HasSubtypeSpec) else None
         if subtype_spec:
             constraints = []
             try:
                 # Try to get values attribute (for ConstraintsUnion)
-                values = getattr(subtype_spec, "values", None)
+                values = subtype_spec.values if isinstance(subtype_spec, HasValues) else None
                 if values:
                     for constraint in values:
                         constraint_info = str(constraint)

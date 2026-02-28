@@ -129,10 +129,7 @@ def test_run_compile_failure_logs_and_continues(
     monkeypatch.setattr("app.snmp_agent.TypeRegistry", FakeTypeRegistry)
 
     # Validation should pass so run continues
-    monkeypatch.setattr(
-        "app.type_registry_validator.validate_type_registry_file",
-        lambda _p: (True, [], 0),
-    )
+    monkeypatch.setattr("app.snmp_agent.validate_type_registry_file", lambda _p: (True, [], 0))
     # Prevent starting the SNMP server
     monkeypatch.setattr(
         SNMPAgent,
@@ -1452,3 +1449,724 @@ def test_delete_table_instance_schema_and_non_schema(
         agent.delete_table_instance(norm_table_oid, index_values, propagate_augments=False) is True
     )
     assert agent.deleted_instances.count(f"{norm_table_oid}.9") == 1
+
+
+def test_update_table_cell_values_missing_column_oid_stores_and_skips(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Covers missing-column branch in _update_table_cell_values while syncing table_instances."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    class FakeMibScalarInstance:
+        pass
+
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstance],
+        mibSymbols={"TEST-MIB": {}},
+    )
+    agent.mib_builder = cast(Any, fake_builder)
+    table_oid = "1.3.6.1.4.1.999.1"
+    agent.table_instances = {table_oid: {"7": {"column_values": {}}}}
+
+    class LinkMgr:
+        def should_propagate(self, _column: str, _instance_key: str) -> bool:
+            return True
+
+        def begin_update(self, _column: str, _instance_key: str) -> None:
+            return None
+
+        def end_update(self, _column: str, _instance_key: str) -> None:
+            return None
+
+        def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
+            return []
+
+    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+
+    agent._update_table_cell_values(table_oid, "7", {"ifDescr": [1, 2, 3]})
+
+    assert agent.table_instances[table_oid]["7"]["column_values"]["ifDescr"] == "1.2.3"
+
+
+def test_update_table_cell_values_updates_existing_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Covers existing MibScalarInstance update path in _update_table_cell_values."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    table_oid = "1.3.6.1.4.1.999.1"
+    entry_oid = tuple(int(x) for x in table_oid.split(".")) + (1,)
+    column_oid = entry_oid + (5,)
+    cell_oid = column_oid + (7,)
+
+    class FakeSyntax:
+        def __init__(self, value: Any) -> None:
+            self.value = value
+
+        def clone(self, new_value: Any) -> "FakeSyntax":
+            return FakeSyntax(new_value)
+
+    class FakeMibScalarInstance:
+        def __init__(self, name: tuple[int, ...], value: Any) -> None:
+            self.name = name
+            self.syntax = FakeSyntax(value)
+
+    class FakeColumn:
+        def __init__(self, name: tuple[int, ...]) -> None:
+            self.name = name
+
+    instance_obj = FakeMibScalarInstance(cell_oid, "old")
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstance],
+        mibSymbols={
+            "TEST-MIB": {
+                "ifDescr": FakeColumn(column_oid),
+                "ifDescrInst_7": instance_obj,
+            }
+        },
+    )
+    agent.mib_builder = cast(Any, fake_builder)
+    agent.table_instances = {table_oid: {"7": {"column_values": {}}}}
+
+    class LinkMgr:
+        def should_propagate(self, _column: str, _instance_key: str) -> bool:
+            return True
+
+        def begin_update(self, _column: str, _instance_key: str) -> None:
+            return None
+
+        def end_update(self, _column: str, _instance_key: str) -> None:
+            return None
+
+        def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
+            return []
+
+    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+
+    agent._update_table_cell_values(table_oid, "7", {"ifDescr": {"k": "v"}})
+
+    assert isinstance(instance_obj.syntax, FakeSyntax)
+    assert instance_obj.syntax.value == "{'k': 'v'}"
+
+
+def test_update_table_cell_values_creates_missing_instance_when_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Covers fallback path that creates missing table cell instances."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    table_oid = "1.3.6.1.4.1.999.1"
+    entry_oid = tuple(int(x) for x in table_oid.split(".")) + (1,)
+    column_oid = entry_oid + (9,)
+
+    class FakeMibScalarInstance:
+        pass
+
+    class FakeColumn:
+        def __init__(self, name: tuple[int, ...]) -> None:
+            self.name = name
+
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstance],
+        mibSymbols={"TEST-MIB": {"ifAlias": FakeColumn(column_oid)}},
+    )
+    agent.mib_builder = cast(Any, fake_builder)
+
+    calls: list[tuple[str, tuple[int, ...], Any]] = []
+
+    def fake_create(col_name: str, cell_oid: tuple[int, ...], value: Any) -> bool:
+        calls.append((col_name, cell_oid, value))
+        return True
+
+    monkeypatch.setattr(agent, "_create_missing_cell_instance", fake_create)
+
+    class LinkMgr:
+        def should_propagate(self, _column: str, _instance_key: str) -> bool:
+            return True
+
+        def begin_update(self, _column: str, _instance_key: str) -> None:
+            return None
+
+        def end_update(self, _column: str, _instance_key: str) -> None:
+            return None
+
+        def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
+            return []
+
+    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+
+    agent._update_table_cell_values(table_oid, "3", {"ifAlias": "uplink"})
+
+    assert calls
+    assert calls[0][0] == "ifAlias"
+    assert calls[0][1] == column_oid + (3,)
+    assert calls[0][2] == "uplink"
+
+
+def test_capture_initial_values_fallback_access_detection_paths() -> None:
+    """Covers fallback writable detection via getMaxAccess/maxAccess branches."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    class FakeMibScalarInstance:
+        def __init__(self, name: tuple[int, ...], syntax: Any, access: str) -> None:
+            self.name = name
+            self.syntax = syntax
+            self.maxAccess = access
+
+        def getMaxAccess(self) -> str:
+            return self.maxAccess
+
+    class FakeMibScalarInstanceNoMethod:
+        def __init__(self, name: tuple[int, ...], syntax: Any, access: str) -> None:
+            self.name = name
+            self.syntax = syntax
+            self.maxAccess = access
+
+    class FakeSyntax:
+        def __str__(self) -> str:
+            return "ok"
+
+    # First pass: fallback via getMaxAccess()
+    sym1 = FakeMibScalarInstance((1, 3, 6, 1, 2, 1, 1, 5, 0), FakeSyntax(), "readwrite")
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstance],
+        mibSymbols={"TEST-MIB": {"sysNameInst": sym1}},
+    )
+    agent.mib_builder = cast(Any, fake_builder)
+    agent.mib_jsons = {"TEST-MIB": "not-a-dict"}
+    agent._capture_initial_values()
+
+    # Second pass: fallback via maxAccess attribute when getMaxAccess is absent
+    sym2 = FakeMibScalarInstanceNoMethod((1, 3, 6, 1, 2, 1, 1, 6, 0), FakeSyntax(), "readwrite")
+    fake_builder_2 = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstanceNoMethod],
+        mibSymbols={"TEST-MIB": {"sysLocationInst": sym2}},
+    )
+    agent.mib_builder = cast(Any, fake_builder_2)
+    agent.mib_jsons = {"TEST-MIB": "not-a-dict"}
+    agent._capture_initial_values()
+
+    assert "1.3.6.1.2.1.1.5.0" in agent._writable_oids
+    assert "1.3.6.1.2.1.1.6.0" in agent._writable_oids
+
+
+def test_apply_overrides_clone_failure_prunes_and_logs_save_error(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Covers clone-failure path, invalid override pruning, and save-error logging."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    class FakeMibScalarInstance:
+        def __init__(self) -> None:
+            self.name: tuple[int, ...] | None = None
+            self.syntax: Any | None = None
+
+    class BadSyntax:
+        def clone(self, _new_value: Any) -> Any:
+            msg = "clone failed"
+            raise TypeError(msg)
+
+    sym = FakeMibScalarInstance()
+    sym.name = (1, 3, 6, 1, 4, 1, 99999, 2, 0)
+    sym.syntax = BadSyntax()
+
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstance],
+        mibSymbols={"TEST-MIB": {"badScalarInst": sym}},
+    )
+    agent.mib_builder = cast(Any, fake_builder)
+    # OID already ends with .0 to exercise no-append branch for candidate_oids
+    agent.overrides = {"1.3.6.1.4.1.99999.2.0": "new"}
+
+    def bad_save() -> None:
+        msg = "save failed"
+        raise OSError(msg)
+
+    monkeypatch.setattr(agent, "_save_mib_state", bad_save)
+
+    with caplog.at_level(logging.WARNING):
+        agent._apply_overrides()
+
+    assert "1.3.6.1.4.1.99999.2.0" not in agent.overrides
+    assert "Failed to apply override" in caplog.text
+    assert "Failed to save MIB state after pruning invalid entries" in caplog.text
+
+
+def test_apply_overrides_returns_when_import_symbols_fails() -> None:
+    """Covers import_symbols failure early-return path in _apply_overrides."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    agent.overrides = {"1.3.6.1.2.1.1.1.0": "x"}
+
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: (_ for _ in ()).throw(AttributeError("boom")),
+        mibSymbols={},
+    )
+    agent.mib_builder = cast(Any, fake_builder)
+
+    agent._apply_overrides()
+
+    assert agent.overrides == {"1.3.6.1.2.1.1.1.0": "x"}
+
+
+def test_update_table_cell_values_skips_when_already_processed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Covers already-processed skip path before propagation checks."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    class FakeMibScalarInstance:
+        pass
+
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstance],
+        mibSymbols={},
+    )
+    agent.mib_builder = cast(Any, fake_builder)
+
+    class LinkMgr:
+        def should_propagate(self, _column: str, _instance_key: str) -> bool:
+            return True
+
+        def begin_update(self, _column: str, _instance_key: str) -> None:
+            msg = "should not be called"
+            raise AssertionError(msg)
+
+        def end_update(self, _column: str, _instance_key: str) -> None:
+            return None
+
+        def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
+            return []
+
+    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+
+    processed = {"1.3.6.1.4.1.999.1:ifDescr"}
+    agent._update_table_cell_values(
+        "1.3.6.1.4.1.999.1",
+        "1",
+        {"ifDescr": "x"},
+        _processed=processed,
+    )
+
+
+def test_update_table_cell_values_skips_when_propagation_disallowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Covers should_propagate=False early-continue path."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    class FakeMibScalarInstance:
+        pass
+
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstance],
+        mibSymbols={},
+    )
+    agent.mib_builder = cast(Any, fake_builder)
+
+    class LinkMgr:
+        def should_propagate(self, _column: str, _instance_key: str) -> bool:
+            return False
+
+        def begin_update(self, _column: str, _instance_key: str) -> None:
+            msg = "should not be called"
+            raise AssertionError(msg)
+
+        def end_update(self, _column: str, _instance_key: str) -> None:
+            return None
+
+        def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
+            return []
+
+    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+
+    agent._update_table_cell_values("1.3.6.1.4.1.999.1", "1", {"ifDescr": "x"})
+
+
+def test_update_table_cell_values_clone_error_still_propagates_when_stored(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Covers clone-error logging and linked-propagation branch when stored=True."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    table_oid = "1.3.6.1.4.1.999.1"
+    entry_oid = tuple(int(x) for x in table_oid.split(".")) + (1,)
+    column_oid = entry_oid + (5,)
+    cell_oid = column_oid + (7,)
+
+    class BadSyntax:
+        def clone(self, _new_value: Any) -> Any:
+            msg = "bad clone"
+            raise TypeError(msg)
+
+    class FakeMibScalarInstance:
+        def __init__(self, name: tuple[int, ...], syntax: Any) -> None:
+            self.name = name
+            self.syntax = syntax
+
+    class FakeColumn:
+        def __init__(self, name: tuple[int, ...]) -> None:
+            self.name = name
+
+    instance_obj = FakeMibScalarInstance(cell_oid, BadSyntax())
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstance],
+        mibSymbols={
+            "TEST-MIB": {
+                "ifDescr": FakeColumn(column_oid),
+                "ifDescrInst_7": instance_obj,
+            }
+        },
+    )
+    agent.mib_builder = cast(Any, fake_builder)
+    agent.table_instances = {table_oid: {"7": {"column_values": {}}}}
+
+    calls: dict[str, int] = {"begin": 0, "end": 0}
+
+    class LinkMgr:
+        def should_propagate(self, _column: str, _instance_key: str) -> bool:
+            return True
+
+        def begin_update(self, _column: str, _instance_key: str) -> None:
+            calls["begin"] += 1
+
+        def end_update(self, _column: str, _instance_key: str) -> None:
+            calls["end"] += 1
+
+        def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
+            return [SimpleNamespace(table_oid=None, column_name="ifDescr")]
+
+    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+    monkeypatch.setattr(agent, "_create_missing_cell_instance", lambda *_args: False)
+
+    with caplog.at_level(logging.ERROR):
+        agent._update_table_cell_values(table_oid, "7", {"ifDescr": "value"})
+
+    assert "Failed to update MibScalarInstance" in caplog.text
+    assert calls["begin"] == 1
+    assert calls["end"] == 1
+
+
+def test_setup_signal_handlers_handler_name_paths_and_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Covers signal-name resolution success/fallback and forced exit path."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    handlers: dict[int, Any] = {}
+
+    def record_signal(sig: int, handler: Any) -> None:
+        handlers[sig] = handler
+
+    monkeypatch.setattr(signal, "signal", record_signal)
+
+    def fake_exit(code: int) -> None:
+        raise SystemExit(code)
+
+    monkeypatch.setattr(os, "_exit", fake_exit)
+
+    agent._setup_signal_handlers()
+    handler = handlers[signal.SIGTERM]
+
+    with caplog.at_level(logging.INFO):
+        with pytest.raises(SystemExit):
+            handler(999999, None)
+
+    assert "SIGNAL(999999)" in caplog.text
+
+    with caplog.at_level(logging.INFO):
+        with pytest.raises(SystemExit):
+            handler(int(signal.SIGINT), None)
+
+    assert "SIGINT" in caplog.text
+
+
+def test_shutdown_happy_path_closes_dispatcher_and_flushes_handlers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Covers normal shutdown path with dispatcher close and handler flush."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    calls: dict[str, int] = {"closed": 0, "flushed": 0}
+
+    class GoodDispatcher:
+        def close_dispatcher(self) -> None:
+            calls["closed"] += 1
+
+    class CountingHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            return None
+
+        def flush(self) -> None:
+            calls["flushed"] += 1
+
+    root_logger = logging.getLogger()
+    counting_handler = CountingHandler()
+    root_logger.addHandler(counting_handler)
+
+    agent.snmp_engine = cast(Any, SimpleNamespace(transport_dispatcher=GoodDispatcher()))
+
+    def fake_exit(code: int) -> None:
+        raise SystemExit(code)
+
+    monkeypatch.setattr(os, "_exit", fake_exit)
+
+    try:
+        with pytest.raises(SystemExit):
+            agent._shutdown()
+    finally:
+        root_logger.removeHandler(counting_handler)
+
+    assert calls["closed"] == 1
+    assert calls["flushed"] >= 1
+
+
+def test_update_table_cell_values_logs_exception_when_begin_update_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Covers outer exception path and ensures end_update is still called."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    class FakeMibScalarInstance:
+        pass
+
+    fake_builder = SimpleNamespace(
+        import_symbols=lambda *_args: [FakeMibScalarInstance],
+        mibSymbols={},
+    )
+    agent.mib_builder = cast(Any, fake_builder)
+
+    calls: dict[str, int] = {"end": 0}
+
+    class LinkMgr:
+        def should_propagate(self, _column: str, _instance_key: str) -> bool:
+            return True
+
+        def begin_update(self, _column: str, _instance_key: str) -> None:
+            msg = "begin failed"
+            raise TypeError(msg)
+
+        def end_update(self, _column: str, _instance_key: str) -> None:
+            calls["end"] += 1
+
+        def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
+            return []
+
+    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+
+    with caplog.at_level(logging.ERROR):
+        agent._update_table_cell_values("1.3.6.1.4.1.999.1", "1", {"ifDescr": "x"})
+
+    assert "Error updating column ifDescr: begin failed" in caplog.text
+    assert calls["end"] == 1
+
+
+def test_add_table_instance_serializes_values_removes_deleted_and_skips_augment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Covers add_table_instance serialization/removal paths with no augment propagation."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    table_oid = "1.3.6.1.4.1.999.7"
+    index_values: dict[str, JsonValue] = {"__index__": 11}
+    instance_oid = f"{table_oid}.11"
+    agent.deleted_instances = [instance_oid]
+
+    updated_calls: list[tuple[str, str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        agent,
+        "_update_table_cell_values",
+        lambda t, i, c: updated_calls.append((t, i, c)),
+    )
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: None)
+    monkeypatch.setattr(
+        agent,
+        "_propagate_augmented_tables",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("unexpected propagation")),
+    )
+
+    created = agent.add_table_instance(
+        table_oid,
+        index_values,
+        column_values={"a": [1, 2], "b": {"k": "v"}, "c": 5},
+        propagate_augments=False,
+    )
+
+    assert created == instance_oid
+    assert "11" in agent.table_instances[table_oid]
+    stored = agent.table_instances[table_oid]["11"]["column_values"]
+    assert stored["a"] == "1.2"
+    assert stored["b"] == "{'k': 'v'}"
+    assert stored["c"] == 5
+    assert instance_oid not in agent.deleted_instances
+    assert updated_calls == [(table_oid, "11", stored)]
+
+
+def test_add_table_instance_skips_augment_when_table_already_visited(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Covers visited-cycle guard branch for augment propagation."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    table_oid = "1.3.6.1.4.1.999.8"
+
+    monkeypatch.setattr(agent, "_update_table_cell_values", lambda *_args: None)
+    monkeypatch.setattr(agent, "_save_mib_state", lambda: None)
+    monkeypatch.setattr(
+        agent,
+        "_propagate_augmented_tables",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("should be skipped by visited")),
+    )
+
+    agent.add_table_instance(
+        table_oid,
+        {"__index__": 1},
+        column_values={},
+        propagate_augments=True,
+        _augment_path={table_oid},
+    )
+
+
+def test_delete_table_instance_does_not_resave_when_already_marked_deleted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Covers duplicate-deletion branch where instance already exists in deleted list."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    table_oid = "1.3.6.1.4.1.999.9"
+    index_values: dict[str, JsonValue] = {"__index__": 3}
+    instance_oid = f"{table_oid}.3"
+
+    agent.table_instances = {table_oid: {"3": {"column_values": {"x": "y"}}}}
+    agent.deleted_instances = [instance_oid]
+
+    monkeypatch.setattr(agent, "_instance_defined_in_schema", lambda *_args: True)
+    monkeypatch.setattr(
+        agent,
+        "_save_mib_state",
+        lambda: (_ for _ in ()).throw(AssertionError("should not save duplicate deletion")),
+    )
+    monkeypatch.setattr(agent, "_propagate_augmented_deletions", lambda *_args: None)
+
+    assert agent.delete_table_instance(table_oid, index_values, propagate_augments=True) is True
+    assert agent.deleted_instances.count(instance_oid) == 1
+
+
+def test_repair_loaded_schema_fills_missing_sysor_metadata() -> None:
+    """Covers schema repair branches for missing sysOR table/column metadata."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    schema: dict[str, JsonValue] = {
+        "objects": {
+            "sysORTable": {},
+            "sysORIndex": {"oid": [9], "type": "", "access": ""},
+        },
+    }
+
+    agent._repair_loaded_schema("SNMPv2-MIB", schema)
+
+    objects = cast(dict[str, Any], schema["objects"])
+    assert objects["sysORTable"]["oid"] == [1, 3, 6, 1, 2, 1, 1, 9]
+    assert objects["sysORTable"]["type"] == "MibTable"
+    assert isinstance(objects["sysORTable"]["rows"], list)
+    assert objects["sysORIndex"]["oid"] == [1, 3, 6, 1, 2, 1, 1, 9, 1, 1]
+    assert objects["sysORIndex"]["type"] == "Integer32"
+    assert objects["sysORIndex"]["access"] == "not-accessible"
+    assert objects["sysORID"]["type"] == "ObjectIdentifier"
+    assert objects["sysORDescr"]["type"] == "DisplayString"
+    assert objects["sysORUpTime"]["type"] == "TimeStamp"
+
+
+def test_repair_loaded_schema_early_returns_for_non_snmpv2_or_bad_shapes() -> None:
+    """Covers early-return guard branches in _repair_loaded_schema."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    schema_non_target: dict[str, JsonValue] = {"objects": {"sysORTable": {}}}
+    agent._repair_loaded_schema("IF-MIB", schema_non_target)
+    assert schema_non_target == {"objects": {"sysORTable": {}}}
+
+    schema_bad_objects: dict[str, JsonValue] = {"objects": cast(JsonValue, [1, 2, 3])}
+    agent._repair_loaded_schema("SNMPv2-MIB", schema_bad_objects)
+    assert schema_bad_objects["objects"] == [1, 2, 3]
+
+    schema_no_table: dict[str, JsonValue] = {"objects": {"x": 1}}
+    agent._repair_loaded_schema("SNMPv2-MIB", schema_no_table)
+    assert schema_no_table == {"objects": {"x": 1}}
+
+
+def _valid_snmpv2_objects() -> dict[str, dict[str, JsonValue]]:
+    return {
+        "sysORIndex": {
+            "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 1],
+            "type": "Integer32",
+            "access": "not-accessible",
+        },
+        "sysORID": {
+            "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 2],
+            "type": "ObjectIdentifier",
+            "access": "read-only",
+        },
+        "sysORDescr": {
+            "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 3],
+            "type": "DisplayString",
+            "access": "read-only",
+        },
+        "sysORUpTime": {
+            "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 4],
+            "type": "TimeStamp",
+            "access": "read-only",
+        },
+    }
+
+
+def test_validate_snmpv2_core_schema_pass_and_non_target() -> None:
+    """Covers success path and non-target no-op in schema validator."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    schema: dict[str, JsonValue] = {"objects": cast(JsonValue, _valid_snmpv2_objects())}
+
+    agent._validate_snmpv2_core_schema("IF-MIB", schema)
+    agent._validate_snmpv2_core_schema("SNMPv2-MIB", schema)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "error_type", "msg"),
+    [
+        (
+            lambda s: cast(dict[str, Any], s["objects"]).pop("sysORID"),
+            TypeError,
+            "core column missing or invalid",
+        ),
+        (
+            lambda s: cast(dict[str, Any], s["objects"])["sysORID"].update({"oid": [9]}),
+            ValueError,
+            "malformed OID",
+        ),
+        (
+            lambda s: cast(dict[str, Any], s["objects"])["sysORDescr"].update({"type": "X"}),
+            ValueError,
+            "malformed type",
+        ),
+        (
+            lambda s: cast(dict[str, Any], s["objects"])["sysORUpTime"].update({"access": "rw"}),
+            ValueError,
+            "malformed access",
+        ),
+    ],
+)
+def test_validate_snmpv2_core_schema_failure_branches(
+    mutation: Any,
+    error_type: type[Exception],
+    msg: str,
+) -> None:
+    """Covers TypeError/ValueError failure branches in SNMPv2 schema validator."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    schema: dict[str, JsonValue] = {"objects": cast(JsonValue, _valid_snmpv2_objects())}
+    mutation(schema)
+
+    with pytest.raises(error_type, match=msg):
+        agent._validate_snmpv2_core_schema("SNMPv2-MIB", schema)
+
+
+def test_validate_snmpv2_core_schema_non_dict_schema_raises_attribute_error() -> None:
+    """Covers non-dict runtime input behavior for schema validator."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+    bad_schema = cast(dict[str, JsonValue], [1, 2, 3])
+
+    with pytest.raises(AttributeError):
+        agent._validate_snmpv2_core_schema("SNMPv2-MIB", bad_schema)

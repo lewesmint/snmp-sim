@@ -17,7 +17,7 @@ import re
 import shutil
 import sys
 import tkinter as tk
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
@@ -39,6 +39,7 @@ from pysnmp.proto.error import StatusInformation
 from pysnmp.proto.rfc1902 import OctetString
 from pysnmp.smi import builder, view
 
+from app.mib_builder_adapters import extract_optional_metadata, extract_symbol_oid
 from ui.common import Logger, format_snmp_value
 
 
@@ -183,7 +184,7 @@ class MIBBrowserWindow:
                     self.icons[name] = tk.PhotoImage(file=str(png_path))
                 else:
                     self.icons[name] = make_generated(color, inner)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):  # noqa: PERF203
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 # On any error fall back to generated icon
                 self.icons[name] = make_generated(color, inner)
 
@@ -662,7 +663,7 @@ class MIBBrowserWindow:
                             if dep not in self.loaded_mibs:
                                 self.loaded_mibs.append(dep)
                             self.logger.log(f"Loaded dependency: {dep}", "DEBUG")
-                        except (  # noqa: PERF203
+                        except (
                             AttributeError,
                             LookupError,
                             OSError,
@@ -713,7 +714,7 @@ class MIBBrowserWindow:
                                 f"Failed to load main MIB {mib_name}: {e}",
                                 "ERROR",
                             )
-            except (  # noqa: PERF203
+            except (
                 AttributeError,
                 LookupError,
                 OSError,
@@ -767,23 +768,18 @@ class MIBBrowserWindow:
                 try:
                     mib_symbols = self.mib_builder.mibSymbols.get(mod_name, {})
                     for symbol_name, symbol_obj in mib_symbols.items():
-                        # Check if this symbol has an OID that matches
-                        if hasattr(symbol_obj, "getName"):
-                            symbol_oid = symbol_obj.getName()
-                            if symbol_oid == oid_tuple:
-                                metadata["name"] = symbol_name
-                                metadata["mib"] = mod_name
-
-                                # Extract access and type info
-                                if hasattr(symbol_obj, "getMaxAccess"):
-                                    metadata["access"] = str(symbol_obj.getMaxAccess())
-                                if hasattr(symbol_obj, "getSyntax"):
-                                    metadata["type"] = type(symbol_obj.getSyntax()).__name__
-                                if hasattr(symbol_obj, "getDescription"):
-                                    metadata["description"] = str(symbol_obj.getDescription())
-
-                                return metadata
-                except (  # noqa: PERF203
+                        symbol_meta = extract_optional_metadata(symbol_obj)
+                        if symbol_meta and symbol_meta.oid == oid_tuple:
+                            metadata["name"] = symbol_name
+                            metadata["mib"] = mod_name
+                            if symbol_meta.access is not None:
+                                metadata["access"] = symbol_meta.access
+                            if symbol_meta.type_name is not None:
+                                metadata["type"] = symbol_meta.type_name
+                            if symbol_meta.description is not None:
+                                metadata["description"] = symbol_meta.description
+                            return metadata
+                except (
                     AttributeError,
                     LookupError,
                     OSError,
@@ -889,10 +885,10 @@ class MIBBrowserWindow:
                     mib_symbols = self.mib_builder.mibSymbols.get(mod_name, {})
                     if oid_input in mib_symbols:
                         symbol_obj = mib_symbols[oid_input]
-                        if hasattr(symbol_obj, "getName"):
-                            oid_tuple = symbol_obj.getName()
-                            return tuple(oid_tuple)  # Ensure it's a tuple of ints
-                except (  # noqa: PERF203
+                        symbol_oid = extract_symbol_oid(symbol_obj)
+                        if symbol_oid is not None:
+                            return symbol_oid
+                except (
                     AttributeError,
                     LookupError,
                     OSError,
@@ -1466,7 +1462,7 @@ class MIBBrowserWindow:
                 return child
 
         # Create new operation node
-        timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        timestamp = datetime.now(UTC).strftime("%H:%M:%S")
         op_label = f"→ {operation} {oid} [{timestamp}]"
         op_item = self.results_tree.insert(agent_item, "end", text=op_label, values=("", "", ""))
         self.results_tree.item(op_item, open=True)

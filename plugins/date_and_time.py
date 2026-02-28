@@ -1,6 +1,6 @@
 """DateAndTime TEXTUAL-CONVENTION plugin for proper SNMP octet encoding."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from plugins.type_encoders import register_type_encoder
 
@@ -42,7 +42,7 @@ def _format_date_and_time(value: str | bytes | None) -> bytes:
 
     # Default to current time if unset/None/empty
     if value in [None, "unset", "", "unknown"]:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
     else:
         # Try to parse the value as a datetime string
         try:
@@ -50,12 +50,12 @@ def _format_date_and_time(value: str | bytes | None) -> bytes:
                 # Try ISO format first (handle comma as time separator)
                 now = datetime.fromisoformat(value.replace(",", "T"))
                 if now.tzinfo is None:
-                    now = now.replace(tzinfo=timezone.utc)
+                    now = now.replace(tzinfo=UTC)
             else:
-                now = datetime.now(tz=timezone.utc)
+                now = datetime.now(tz=UTC)
         except (ValueError, AttributeError):
             # If parsing fails, use current time
-            now = datetime.now(tz=timezone.utc)
+            now = datetime.now(tz=UTC)
 
     # Encode as 11 octets (8 + timezone):
     year_bytes = now.year.to_bytes(2, byteorder="big")

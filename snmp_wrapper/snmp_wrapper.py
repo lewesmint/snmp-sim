@@ -1,5 +1,4 @@
 # pyright: reportAttributeAccessIssue=false, reportCallIssue=false
-# ruff: noqa: INP001
 # pylint: disable=global-statement,too-many-arguments,too-many-positional-arguments
 """Optimized synchronous wrapper for PySNMP 7.x async HLAPI.
 

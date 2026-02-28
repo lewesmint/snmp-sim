@@ -1185,3 +1185,397 @@ def test_get_dynamic_function_other_symbols() -> None:
     result = g._get_dynamic_function("sysDescr")
 
     assert result is None
+
+
+def test_extract_traps_mixed_objects_and_error_path(caplog: pytest.LogCaptureFixture) -> None:
+    """Cover trap extraction for normal and failing notification symbols."""
+    g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
+
+    GoodNotificationType = type(
+        "NotificationType",
+        (),
+        {
+            "getName": lambda self: (1, 3, 6, 1, 4, 1, 99999, 0, 1),
+            "getObjects": lambda self: [
+                ("IF-MIB", "ifIndex"),
+                [("SNMPv2-MIB", "sysDescr")],
+            ],
+            "getDescription": lambda self: "Trap description",
+            "getStatus": lambda self: "current",
+        },
+    )
+    BadNotificationType = type(
+        "NotificationType",
+        (),
+        {
+            "getName": lambda self: (_ for _ in ()).throw(TypeError("boom")),
+        },
+    )
+
+    caplog.set_level("WARNING")
+    traps = g._extract_traps(
+        {
+            "goodTrap": GoodNotificationType(),
+            "badTrap": BadNotificationType(),
+        },
+        "TEST-MIB",
+    )
+
+    assert "goodTrap" in traps
+    assert traps["goodTrap"]["mib"] == "TEST-MIB"
+    assert len(traps["goodTrap"]["objects"]) >= 2
+    assert "Failed to extract trap info" in caplog.text
+
+
+def test_load_type_registry_missing_file_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cover FileNotFoundError path for canonical type registry loading."""
+    g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
+    missing_registry = tmp_path / "missing-types.json"
+    monkeypatch.setattr("app.generator.TYPE_REGISTRY_FILE", missing_registry)
+
+    with pytest.raises(FileNotFoundError):
+        g._load_type_registry()
+
+
+def test_detect_inherited_indexes_handles_entry_exception(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Cover inherited-index detection error handling branch."""
+    g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
+
+    class BrokenEntry:
+        def getIndexNames(self) -> list[tuple[object, str, str]]:
+            msg = "broken"
+            raise RuntimeError(msg)
+
+    caplog.set_level("DEBUG")
+    result = {"brokenEntry": {"oid": [1, 2, 3]}}
+    g._detect_inherited_indexes(result, {"brokenEntry": BrokenEntry()}, "TEST-MIB")
+
+    assert "Skipping inherited-index detection" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("symbol_name", "expected"),
+    [
+        ("sysObjectID", "1.3.6.1.4.1.99999"),
+        ("sysContact", "Admin <admin@example.com>"),
+        ("sysName", "my-pysnmp-agent"),
+        ("sysLocation", "Development Lab"),
+    ],
+)
+def test_get_default_value_symbol_specific_defaults(symbol_name: str, expected: object) -> None:
+    """Cover remaining symbol-specific legacy default branches."""
+    g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
+    assert g._get_default_value("DisplayString", symbol_name) == expected
+
+
+def test_get_default_index_value_port_like_base_and_normalize_ip() -> None:
+    """Cover port-like index fallback and IpAddress normalization helper branch."""
+    g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
+
+    assert g._get_default_index_value("Integer32", {"base_type": "PortNumber"}) == 8080
+    assert g._normalize_type_info_for_symbol({"base_type": "OctetString"}, "IpAddress") == {
+        "base_type": "IpAddress"
+    }
+
+
+def test_generate_extracts_indexes_via_builder_fallback_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Cover generate() path that retries add_mib_sources without DirMibSource."""
+    g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
+
+    def mock_extract(compiled_py_path: str, mib_name: str) -> dict[str, Any]:
+        return {
+            "objects": {
+                "myTable": {"type": "MibTable", "oid": [1, 2, 3], "rows": []},
+                "myEntry": {"type": "MibTableRow", "oid": [1, 2, 3, 1]},
+                "idxCol": {
+                    "oid": [1, 2, 3, 1, 1],
+                    "type": "Integer32",
+                    "enums": {"one": 1},
+                },
+            },
+            "traps": {},
+        }
+
+    monkeypatch.setattr(g, "_extract_mib_info", mock_extract)
+    monkeypatch.setattr(g, "_load_type_registry", lambda: {"Integer32": {"base_type": "Integer32"}})
+
+    class EntryObj:
+        @staticmethod
+        def getIndexNames() -> list[tuple[object, str, str]]:
+            return [(None, "TEST-MIB", "idxCol")]
+
+    class MockBuilder:
+        def __init__(self) -> None:
+            self.mibSymbols = {"TEST-MIB": {"myEntry": EntryObj()}}
+
+        @staticmethod
+        def add_mib_sources(source: Any = None) -> None:
+            if source is not None:
+                msg = "DirMibSource unavailable"
+                raise AttributeError(msg)
+
+        @staticmethod
+        def load_modules(*args: Any) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "app.generator.builder",
+        types.SimpleNamespace(
+            MibBuilder=MockBuilder,
+            DirMibSource=lambda p: p,
+        ),
+    )
+
+    path = g.generate("dummy.py", mib_name="TEST-MIB")
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    assert data["objects"]["myEntry"].get("indexes") == ["idxCol"]
+
+
+def test_generate_index_default_correction_with_nonzero_constraint(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Cover index default correction path for constraints excluding zero."""
+    g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
+
+    monkeypatch.setattr(
+        g,
+        "_extract_mib_info",
+        lambda _p, _m: {
+            "objects": {
+                "tbl": {"type": "MibTable", "oid": [1, 9], "rows": []},
+                "tblEntry": {
+                    "type": "MibTableRow",
+                    "oid": [1, 9, 1],
+                    "indexes": ["idx"],
+                },
+                "idx": {"oid": [1, 9, 1, 1], "type": "InterfaceIndexOrZero"},
+            },
+            "traps": {},
+        },
+    )
+    monkeypatch.setattr(
+        g,
+        "_load_type_registry",
+        lambda: {
+            "InterfaceIndexOrZero": {
+                "base_type": "Integer32",
+                "constraints": [{"type": "ValueRangeConstraint", "min": 1, "max": 2147483647}],
+            }
+        },
+    )
+
+    path = g.generate("dummy.py", mib_name="TEST-MIB")
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    assert data["objects"]["tbl"]["rows"][0]["idx"] == 1
+
+
+def test_extract_type_info_constraint_else_and_exception_paths() -> None:
+    """Cover _extract_type_info else path (no values) and exception path."""
+    g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
+
+    class NoValuesSyntax:
+        class subtypeSpec:
+            @staticmethod
+            def __str__() -> str:
+                return "SIZE(1..10)"
+
+    no_values = g._extract_type_info(NoValuesSyntax(), "CustomType")
+    assert no_values["constraints"] is not None
+
+    class ExplodingSubtype:
+        @property
+        def values(self) -> object:
+            msg = "bad subtype"
+            raise TypeError(msg)
+
+    class ExplodingSyntax:
+        subtypeSpec = ExplodingSubtype()
+
+    exploded = g._extract_type_info(ExplodingSyntax(), "CustomType")
+    assert exploded["constraints"] is None
+
+
+@pytest.mark.parametrize(
+    ("col_type", "type_info", "expected"),
+    [
+        ("IpAddress", {}, "192.168.1.1"),
+        ("InterfaceIndexOrZero", {}, 0),
+        ("InterfaceIndex", {}, 1),
+        ("Unsigned32", {"base_type": "PortNumber"}, 8080),
+        ("Gauge32", {}, 1),
+        ("DisplayString", {}, "default"),
+    ],
+)
+def test_get_default_index_value_branch_matrix(
+    col_type: str,
+    type_info: dict[str, Any],
+    expected: object,
+) -> None:
+    """Cover main _get_default_index_value branches with compact parametrization."""
+    g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
+    assert g._get_default_index_value(col_type, type_info) == expected
+
+
+def test_init_loads_default_plugins_logs_count(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+) -> None:
+    """Cover __init__ branch that loads plugins and logs loaded names."""
+    monkeypatch.setattr("app.generator.load_plugins", lambda: ["plugins.a", "plugins.b"])
+    caplog.set_level("INFO")
+
+    BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=True)
+    assert "Loaded 2 default value plugins" in caplog.text
+
+
+def test_generate_handles_index_extraction_error_and_non_index_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Cover generate branches for index-extraction warning and non-index default row values."""
+    g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
+
+    monkeypatch.setattr(
+        g,
+        "_extract_mib_info",
+        lambda _p, _m: {
+            "objects": {
+                "tbl": {"type": "MibTable", "oid": [1, 7], "rows": []},
+                "tblEntry": {"type": "MibTableRow", "oid": [1, 7, 1]},
+                "idx": {"oid": [1, 7, 1, 1], "type": "Integer32"},
+                "val": {"oid": [1, 7, 1, 2], "type": "DisplayString", "enums": {"a": 1}},
+                "junk": 5,
+            },
+            "traps": {},
+        },
+    )
+    monkeypatch.setattr(g, "_load_type_registry", lambda: {"DisplayString": {"base_type": "OctetString"}})
+    monkeypatch.setattr(g, "_get_default_value_from_type_info", lambda _ti, name: f"v:{name}")
+
+    class BrokenBuilder:
+        def __init__(self) -> None:
+            self.mibSymbols: dict[str, Any] = {}
+
+        @staticmethod
+        def add_mib_sources(*args: Any, **kwargs: Any) -> None:
+            return None
+
+        @staticmethod
+        def load_modules(*args: Any, **kwargs: Any) -> None:
+            msg = "cannot load"
+            raise RuntimeError(msg)
+
+    monkeypatch.setattr(
+        "app.generator.builder",
+        types.SimpleNamespace(MibBuilder=BrokenBuilder, DirMibSource=lambda p: p),
+    )
+
+    caplog.set_level("WARNING")
+    schema_path = g.generate("dummy.py", mib_name="TEST-MIB")
+    data = json.loads(Path(schema_path).read_text(encoding="utf-8"))
+
+    row = data["objects"]["tbl"]["rows"][0]
+    assert "__index__" in row
+    assert row["val"] == "v:val"
+    assert "Could not extract index columns" in caplog.text
+
+
+def test_extract_mib_info_covers_typeerror_continue_mapping_and_trap_logging(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+) -> None:
+    """Cover _extract_mib_info branches: TypeError continue, type mapping, constraints merge, trap info log."""
+    g = BehaviourGenerator(output_dir=str(tmp_path), load_default_plugins=False)
+    g._type_registry = {}
+
+    class BadSymbol:
+        @staticmethod
+        def getName() -> tuple[int, ...]:
+            msg = "bad"
+            raise TypeError(msg)
+
+        @staticmethod
+        def getSyntax() -> object:
+            return object()
+
+    class IntegerSyntax:
+        __name__ = "INTEGER"
+        namedValues = {"up": 1, "down": 2}
+
+        class subtypeSpec:
+            values = ["1..2"]
+
+    class GoodScalar:
+        @staticmethod
+        def getName() -> tuple[int, ...]:
+            return (1, 3, 6, 1, 2, 1, 2, 2, 1, 7)
+
+        @staticmethod
+        def getSyntax() -> object:
+            return IntegerSyntax()
+
+        @staticmethod
+        def getMaxAccess() -> str:
+            return "read-write"
+
+    NotificationType = type(
+        "NotificationType",
+        (),
+        {
+            "getName": lambda self: (1, 3, 6, 1, 4, 1, 99999, 0, 9),
+            "getObjects": lambda self: [("IF-MIB", "ifIndex")],
+            "getDescription": lambda self: "trap",
+            "getStatus": lambda self: "current",
+        },
+    )
+
+    class MockBuilder:
+        def __init__(self) -> None:
+            self.mibSymbols = {
+                "TEST-MIB": {
+                    "broken": BadSymbol(),
+                    "ifAdminStatus": GoodScalar(),
+                    "trapNine": NotificationType(),
+                }
+            }
+
+        @staticmethod
+        def add_mib_sources(*args: Any, **kwargs: Any) -> None:
+            return None
+
+        @staticmethod
+        def load_modules(*args: Any, **kwargs: Any) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "app.generator.builder",
+        types.SimpleNamespace(MibBuilder=MockBuilder, DirMibSource=lambda p: p),
+    )
+    monkeypatch.setattr(g, "_load_type_registry", lambda: {})
+    monkeypatch.setattr(g, "_get_default_value_from_type_info", lambda _ti, _name: 1)
+
+    caplog.set_level("INFO")
+    extracted = g._extract_mib_info("dummy.py", "TEST-MIB")
+
+    assert "ifAdminStatus" in extracted["objects"]
+    assert extracted["objects"]["ifAdminStatus"]["type"] == "IntegerSyntax"
+    assert "trapNine" in extracted["traps"]
+    assert "Found 1 trap(s) in TEST-MIB" in caplog.text
+
+
+def test_get_default_index_value_unknown_type_uses_generic_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cover fallback branch that delegates to _get_default_value_from_type_info."""
+    g = BehaviourGenerator(output_dir=".", load_default_plugins=False)
+    monkeypatch.setattr(g, "_get_default_value_from_type_info", lambda _ti, _name: "fallback")
+    assert g._get_default_index_value("CustomIndexType", {}) == "fallback"

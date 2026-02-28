@@ -1,7 +1,7 @@
 """Tests for test type registry validator."""
 
 import json
-import subprocess
+import runpy
 import sys
 from pathlib import Path
 
@@ -15,7 +15,7 @@ from app.type_registry_validator import (
 
 def test_validate_type_registry_valid() -> None:
     """Test case for test_validate_type_registry_valid."""
-    registry = {
+    registry: dict[str, dict[str, object]] = {
         "MyType": {
             "base_type": "Integer",
             "used_by": [],
@@ -32,7 +32,7 @@ def test_validate_type_registry_valid() -> None:
 
 def test_validate_type_registry_missing_fields() -> None:
     """Test case for test_validate_type_registry_missing_fields."""
-    registry = {"T": {"base_type": "Integer"}}
+    registry: dict[str, dict[str, object]] = {"T": {"base_type": "Integer"}}
 
     is_valid, errors = validate_type_registry(registry)
 
@@ -96,6 +96,18 @@ def test_validate_type_registry_file_not_dict(tmp_path: Path) -> None:
     assert any("must be a dictionary" in e for e in errors)
 
 
+def test_validate_type_registry_file_invalid_entry_mapping(tmp_path: Path) -> None:
+    """Test case for invalid non-dict entry values in registry mapping."""
+    path = tmp_path / "bad_mapping.json"
+    path.write_text(json.dumps({"T": [1, 2, 3]}))
+
+    is_valid, errors, count = validate_type_registry_file(str(path))
+
+    assert is_valid is False
+    assert count == 0
+    assert any("must map string names to object entries" in e for e in errors)
+
+
 def test_validate_type_registry_file_open_error(tmp_path: Path) -> None:
     """Test case for test_validate_type_registry_file_open_error."""
     # Pass a directory path to provoke an OSError when opening as a file
@@ -126,21 +138,9 @@ def test_validate_type_registry_file_valid(tmp_path: Path) -> None:
     assert count == 1
 
 
-def test_main_no_args(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test case for test_main_no_args."""
-    # Test the main function with no arguments
-    result = subprocess.run(
-        [sys.executable, "-m", "app.type_registry_validator"],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 2
-    assert "Usage:" in result.stderr
-
-
-def test_main_with_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Test case for test_main_with_valid_file."""
-    # Create a valid registry file
+@pytest.mark.parametrize("with_valid_file", [False, True])
+def test_main_entrypoint(with_valid_file: bool, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """Test case for module entrypoint with and without required argument."""
     registry = {
         "MyType": {
             "base_type": "Integer",
@@ -152,18 +152,20 @@ def test_main_with_valid_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]
     path = tmp_path / "types.json"
     path.write_text(json.dumps(registry))
 
-    # Run the main function
-    result = subprocess.run(
-        [sys.executable, "-m", "app.type_registry_validator", str(path)],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0
-    assert result.stdout == ""
-    stderr = result.stderr.strip()
-    if stderr:
-        assert (
-            "RuntimeWarning" in stderr
-            and "app.type_registry_validator" in stderr
-            and "<frozen runpy>" in stderr
-        )
+    if with_valid_file:
+        argv = ["type_registry_validator.py", str(path)]
+    else:
+        argv = ["type_registry_validator.py"]
+
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        if with_valid_file:
+            runpy.run_module("app.type_registry_validator", run_name="__main__")
+        else:
+            with pytest.raises(SystemExit) as exc_info:
+                runpy.run_module("app.type_registry_validator", run_name="__main__")
+            assert exc_info.value.code == 2
+            assert any("Usage:" in message for message in caplog.messages)
+    finally:
+        sys.argv = old_argv

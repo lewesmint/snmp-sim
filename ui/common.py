@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
+
+from app.interface_types import PrettyPrintable
 
 if TYPE_CHECKING:
     import tkinter as tk
@@ -40,7 +42,7 @@ class Logger:
 
     def log(self, message: str, level: str = "INFO") -> None:
         """Log a message with timestamp and level, with color coding."""
-        timestamp = datetime.now(tz=timezone.utc).strftime("%H:%M:%S")
+        timestamp = datetime.now(tz=UTC).strftime("%H:%M:%S")
         log_entry = f"[{timestamp}] {level}: {message}\n"
 
         # Print to stdout
@@ -84,11 +86,11 @@ def save_gui_log(log_widget: tk.Text, filename: str = "gui.log") -> None:
         return
 
 
-def format_snmp_value(value: object) -> str:
+def format_snmp_value(value: PrettyPrintable | object) -> str:
     """Format SNMP value for display."""
     try:
-        # Try to prettyPrint if available (pysnmp objects)
-        if hasattr(value, "prettyPrint"):
+        # Use prettyPrint when available (pysnmp objects)
+        if isinstance(value, PrettyPrintable):
             result = value.prettyPrint()
             return str(result)
         return str(value)

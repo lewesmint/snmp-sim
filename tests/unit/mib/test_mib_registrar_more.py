@@ -1388,3 +1388,193 @@ def test_build_mib_symbols_scalar_write_wrappers_paths(monkeypatch: Any) -> None
     ro.writeCommit((ro.name, 99), snmpEngine=None)
     assert isinstance(ro.syntax, FakeValue)
     assert ro.syntax.value == 2
+
+
+@pytest.mark.parametrize(
+    ("loaded", "expected"),
+    [
+        ({"A": {"base_type": "Integer"}}, {"A": {"base_type": "Integer"}}),
+        ([1, 2, 3], {}),
+    ],
+)
+def test_load_type_registry_valid_and_non_dict(
+    monkeypatch: Any,
+    tmp_path: Path,
+    loaded: Any,
+    expected: dict[str, Any],
+) -> None:
+    reg = make_registrar()
+    registry_path = tmp_path / "types.json"
+    registry_path.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr("json.load", lambda _f: loaded)
+    assert reg._load_type_registry(str(registry_path)) == expected
+
+
+def test_load_type_registry_open_error_returns_empty() -> None:
+    reg = make_registrar()
+    assert reg._load_type_registry("/definitely/missing/types.json") == {}
+
+
+@pytest.mark.parametrize(
+    "snmp2_payload",
+    [
+        {"objects": {}},
+        {"objects": {"sysORTable": "not-a-dict"}},
+        {"objects": {"sysORTable": {"rows": "not-a-list"}}},
+    ],
+)
+def test_persist_sysor_schema_branch_cases(
+    monkeypatch: Any,
+    tmp_path: Path,
+    snmp2_payload: dict[str, Any],
+) -> None:
+    reg = make_registrar()
+    persist_globals = MibRegistrar._persist_sysor_schema.__globals__
+    monkeypatch.setitem(persist_globals, "AGENT_MODEL_DIR", tmp_path)
+
+    calls: list[tuple[Path, dict[str, Any]]] = []
+
+    def fake_write(path: Path, payload: dict[str, Any]) -> None:
+        calls.append((path, payload))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    monkeypatch.setitem(persist_globals, "write_json_with_horizontal_oid_lists", fake_write)
+
+    reg._persist_sysor_schema(snmp2_payload)
+
+    schema_file = tmp_path / "SNMPv2-MIB" / "schema.json"
+    assert schema_file.exists()
+    assert calls
+    assert calls[0][0] == schema_file
+
+
+def test_populate_sysor_table_returns_when_snmpv2_missing_even_with_rows(
+    monkeypatch: Any,
+) -> None:
+    reg = make_registrar()
+    called = {"register": False}
+
+    monkeypatch.setattr("app.mib_metadata.get_sysor_table_rows", lambda _names: [{"oid": [1]}])
+
+    def fake_register(*args: Any, **kwargs: Any) -> None:
+        called["register"] = True
+
+    monkeypatch.setattr(MibRegistrar, "register_mib", fake_register)
+
+    reg.populate_sysor_table({"OTHER-MIB": {}})
+    assert called["register"] is False
+
+
+def test_register_mib_new_schema_without_traps_registers_symbols(monkeypatch: Any) -> None:
+    reg = make_registrar()
+
+    class Builder:
+        def __init__(self) -> None:
+            self.mibSymbols: dict[str, dict[str, Any]] = {}
+            self.exported: dict[str, Any] = {}
+
+        def export_symbols(self, mib: str, **symbols: Any) -> None:
+            self.exported[mib] = symbols
+
+    builder = Builder()
+    reg.mib_builder = builder
+    monkeypatch.setattr(MibRegistrar, "_build_mib_symbols", lambda *_args: {"foo": object()})
+
+    reg.register_mib("SNMPv2-MIB", {"objects": {}}, {})
+
+    assert "SNMPv2-MIB" in builder.exported
+    assert "foo" in builder.exported["SNMPv2-MIB"]
+
+
+def test_wrapper_delegations_cover_helper_paths() -> None:
+    reg = make_registrar()
+
+    class FakeHooks:
+        @staticmethod
+        def build_write_commit_wrapper(**kwargs: Any) -> Any:
+            return lambda *args, **kw: None
+
+        @staticmethod
+        def build_write_test_wrapper(**kwargs: Any) -> Any:
+            return lambda *args, **kw: None
+
+        @staticmethod
+        def attach_write_hooks(**kwargs: Any) -> None:
+            return None
+
+        @staticmethod
+        def format_snmp_value(val: Any) -> str:
+            return f"fmt:{val}"
+
+    class FakeTableBuilder:
+        @staticmethod
+        def extract_row_values(row_data: dict[str, Any]) -> dict[str, Any]:
+            return cast(dict[str, Any], row_data.get("values", {}))
+
+        @staticmethod
+        def resolve_table_cell_value(**kwargs: Any) -> tuple[bool, Any]:
+            return False, 1
+
+        def resolve_table_entry(self, table_name: str, mib_json: dict[str, Any]) -> tuple[str, dict[str, Any], tuple[int, ...], list[str]]:
+            return "Entry", {}, (1, 2), ["idx"]
+
+        def collect_table_columns(self, **kwargs: Any) -> dict[str, tuple[tuple[int, ...], str, bool]]:
+            return {"col": ((1, 2, 3), "Integer32", True)}
+
+        def build_row_index_tuple(self, **kwargs: Any) -> tuple[int, ...]:
+            return (1,)
+
+        def create_table_instance(self, **kwargs: Any) -> tuple[str, object, str]:
+            return "col", object(), "Integer32"
+
+        def process_table_rows(self, **kwargs: Any) -> dict[str, Any]:
+            return {"inst": object()}
+
+        def expand_ipaddress_components(self, value: Any) -> tuple[int, ...]:
+            return (127, 0, 0, 1)
+
+        def expand_string_components(self, value: Any) -> tuple[int, ...]:
+            return (3, 97, 98, 99)
+
+        def expand_integer_components(self, value: Any) -> tuple[int, ...]:
+            return (5,)
+
+        def expand_index_value_to_oid_components(self, value: Any, index_type: str) -> tuple[int, ...]:
+            return (9,)
+
+    class FakeScalarBuilder:
+        def resolve_scalar_type_value(self, name: str, info: dict[str, Any], type_registry: dict[str, Any]) -> tuple[str, str, object]:
+            return "Integer32", "INTEGER", 1
+
+        def attach_sysuptime_read_hook(self, scalar_inst: Any, pysnmp_type: Any) -> None:
+            return None
+
+        def build_scalar_instance(self, **kwargs: Any) -> tuple[object, str, str]:
+            return object(), "readonly", "Integer32"
+
+    reg._table_builder = cast(Any, FakeTableBuilder())
+    reg._scalar_builder = cast(Any, FakeScalarBuilder())
+    reg._write_hooks = cast(Any, FakeHooks())
+
+    assert reg._format_snmp_value(7) == "7"
+    assert callable(reg._build_write_commit_wrapper("1.2.3", "m:o", True, object()))
+    assert callable(reg._build_write_test_wrapper("1.2.3", "m:o", False))
+    reg._attach_write_hooks(object(), "1.2.3", "m:o", is_writable=True, original_write=object())
+
+    assert reg._resolve_table_entry("T", {})[0] == "Entry"
+    assert "col" in reg._collect_table_columns({}, (1,), {}, {})
+    assert reg._build_row_index_tuple({}, [], {}, 0) == (1,)
+    assert reg._extract_row_values({"values": {"a": 1}}) == {"a": 1}
+    resolved = reg._resolve_table_cell_value("c", {}, [], (1,))
+    assert resolved[0] is False
+    assert reg._create_table_instance("M", "c", ((1,), "Integer32", True), ((1,), 1)) is not None
+    assert reg._resolve_scalar_type_value("n", {}, {}) is not None
+    reg._attach_sysuptime_read_hook(object(), object())
+    assert reg._build_scalar_instance("M", "n", ((1,), "readonly"), ("Integer32", 1)) is not None
+    assert reg._process_table_rows("T", [], [], {}, "M")
+    assert reg._expand_ipaddress_components("127.0.0.1") == (127, 0, 0, 1)
+    assert reg._expand_string_components("abc") == (3, 97, 98, 99)
+    assert reg._expand_integer_components(5) == (5,)
+    assert reg._expand_index_value_to_oid_components(9, "Integer32") == (9,)
