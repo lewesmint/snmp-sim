@@ -5,7 +5,7 @@ by returning data from the behavior JSON files, enabling full SNMP queryability
 (GET, GETNEXT, WALK) without relying on pysnmp's native table handling.
 """
 
-# pylint: disable=logging-fstring-interpolation,unused-variable
+# pylint: disable=logging-fstring-interpolation,unused-variable,too-many-arguments
 
 import logging
 
@@ -157,7 +157,7 @@ class SNMPTableResponder:
 
         return None
 
-    def _get_all_table_oids(self) -> list[tuple[int, ...]]:
+    def _get_all_table_oids(self) -> list[tuple[int, ...]]:  # noqa: PLR0915
         """Get all OIDs in tables, sorted lexicographically."""
         oids = []
 
@@ -370,7 +370,7 @@ class SNMPTableResponder:
             return None
         return None
 
-    def _get_oid_value(self, oid: tuple[int, ...]) -> object | None:
+    def _get_oid_value(self, oid: tuple[int, ...]) -> object | None:  # noqa: PLR0911
         """Get the value for a specific OID."""
         table_info = self.get_table_info(oid)
         if not table_info:

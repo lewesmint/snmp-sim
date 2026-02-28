@@ -38,19 +38,19 @@ from pysnmp.smi.builder import MibBuilder
 from app.app_config import AppConfig
 from app.app_logger import AppLogger
 from app.compiler import MibCompiler
+from app.generator import BehaviourGenerator
 from app.mib_registrar import MibRegistrar, SNMPContext
+from app.model_paths import TYPE_REGISTRY_FILE, agent_model_dir, compiled_mibs_dir, mib_state_file
+from app.type_registry import TypeRegistry
+from app.type_registry_validator import validate_type_registry_file
+from app.value_links import get_link_manager
 from pysnmp_type_wrapper.mib_registrar_runtime_adapter import (
     ADAPTER_EXCEPTIONS as RUNTIME_ADAPTER_EXCEPTIONS,
     RuntimeSnmpContextArgs,
     create_runtime_mib_registrar,
     decode_value_with_runtime_registrar,
 )
-from app.model_paths import TYPE_REGISTRY_FILE, agent_model_dir, compiled_mibs_dir, mib_state_file
 from pysnmp_type_wrapper.pysnmp_mib_symbols_adapter import PysnmpMibSymbolsAdapter
-from app.value_links import get_link_manager
-from app.generator import BehaviourGenerator
-from app.type_registry_validator import validate_type_registry_file
-from app.type_registry import TypeRegistry
 
 if TYPE_CHECKING:
     from pysnmp_type_wrapper.interfaces import SupportsClone, SupportsMibSymbolsAdapter

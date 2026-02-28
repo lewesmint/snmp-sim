@@ -7,10 +7,46 @@ reuse the adapter layer without importing project-specific modules.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Protocol, runtime_checkable
+from typing import Protocol, TypedDict, runtime_checkable
 
 type MibSymbolMap = Mapping[str, Mapping[str, object]]
 type SnmpTypeFactory = Callable[..., object]
+type MibJsonObject = dict[str, object]
+
+
+class ColumnMeta(TypedDict, total=False):
+    """Known schema fields for table column metadata."""
+
+    oid: list[int]
+    type: str
+    access: str
+    initial: object
+
+
+class EntryMeta(TypedDict, total=False):
+    """Known schema fields for table entry metadata."""
+
+    oid: list[int]
+    type: str
+    indexes: list[str]
+    index_from: str | list[str]
+
+
+class TableMeta(TypedDict, total=False):
+    """Known schema fields for table metadata."""
+
+    oid: list[int]
+    type: str
+    access: str
+    rows: list[MibJsonObject]
+
+
+class TableData(TypedDict):
+    """Normalized table bundle passed between registrar methods."""
+
+    table: TableMeta
+    entry: EntryMeta
+    columns: dict[str, ColumnMeta]
 
 
 @runtime_checkable

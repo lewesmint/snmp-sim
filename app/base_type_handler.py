@@ -14,7 +14,7 @@ from typing import ClassVar, Protocol, cast
 
 from pysnmp.proto import rfc1902
 
-from app.interface_types import SupportsMibBuilder
+from pysnmp_type_wrapper.interfaces import SupportsMibBuilder
 from app.types import TypeInfo, TypeRegistry
 
 

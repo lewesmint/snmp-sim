@@ -8,6 +8,7 @@ It can optionally run pytest with ``--cov-context=test`` to produce context-awar
 coverage data before analysis.
 """
 # ruff: noqa: INP001
+# pylint: disable=line-too-long,missing-class-docstring,missing-function-docstring
 
 from __future__ import annotations
 

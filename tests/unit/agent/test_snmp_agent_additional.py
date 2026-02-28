@@ -1631,7 +1631,7 @@ def test_capture_initial_values_fallback_access_detection_paths() -> None:
         mibSymbols={"TEST-MIB": {"sysNameInst": sym1}},
     )
     agent.mib_builder = cast(Any, fake_builder)
-    agent.mib_jsons = {"TEST-MIB": "not-a-dict"}
+    agent.mib_jsons = cast(Any, {"TEST-MIB": "not-a-dict"})
     agent._capture_initial_values()
 
     # Second pass: fallback via maxAccess attribute when getMaxAccess is absent
@@ -1641,7 +1641,7 @@ def test_capture_initial_values_fallback_access_detection_paths() -> None:
         mibSymbols={"TEST-MIB": {"sysLocationInst": sym2}},
     )
     agent.mib_builder = cast(Any, fake_builder_2)
-    agent.mib_jsons = {"TEST-MIB": "not-a-dict"}
+    agent.mib_jsons = cast(Any, {"TEST-MIB": "not-a-dict"})
     agent._capture_initial_values()
 
     assert "1.3.6.1.2.1.1.5.0" in agent._writable_oids

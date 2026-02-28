@@ -179,14 +179,20 @@ class ValueLinkManager:
                 table_oid = entry.get("table_oid")
                 column_name = entry.get("column")
                 is_base = entry.get("is_base", False)
-                endpoints.append(ValueLinkEndpoint(
-                    table_oid if isinstance(table_oid, str) else None,
-                    column_name if isinstance(column_name, str) else "",
-                    bool(is_base),
-                ))
+                endpoints.append(
+                    ValueLinkEndpoint(
+                        table_oid if isinstance(table_oid, str) else None,
+                        column_name if isinstance(column_name, str) else "",
+                        bool(is_base),
+                    )
+                )
         else:
             columns_raw = link_config.get("columns")
-            columns = [col for col in columns_raw if isinstance(col, str)] if isinstance(columns_raw, list) else []
+            columns = (
+                [col for col in columns_raw if isinstance(col, str)]
+                if isinstance(columns_raw, list)
+                else []
+            )
             table_oid = None
             if scope == "per-instance" and objects:
                 table_oid = self._table_oid_from_columns(columns, objects)

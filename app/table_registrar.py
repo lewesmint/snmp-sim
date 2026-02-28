@@ -4,7 +4,7 @@ Separates table registration logic from SNMPAgent, improving testability
 and making table registration behavior clearer and more maintainable.
 """
 
-# pylint: disable=invalid-name
+# pylint: disable=invalid-name,too-many-arguments
 
 import logging
 from collections.abc import Callable
@@ -16,12 +16,14 @@ from app.interface_types import (
     InterfaceObject,
     MibJsonMap,
     MibJsonObject,
-    SnmpTypeFactory,
-    SupportsMibBuilder,
-    SupportsSnmpTypeResolver,
     TableData,
 )
 from app.types import TypeInfo, TypeRegistry
+from pysnmp_type_wrapper.interfaces import (
+    SnmpTypeFactory,
+    SupportsMibBuilder,
+    SupportsSnmpTypeResolver,
+)
 from pysnmp_type_wrapper.pysnmp_type_resolver import PysnmpTypeResolver
 
 if TYPE_CHECKING:
@@ -103,6 +105,55 @@ class TableRegistrar:
                             table_related_objects.add(col_name)
         return table_related_objects
 
+    @staticmethod
+    def _is_table_candidate(info: object) -> bool:
+        if not isinstance(info, dict):
+            return False
+        return info.get("type") == "MibTable" and info.get("access") == "not-accessible"
+
+    def _find_table_entry(
+        self,
+        mib_json: MibJsonObject,
+        table_oid: tuple[int, ...],
+    ) -> tuple[str, tuple[int, ...], "EntryMeta"] | None:
+        expected_entry_oid = [*table_oid, 1]
+        for other_name, other_data in mib_json.items():
+            if not isinstance(other_data, dict):
+                continue
+            if other_data.get("type") != "MibTableRow":
+                continue
+            if list(other_data.get("oid", [])) != expected_entry_oid:
+                continue
+            entry_oid = self._oid_tuple(other_data.get("oid"))
+            if entry_oid is None:
+                return None
+            return other_name, entry_oid, cast("EntryMeta", other_data)
+        return None
+
+    def _collect_table_columns(
+        self,
+        mib_json: MibJsonObject,
+        table_name: str,
+        entry_name: str,
+        entry_oid: tuple[int, ...],
+    ) -> dict[str, ColumnMeta]:
+        columns: dict[str, ColumnMeta] = {}
+        for col_name, col_info in mib_json.items():
+            if col_name in {table_name, entry_name}:
+                continue
+            if not isinstance(col_info, dict):
+                continue
+            col_oid = self._oid_tuple(col_info.get("oid"))
+            if col_oid is None:
+                continue
+            is_child_column = len(col_oid) == len(entry_oid) + 1
+            if not is_child_column:
+                continue
+            if col_oid[: len(entry_oid)] != entry_oid:
+                continue
+            columns[col_name] = cast("ColumnMeta", col_info)
+        return columns
+
     def register_tables(
         self,
         mib: str,
@@ -128,64 +179,30 @@ class TableRegistrar:
             )
             return
 
-        # Find all tables by looking for objects ending in "Table"
         tables: dict[str, TableData] = {}
 
         for name, info in mib_json.items():
-            if not isinstance(info, dict):
+            if not self._is_table_candidate(info):
                 continue
-            if info.get("type") == "MibTable" and info.get("access") == "not-accessible":
-                # Found a table, now find its entry by OID structure
-                table_oid = self._oid_tuple(info.get("oid"))
-                if table_oid is None:
-                    continue
-                expected_entry_oid = [*table_oid, 1]
-                entry_name = None
-                entry_oid = None
+            table_info = cast("dict[str, object]", info)
+            table_oid = self._oid_tuple(table_info.get("oid"))
+            if table_oid is None:
+                continue
 
-                for other_name, other_data in mib_json.items():
-                    if (
-                        isinstance(other_data, dict)
-                        and other_data.get("type") == "MibTableRow"
-                        and list(other_data.get("oid", [])) == expected_entry_oid
-                    ):
-                        entry_name = other_name
-                        entry_oid = self._oid_tuple(other_data.get("oid"))
-                        break
+            entry_match = self._find_table_entry(mib_json, table_oid)
+            if entry_match is None:
+                continue
+            entry_name, entry_oid, entry_meta = entry_match
 
-                if not entry_name or not entry_oid:
-                    continue
+            columns = self._collect_table_columns(mib_json, name, entry_name, entry_oid)
+            if not columns:
+                continue
 
-                # Collect all columns for this table by checking OID hierarchy
-                # Columns must be direct children of the entry OID
-                entry_data = mib_json[entry_name]
-                if not isinstance(entry_data, dict):
-                    continue
-
-                columns: dict[str, ColumnMeta] = {}
-                for col_name, col_info in mib_json.items():
-                    if not isinstance(col_info, dict):
-                        continue
-                    if col_name in [name, entry_name]:
-                        continue
-                    col_oid = self._oid_tuple(col_info.get("oid"))
-                    if col_oid is None:
-                        continue
-                    # Check if column OID is a child of entry OID
-                    if (
-                        len(col_oid) == len(entry_oid) + 1
-                        and col_oid[: len(entry_oid)] == entry_oid
-                    ):
-                        columns[col_name] = cast("ColumnMeta", col_info)
-
-                if columns:
-                    table_meta = cast("TableMeta", info)
-                    entry_meta = cast("EntryMeta", entry_data)
-                    tables[name] = {
-                        "table": table_meta,
-                        "entry": entry_meta,
-                        "columns": columns,
-                    }
+            tables[name] = {
+                "table": cast("TableMeta", info),
+                "entry": entry_meta,
+                "columns": columns,
+            }
 
         # Register each table in the JSON model (but NOT in pysnmp to avoid index errors)
         for table_name, table_data in tables.items():
@@ -368,6 +385,40 @@ class TableRegistrar:
             suppress_export=True,
         )
 
+    def _try_export_row_symbols(self) -> None:
+        if not self.mib_builder:
+            return
+        self.mib_builder.export_symbols("SNMPv2-SMI")
+
+    def _register_single_column_instance(
+        self,
+        table_name: str,
+        col_name: str,
+        columns: dict[str, ColumnMeta],
+        type_registry: TypeRegistry,
+        new_row: MibJsonObject,
+    ) -> bool:
+        col_info = columns.get(col_name)
+        if not col_info:
+            raise KeyError(col_name)
+
+        type_name = col_info.get("type", "")
+        type_info = type_registry.get(type_name, {}) if type_name else {}
+        base_type = type_info.get("base_type") or type_name
+        pysnmp_type = self._resolve_snmp_type(base_type, col_name, table_name)
+        if pysnmp_type is None:
+            return False
+
+        raw_val = new_row.get(col_name)
+        if raw_val is None:
+            raw_val = self._get_default_value_for_type(col_info, type_name, type_info, base_type)
+        pysnmp_type(raw_val)
+
+        if self.mib_scalar_instance is None:
+            return False
+        self.mib_scalar_instance()
+        return True
+
     def _register_row_instances(
         self,
         _mib: str,
@@ -386,16 +437,13 @@ class TableRegistrar:
         remains best-effort (complete table support requires compiled MIBs).
         """
         try:
-            # No column names => nothing to do
             if not col_names:
                 self.logger.warning("No row instances registered")
                 return
 
-            # Attempt to export symbols needed for row instances (best-effort)
             if not suppress_export:
                 try:
-                    if self.mib_builder:
-                        self.mib_builder.export_symbols("SNMPv2-SMI")
+                    self._try_export_row_symbols()
                 except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
                     self.logger.exception("Error exporting")
 
@@ -409,51 +457,25 @@ class TableRegistrar:
             columns = table_data["columns"]
             for col_name in col_names:
                 try:
-                    # Fetch column info; missing column is treated as an outer error
-                    col_info = columns.get(col_name)
-                    if not col_info:
-                        missing_column = col_name
-                        break
-
-                    type_name = col_info.get("type", "")
-                    type_info = type_registry.get(type_name, {}) if type_name else {}
-                    base_type = type_info.get("base_type") or type_name
-
-                    # Skip if SNMP type cannot be resolved
-                    pysnmp_type = self._resolve_snmp_type(base_type, col_name, table_name)
-                    if pysnmp_type is None:
-                        continue
-
-                    # Try to construct the value using the resolved type (may raise)
-                    try:
-                        raw_val = new_row.get(col_name)
-                        # If value missing, fall back to default from registry/context
-                        if raw_val is None:
-                            raw_val = self._get_default_value_for_type(
-                                col_info, type_name, type_info, base_type
-                            )
-                        # Attempt to cast/construct value for the type
-                        # (int, pysnmp classes, etc.).
-                        pysnmp_type(raw_val)
-                    except (
-                        AttributeError,
-                        LookupError,
-                        OSError,
-                        TypeError,
-                        ValueError,
-                        RuntimeError,
-                    ):
-                        self.logger.exception("Error registering row instance")
-                        continue
-
-                    # Create scalar instance (best-effort). Tests patch this method.
-                    try:
-                        self.mib_scalar_instance()
-                        created_any = True
-                    except Exception:
-                        self.logger.exception("Error registering row instance")
-                        continue
-                except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
+                    created_any = self._register_single_column_instance(
+                        table_name,
+                        col_name,
+                        columns,
+                        type_registry,
+                        new_row,
+                    ) or created_any
+                except KeyError:
+                    missing_column = col_name
+                    break
+                except (
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                    RuntimeError,
+                    Exception,
+                ):
                     self.logger.exception("Error registering row instance")
 
             if missing_column is not None:

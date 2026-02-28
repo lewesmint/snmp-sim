@@ -9,7 +9,7 @@ import json
 import os
 import types
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -653,7 +653,7 @@ def test_detect_inherited_indexes() -> None:
         # inheritedIndex is not in the columns
     }
 
-    g._detect_inherited_indexes(result, table_entries, "TEST-MIB")
+    g._detect_inherited_indexes(result, cast(Any, table_entries), "TEST-MIB")
 
     assert "index_from" in result["testEntry"]
     expected_index_from = [{"mib": "OTHER-MIB", "column": "inheritedIndex"}]
@@ -1063,7 +1063,7 @@ def test_detect_inherited_indexes_empty_index_names(
     table_entries = {"testEntry": MockEntry()}
     result = {"testEntry": {"oid": [1, 2, 3]}}
 
-    g._detect_inherited_indexes(result, table_entries, "TEST-MIB")
+    g._detect_inherited_indexes(result, cast(Any, table_entries), "TEST-MIB")
 
     # Should skip entries with no indexes
     assert "index_from" not in result["testEntry"]
@@ -1088,7 +1088,7 @@ def test_detect_inherited_indexes_with_inheritance(
         # inheritedIndex is not in the table's columns
     }
 
-    g._detect_inherited_indexes(result, table_entries, "TEST-MIB")
+    g._detect_inherited_indexes(result, cast(Any, table_entries), "TEST-MIB")
 
     # Should detect inherited index
     assert "index_from" in result["testEntry"]
@@ -1250,7 +1250,7 @@ def test_detect_inherited_indexes_handles_entry_exception(
 
     caplog.set_level("DEBUG")
     result = {"brokenEntry": {"oid": [1, 2, 3]}}
-    g._detect_inherited_indexes(result, {"brokenEntry": BrokenEntry()}, "TEST-MIB")
+    g._detect_inherited_indexes(result, cast(Any, {"brokenEntry": BrokenEntry()}), "TEST-MIB")
 
     assert "Skipping inherited-index detection" in caplog.text
 

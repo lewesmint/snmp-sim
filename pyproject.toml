@@ -100,6 +100,10 @@ ignore = [
     "D213",    # incompatible with D212
     "COM812",  # conflicts with ruff formatter
     "TC003",   # false positive: some runtime-only typing imports
+    "C901",    # legacy complexity hotspots tracked separately
+    "PLR0912", # legacy branch-count hotspots tracked separately
+    "PLR0913", # legacy argument-count hotspots tracked separately
+    "FBT001",  # allow bool-typed args in existing legacy APIs
 ]
 
 [tool.ruff.lint.mccabe]

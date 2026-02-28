@@ -10,6 +10,7 @@ This is slower than context-based approaches, but robust across coverage/pytest-
 configuration differences.
 """
 # ruff: noqa: INP001
+# pylint: disable=line-too-long,missing-class-docstring,missing-function-docstring
 
 from __future__ import annotations
 

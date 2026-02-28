@@ -2,11 +2,12 @@
 
 import logging
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pytest_mock import MockerFixture
 
+from app.interface_types import ColumnMeta, MibJsonMap, MibJsonObject, TableData
 from app.table_registrar import TableRegistrar
 from app.types import TypeRegistry
 
@@ -127,7 +128,7 @@ def test_find_table_related_objects_identifies_columns_by_oid_hierarchy(
 
 def test_get_default_value_for_integer_type(table_registrar: TableRegistrar) -> None:
     """Test default value generation for integer types."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"base_type": "Integer32"}
 
     value = table_registrar._get_default_value_for_type(
@@ -141,7 +142,7 @@ def test_get_default_value_for_integer_type(table_registrar: TableRegistrar) -> 
 
 def test_get_default_value_for_string_type(table_registrar: TableRegistrar) -> None:
     """Test default value generation for string types."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"base_type": "OctetString"}
 
     value = table_registrar._get_default_value_for_type(
@@ -157,7 +158,7 @@ def test_get_default_value_uses_initial_if_present(
     table_registrar: TableRegistrar,
 ) -> None:
     """Test that initial value is used if present."""
-    col_info = {"initial": 42}
+    col_info = cast(ColumnMeta, {"initial": 42})
     type_info = {"base_type": "Integer32"}
 
     value = table_registrar._get_default_value_for_type(
@@ -171,7 +172,7 @@ def test_get_default_value_uses_initial_if_present(
 
 def test_get_default_value_for_enumerated_type(table_registrar: TableRegistrar) -> None:
     """Test default value for enumerated types uses first enum value."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {
         "base_type": "Integer32",
         "enums": [
@@ -193,7 +194,7 @@ def test_get_default_value_for_constrained_type(
     table_registrar: TableRegistrar,
 ) -> None:
     """Test default value for constrained types."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {
         "base_type": "Integer32",
         "constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 100}],
@@ -241,7 +242,12 @@ def test_register_tables_creates_table_structure(
     # Mock register_single_table to verify it gets called
     mock_register = mocker.patch.object(table_registrar, "register_single_table")
 
-    table_registrar.register_tables("TEST-MIB", mib_json, type_registry, mib_jsons)
+    table_registrar.register_tables(
+        "TEST-MIB",
+        cast(MibJsonObject, mib_json),
+        type_registry,
+        cast(MibJsonMap, mib_jsons),
+    )
 
     # Verify register_single_table was called for the table
     mock_register.assert_called_once()
@@ -275,12 +281,15 @@ def test_register_single_table_missing_mib_json(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_register_single_table_missing_mib_json."""
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "table": {"oid": [1, 2, 3]},
         "entry": {"oid": [1, 2, 3, 1], "indexes": []},
         "columns": {},
         "prefix": "test",
-    }
+        },
+    )
     with caplog.at_level(logging.ERROR):
         table_registrar.register_single_table("TEST-MIB", "testTable", table_data, {}, {})
     assert "No in-memory JSON found" in caplog.text
@@ -292,7 +301,9 @@ def test_register_single_table_creates_row(
 ) -> None:
     """Test case for test_register_single_table_creates_row."""
     mib_jsons: dict[str, Any] = {"TEST-MIB": {"placeholder": {}}}
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "table": {"oid": [1, 2, 3]},
         "entry": {"oid": [1, 2, 3, 1], "indexes": ["idx"]},
         "columns": {
@@ -300,7 +311,8 @@ def test_register_single_table_creates_row(
             "val": {"oid": [1, 2, 3, 1, 2], "type": "OctetString"},
         },
         "prefix": "test",
-    }
+        },
+    )
     type_registry = {
         "Integer32": {"base_type": "Integer32"},
         "OctetString": {"base_type": "OctetString"},
@@ -353,14 +365,19 @@ def test_register_pysnmp_table_export_error(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_register_pysnmp_table_export_error."""
-    table_registrar.mib_builder.export_symbols.side_effect = Exception("boom")
-    table_data = {
+    mib_builder = table_registrar.mib_builder
+    assert mib_builder is not None
+    cast(Any, mib_builder).export_symbols.side_effect = Exception("boom")
+    table_data = cast(
+        TableData,
+        {
         "table": {"oid": [1, 2, 3]},
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {
             "col": {"oid": [1, 2, 3, 1, 1], "type": "Integer32"},
         },
-    }
+        },
+    )
     mocker.patch.object(table_registrar, "_resolve_snmp_type", return_value=int)
     mocker.patch.object(table_registrar, "_register_row_instances")
 
@@ -373,7 +390,7 @@ def test_register_pysnmp_table_export_error(
             {"col": 1},
         )
     # TableRegistrar does not export table symbols; ensure we did not attempt to call export_symbols
-    table_registrar.mib_builder.export_symbols.assert_not_called()
+    cast(Any, mib_builder).export_symbols.assert_not_called()
 
 
 def test_register_row_instances_empty_columns(
@@ -381,10 +398,13 @@ def test_register_row_instances_empty_columns(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_register_row_instances_empty_columns."""
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {},
-    }
+        },
+    )
     with caplog.at_level(logging.WARNING):
         table_registrar._register_row_instances("TEST", "testTable", table_data, {}, [], {})
     assert "No row instances registered" in caplog.text
@@ -409,7 +429,7 @@ def test_get_default_value_for_size_constraints(
     table_registrar: TableRegistrar,
 ) -> None:
     """Test case for test_get_default_value_for_size_constraints."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info: dict[str, Any] = {
         "constraints": [{"type": "ValueSizeConstraint", "min": 4, "max": 4}],
     }
@@ -426,15 +446,18 @@ def test_register_row_instances_handles_errors(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test case for test_register_row_instances_handles_errors."""
-    table_registrar.mib_scalar_instance.side_effect = Exception("boom")
-    table_data = {
+    cast(Any, table_registrar.mib_scalar_instance).side_effect = Exception("boom")
+    table_data = cast(
+        TableData,
+        {
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {
             "col": {"oid": [1, 2, 3, 1, 1], "type": "Integer32"},
         },
-    }
+        },
+    )
     col_names = ["col"]
-    new_row = {"col": 5}
+    new_row = cast(MibJsonObject, {"col": 5})
     type_registry = {"Integer32": {"base_type": "Integer32"}}
 
     with caplog.at_level(logging.ERROR):
@@ -462,12 +485,14 @@ def test_resolve_snmp_type_returns_type_or_none(
     """Test that _resolve_snmp_type handles resolution correctly."""
     # Setup mock to return a type
     mock_type = mocker.MagicMock()
-    table_registrar.mib_builder.import_symbols.return_value = (mock_type,)
+    mib_builder = table_registrar.mib_builder
+    assert mib_builder is not None
+    cast(Any, mib_builder).import_symbols.return_value = (mock_type,)
 
     result = table_registrar._resolve_snmp_type("Integer32", "testCol", "testTable")
 
     # Verify import_symbols was called
-    table_registrar.mib_builder.import_symbols.assert_called()
+    cast(Any, mib_builder).import_symbols.assert_called()
     assert result == mock_type
 
 
@@ -478,7 +503,9 @@ def test_resolve_snmp_type_tries_multiple_modules(
     """Test that _resolve_snmp_type tries SNMPv2-SMI then SNMPv2-TC."""
     # Setup mock to fail on first attempt, succeed on second
     mock_type = mocker.MagicMock()
-    table_registrar.mib_builder.import_symbols.side_effect = [
+    mib_builder = table_registrar.mib_builder
+    assert mib_builder is not None
+    cast(Any, mib_builder).import_symbols.side_effect = [
         TypeError("Not in SNMPv2-SMI"),
         (mock_type,),
     ]
@@ -486,7 +513,7 @@ def test_resolve_snmp_type_tries_multiple_modules(
     result = table_registrar._resolve_snmp_type("DisplayString", "testCol", "testTable")
 
     # Should have called import_symbols twice
-    assert table_registrar.mib_builder.import_symbols.call_count == 2
+    assert cast(Any, mib_builder).import_symbols.call_count == 2
     assert result == mock_type
 
 
@@ -500,7 +527,12 @@ def test_register_tables_missing_entry(table_registrar: TableRegistrar) -> None:
     mib_jsons = {"TEST-MIB": mib_json}
 
     # Should not raise exception, should skip the table
-    table_registrar.register_tables("TEST-MIB", mib_json, {}, mib_jsons)
+    table_registrar.register_tables(
+        "TEST-MIB",
+        cast(MibJsonObject, mib_json),
+        {},
+        cast(MibJsonMap, mib_jsons),
+    )
 
 
 def test_register_tables_no_columns(table_registrar: TableRegistrar) -> None:
@@ -514,7 +546,12 @@ def test_register_tables_no_columns(table_registrar: TableRegistrar) -> None:
     mib_jsons = {"TEST-MIB": mib_json}
 
     # Should not process table without columns
-    table_registrar.register_tables("TEST-MIB", mib_json, {}, mib_jsons)
+    table_registrar.register_tables(
+        "TEST-MIB",
+        mib_json,
+        {},
+        mib_jsons,
+    )
 
 
 def test_register_single_table_no_rows_in_json(
@@ -523,14 +560,17 @@ def test_register_single_table_no_rows_in_json(
 ) -> None:
     """Test register_single_table when table_json exists but has no rows key."""
     mib_jsons = {"TEST-MIB": {"testTable": {"oid": [1, 2, 3]}}}  # No 'rows' key
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "table": {"oid": [1, 2, 3]},
         "entry": {"oid": [1, 2, 3, 1], "indexes": ["idx"]},
         "columns": {
             "idx": {"oid": [1, 2, 3, 1, 1], "type": "Integer32"},
         },
         "prefix": "test",
-    }
+        },
+    )
     type_registry = {"Integer32": {"base_type": "Integer32"}}
     mocker.patch.object(table_registrar, "_register_pysnmp_table")
 
@@ -539,7 +579,7 @@ def test_register_single_table_no_rows_in_json(
         "testTable",
         table_data,
         type_registry,
-        mib_jsons,
+        cast(MibJsonMap, mib_jsons),
     )
 
     # Should create rows key
@@ -555,7 +595,7 @@ def test_find_table_related_objects_with_non_dict_column_info(
         "invalidCol": "not a dict",  # Should be skipped
     }
 
-    table_related = table_registrar.find_table_related_objects(mib_json)
+    table_related = table_registrar.find_table_related_objects(cast(MibJsonObject, mib_json))
 
     assert "testEntry" in table_related
     assert "invalidCol" not in table_related
@@ -577,7 +617,12 @@ def test_register_tables_logs_warning_on_exception(
     mocker.patch.object(table_registrar, "register_single_table", side_effect=RuntimeError("boom"))
 
     with caplog.at_level(logging.WARNING):
-        table_registrar.register_tables("TEST-MIB", mib_json, {}, mib_jsons)
+        table_registrar.register_tables(
+            "TEST-MIB",
+            cast(MibJsonObject, mib_json),
+            {},
+            cast(MibJsonMap, mib_jsons),
+        )
 
     assert "Could not register table testTable" in caplog.text
 
@@ -588,14 +633,17 @@ def test_register_single_table_skips_missing_index(
 ) -> None:
     """Test register_single_table ignores index names not present in row."""
     mib_jsons: dict[str, Any] = {"TEST-MIB": {"testTable": {"rows": []}}}
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "table": {"oid": [1, 2, 3]},
         "entry": {"oid": [1, 2, 3, 1], "indexes": ["missingIdx"]},
         "columns": {
             "val": {"oid": [1, 2, 3, 1, 2], "type": "OctetString"},
         },
         "prefix": "test",
-    }
+        },
+    )
     type_registry = {"OctetString": {"base_type": "OctetString"}}
     mocker.patch.object(table_registrar, "_register_pysnmp_table")
 
@@ -618,12 +666,15 @@ def test_register_row_instances_uses_default_when_missing_value(
     mocker: MockerFixture,
 ) -> None:
     """Test _register_row_instances falls back to default when value is None."""
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {
             "col": {"oid": [1, 2, 3, 1, 1], "type": "Integer32"},
         },
-    }
+        },
+    )
     col_names = ["col"]
     new_row: dict[str, Any] = {}
     type_registry = {"Integer32": {"base_type": "Integer32"}}
@@ -640,8 +691,10 @@ def test_register_row_instances_uses_default_when_missing_value(
         new_row,
     )
 
-    table_registrar.mib_scalar_instance.assert_called_once()
-    table_registrar.mib_builder.export_symbols.assert_called_once()
+    cast(Any, table_registrar.mib_scalar_instance).assert_called_once()
+    mib_builder = table_registrar.mib_builder
+    assert mib_builder is not None
+    cast(Any, mib_builder).export_symbols.assert_called_once()
 
 
 def test_register_row_instances_skips_unresolved_type(
@@ -649,27 +702,30 @@ def test_register_row_instances_skips_unresolved_type(
     mocker: MockerFixture,
 ) -> None:
     """Test _register_row_instances skips columns when type cannot be resolved."""
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {
             "col": {"oid": [1, 2, 3, 1, 1], "type": "UnknownType"},
         },
-    }
+        },
+    )
     col_names = ["col"]
-    new_row = {"col": 1}
+    new_row = cast(MibJsonObject, {"col": 1})
 
     mocker.patch.object(table_registrar, "_resolve_snmp_type", return_value=None)
 
     table_registrar._register_row_instances("TEST", "testTable", table_data, {}, col_names, new_row)
 
-    table_registrar.mib_scalar_instance.assert_not_called()
+    cast(Any, table_registrar.mib_scalar_instance).assert_not_called()
 
 
 def test_get_default_value_for_object_identifier(
     table_registrar: TableRegistrar,
 ) -> None:
     """Test default value for ObjectIdentifier base type."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"base_type": "ObjectIdentifier"}
 
     value = table_registrar._get_default_value_for_type(
@@ -685,7 +741,7 @@ def test_get_default_value_for_value_size_constraint_non_ip(
     table_registrar: TableRegistrar,
 ) -> None:
     """Test ValueSizeConstraint returns empty string when size is not IP."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"constraints": [{"type": "ValueSizeConstraint", "min": 1, "max": 10}]}
 
     value = table_registrar._get_default_value_for_type(col_info, "OctetString", type_info, "")
@@ -694,7 +750,7 @@ def test_get_default_value_for_value_size_constraint_non_ip(
 
 def test_get_default_value_for_size_set_non_ip(table_registrar: TableRegistrar) -> None:
     """Test size set constraint returns empty string for non-IP sizes."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"size": {"type": "set", "allowed": [8]}}
 
     value = table_registrar._get_default_value_for_type(col_info, "OctetString", type_info, "")
@@ -703,7 +759,7 @@ def test_get_default_value_for_size_set_non_ip(table_registrar: TableRegistrar) 
 
 def test_get_default_value_for_size_range(table_registrar: TableRegistrar) -> None:
     """Test size range constraint returns empty string."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"size": {"type": "range", "min": 1, "max": 255}}
 
     value = table_registrar._get_default_value_for_type(col_info, "OctetString", type_info, "")
@@ -727,9 +783,9 @@ def test_register_tables_ignores_non_child_columns(
 
     table_registrar.register_tables(
         "TEST-MIB",
-        mib_json,
+        cast(MibJsonObject, mib_json),
         {"Integer32": {"base_type": "Integer32"}},
-        mib_jsons,
+        cast(MibJsonMap, mib_jsons),
     )
 
     mock_register.assert_called_once()
@@ -743,12 +799,15 @@ def test_register_row_instances_handles_outer_exception(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test _register_row_instances logs missing-column errors."""
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {
             "present": {"oid": [1, 2, 3, 1, 1], "type": "Integer32"},
         },
-    }
+        },
+    )
     col_names = ["missing"]
 
     with caplog.at_level(logging.ERROR):
@@ -759,7 +818,7 @@ def test_register_row_instances_handles_outer_exception(
 
 def test_get_default_value_for_enums_non_list(table_registrar: TableRegistrar) -> None:
     """Test enums present but not a list returns 0."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"enums": {"up": 1}}
 
     value = table_registrar._get_default_value_for_type(
@@ -775,7 +834,7 @@ def test_get_default_value_for_value_range_without_base_type(
     table_registrar: TableRegistrar,
 ) -> None:
     """Test ValueRangeConstraint returns 0 when base_type is empty."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"constraints": [{"type": "ValueRangeConstraint", "min": 0, "max": 10}]}
 
     value = table_registrar._get_default_value_for_type(col_info, "RangeType", type_info, "")
@@ -786,7 +845,7 @@ def test_get_default_value_unknown_base_no_constraints(
     table_registrar: TableRegistrar,
 ) -> None:
     """Test unknown base type with no constraints falls back to 0."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info: dict[str, Any] = {}
 
     value = table_registrar._get_default_value_for_type(
@@ -802,7 +861,7 @@ def test_get_default_value_unknown_constraint_type(
     table_registrar: TableRegistrar,
 ) -> None:
     """Test unknown constraint type falls through to default."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"constraints": [{"type": "OtherConstraint"}]}
 
     value = table_registrar._get_default_value_for_type(col_info, "CustomType", type_info, "")
@@ -811,7 +870,7 @@ def test_get_default_value_unknown_constraint_type(
 
 def test_get_default_value_size_not_dict(table_registrar: TableRegistrar) -> None:
     """Test size value that is not a dict falls through to default."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"size": "not-a-dict"}
 
     value = table_registrar._get_default_value_for_type(col_info, "CustomType", type_info, "")
@@ -820,7 +879,7 @@ def test_get_default_value_size_not_dict(table_registrar: TableRegistrar) -> Non
 
 def test_get_default_value_size_unknown_type(table_registrar: TableRegistrar) -> None:
     """Test size dict with unknown type falls through to default."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"size": {"type": "unknown"}}
 
     value = table_registrar._get_default_value_for_type(col_info, "CustomType", type_info, "")

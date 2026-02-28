@@ -23,6 +23,8 @@ import pysnmp.smi.builder as _builder
 
 from pysnmp_type_wrapper.pysnmp_rfc1902_adapter import PysnmpRfc1902Adapter
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from app.types import JsonDict
     from pysnmp_type_wrapper.raw_boundary_types import MibSymbolMap, SupportsBoundarySnmpEngine
@@ -233,7 +235,7 @@ class TypeRecorder:
 
             try:
                 raw_pairs = items()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logging.getLogger(__name__).debug(
                     "Skipping enum extraction for candidate %r",
                     candidate,
@@ -520,7 +522,8 @@ class TypeRecorder:
         return "INTEGER"  # Default fallback
 
     def _seed_base_types_impl(self) -> dict[str, TypeEntry]:
-        """Implementation that creates canonical entries for SNMP application types
+        """Create canonical entries for SNMP application types.
+
         from SNMPv2-SMI so later OBJECT-TYPE instances cannot accidentally tighten them
         (eg sysServices constraining Integer32 to 0..127).
 
@@ -536,7 +539,7 @@ class TypeRecorder:
                 continue
             try:
                 syntax_obj = ctor()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logging.getLogger(__name__).debug(
                     "Skipping base type seeding for %s due to constructor error",
                     name,
@@ -636,6 +639,7 @@ class TypeRecorder:
         types: Mapping[str, TypeEntry],
     ) -> list[JsonDict]:
         """Drop inherited ValueRangeConstraint if a stricter range exists in constraints.
+
         Only applies if base_type is known and both have ValueRangeConstraint.
         """
         if base_type is None:
@@ -710,7 +714,7 @@ class TypeRecorder:
                 continue
             try:
                 mib_builder.load_modules(path.stem)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 self.logger.debug("Skipping unloadable compiled MIB %s", path.stem)
 
         return mib_builder.mibSymbols
@@ -772,6 +776,7 @@ class TypeRecorder:
         syntax: object,
         base_obj: object,
         base_type_out: str | None,
+        *,
         allow_metadata: bool,
     ) -> tuple[
         str | None,
@@ -811,13 +816,13 @@ class TypeRecorder:
         mib_name: str,
         sym_name: str,
         sym_obj: object,
-    ) -> None:
+    ) -> None:  # pylint: disable=too-many-branches
         get_syntax = self._resolve_zero_arg_callable(sym_obj, "getSyntax")
         if get_syntax is None:
             return
         try:
             syntax = get_syntax()
-        except Exception:
+        except Exception:  # noqa: BLE001
             return
 
         if syntax is None:
@@ -949,7 +954,7 @@ def main() -> None:
     recorder = TypeRecorder(args.compiled_dir)
     recorder.build()
     recorder.export_to_json(str(args.output))
-    logging.info("Wrote %d types to %s", len(recorder.registry), args.output)
+    logger.info("Wrote %d types to %s", len(recorder.registry), args.output)
 
 
 if __name__ == "__main__":  # pragma: no cover

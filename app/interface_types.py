@@ -12,23 +12,60 @@ Design rule:
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import Any, Protocol, TypedDict, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from pysnmp_type_wrapper.interfaces import (
+    ColumnMeta as _ColumnMeta,
+)
+from pysnmp_type_wrapper.interfaces import (
+    EntryMeta as _EntryMeta,
+)
+from pysnmp_type_wrapper.interfaces import (
+    MibJsonObject as _BoundaryMibJsonObject,
+)
+from pysnmp_type_wrapper.interfaces import (
     MutableScalarInstance as _MutableScalarInstance,
+)
+from pysnmp_type_wrapper.interfaces import (
+    SnmpTypeFactory as _SnmpTypeFactory,
+)
+from pysnmp_type_wrapper.interfaces import (
     SupportsClone as _SupportsClone,
+)
+from pysnmp_type_wrapper.interfaces import (
+    SupportsMibBuilder as _SupportsMibBuilder,
+)
+from pysnmp_type_wrapper.interfaces import (
     SupportsMibSymbolsAdapter as _SupportsMibSymbolsAdapter,
+)
+from pysnmp_type_wrapper.interfaces import (
     SupportsSnmpTypeResolver as _SupportsSnmpTypeResolver,
+)
+from pysnmp_type_wrapper.interfaces import (
+    TableData as _TableData,
+)
+from pysnmp_type_wrapper.interfaces import (
+    TableMeta as _TableMeta,
 )
 
 type InterfaceObject = object
-type MibJsonObject = dict[str, InterfaceObject]
+type MibJsonObject = _BoundaryMibJsonObject
 type MibJsonMap = dict[str, MibJsonObject]
+type SnmpTypeFactory = _SnmpTypeFactory
 
+
+@runtime_checkable
+class SupportsMibBuilder(_SupportsMibBuilder, Protocol):
+    """Compatibility alias for wrapper-owned MIB builder protocol."""
+
+ColumnMeta = _ColumnMeta
+EntryMeta = _EntryMeta
 MutableScalarInstance = _MutableScalarInstance
 SupportsClone = _SupportsClone
 SupportsMibSymbolsAdapter = _SupportsMibSymbolsAdapter
 SupportsSnmpTypeResolver = _SupportsSnmpTypeResolver
+TableData = _TableData
+TableMeta = _TableMeta
 
 
 @runtime_checkable
@@ -125,14 +162,14 @@ class HasObjects(Protocol):
 class HasNamedValues(Protocol):
     """Objects exposing namedValues attribute for enum extraction."""
 
-    namedValues: Mapping[object, object]
+    namedValues: Mapping[object, object]  # noqa: N815
 
 
 @runtime_checkable
 class HasSubtypeSpec(Protocol):
     """Objects exposing subtypeSpec attribute for constraint extraction."""
 
-    subtypeSpec: object
+    subtypeSpec: object  # noqa: N815
 
 
 @runtime_checkable
@@ -140,39 +177,3 @@ class HasValues(Protocol):
     """Objects exposing values iterable for union-like constraints."""
 
     values: Iterable[object]
-
-
-class ColumnMeta(TypedDict, total=False):
-    """Known schema fields for table column metadata."""
-
-    oid: list[int]
-    type: str
-    access: str
-    initial: InterfaceObject
-
-
-class EntryMeta(TypedDict, total=False):
-    """Known schema fields for table entry metadata."""
-
-    oid: list[int]
-    type: str
-    indexes: list[str]
-    index_from: str | list[str]
-
-
-class TableMeta(TypedDict, total=False):
-    """Known schema fields for table metadata."""
-
-    oid: list[int]
-    type: str
-    access: str
-    rows: list[MibJsonObject]
-
-
-class TableData(TypedDict):
-    """Normalized table bundle passed between registrar methods."""
-
-    table: TableMeta
-    entry: EntryMeta
-    columns: dict[str, ColumnMeta]
-

@@ -50,7 +50,11 @@ def _collect_warnings() -> dict[str, list[tuple[int, str]]]:
     return warnings
 
 
-def _insert_docstrings(file_path: Path, rel: str, items: list[tuple[int, str]]) -> bool:
+def _insert_docstrings(  # pylint: disable=too-many-locals
+    file_path: Path,
+    rel: str,
+    items: list[tuple[int, str]],
+) -> bool:
     original = file_path.read_text(encoding="utf-8")
     lines = original.splitlines(keepends=True)
     inserts: list[tuple[int, str]] = []

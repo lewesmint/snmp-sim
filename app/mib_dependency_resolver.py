@@ -274,7 +274,7 @@ class MibDependencyResolver:
             },
         }
 
-    def generate_mermaid_diagram(self, mib_names: list[str]) -> str:
+    def generate_mermaid_diagram(self, mib_names: list[str]) -> str:  # pylint: disable=too-many-locals
         """Generate a Mermaid diagram showing MIB dependencies.
 
         Args:
@@ -292,30 +292,25 @@ class MibDependencyResolver:
         added_edges: set[str] = set()
 
         # Add all nodes first, with styling based on whether they're configured
-        for mib_name in tree:
+        for mib_name, mib_data in tree.items():
             if mib_name not in added_nodes:
-                mib_data = tree[mib_name]
+                safe_name = mib_name.replace("-", "_")
                 is_configured = mib_data["is_configured"]
                 if is_configured:
                     # Configured MIBs: normal styling
-                    safe_name = mib_name.replace("-", "_")
-                    lines.append(
-                        f'    {safe_name}["{mib_name}"]\n'
-                        f"    style {safe_name} fill:#7dd3fc,stroke:#0369a1,color:#000"
-                    )
+                    node_style = "fill:#7dd3fc,stroke:#0369a1,color:#000"
                 else:
                     # Transitive dependencies: shaded/faded styling
-                    safe_name = mib_name.replace("-", "_")
-                    lines.append(
-                        f'    {safe_name}["{mib_name}"]\n'
-                        f"    style {safe_name} fill:#e5e7eb,stroke:#9ca3af,color:#666"
-                    )
+                    node_style = "fill:#e5e7eb,stroke:#9ca3af,color:#666"
+                lines.append(
+                    f'    {safe_name}["{mib_name}"]\n'
+                    f"    style {safe_name} {node_style}"
+                )
                 added_nodes.add(mib_name)
 
         # Add edges for direct dependencies
         for mib_name, mib_info in tree.items():
-            direct_deps = mib_info["direct_deps"]
-            for dep in direct_deps:
+            for dep in mib_info["direct_deps"]:
                 edge_key = f"{mib_name}->{dep}"
                 if edge_key not in added_edges:
                     safe_src = mib_name.replace("-", "_")
