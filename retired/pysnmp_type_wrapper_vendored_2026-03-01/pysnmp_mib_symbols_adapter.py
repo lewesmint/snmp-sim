@@ -8,16 +8,8 @@ from __future__ import annotations
 
 from typing import cast
 
+from ._adapter_exceptions import ADAPTER_EXCEPTIONS
 from .interfaces import MutableScalarInstance, MibSymbolMap, SupportsMibSymbolsBuilder
-
-ADAPTER_EXCEPTIONS = (
-    AttributeError,
-    LookupError,
-    OSError,
-    TypeError,
-    ValueError,
-    RuntimeError,
-)
 
 
 class PysnmpMibSymbolsAdapter:
@@ -29,11 +21,11 @@ class PysnmpMibSymbolsAdapter:
 
     @property
     def _symbols(self) -> MibSymbolMap:
-        return cast("SupportsMibSymbolsBuilder", self._mib_builder).mibSymbols
+        return cast(SupportsMibSymbolsBuilder, self._mib_builder).mibSymbols
 
     def load_symbol_class(self, module: str, symbol: str) -> type[object] | None:
         """Load class-like symbol from MIB builder imports."""
-        builder = cast("SupportsMibSymbolsBuilder", self._mib_builder)
+        builder = cast(SupportsMibSymbolsBuilder, self._mib_builder)
         try:
             symbols = builder.import_symbols(module, symbol)
         except ADAPTER_EXCEPTIONS:

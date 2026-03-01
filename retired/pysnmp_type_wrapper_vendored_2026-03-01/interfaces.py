@@ -72,7 +72,7 @@ class SupportsMibSymbolsBuilder(SupportsMibBuilder, Protocol):
 
 
 @runtime_checkable
-class SupportsSnmpTypeResolver(Protocol):
+class SupportsSnmpTypeResolver(Protocol):  # pylint: disable=too-few-public-methods
     """Adapter capability for resolving PySNMP type factories by type name."""
 
     def resolve_type_factory(
@@ -86,7 +86,7 @@ class SupportsSnmpTypeResolver(Protocol):
 
 
 @runtime_checkable
-class MutableScalarInstance(Protocol):
+class MutableScalarInstance(Protocol):  # pylint: disable=too-few-public-methods
     """Mutable scalar-instance shape consumed by agent logic."""
 
     name: tuple[int, ...]
@@ -94,7 +94,7 @@ class MutableScalarInstance(Protocol):
 
 
 @runtime_checkable
-class SupportsClone(Protocol):
+class SupportsClone(Protocol):  # pylint: disable=too-few-public-methods
     """Values exposing PySNMP-style clone(value) behavior."""
 
     def clone(self, value: object) -> object:
@@ -104,7 +104,7 @@ class SupportsClone(Protocol):
 
 
 @runtime_checkable
-class SupportsMibSymbolsAdapter(Protocol):
+class SupportsMibSymbolsAdapter(Protocol):  # pylint: disable=too-few-public-methods
     """Adapter contract over dynamic ``mibSymbols`` state."""
 
     def load_symbol_class(self, module: str, symbol: str) -> type[object] | None:

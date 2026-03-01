@@ -19,6 +19,7 @@ pyasn1 = "^0.6.2"
 PyYAML = "^6.0.3"
 pysmi = "^1.6.3"
 pysnmp = "^7.1.22"
+pysnmp-type-wrapper = { path = "../pysnmp-type-wrapper", develop = true }
 requests = "^2.32.5"
 uvicorn = "^0.41.0"
 types-requests = "^2.32.4.20260107"
@@ -33,6 +34,7 @@ warn_return_any = true
 warn_unreachable = true
 show_error_codes = true
 ignore_missing_imports = false
+mypy_path = ["../pysnmp-type-wrapper", "../pysnmp-type-wrapper/typings"]
 
 # Exclude generated, test, and scratch folders anywhere in the tree
 exclude = '(^|.*/)(retired|compiled-mibs-test|compiled-mibs|minimal-for-reference|manual-tests|logs|tests|snmp_wrapper)/'
@@ -114,10 +116,30 @@ disable = [
     "broad-exception-caught",
     "protected-access",
     "raise-missing-from",
+    "too-many-branches",
+    "duplicate-code",
 ]
 
 [tool.pylint.main]
-ignore = ["retired", "compiled-mibs", "compiled-mibs-test", "manual-tests", "tests", "snmp_wrapper"]
+ignore = [
+    "retired",
+    "compiled-mibs",
+    "compiled-mibs-test",
+    "manual-tests",
+    "tests",
+    "snmp_wrapper",
+    ".venv",
+    ".pyenv",
+    "venv",
+    "build",
+    "dist",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    "site-packages",
+]
 ignore-paths = [
     "(^|.*/)retired/.*",
     "(^|.*/)compiled-mibs/.*",
@@ -125,6 +147,18 @@ ignore-paths = [
     "(^|.*/)manual-tests/.*",
     "(^|.*/)tests/.*",
     "(^|.*/)snmp_wrapper/.*",
+    "(^|.*/)\\.venv/.*",
+    "(^|.*/)\\.pyenv/.*",
+    "(^|.*/)venv/.*",
+    "(^|.*/)build/.*",
+    "(^|.*/)dist/.*",
+    "(^|.*/)__pycache__/.*",
+    "(^|.*/)\\.mypy_cache/.*",
+    "(^|.*/)\\.pytest_cache/.*",
+    "(^|.*/)\\.ruff_cache/.*",
+    "(^|.*/)\\.tox/.*",
+    "(^|.*/)site-packages/.*",
+    "(^|.*/).*\\.egg-info/.*",
 ]
 
 [tool.pytest.ini_options]
@@ -148,6 +182,7 @@ pythonVersion = "3.13"
 venvPath = "."
 venv = ".venv"
 reportMissingTypeStubs = "none"
+stubPath = "../pysnmp-type-wrapper/typings"
 exclude = [
     "**/node_modules",
     "**/__pycache__",

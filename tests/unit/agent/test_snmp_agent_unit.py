@@ -67,17 +67,17 @@ def test_snmp_agent_attributes() -> None:
     """Test SNMPAgent has expected attributes."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
-    assert hasattr(agent, "host")
-    assert hasattr(agent, "port")
-    assert hasattr(agent, "config_path")
-    assert hasattr(agent, "app_config")
-    assert hasattr(agent, "logger")
-    assert hasattr(agent, "snmp_engine")
-    assert hasattr(agent, "snmp_context")
-    assert hasattr(agent, "mib_jsons")
-    assert hasattr(agent, "start_time")
-    assert hasattr(agent, "preloaded_model")
-    assert hasattr(agent, "_shutdown_requested")
+    assert agent.host == "0.0.0.0"
+    assert agent.port == 11161
+    assert agent.config_path == "agent_config.yaml"
+    assert agent.app_config is not None
+    assert isinstance(agent.logger, logging.Logger)
+    assert agent.snmp_engine is None
+    assert agent.snmp_context is None
+    assert isinstance(agent.mib_jsons, dict)
+    assert isinstance(agent.start_time, float)
+    assert agent.preloaded_model is None
+    assert agent._shutdown_requested is False
 
 
 def test_snmp_agent_config_path() -> None:
@@ -185,8 +185,10 @@ def test_register_mib_objects_creates_registrar_and_calls_register_all() -> None
     """Test case for test_register_mib_objects_creates_registrar_and_calls_register_all."""
     agent = SNMPAgent(preloaded_model={})
     # Ensure there's no existing registrar
-    if hasattr(agent, "mib_registrar"):
+    try:
         delattr(agent, "mib_registrar")
+    except AttributeError:
+        pass
 
     # Create a dummy module with MibRegistrar (use a ModuleType for correct typing)
     mod = types.ModuleType("app.mib_registrar")
@@ -214,7 +216,6 @@ def test_register_mib_objects_creates_registrar_and_calls_register_all() -> None
         agent.mib_builder = cast(Any, object())
         agent._register_mib_objects()
 
-        assert hasattr(agent, "mib_registrar")
         registrar = agent.mib_registrar
         assert getattr(registrar, "registered", True) is True
         assert getattr(registrar, "_mib_jsons", None) == agent.mib_jsons

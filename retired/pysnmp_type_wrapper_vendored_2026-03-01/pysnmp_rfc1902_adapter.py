@@ -2,14 +2,7 @@
 
 from __future__ import annotations
 
-ADAPTER_EXCEPTIONS = (
-    AttributeError,
-    LookupError,
-    OSError,
-    TypeError,
-    ValueError,
-    RuntimeError,
-)
+from ._adapter_exceptions import ADAPTER_EXCEPTIONS
 
 
 class PysnmpRfc1902Adapter:
@@ -50,5 +43,4 @@ class PysnmpRfc1902Adapter:
             getattr(obj, attr_name)
         except ADAPTER_EXCEPTIONS:
             return False
-        else:
-            return True
+        return True

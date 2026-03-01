@@ -32,7 +32,7 @@ class SupportsBoundaryMibBuilder(Protocol):
         raise NotImplementedError
 
 
-class SupportsBoundarySnmpEngine(Protocol):
+class SupportsBoundarySnmpEngine(Protocol):  # pylint: disable=too-few-public-methods
     """Minimal SNMP engine surface used at the PySNMP boundary."""
 
     def get_mib_builder(self) -> SupportsBoundaryMibBuilder:

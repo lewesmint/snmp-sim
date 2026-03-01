@@ -1,0 +1,13 @@
+from collections.abc import Mapping
+from typing import Protocol
+
+type MibSymbolMap = Mapping[str, Mapping[str, object]]
+
+class SupportsBoundaryMibBuilder(Protocol):
+    mibSymbols: MibSymbolMap
+    def add_mib_sources(self, *mib_sources: object) -> None: ...
+    def import_symbols(self, module: str, *symbols: str) -> tuple[object, ...]: ...
+    def load_modules(self, *module_names: str) -> None: ...
+
+class SupportsBoundarySnmpEngine(Protocol):
+    def get_mib_builder(self) -> SupportsBoundaryMibBuilder: ...

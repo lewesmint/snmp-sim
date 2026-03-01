@@ -521,7 +521,7 @@
         "max": 65535
       }
     ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueSizeConstraint object, consts 0, 65535>>",
+    "constraints_repr": null,
     "enums": null,
     "used_by": [
       "IF-MIB::ifPhysAddress",
@@ -559,7 +559,7 @@
   },
   "TruthValue": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -597,7 +597,7 @@
   },
   "TestAndIncr": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -624,7 +624,7 @@
   },
   "AutonomousType": {
     "base_type": "ObjectIdentifier",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [],
     "constraints_repr": null,
@@ -642,7 +642,7 @@
   },
   "InstancePointer": {
     "base_type": "ObjectIdentifier",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [],
     "constraints_repr": null,
@@ -653,7 +653,7 @@
   },
   "VariablePointer": {
     "base_type": "ObjectIdentifier",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [],
     "constraints_repr": null,
@@ -664,7 +664,7 @@
   },
   "RowPointer": {
     "base_type": "ObjectIdentifier",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [],
     "constraints_repr": null,
@@ -677,7 +677,7 @@
   },
   "RowStatus": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -742,7 +742,7 @@
   },
   "TimeStamp": {
     "base_type": "TimeTicks",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -751,7 +751,7 @@
         "max": 4294967295
       }
     ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueRangeConstraint object, consts 0, 4294967295>>",
+    "constraints_repr": null,
     "enums": null,
     "used_by": [
       "SNMPv2-MIB::sysORLastChange",
@@ -763,7 +763,7 @@
   },
   "TimeInterval": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -825,7 +825,7 @@
   },
   "StorageType": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -878,7 +878,7 @@
   },
   "TDomain": {
     "base_type": "ObjectIdentifier",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [],
     "constraints_repr": null,
@@ -891,7 +891,7 @@
   },
   "TAddress": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 1,
@@ -919,7 +919,7 @@
   },
   "TextualConvention": {
     "base_type": null,
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [],
     "constraints_repr": null,
@@ -930,7 +930,7 @@
   },
   "SnmpEngineID": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 5,
@@ -961,7 +961,7 @@
   },
   "SnmpSecurityModel": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -985,7 +985,7 @@
   },
   "SnmpMessageProcessingModel": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1009,7 +1009,7 @@
   },
   "SnmpSecurityLevel": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1141,7 +1141,7 @@
   },
   "KeyChange": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 0,
@@ -1154,7 +1154,7 @@
         "max": 65535
       }
     ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueSizeConstraint object, consts 0, 65535>>",
+    "constraints_repr": null,
     "enums": null,
     "used_by": [
       "SNMP-USER-BASED-SM-MIB::usmUserAuthKeyChange",
@@ -1167,7 +1167,7 @@
   },
   "Layer2Cos": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1189,7 +1189,7 @@
   },
   "CiscoNetworkProtocol": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1237,20 +1237,10 @@
   },
   "CiscoNetworkAddress": {
     "base_type": "OctetString",
-    "display_hint": "",
-    "size": {
-      "type": "range",
-      "min": 0,
-      "max": 65535
-    },
-    "constraints": [
-      {
-        "type": "ValueSizeConstraint",
-        "min": 0,
-        "max": 65535
-      }
-    ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueSizeConstraint object, consts 0, 65535>>",
+    "display_hint": null,
+    "size": null,
+    "constraints": [],
+    "constraints_repr": null,
     "enums": null,
     "used_by": [],
     "defined_in": "CISCO-TC",
@@ -1258,16 +1248,10 @@
   },
   "Unsigned64": {
     "base_type": "Counter64",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
-    "constraints": [
-      {
-        "type": "ValueRangeConstraint",
-        "min": 0,
-        "max": 18446744073709551615
-      }
-    ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueRangeConstraint object, consts 0, 18446744073709551615>>",
+    "constraints": [],
+    "constraints_repr": null,
     "enums": null,
     "used_by": [],
     "defined_in": "CISCO-TC",
@@ -1275,7 +1259,7 @@
   },
   "InterfaceIndexOrZero": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": "d",
     "size": null,
     "constraints": [
       {
@@ -1302,7 +1286,7 @@
   },
   "SAPType": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1324,7 +1308,7 @@
   },
   "CountryCode": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "set",
       "allowed": [
@@ -1357,7 +1341,7 @@
   },
   "CountryCodeITU": {
     "base_type": "Unsigned32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1379,7 +1363,7 @@
   },
   "EntPhysicalIndexOrZero": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1403,7 +1387,7 @@
   },
   "CiscoRowOperStatus": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1429,7 +1413,7 @@
   },
   "CiscoPort": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1451,7 +1435,7 @@
   },
   "CiscoIpProtocol": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1473,7 +1457,7 @@
   },
   "CiscoLocationClass": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1503,7 +1487,7 @@
   },
   "CiscoLocationSpecifier": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 0,
@@ -1529,7 +1513,7 @@
   },
   "CiscoInetAddressMask": {
     "base_type": "Unsigned32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1551,16 +1535,10 @@
   },
   "CiscoAbsZeroBasedCounter32": {
     "base_type": "Gauge32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
-    "constraints": [
-      {
-        "type": "ValueRangeConstraint",
-        "min": 0,
-        "max": 4294967295
-      }
-    ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueRangeConstraint object, consts 0, 4294967295>>",
+    "constraints": [],
+    "constraints_repr": null,
     "enums": null,
     "used_by": [],
     "defined_in": "CISCO-TC",
@@ -1568,16 +1546,10 @@
   },
   "CiscoSnapShotAbsCounter32": {
     "base_type": "Unsigned32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
-    "constraints": [
-      {
-        "type": "ValueRangeConstraint",
-        "min": 0,
-        "max": 4294967295
-      }
-    ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueRangeConstraint object, consts 0, 4294967295>>",
+    "constraints": [],
+    "constraints_repr": null,
     "enums": null,
     "used_by": [],
     "defined_in": "CISCO-TC",
@@ -1585,7 +1557,7 @@
   },
   "CiscoAlarmSeverity": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1614,16 +1586,10 @@
   },
   "PerfHighIntervalCount": {
     "base_type": "Counter64",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
-    "constraints": [
-      {
-        "type": "ValueRangeConstraint",
-        "min": 0,
-        "max": 18446744073709551615
-      }
-    ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueRangeConstraint object, consts 0, 18446744073709551615>>",
+    "constraints": [],
+    "constraints_repr": null,
     "enums": null,
     "used_by": [],
     "defined_in": "CISCO-TC",
@@ -1631,7 +1597,7 @@
   },
   "ConfigIterator": {
     "base_type": "Unsigned32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1653,7 +1619,7 @@
   },
   "BulkConfigResult": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 0,
@@ -1679,7 +1645,7 @@
   },
   "ListIndex": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1701,7 +1667,7 @@
   },
   "ListIndexOrZero": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1723,16 +1689,10 @@
   },
   "TimeIntervalSec": {
     "base_type": "Unsigned32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
-    "constraints": [
-      {
-        "type": "ValueRangeConstraint",
-        "min": 0,
-        "max": 4294967295
-      }
-    ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueRangeConstraint object, consts 0, 4294967295>>",
+    "constraints": [],
+    "constraints_repr": null,
     "enums": null,
     "used_by": [],
     "defined_in": "CISCO-TC",
@@ -1740,16 +1700,10 @@
   },
   "TimeIntervalMin": {
     "base_type": "Unsigned32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
-    "constraints": [
-      {
-        "type": "ValueRangeConstraint",
-        "min": 0,
-        "max": 4294967295
-      }
-    ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueRangeConstraint object, consts 0, 4294967295>>",
+    "constraints": [],
+    "constraints_repr": null,
     "enums": null,
     "used_by": [],
     "defined_in": "CISCO-TC",
@@ -1757,16 +1711,10 @@
   },
   "CiscoMilliSeconds": {
     "base_type": "Unsigned32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
-    "constraints": [
-      {
-        "type": "ValueRangeConstraint",
-        "min": 0,
-        "max": 4294967295
-      }
-    ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueRangeConstraint object, consts 0, 4294967295>>",
+    "constraints": [],
+    "constraints_repr": null,
     "enums": null,
     "used_by": [],
     "defined_in": "CISCO-TC",
@@ -1774,16 +1722,10 @@
   },
   "MicroSeconds": {
     "base_type": "Unsigned32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
-    "constraints": [
-      {
-        "type": "ValueRangeConstraint",
-        "min": 0,
-        "max": 4294967295
-      }
-    ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueRangeConstraint object, consts 0, 4294967295>>",
+    "constraints": [],
+    "constraints_repr": null,
     "enums": null,
     "used_by": [],
     "defined_in": "CISCO-TC",
@@ -1791,7 +1733,7 @@
   },
   "CiscoPortList": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 0,
@@ -1817,7 +1759,7 @@
   },
   "CiscoPortListRange": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -1847,7 +1789,7 @@
   },
   "IfOperStatusReason": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -2177,7 +2119,7 @@
   },
   "EntLogicalIndexOrZero": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -2199,7 +2141,7 @@
   },
   "CiscoURLString": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 1,
@@ -2225,7 +2167,7 @@
   },
   "CiscoURLStringOrEmpty": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 0,
@@ -2251,7 +2193,7 @@
   },
   "CiscoHTTPResponseStatusCode": {
     "base_type": "Unsigned32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -2273,7 +2215,7 @@
   },
   "CvE164Address": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 1,
@@ -2299,7 +2241,7 @@
   },
   "CiscoVlanList": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 0,
@@ -2325,20 +2267,10 @@
   },
   "CiscoCosList": {
     "base_type": "Bits",
-    "display_hint": "",
-    "size": {
-      "type": "range",
-      "min": 0,
-      "max": 65535
-    },
-    "constraints": [
-      {
-        "type": "ValueSizeConstraint",
-        "min": 0,
-        "max": 65535
-      }
-    ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueSizeConstraint object, consts 0, 65535>>",
+    "display_hint": null,
+    "size": null,
+    "constraints": [],
+    "constraints_repr": null,
     "enums": null,
     "used_by": [],
     "defined_in": "CISCO-TC",
@@ -2346,7 +2278,7 @@
   },
   "CiscoPbbServiceIdentifier": {
     "base_type": "Unsigned32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -2368,7 +2300,7 @@
   },
   "CiscoBridgeDomain": {
     "base_type": "Unsigned32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -2390,7 +2322,7 @@
   },
   "Cisco2KVlanList": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 0,
@@ -2416,7 +2348,7 @@
   },
   "CiscoInterfaceIndexList": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 0,
@@ -2442,7 +2374,7 @@
   },
   "CiscoVrfName": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 0,
@@ -2468,7 +2400,7 @@
   },
   "CiscoEntityIndexList": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 0,
@@ -2494,7 +2426,7 @@
   },
   "CiscoVlanIndex": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -2516,16 +2448,10 @@
   },
   "CiscoAbsZeroBasedCounter64": {
     "base_type": "Counter64",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
-    "constraints": [
-      {
-        "type": "ValueRangeConstraint",
-        "min": 0,
-        "max": 18446744073709551615
-      }
-    ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueRangeConstraint object, consts 0, 18446744073709551615>>",
+    "constraints": [],
+    "constraints_repr": null,
     "enums": null,
     "used_by": [],
     "defined_in": "CISCO-TC",
@@ -2533,7 +2459,7 @@
   },
   "IANAifType": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -4053,7 +3979,7 @@
   },
   "IANAtunnelType": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -4146,7 +4072,7 @@
   },
   "CoiAlarmObjectTypeClass": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -4511,7 +4437,7 @@
   },
   "KBytes": {
     "base_type": "Integer32",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [
       {
@@ -4538,7 +4464,7 @@
   },
   "ProductID": {
     "base_type": "ObjectIdentifier",
-    "display_hint": "",
+    "display_hint": null,
     "size": null,
     "constraints": [],
     "constraints_repr": null,
@@ -4554,20 +4480,20 @@
   },
   "InternationalDisplayString": {
     "base_type": "OctetString",
-    "display_hint": "",
+    "display_hint": null,
     "size": {
       "type": "range",
       "min": 0,
-      "max": 65535
+      "max": 128
     },
     "constraints": [
       {
         "type": "ValueSizeConstraint",
         "min": 0,
-        "max": 65535
+        "max": 128
       }
     ],
-    "constraints_repr": "<ConstraintsIntersection object, consts <ValueSizeConstraint object, consts 0, 65535>>",
+    "constraints_repr": null,
     "enums": null,
     "used_by": [
       "HOST-RESOURCES-MIB::hrSystemInitialLoadParameters",

@@ -12,14 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol, cast
 
-ADAPTER_EXCEPTIONS = (
-    AttributeError,
-    LookupError,
-    OSError,
-    TypeError,
-    ValueError,
-    RuntimeError,
-)
+from ._adapter_exceptions import ADAPTER_EXCEPTIONS
 
 
 @dataclass(frozen=True)
@@ -33,7 +26,7 @@ class RuntimeSnmpContextArgs:
     mib_table_column: object | None
 
 
-class RuntimeMibRegistrar(Protocol):
+class RuntimeMibRegistrar(Protocol):  # pylint: disable=too-few-public-methods
     """Minimal runtime registrar capability used by SNMPAgent."""
 
     def register_all_mibs(self, mib_jsons: Mapping[str, object]) -> None:
@@ -101,4 +94,4 @@ def decode_value_with_runtime_registrar(
             mib_table_column=None,
         ),
     )
-    return registrar._decode_value(value)
+    return registrar._decode_value(value)  # pylint: disable=protected-access

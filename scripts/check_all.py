@@ -190,6 +190,9 @@ def build_tools(
     *,
     fix: bool,
     optional: bool,
+    with_pylint: bool,
+    with_wrapper_sync: bool,
+    with_wrapper_source_check: bool,
     pip_audit_verbose: bool,
 ) -> list[ToolRun]:
     """Build the ordered set of quality tools to execute."""
@@ -241,6 +244,33 @@ def build_tools(
             install_hint="python -m pip install -U pyright",
         )
     )
+
+    if with_pylint:
+        tools.append(
+            ToolRun(
+                name="pylint",
+                command=[sys.executable, "-m", "pylint", *targets],
+                install_hint="python -m pip install -U pylint",
+            )
+        )
+
+    if with_wrapper_sync:
+        tools.append(
+            ToolRun(
+                name="wrapper sync",
+                command=["bash", "scripts/check_wrapper_sync.sh"],
+                install_hint="Ensure bash is available (standard on macOS/Linux)",
+            )
+        )
+
+    if with_wrapper_source_check:
+        tools.append(
+            ToolRun(
+                name="wrapper source",
+                command=["bash", "scripts/check_wrapper_package_source.sh"],
+                install_hint="Ensure bash is available (standard on macOS/Linux)",
+            )
+        )
 
     tools.append(
         ToolRun(
@@ -343,6 +373,21 @@ def main() -> int:
         help="Run heavier optional tools (vulture, radon, jscpd).",
     )
     parser.add_argument(
+        "--with-pylint",
+        action="store_true",
+        help="Run pylint in addition to the default quality toolchain.",
+    )
+    parser.add_argument(
+        "--with-wrapper-sync",
+        action="store_true",
+        help="Run vendored-wrapper drift check against ../pysnmp-type-wrapper.",
+    )
+    parser.add_argument(
+        "--with-wrapper-source-check",
+        action="store_true",
+        help="Report where pysnmp_type_wrapper resolves from (vendored vs external).",
+    )
+    parser.add_argument(
         "--fail-on-suppressions",
         action="store_true",
         help="Fail if any suppression markers are found (noqa, type: ignore, pylint disable, etc).",
@@ -386,6 +431,9 @@ def main() -> int:
         mypy_targets=mypy_targets,
         fix=args.fix,
         optional=args.optional,
+        with_pylint=args.with_pylint,
+        with_wrapper_sync=args.with_wrapper_sync,
+        with_wrapper_source_check=args.with_wrapper_source_check,
         pip_audit_verbose=args.pip_audit_verbose,
     )
     for tool in tools:

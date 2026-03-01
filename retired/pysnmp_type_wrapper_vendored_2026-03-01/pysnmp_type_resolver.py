@@ -7,7 +7,7 @@ from pysnmp.proto import rfc1902
 from .interfaces import SnmpTypeFactory, SupportsMibBuilder
 
 
-class PysnmpTypeResolver:
+class PysnmpTypeResolver:  # pylint: disable=too-few-public-methods
     """Resolve SNMP type factories from MIB modules and runtime fallback."""
 
     def resolve_type_factory(

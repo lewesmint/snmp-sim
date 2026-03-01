@@ -55,21 +55,6 @@ files = [
 ]
 
 [[package]]
-name = "authors"
-version = "0.5"
-description = "Authors of your next scientific article"
-optional = false
-python-versions = ">=3.8"
-groups = ["dev"]
-files = [
-    {file = "authors-0.5-py3-none-any.whl", hash = "sha256:6f36d005ceba8056f3b996969b31c6f506f0b76816e695fe6701ad5e7583ebc2"},
-    {file = "authors-0.5.tar.gz", hash = "sha256:a8771dc206058010950b619c240fa59ba2c377e747087657c45e5aacd7e9486d"},
-]
-
-[package.dependencies]
-pyaml = "*"
-
-[[package]]
 name = "certifi"
 version = "2026.2.25"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -948,24 +933,6 @@ files = [
 ]
 
 [[package]]
-name = "pyaml"
-version = "26.2.1"
-description = "PyYAML-based module to produce a bit more pretty and readable YAML-serialized data"
-optional = false
-python-versions = ">=3.8"
-groups = ["dev"]
-files = [
-    {file = "pyaml-26.2.1-py3-none-any.whl", hash = "sha256:6261c2f0a2f33245286c794ad6ec234be33a73d2b05427079fd343e2812a87cf"},
-    {file = "pyaml-26.2.1.tar.gz", hash = "sha256:489dd82997235d4cfcf76a6287fce2f075487d77a6567c271e8d790583690c68"},
-]
-
-[package.dependencies]
-PyYAML = "*"
-
-[package.extras]
-anchors = ["unidecode"]
-
-[[package]]
 name = "pyasn1"
 version = "0.6.2"
 description = "Pure-Python implementation of ASN.1 types and DER/BER/CER codecs (X.208)"
@@ -1249,6 +1216,24 @@ pyasn1 = ">=0.4.8,<0.5.0 || >0.5.0"
 dev = ["Sphinx (>=7.0.0,<8.0.0)", "bump2version (>=1.0.1)", "codecov (>=2.1.12)", "cryptography (>=44.0.1)", "doc8 (>=1.0.0)", "flake8 (>=7.0.0)", "furo (>=2023.1.1)", "jinja2 (>=3.1.6)", "pep8-naming (>=0.14.1)", "pre-commit (==2.21.0)", "pysmi (>=1.6.1)", "pytest (>=7.2.0)", "pytest-asyncio (>=0.21.1)", "pytest-codecov (>=0.4.0)", "pytest-cov (>=4.1.0)", "ruff (>=0.11.7)", "sphinx-copybutton (>=0.5.2)", "sphinx-notfound-page (>=1.0.0)", "sphinx-polyversion (>=1.0.0)", "sphinx-sitemap-lextudio (>=2.5.2)"]
 
 [[package]]
+name = "pysnmp-type-wrapper"
+version = "0.1.0"
+description = "Typed boundary adapters for integrating with dynamic PySNMP surfaces"
+optional = false
+python-versions = ">=3.13"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+pyasn1 = ">=0.6.2"
+pysnmp = ">=7.1.22"
+
+[package.source]
+type = "directory"
+url = "../pysnmp-type-wrapper"
+
+[[package]]
 name = "pytest"
 version = "9.0.2"
 description = "pytest: simple powerful testing with Python"
@@ -1309,24 +1294,12 @@ pytest = ">=6.2.5"
 dev = ["pre-commit", "pytest-asyncio", "tox"]
 
 [[package]]
-name = "python-version"
-version = "0.0.2"
-description = "Provides a simple utility for checking the python version."
-optional = false
-python-versions = "*"
-groups = ["dev"]
-files = [
-    {file = "python_version-0.0.2-py2.py3-none-any.whl", hash = "sha256:2c7429f3375cee19873892e5db4d10d2b42172d8851a8bb5111729e028470580"},
-    {file = "python_version-0.0.2.tar.gz", hash = "sha256:5c16de57c7f2d614621cf468e8f5a20bb6b3cec665c9c7f5e9f9f000bf04fe67"},
-]
-
-[[package]]
 name = "pyyaml"
 version = "6.0.3"
 description = "YAML parser and emitter for Python"
 optional = false
 python-versions = ">=3.8"
-groups = ["main", "dev"]
+groups = ["main"]
 files = [
     {file = "PyYAML-6.0.3-cp38-cp38-macosx_10_13_x86_64.whl", hash = "sha256:c2514fceb77bc5e7a2f7adfaa1feb2fb311607c9cb518dbc378688ec73d8292f"},
     {file = "PyYAML-6.0.3-cp38-cp38-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:9c57bb8c96f6d1808c030b1687b9b5fb476abaa47f0db9c0101f5e9f394e97f4"},
@@ -1454,18 +1427,6 @@ files = [
 ]
 
 [[package]]
-name = "six"
-version = "1.17.0"
-description = "Python 2 and 3 compatibility utilities"
-optional = false
-python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7"
-groups = ["dev"]
-files = [
-    {file = "six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"},
-    {file = "six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81"},
-]
-
-[[package]]
 name = "starlette"
 version = "0.52.1"
 description = "The little ASGI library that shines."
@@ -1482,20 +1443,6 @@ anyio = ">=3.6.2,<5"
 
 [package.extras]
 full = ["httpx (>=0.27.0,<0.29.0)", "itsdangerous", "jinja2", "python-multipart (>=0.0.18)", "pyyaml"]
-
-[[package]]
-name = "strict"
-version = "0.1a0"
-description = "Type and subject matter checks for functions and classes."
-optional = false
-python-versions = "*"
-groups = ["dev"]
-files = [
-    {file = "strict-0.1alpha.tar.gz", hash = "sha256:caad92ee5f9e825c5d9e0d0eab4b14051efa867987eefc44e52964337ccad1d4"},
-]
-
-[package.dependencies]
-six = ">=1.7.3"
 
 [[package]]
 name = "tomlkit"
@@ -1603,4 +1550,4 @@ standard = ["colorama (>=0.4) ; sys_platform == \"win32\"", "httptools (>=0.6.3)
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "87aea6356b12044e8224b64f11b9043bc305dfe160f315332b25f2b18f9d2f86"
+content-hash = "3076f296220bc41b8281a3586d85fb3e1baebd66df6ba1baabf92c62ce7176bb"

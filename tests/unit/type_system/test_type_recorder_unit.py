@@ -52,58 +52,6 @@ class TypeEntryDict(TypedDict, total=False):
     used_by: list[str]
 
 
-class TestSafeCallZeroArg:
-    """Test safe_call_zero_arg static method."""
-
-    def test_not_callable(self, mocker: Any) -> None:
-        """If attribute is not callable, return None."""
-        obj = mocker.Mock()
-        obj.method = "not a function"
-        result = TypeRecorder.safe_call_zero_arg(obj, "method")
-        assert result is None
-
-    def test_missing_attribute(self, mocker: Any) -> None:
-        """If attribute does not exist, return None."""
-        obj = mocker.Mock(spec=[])
-        result = TypeRecorder.safe_call_zero_arg(obj, "missing")
-        assert result is None
-
-    def test_signature_inspection_fails(self, mocker: Any) -> None:
-        """If signature inspection fails, return None."""
-        obj = mocker.Mock()
-        obj.method = mocker.Mock(side_effect=TypeError("inspection failed"))
-
-        # Make inspect.signature fail
-        mocker.patch("inspect.signature", side_effect=TypeError)
-        result = TypeRecorder.safe_call_zero_arg(obj, "method")
-        assert result is None
-
-    def test_required_parameters(self, mocker: Any) -> None:
-        """If method requires parameters, return None."""
-        obj = mocker.Mock()
-
-        def requires_param(x: Any) -> Any:
-            return x
-
-        obj.method = requires_param
-        result = TypeRecorder.safe_call_zero_arg(obj, "method")
-        assert result is None
-
-    def test_call_raises_type_error(self, mocker: Any) -> None:
-        """If call raises TypeError, return None."""
-        obj = mocker.Mock()
-        obj.method = mocker.Mock(side_effect=TypeError("bad call"))
-        result = TypeRecorder.safe_call_zero_arg(obj, "method")
-        assert result is None
-
-    def test_successful_zero_arg_call(self, mocker: Any) -> None:
-        """If method is callable with no args, return result."""
-        obj = mocker.Mock()
-        obj.method = mocker.Mock(return_value="success")
-        result = TypeRecorder.safe_call_zero_arg(obj, "method")
-        assert result == "success"
-
-
 class TestInferBaseTypeFromMRO:
     """Test infer_base_type_from_mro static method."""
 

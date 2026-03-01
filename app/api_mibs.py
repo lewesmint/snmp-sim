@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.api_state import state
 from app.cli_load_model import load_all_schemas
-from app.mib_dependency_resolver import MibDependencyResolver
+from app.mib_dependency_resolver import MermaidDiagramResult, MibDependencyResolver
 from app.model_paths import AGENT_MODEL_DIR
 from app.oid_utils import oid_tuple_to_str
 
@@ -111,7 +111,7 @@ def list_mibs_with_dependencies() -> dict[str, object]:
 
 
 @router.get("/mibs-dependencies-diagram")
-def get_mibs_dependencies_diagram() -> dict[str, object]:
+def get_mibs_dependencies_diagram() -> MermaidDiagramResult:
     """Get a Mermaid diagram showing MIB dependencies."""
     schema_dir = SCHEMA_DIR
     if not Path(schema_dir).exists():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -10,8 +11,10 @@ from pydantic import BaseModel
 from app.api_state import logger, state
 from app.base_type_handler import BaseTypeHandler
 from app.model_paths import TYPE_REGISTRY_FILE
-from app.types import TypeRegistry
 from app.type_registry_validator import validate_type_registry_file
+
+if TYPE_CHECKING:
+    from app.types import TypeRegistry
 
 router = APIRouter()
 

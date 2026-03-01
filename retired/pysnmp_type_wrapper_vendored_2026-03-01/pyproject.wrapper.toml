@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pysnmp-type-wrapper"
+version = "0.1.0"
+description = "Typed boundary adapters for integrating with dynamic PySNMP surfaces"
+readme = "README.md"
+requires-python = ">=3.13"
+authors = [
+  { name = "SNMP Sim Team" }
+]
+license = { text = "Proprietary" }
+dependencies = [
+  "pysnmp>=7.1.22",
+  "pyasn1>=0.6.2"
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed"
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pysnmp_type_wrapper*"]
+
+[tool.setuptools.package-data]
+pysnmp_type_wrapper = ["py.typed", "*.pyi"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unused_ignores = true
+warn_return_any = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["pysnmp.*", "pyasn1.*"]
+ignore_missing_imports = true

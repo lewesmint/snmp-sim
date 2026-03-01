@@ -125,10 +125,10 @@ def get_type_class(type_name: str, mib_builder):
 
 ## Testing
 
-Run `tests/misc/test_pysnmp_type_sources.py` to verify type availability:
+Run `tests/wrapper/test_pysnmp_type_sources.py` to verify type availability:
 
 ```bash
-python -m pytest tests/misc/test_pysnmp_type_sources.py -v -s
+python -m pytest tests/wrapper/test_pysnmp_type_sources.py -v -s
 ```
 
 ## Implementation in Code
@@ -212,7 +212,7 @@ Contains only base RFC 1902 types:
 
 - RFC 1902: Structure of Management Information for SNMPv2
 - PySNMP Documentation: https://pysnmp.com/
-- Test file: `tests/misc/test_pysnmp_type_sources.py`
+- Test file: `tests/wrapper/test_pysnmp_type_sources.py`
 - PySNMP source: `pysnmp/proto/rfc1902.py` (base types)
 - PySNMP source: `pysnmp/smi/mibs/SNMPv2-TC.py` (TEXTUAL-CONVENTIONs)
 

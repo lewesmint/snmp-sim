@@ -56,7 +56,7 @@ type SnmpTypeFactory = _SnmpTypeFactory
 
 @runtime_checkable
 class SupportsMibBuilder(_SupportsMibBuilder, Protocol):
-    """Compatibility alias for wrapper-owned MIB builder protocol."""
+    """Compatibility shim for wrapper-owned MIB builder protocol."""
 
 ColumnMeta = _ColumnMeta
 EntryMeta = _EntryMeta
@@ -121,6 +121,23 @@ class HasGetMaxAccess(Protocol):
         """Return max-access metadata for this symbol."""
         msg = "Protocol method"
         raise NotImplementedError(msg)
+
+
+@runtime_checkable
+class HasGetDisplayHint(Protocol):
+    """Objects exposing getDisplayHint textual metadata."""
+
+    def getDisplayHint(self) -> str | None:  # noqa: N802  # pylint: disable=invalid-name
+        """Return display-hint metadata for this symbol."""
+        msg = "Protocol method"
+        raise NotImplementedError(msg)
+
+
+@runtime_checkable
+class HasDisplayHint(Protocol):
+    """Objects exposing displayHint attribute metadata."""
+
+    displayHint: str | None  # noqa: N815
 
 
 @runtime_checkable
