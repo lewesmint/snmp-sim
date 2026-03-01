@@ -10,6 +10,13 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
+from pysnmp_type_wrapper.interfaces import (
+    SnmpTypeFactory,
+    SupportsMibBuilder,
+    SupportsSnmpTypeResolver,
+)
+from pysnmp_type_wrapper.pysnmp_type_resolver import PysnmpTypeResolver
+
 from app.base_type_handler import BaseTypeHandler
 from app.interface_types import (
     ColumnMeta,
@@ -19,12 +26,6 @@ from app.interface_types import (
     TableData,
 )
 from app.types import TypeInfo, TypeRegistry
-from pysnmp_type_wrapper.interfaces import (
-    SnmpTypeFactory,
-    SupportsMibBuilder,
-    SupportsSnmpTypeResolver,
-)
-from pysnmp_type_wrapper.pysnmp_type_resolver import PysnmpTypeResolver
 
 if TYPE_CHECKING:
     from app.interface_types import EntryMeta, TableMeta
@@ -287,7 +288,8 @@ class TableRegistrar:
         if not isinstance(rows, list):
             table_json["rows"] = []
             rows = table_json["rows"]
-        rows.append(new_row)
+        if isinstance(rows, list):
+            rows.append(new_row)
         self.logger.info(
             "%s",
             f"Created row in {table_name} for MIB {mib} with {len(new_row)} columns: {new_row}",

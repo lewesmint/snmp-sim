@@ -18,6 +18,8 @@ from typing import (
 import pysnmp.entity.engine as _engine
 import pysnmp.proto.rfc1902 as _rfc1902
 import pysnmp.smi.builder as _builder
+from pysnmp_type_wrapper.constraint_parser import parse_constraints_from_repr as parse_constraints
+from pysnmp_type_wrapper.pysnmp_rfc1902_adapter import PysnmpRfc1902Adapter
 
 from app.interface_types import (
     HasDisplayHint,
@@ -26,14 +28,13 @@ from app.interface_types import (
     HasSubtypeSpec,
     HasSyntax,
 )
-from pysnmp_type_wrapper.constraint_parser import parse_constraints_from_repr as parse_constraints
-from pysnmp_type_wrapper.pysnmp_rfc1902_adapter import PysnmpRfc1902Adapter
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from app.types import JsonDict
     from pysnmp_type_wrapper.raw_boundary_types import MibSymbolMap, SupportsBoundarySnmpEngine
+
+    from app.types import JsonDict
 
 # True ASN.1 base types (RFC 2578)
 # These are the only fundamental types in ASN.1:

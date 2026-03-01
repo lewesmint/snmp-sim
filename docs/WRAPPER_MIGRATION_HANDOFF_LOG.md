@@ -333,6 +333,19 @@ Track ongoing migration from in-repo PySNMP boundary work to a standalone `pysnm
 - Result:
   - `Success: no issues found in 79 source files` (`exit=0`).
 
+### Pyright follow-up (same session)
+- Symptom:
+  - `pyright .` in `snmp-sim` reported many `reportMissingImports` for
+    `pysnmp_type_wrapper.*` and cascading type-form errors.
+- Root cause:
+  - post-de-vendoring, pyright search paths did not include canonical wrapper source root.
+- Fix:
+  - updated `pyproject.toml` `tool.pyright.executionEnvironments[0]` with:
+    - `extraPaths = ["../pysnmp-type-wrapper"]`
+- Validation:
+  - `cd /Users/mintz/code/snmp-sim && ./.venv/bin/pyright .`
+  - result: `0 errors, 0 warnings, 0 informations`.
+
 ### Status
 - De-vendoring is complete.
 - `snmp-sim` now uses installed canonical `pysnmp-type-wrapper` as source of truth.
