@@ -10,6 +10,7 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
+from pysnmp.proto import rfc1902
 from pysnmp_type_wrapper.interfaces import (
     SnmpTypeFactory,
     SupportsMibBuilder,
@@ -507,7 +508,20 @@ class TableRegistrar:
         """
         if not base_type:
             return None
-        return self.snmp_type_resolver.resolve_type_factory(base_type, self.mib_builder)
+        try:
+            resolved = self.snmp_type_resolver.resolve_type_factory(base_type, self.mib_builder)
+        except Exception:
+            resolved = None
+
+        if resolved is not None:
+            return resolved
+
+        try:
+            fallback = getattr(rfc1902, base_type, None)
+        except Exception:
+            return None
+
+        return fallback if callable(fallback) else None
 
     @staticmethod
     def _oid_tuple(value: InterfaceObject) -> tuple[int, ...] | None:

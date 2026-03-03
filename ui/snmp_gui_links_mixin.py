@@ -1,6 +1,6 @@
 """Links-tab behaviors for the SNMP GUI controller."""
 
-# ruff: noqa: ANN401, C901, PLR0915, PLR2004
+# ruff: noqa: ANN401, PLR0915, PLR2004
 
 from __future__ import annotations
 

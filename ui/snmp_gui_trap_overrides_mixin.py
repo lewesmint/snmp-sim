@@ -1,6 +1,6 @@
 """Trap metadata, index handling, and override workflows for the SNMP GUI."""
 
-# ruff: noqa: ANN401, ARG005, C901, PLR0912, PLR0915, PLR2004
+# ruff: noqa: ANN401, ARG005, PLR0915, PLR2004
 
 from __future__ import annotations
 

@@ -4,6 +4,23 @@
 
 This document clarifies where different SNMP types can be sourced from in PySNMP, based on empirical testing.
 
+## Workspace Note (Wrapper Pulls)
+
+If you pull structural changes in `../pysnmp-type-wrapper` (for example layout or package path updates), re-install it in editable mode from `snmp-sim` before running checks/tests:
+
+```bash
+./.venv/bin/python -m pip install -e ../pysnmp-type-wrapper
+```
+
+Then verify source resolution:
+
+```bash
+scripts/check_wrapper_sync.sh
+scripts/check_wrapper_package_source.sh --probe-installed --require-external
+```
+
+Expected source path is under `../pysnmp-type-wrapper/src/pysnmp_type_wrapper`.
+
 ## Two Categories of Types
 
 ### 1. Base RFC 1902 Types (Direct Import)

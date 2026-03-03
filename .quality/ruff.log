@@ -1,0 +1,517 @@
+TC001 Move application import `app.api_shared.JsonObject` into a type-checking block
+  --> app/api_config.py:16:28
+   |
+14 | from pydantic import BaseModel
+15 |
+16 | from app.api_shared import JsonObject
+   |                            ^^^^^^^^^^
+17 | from app.api_state import logger, state
+18 | from app.app_config import AppConfig
+   |
+help: Move into type-checking block
+
+SLF001 Private member accessed: `_save_mib_state`
+  --> app/api_config.py:77:13
+   |
+75 |         state.snmp_agent.deleted_instances = []
+76 |         with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
+77 |             state.snmp_agent._save_mib_state()
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+SLF001 Private member accessed: `_update_table_cell_values`
+   --> app/api_links.py:135:13
+    |
+133 |             if instance_str not in state.snmp_agent.table_instances[target_table]:
+134 |                 continue
+135 |             state.snmp_agent._update_table_cell_values(
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+136 |                 target_table,
+137 |                 instance_str,
+    |
+
+SLF001 Private member accessed: `_save_mib_state`
+   --> app/api_links.py:175:5
+    |
+173 |     _sync_link_targets_on_create(request)
+174 |
+175 |     state.snmp_agent._save_mib_state()
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+176 |
+177 |     return {"status": "ok", "id": link_id}
+    |
+
+SLF001 Private member accessed: `_save_mib_state`
+   --> app/api_links.py:196:5
+    |
+194 |         raise HTTPException(status_code=404, detail="Link not found")
+195 |
+196 |     state.snmp_agent._save_mib_state()
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+197 |     return {"status": "deleted", "id": link_id}
+    |
+
+PLR0915 Too many statements (115 > 50)
+   --> app/api_table_views.py:375:5
+    |
+374 | @router.get("/tree/bulk")
+375 | def get_tree_bulk_data() -> dict[str, object]:
+    |     ^^^^^^^^^^^^^^^^^^
+376 |     """Get complete tree data including all table instances for efficient GUI loading."""
+377 |     if state.snmp_agent is None:
+    |
+
+TC001 Move application import `app.api_shared.JsonValue` into a type-checking block
+  --> app/api_tables.py:8:28
+   |
+ 6 | from pydantic import BaseModel
+ 7 |
+ 8 | from app.api_shared import JsonValue
+   |                            ^^^^^^^^^
+ 9 | from app.api_state import logger, state
+10 | from app.api_table_helpers import (
+   |
+help: Move into type-checking block
+
+C416 Unnecessary dict comprehension (rewrite using `dict()`)
+  --> app/api_tables.py:65:62
+   |
+63 |               index_str = extract_instance_index_str(request.index_values)
+64 |               parsed_index_values = parse_index_values(index_str)
+65 |               parsed_index_values_json: dict[str, JsonValue] = {
+   |  ______________________________________________________________^
+66 | |                 key: value for key, value in parsed_index_values.items()
+67 | |             }
+   | |_____________^
+68 |
+69 |               default_row = get_default_row_from_schemas(schemas, request.table_oid)
+   |
+help: Rewrite using `dict()`
+
+C416 Unnecessary dict comprehension (rewrite using `dict()`)
+  --> app/api_tables.py:77:63
+   |
+75 |                   excluded_columns=set(parsed_index_values.keys()),
+76 |               )
+77 |               merged_values_simple_json: dict[str, JsonValue] = {
+   |  _______________________________________________________________^
+78 | |                 key: value for key, value in merged_values_simple.items()
+79 | |             }
+   | |_____________^
+80 |
+81 |               instance_oid = state.snmp_agent.add_table_instance(
+   |
+help: Rewrite using `dict()`
+
+C416 Unnecessary dict comprehension (rewrite using `dict()`)
+   --> app/api_tables.py:112:52
+    |
+110 |               excluded_columns=set(index_columns),
+111 |           )
+112 |           merged_values_json: dict[str, JsonValue] = {
+    |  ____________________________________________________^
+113 | |             key: value for key, value in merged_values.items()
+114 | |         }
+    | |_________^
+115 |
+116 |           instance_oid = state.snmp_agent.add_table_instance(
+    |
+help: Rewrite using `dict()`
+
+C416 Unnecessary dict comprehension (rewrite using `dict()`)
+   --> app/api_tables.py:146:58
+    |
+144 |           index_str = extract_instance_index_str(index_values)
+145 |           parsed_index_values = parse_index_values(index_str)
+146 |           parsed_index_values_json: dict[str, JsonValue] = {
+    |  __________________________________________________________^
+147 | |             key: value for key, value in parsed_index_values.items()
+148 | |         }
+    | |_________^
+149 |
+150 |           success = state.snmp_agent.delete_table_instance(
+    |
+help: Rewrite using `dict()`
+
+S104 Possible binding to all interfaces
+  --> app/api_trap_receiver.py:17:17
+   |
+15 |     """Configuration for trap receiver."""
+16 |
+17 |     host: str = "0.0.0.0"
+   |                 ^^^^^^^^^
+18 |     port: int = 16662
+19 |     community: str = "public"
+   |
+
+S104 Possible binding to all interfaces
+  --> app/api_trap_receiver.py:33:39
+   |
+31 |         }
+32 |
+33 |     host = config.host if config else "0.0.0.0"
+   |                                       ^^^^^^^^^
+34 |     port = config.port if config else 16662
+35 |     community = config.community if config else "public"
+   |
+
+PLR0915 Too many statements (67 > 50)
+   --> app/api_traps.py:129:5
+    |
+128 | @router.get("/trap-varbinds/{trap_name}")
+129 | def get_trap_varbinds(trap_name: str) -> dict[str, object]:
+    |     ^^^^^^^^^^^^^^^^^
+130 |     """Get detailed varbind metadata for a specific trap."""
+131 |     if state.snmp_agent is None:
+    |
+
+ANN401 Dynamically typed expressions (typing.Any) are disallowed in `*args`
+   --> app/app_logger.py:196:34
+    |
+195 |     @staticmethod
+196 |     def warning(msg: str, *args: Any, **kwargs: Any) -> None:
+    |                                  ^^^
+197 |         """Log a warning message."""
+198 |         logging.getLogger().warning(msg, *args, **kwargs)
+    |
+
+ANN401 Dynamically typed expressions (typing.Any) are disallowed in `**kwargs`
+   --> app/app_logger.py:196:49
+    |
+195 |     @staticmethod
+196 |     def warning(msg: str, *args: Any, **kwargs: Any) -> None:
+    |                                                 ^^^
+197 |         """Log a warning message."""
+198 |         logging.getLogger().warning(msg, *args, **kwargs)
+    |
+
+ANN401 Dynamically typed expressions (typing.Any) are disallowed in `*args`
+   --> app/app_logger.py:201:32
+    |
+200 |     @staticmethod
+201 |     def error(msg: str, *args: Any, **kwargs: Any) -> None:
+    |                                ^^^
+202 |         """Log an error message."""
+203 |         logging.getLogger().error(msg, *args, **kwargs)
+    |
+
+ANN401 Dynamically typed expressions (typing.Any) are disallowed in `**kwargs`
+   --> app/app_logger.py:201:47
+    |
+200 |     @staticmethod
+201 |     def error(msg: str, *args: Any, **kwargs: Any) -> None:
+    |                                               ^^^
+202 |         """Log an error message."""
+203 |         logging.getLogger().error(msg, *args, **kwargs)
+    |
+
+ANN401 Dynamically typed expressions (typing.Any) are disallowed in `*args`
+   --> app/app_logger.py:206:31
+    |
+205 |     @staticmethod
+206 |     def info(msg: str, *args: Any, **kwargs: Any) -> None:
+    |                               ^^^
+207 |         """Log an info message."""
+208 |         logging.getLogger().info(msg, *args, **kwargs)
+    |
+
+ANN401 Dynamically typed expressions (typing.Any) are disallowed in `**kwargs`
+   --> app/app_logger.py:206:46
+    |
+205 |     @staticmethod
+206 |     def info(msg: str, *args: Any, **kwargs: Any) -> None:
+    |                                              ^^^
+207 |         """Log an info message."""
+208 |         logging.getLogger().info(msg, *args, **kwargs)
+    |
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> app/base_type_handler.py:12:1
+   |
+10 |   """
+11 |
+12 | / import logging
+13 | | from typing import ClassVar, Protocol, cast
+14 | |
+15 | | from pysnmp.proto import rfc1902
+16 | |
+17 | | from pysnmp_type_wrapper.interfaces import SupportsMibBuilder
+18 | | from app.types import TypeInfo, TypeRegistry
+   | |____________________________________________^
+   |
+help: Organize imports
+
+S104 Possible binding to all interfaces
+   --> app/base_type_handler.py:201:20
+    |
+199 |         # Check if it's a special type
+200 |         if type_name == "IpAddress":
+201 |             return "0.0.0.0"
+    |                    ^^^^^^^^^
+202 |         if "address" in type_name.lower() and "mac" in type_name.lower():
+203 |             return "00:00:00:00:00:00"
+    |
+
+TRY401 Redundant exception object included in `logging.exception` call
+  --> app/default_value_plugins.py:37:71
+   |
+35 |             return cast("object | None", plugin(type_info, symbol_name))
+36 |         except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
+37 |             logger.exception("Plugin %s failed: %s", plugin.__name__, e)
+   |                                                                       ^
+38 |             return None
+   |
+
+PLR0915 Too many statements (86 > 50)
+  --> app/generator.py:66:9
+   |
+64 |             )
+65 |
+66 |     def generate(
+   |         ^^^^^^^^
+67 |         self,
+68 |         compiled_py_path: str,
+   |
+
+BLE001 Do not catch blind exception: `Exception`
+   --> app/generator.py:177:36
+    |
+175 | …                             index_names = [idx[2] for idx in entry_obj.getIndexNames()]
+176 | …                             entry_info["indexes"] = index_names
+177 | …                     except Exception as e:
+    |                              ^^^^^^^^^
+178 | …                         logger.warning(
+179 | …                             "Could not extract index columns for %s: %s", entry_name, e
+    |
+
+PLR0915 Too many statements (70 > 50)
+   --> app/generator.py:284:9
+    |
+282 |         return Path(compiled_py_path).stem
+283 |
+284 |     def _extract_mib_info(
+    |         ^^^^^^^^^^^^^^^^^
+285 |         self,
+286 |         mib_py_path: str,
+    |
+
+BLE001 Do not catch blind exception: `Exception`
+   --> app/generator.py:305:16
+    |
+303 |                 builder.DirMibSource(str(Path(mib_py_path).parent))
+304 |             )
+305 |         except Exception:
+    |                ^^^^^^^^^
+306 |             with contextlib.suppress(Exception):
+307 |                 mib_builder.add_mib_sources()
+    |
+
+BLE001 Do not catch blind exception: `Exception`
+   --> app/generator.py:570:20
+    |
+568 |                 if inherited_indexes and entry_name in result:
+569 |                     result[entry_name]["index_from"] = inherited_indexes
+570 |             except Exception:
+    |                    ^^^^^^^^^
+571 |                 # Skip if we can't detect - not all objects have getIndexNames
+572 |                 logger.debug("Skipping inherited-index detection for %s", entry_name)
+    |
+
+PLR0911 Too many return statements (7 > 6)
+   --> app/generator.py:646:9
+    |
+644 |         return type_info
+645 |
+646 |     def _get_default_index_value(
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^
+647 |         self,
+648 |         col_type: str,
+    |
+
+PLR0911 Too many return statements (13 > 6)
+   --> app/generator.py:717:9
+    |
+715 |         return type_info
+716 |
+717 |     def _get_default_value(self, syntax: str, symbol_name: str) -> object:
+    |         ^^^^^^^^^^^^^^^^^^
+718 |         """Legacy method - kept for compatibility."""
+719 |         # This is now handled by _get_default_value_from_type_info
+    |
+
+S104 Possible binding to all interfaces
+   --> app/generator.py:744:20
+    |
+742 |             return 0
+743 |         if syntax == "IpAddress":
+744 |             return "0.0.0.0"
+    |                    ^^^^^^^^^
+745 |         if syntax == "TimeTicks":
+746 |             return 0
+    |
+
+G201 Logging `.exception(...)` should be used instead of `.error(..., exc_info=True)`
+   --> app/mib_registrar.py:599:29
+    |
+597 |                 export_symbols.update(table_symbols)
+598 |             except REGISTRAR_EXCEPTIONS as _e:
+599 |                 self.logger.error(
+    |                             ^^^^^
+600 |                     "Error building table %s: %s",
+601 |                     name,
+    |
+
+BLE001 Do not catch blind exception: `Exception`
+   --> app/table_registrar.py:513:16
+    |
+511 |         try:
+512 |             resolved = self.snmp_type_resolver.resolve_type_factory(base_type, self.mib_builder)
+513 |         except Exception:
+    |                ^^^^^^^^^
+514 |             resolved = None
+    |
+
+BLE001 Do not catch blind exception: `Exception`
+   --> app/table_registrar.py:521:16
+    |
+519 |         try:
+520 |             fallback = getattr(rfc1902, base_type, None)
+521 |         except Exception:
+    |                ^^^^^^^^^
+522 |             return None
+    |
+
+UP047 Generic function `safe_call` should use type parameters
+   --> ui/common.py:101:5
+    |
+101 |   def safe_call(
+    |  _____^
+102 | |     func: Callable[[], T],
+103 | |     default: T | None = None,
+104 | |     logger: Logger | None = None,
+105 | | ) -> T | None:
+    | |_^
+106 |       """Safely call a function and log errors if logger is provided."""
+107 |       try:
+    |
+help: Use type parameters
+
+RUF100 [*] Unused `noqa` directive (non-enabled: `PLR0913`)
+  --> ui/mib_browser.py:65:20
+   |
+63 |     """Standalone MIB Browser window for SNMP operations."""
+64 |
+65 |     def __init__(  # noqa: PLR0913
+   |                    ^^^^^^^^^^^^^^^
+66 |         self,
+67 |         parent: tk.Widget | None = None,
+   |
+help: Remove unused `noqa` directive
+
+RUF100 [*] Unused `noqa` directive (non-enabled: `C901`, `PLR0912`)
+   --> ui/mib_browser.py:466:72
+    |
+464 |         self._refresh_cached_mibs()
+465 |
+466 |     def _extract_mib_imports(self, mib_file_path: Path) -> list[str]:  # noqa: C901, PLR0912
+    |                                                                        ^^^^^^^^^^^^^^^^^^^^^
+467 |         """Extract IMPORTS from a MIB file.
+    |
+help: Remove unused `noqa` directive
+
+RUF100 [*] Unused `noqa` directive (non-enabled: `PLR0912`)
+   --> ui/mib_browser.py:628:85
+    |
+626 |         return resolved, missing
+627 |
+628 |     def load_mib(self, mib_names: list[str] | str) -> tuple[list[str], list[str]]:  # noqa: PLR0912
+    |                                                                                     ^^^^^^^^^^^^^^^
+629 |         """Load MIB module(s) into the MIB browser.
+    |
+help: Remove unused `noqa` directive
+
+RUF100 [*] Unused `noqa` directive (non-enabled: `C901`, `PLR0912`)
+    --> ui/mib_browser.py:1067:46
+     |
+1065 |             self._refresh_cached_mibs()
+1066 |
+1067 |     def _refresh_cached_mibs(self) -> None:  # noqa: C901, PLR0912, PLR0915
+     |                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1068 |         """Refresh the list of cached MIBs with dependency status."""
+1069 |         # Clear existing listbox items
+     |
+help: Remove unused `noqa` directive
+
+RUF100 [*] Unused `noqa` directive (non-enabled: `C901`, `PLR0912`)
+    --> ui/mib_browser.py:1282:48
+     |
+1280 |             messagebox.showerror("Load Failed", msg, parent=self.window)
+1281 |
+1282 |     def _show_mib_dependencies(self) -> None:  # noqa: C901, PLR0912
+     |                                                ^^^^^^^^^^^^^^^^^^^^^
+1283 |         """Show dependency information for selected MIBs."""
+1284 |         selected_files = [
+     |
+help: Remove unused `noqa` directive
+
+RUF100 [*] Unused `noqa` directive (non-enabled: `C901`)
+  --> ui/snmp_gui.py:11:1
+   |
+ 9 | # pylint: disable=consider-using-f-string,too-many-return-statements
+10 | # pylint: disable=too-many-arguments,too-many-positional-arguments,superfluous-parens
+11 | # ruff: noqa: ANN401, ARG001, ARG002, ARG005, B007, C901, D100, D101, D107
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+12 | # ruff: noqa: D401, DTZ005, ERA001, FBT001, FBT003
+13 | # ruff: noqa: PLR0912, PLR0913, PLR0915, PLR2004, SLF001, TRY300
+   |
+help: Remove unused `noqa` directive
+
+RUF100 [*] Unused `noqa` directive (non-enabled: `FBT001`)
+  --> ui/snmp_gui.py:12:1
+   |
+10 | # pylint: disable=too-many-arguments,too-many-positional-arguments,superfluous-parens
+11 | # ruff: noqa: ANN401, ARG001, ARG002, ARG005, B007, C901, D100, D101, D107
+12 | # ruff: noqa: D401, DTZ005, ERA001, FBT001, FBT003
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+13 | # ruff: noqa: PLR0912, PLR0913, PLR0915, PLR2004, SLF001, TRY300
+   |
+help: Remove unused `noqa` directive
+
+RUF100 [*] Unused `noqa` directive (non-enabled: `PLR0912`, `PLR0913`)
+  --> ui/snmp_gui.py:13:1
+   |
+11 | # ruff: noqa: ANN401, ARG001, ARG002, ARG005, B007, C901, D100, D101, D107
+12 | # ruff: noqa: D401, DTZ005, ERA001, FBT001, FBT003
+13 | # ruff: noqa: PLR0912, PLR0913, PLR0915, PLR2004, SLF001, TRY300
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+14 |
+15 | from __future__ import annotations
+   |
+help: Remove unused `noqa` directive
+
+RUF100 [*] Unused `noqa` directive (non-enabled: `C901`)
+ --> ui/snmp_gui_links_mixin.py:3:1
+  |
+1 | """Links-tab behaviors for the SNMP GUI controller."""
+2 |
+3 | # ruff: noqa: ANN401, C901, PLR0915, PLR2004
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4 |
+5 | from __future__ import annotations
+  |
+help: Remove unused `noqa` directive
+
+RUF100 [*] Unused `noqa` directive (non-enabled: `C901`, `PLR0912`)
+ --> ui/snmp_gui_trap_overrides_mixin.py:3:1
+  |
+1 | """Trap metadata, index handling, and override workflows for the SNMP GUI."""
+2 |
+3 | # ruff: noqa: ANN401, ARG005, C901, PLR0912, PLR0915, PLR2004
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4 |
+5 | from __future__ import annotations
+  |
+help: Remove unused `noqa` directive
+
+Found 45 errors.
+[*] 11 fixable with the `--fix` option (7 hidden fixes can be enabled with the `--unsafe-fixes` option).

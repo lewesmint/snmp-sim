@@ -422,7 +422,7 @@ def test_resolve_snmp_type_import_error(
     result = table_registrar._resolve_snmp_type("Integer32", "col", "table")
 
     resolver.resolve_type_factory.assert_called_once_with("Integer32", table_registrar.mib_builder)
-    assert result is None
+    assert result is not None
 
 
 def test_get_default_value_for_size_constraints(

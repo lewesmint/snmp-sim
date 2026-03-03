@@ -8,9 +8,9 @@
 # pylint: disable=consider-using-in,import-outside-toplevel,use-maxsplit-arg
 # pylint: disable=consider-using-f-string,too-many-return-statements
 # pylint: disable=too-many-arguments,too-many-positional-arguments,superfluous-parens
-# ruff: noqa: ANN401, ARG001, ARG002, ARG005, B007, C901, D100, D101, D107
-# ruff: noqa: D401, DTZ005, ERA001, FBT001, FBT003
-# ruff: noqa: PLR0912, PLR0913, PLR0915, PLR2004, SLF001, TRY300
+# ruff: noqa: ANN401, ARG001, ARG002, ARG005, B007, D100, D101, D107
+# ruff: noqa: D401, DTZ005, ERA001, FBT003
+# ruff: noqa: PLR0915, PLR2004, SLF001, TRY300
 
 from __future__ import annotations
 

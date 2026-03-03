@@ -62,7 +62,7 @@ _ensure_default_tk_root()
 class MIBBrowserWindow:
     """Standalone MIB Browser window for SNMP operations."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         parent: tk.Widget | None = None,
         logger: Logger | None = None,
@@ -463,7 +463,7 @@ class MIBBrowserWindow:
         # Refresh the list
         self._refresh_cached_mibs()
 
-    def _extract_mib_imports(self, mib_file_path: Path) -> list[str]:  # noqa: C901, PLR0912
+    def _extract_mib_imports(self, mib_file_path: Path) -> list[str]:
         """Extract IMPORTS from a MIB file.
 
         Args:
@@ -625,7 +625,7 @@ class MIBBrowserWindow:
         _recurse(mib_name)
         return resolved, missing
 
-    def load_mib(self, mib_names: list[str] | str) -> tuple[list[str], list[str]]:  # noqa: PLR0912
+    def load_mib(self, mib_names: list[str] | str) -> tuple[list[str], list[str]]:
         """Load MIB module(s) into the MIB browser.
 
         Args:
@@ -1064,7 +1064,7 @@ class MIBBrowserWindow:
             )
             self._refresh_cached_mibs()
 
-    def _refresh_cached_mibs(self) -> None:  # noqa: C901, PLR0912, PLR0915
+    def _refresh_cached_mibs(self) -> None:  # noqa: PLR0915
         """Refresh the list of cached MIBs with dependency status."""
         # Clear existing listbox items
         for widget in self.mib_listbox_frame.winfo_children():
@@ -1279,7 +1279,7 @@ class MIBBrowserWindow:
                 msg += f"\n• {mib}:\n  {reason}\n"
             messagebox.showerror("Load Failed", msg, parent=self.window)
 
-    def _show_mib_dependencies(self) -> None:  # noqa: C901, PLR0912
+    def _show_mib_dependencies(self) -> None:
         """Show dependency information for selected MIBs."""
         selected_files = [
             Path(file_path) for file_path, var in self.cached_mib_checkbuttons.items() if var.get()

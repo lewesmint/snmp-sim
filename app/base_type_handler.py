@@ -13,8 +13,8 @@ import logging
 from typing import ClassVar, Protocol, cast
 
 from pysnmp.proto import rfc1902
-
 from pysnmp_type_wrapper.interfaces import SupportsMibBuilder
+
 from app.types import TypeInfo, TypeRegistry
 
 

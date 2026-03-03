@@ -36,7 +36,16 @@ if [[ "$PROBE_INSTALLED" -eq 1 ]]; then
   PYTHON_ARGS+=("-P")
 fi
 
-SOURCE_PATH="$($PYTHON_BIN "${PYTHON_ARGS[@]}" -c 'import pathlib, pysnmp_type_wrapper; print(pathlib.Path(pysnmp_type_wrapper.__file__).resolve())')"
+if ! SOURCE_PATH="$($PYTHON_BIN "${PYTHON_ARGS[@]}" -c 'import pathlib, pysnmp_type_wrapper; print(pathlib.Path(pysnmp_type_wrapper.__file__).resolve())' 2>/dev/null)"; then
+  echo "ERROR: unable to import 'pysnmp_type_wrapper' using interpreter: $PYTHON_BIN" >&2
+  if [[ "$PROBE_INSTALLED" -eq 1 ]]; then
+    echo "Hint: install canonical wrapper into this environment (editable):" >&2
+    echo "      $PYTHON_BIN -m pip install -e ../pysnmp-type-wrapper" >&2
+  else
+    echo "Hint: activate the correct virtual environment and install dependencies." >&2
+  fi
+  exit 3
+fi
 SOURCE_DIR="$(dirname "$SOURCE_PATH")"
 VENDORED_DIR="$REPO_ROOT/pysnmp_type_wrapper"
 

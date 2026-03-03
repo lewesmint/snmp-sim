@@ -5,7 +5,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 LOCAL_WRAPPER_DIR="$REPO_ROOT/pysnmp_type_wrapper"
-CANONICAL_WRAPPER_DIR_DEFAULT="$(cd "$REPO_ROOT/.." && pwd)/pysnmp-type-wrapper/pysnmp_type_wrapper"
+WRAPPER_REPO_ROOT_DEFAULT="$(cd "$REPO_ROOT/.." && pwd)/pysnmp-type-wrapper"
+if [[ -d "$WRAPPER_REPO_ROOT_DEFAULT/src/pysnmp_type_wrapper" ]]; then
+  CANONICAL_WRAPPER_DIR_DEFAULT="$WRAPPER_REPO_ROOT_DEFAULT/src/pysnmp_type_wrapper"
+else
+  CANONICAL_WRAPPER_DIR_DEFAULT="$WRAPPER_REPO_ROOT_DEFAULT/pysnmp_type_wrapper"
+fi
 CANONICAL_WRAPPER_DIR="${1:-$CANONICAL_WRAPPER_DIR_DEFAULT}"
 
 if [[ -d "$LOCAL_WRAPPER_DIR" ]]; then
@@ -17,7 +22,7 @@ fi
 
 if [[ ! -d "$CANONICAL_WRAPPER_DIR" ]]; then
   echo "ERROR: canonical wrapper dir not found: $CANONICAL_WRAPPER_DIR" >&2
-  echo "Usage: $0 /absolute/path/to/pysnmp-type-wrapper/pysnmp_type_wrapper" >&2
+  echo "Usage: $0 /absolute/path/to/pysnmp-type-wrapper/src/pysnmp_type_wrapper" >&2
   exit 2
 fi
 
