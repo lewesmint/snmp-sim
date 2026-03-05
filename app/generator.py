@@ -1,4 +1,5 @@
 """Schema generation from compiled MIB files."""
+# pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals,too-many-nested-blocks,too-few-public-methods
 
 import contextlib
 import json
@@ -6,7 +7,7 @@ import os
 import re
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from pysnmp.smi import builder
 
@@ -30,6 +31,39 @@ from app.plugin_loader import load_plugins
 logger = AppLogger.get(__name__)
 
 SCHEMA_VERSION = "1.0.1"
+MIB_OPERATION_ERRORS = (
+    AttributeError,
+    LookupError,
+    OSError,
+    TypeError,
+    ValueError,
+    RuntimeError,
+    KeyError,
+)
+
+
+class SymbolSnapshot(Protocol):
+    """Protocol for symbol snapshots extracted from MIB symbols."""
+
+    @property
+    def class_name(self) -> str:
+        """Return the class name of the MIB symbol (e.g., 'MibTable', 'MibScalar')."""
+        raise NotImplementedError
+
+    @property
+    def oid(self) -> tuple[int, ...]:
+        """Return the OID tuple for this symbol."""
+        raise NotImplementedError
+
+    @property
+    def syntax_obj(self) -> object | None:
+        """Return the syntax object associated with this symbol, or None."""
+        raise NotImplementedError
+
+    @property
+    def access(self) -> str:
+        """Return the access level for this symbol (e.g., 'read-only', 'read-write')."""
+        raise NotImplementedError
 
 
 class BehaviourGenerator:
@@ -104,148 +138,7 @@ class BehaviourGenerator:
         info = extracted_data.get("objects", {})
         traps = extracted_data.get("traps", {})
 
-        # Ensure table and entry symbols are recorded with their type,
-        # and each table has at least one row.
-        for name, symbol_info in info.items():
-            # Record type for tables and entries
-            if isinstance(symbol_info, dict):
-                symbol_type = symbol_info.get("type", None)
-                if symbol_type in {"MibTable", "MibTableRow"} and "type" not in symbol_info:
-                    symbol_info["type"] = "NoneType"
-                # Always ensure the table object exists and has a 'rows' field (type-based)
-                if symbol_type == "MibTable":
-                    if "rows" not in symbol_info or not isinstance(symbol_info["rows"], list):
-                        symbol_info["rows"] = []
-                    # Add at least one default row if empty
-                    if not symbol_info["rows"]:
-                        # Find the corresponding entry by OID structure
-                        entry_info = {}
-                        entry_name = None
-                        expected_entry_oid = [*list(symbol_info["oid"]), 1]
-                        for other_name, other_data in info.items():
-                            if (
-                                isinstance(other_data, dict)
-                                and other_data.get("type") == "MibTableRow"
-                                and list(other_data.get("oid", [])) == expected_entry_oid
-                            ):
-                                entry_info = other_data
-                                entry_name = other_name
-                                break
-
-                        # Extract index columns for ALL table entries (including augmented ones)
-                        # If not already present, add 'indexes' field to entry_info
-                        if entry_info and "indexes" not in entry_info:
-                            # Try to find index columns from the compiled MIB symbols
-                            # This is a best-effort: look for setIndexNames in the compiled MIB
-                            # (We assume the symbol_name is the same as entry_name)
-                            try:
-                                mib_builder = builder.MibBuilder()
-                                # Some tests / mocks replace `builder` with a minimal object
-                                # that only exposes `MibBuilder`. Protect against missing
-                                # `DirMibSource` by trying the usual call and falling back.
-                                try:
-                                    mib_builder.add_mib_sources(
-                                        builder.DirMibSource(
-                                            str(Path(compiled_py_path).parent)
-                                        )
-                                    )
-                                except (
-                                    AttributeError,
-                                    LookupError,
-                                    OSError,
-                                    TypeError,
-                                    ValueError,
-                                    RuntimeError,
-                                ):
-                                    # either DirMibSource is missing (AttributeError) or
-                                    # the add call failed; call without args (mocks accept it)
-                                    with contextlib.suppress(
-                                        AttributeError,
-                                        LookupError,
-                                        OSError,
-                                        TypeError,
-                                        ValueError,
-                                        RuntimeError,
-                                    ):
-                                        mib_builder.add_mib_sources()
-                                mib_builder.load_modules(mib_name)
-                                mib_symbols = mib_builder.mibSymbols[mib_name]
-                                entry_obj = mib_symbols.get(entry_name)
-                                if isinstance(entry_obj, HasIndexNames):
-                                    index_names = [idx[2] for idx in entry_obj.getIndexNames()]
-                                    entry_info["indexes"] = index_names
-                            except Exception as e:
-                                logger.warning(
-                                    "Could not extract index columns for %s: %s", entry_name, e
-                                )
-
-                        # Find columns: direct children of entry OID
-                        # Note: Even augmented tables (with index_from) need default rows
-                        # for their non-index columns
-                        entry_oid = tuple(entry_info.get("oid", []))
-                        columns = []
-                        for col_name, col_info in info.items():
-                            if not isinstance(col_info, dict):
-                                continue
-                            col_oid = tuple(col_info.get("oid", []))
-                            if col_name in [name, entry_name]:
-                                continue
-                            if (
-                                len(col_oid) == len(entry_oid) + 1
-                                and col_oid[: len(entry_oid)] == entry_oid
-                            ):
-                                columns.append(col_name)
-                        # Build a default row with sensible values
-                        default_row: dict[str, Any] = {}
-                        if not getattr(self, "_type_registry", None):
-                            self._type_registry = self._load_type_registry()
-                        index_names = entry_info.get("indexes", [])
-                        if not index_names:
-                            # Missing INDEX: introduce a faux index column for schema/state handling
-                            index_names = ["__index__"]
-                            entry_info["indexes"] = index_names
-                        if "__index__" in index_names:
-                            default_row["__index__"] = "1"
-
-                        for col in columns:
-                            col_info = info[col]
-                            col_type = col_info.get("type", "")
-                            type_info = self._type_registry.get(col_type, {})
-                            type_info = self._normalize_type_info_for_symbol(type_info, col_type)
-                            # Add enums from col_info to type_info if present
-                            if "enums" in col_info:
-                                type_info = {**type_info, "enums": col_info["enums"]}
-                            # If this column is an index, set appropriate default based on type
-                            if col in index_names:
-                                default_value = self._get_default_index_value(col_type, type_info)
-                                # Ensure index values respect their type constraints
-                                # For types with constraints excluding 0
-                                # (like InterfaceIndex), use 1 as minimum.
-                                if isinstance(default_value, int) and default_value < 1:
-                                    # Check if type has constraints that exclude 0
-                                    constraints = type_info.get("constraints", [])
-                                    has_nonzero_constraint = any(
-                                        (
-                                            c.get("min", 0) > 0
-                                            if isinstance(c, dict)
-                                            and c.get("type") == "ValueRangeConstraint"
-                                            else False
-                                        )
-                                        for c in constraints
-                                    )
-                                    # Only fix to 1 if constraints require it
-                                    if has_nonzero_constraint or col_type == "InterfaceIndex":
-                                        default_value = 1
-                                default_row[col] = default_value
-                                # Don't set col_info["initial"] - table columns
-                                # shouldn't have initial values.
-                            else:
-                                value = self._get_default_value_from_type_info(type_info, col)
-                                default_row[col] = value
-                                # Don't set col_info["initial"] - table columns
-                                # shouldn't have initial values.
-                        if default_row:
-                            symbol_info["rows"].append(default_row)
+        self._ensure_table_rows(info, compiled_py_path, mib_name)
 
         # Write to JSON file (include both objects and traps)
         output_data = {
@@ -266,6 +159,166 @@ class BehaviourGenerator:
             len(traps),
         )
         return str(json_path)
+
+    def _ensure_table_rows(
+        self,
+        info: dict[str, Any],
+        compiled_py_path: str,
+        mib_name: str,
+    ) -> None:
+        """Ensure table metadata contains at least one default row."""
+        for table_name, symbol_info in info.items():
+            if not isinstance(symbol_info, dict):
+                continue
+
+            symbol_type = symbol_info.get("type")
+            if symbol_type in {"MibTable", "MibTableRow"} and "type" not in symbol_info:
+                symbol_info["type"] = "NoneType"
+
+            if symbol_type != "MibTable":
+                continue
+
+            if "rows" not in symbol_info or not isinstance(symbol_info["rows"], list):
+                symbol_info["rows"] = []
+            if symbol_info["rows"]:
+                continue
+
+            self._add_default_table_row(
+                info=info,
+                table_name=table_name,
+                symbol_info=symbol_info,
+                compiled_py_path=compiled_py_path,
+                mib_name=mib_name,
+            )
+
+    def _add_default_table_row(
+        self,
+        info: dict[str, Any],
+        table_name: str,
+        symbol_info: dict[str, Any],
+        compiled_py_path: str,
+        mib_name: str,
+    ) -> None:
+        """Create and append a default row for a table when no rows are present."""
+        entry_info, entry_name = self._find_table_entry(info, symbol_info)
+        self._ensure_entry_indexes(entry_info, entry_name, compiled_py_path, mib_name)
+
+        entry_oid = tuple(entry_info.get("oid", []))
+        columns = self._find_table_columns(info, entry_oid, table_name, entry_name)
+        default_row = self._build_default_row(columns, info, entry_info)
+        if default_row:
+            rows = cast("list[dict[str, Any]]", symbol_info["rows"])
+            rows.append(default_row)
+
+    def _find_table_entry(
+        self,
+        info: dict[str, Any],
+        symbol_info: dict[str, Any],
+    ) -> tuple[dict[str, Any], str | None]:
+        """Find the MibTableRow entry for a table by matching OID suffix."""
+        expected_entry_oid = [*list(symbol_info["oid"]), 1]
+        for other_name, other_data in info.items():
+            if (
+                isinstance(other_data, dict)
+                and other_data.get("type") == "MibTableRow"
+                and list(other_data.get("oid", [])) == expected_entry_oid
+            ):
+                return other_data, other_name
+        return {}, None
+
+    def _ensure_entry_indexes(
+        self,
+        entry_info: dict[str, Any],
+        entry_name: str | None,
+        compiled_py_path: str,
+        mib_name: str,
+    ) -> None:
+        """Best-effort index extraction from compiled MIB metadata."""
+        if not entry_info or "indexes" in entry_info or not entry_name:
+            return
+
+        try:
+            mib_builder = builder.MibBuilder()
+            try:
+                mib_builder.add_mib_sources(
+                    builder.DirMibSource(str(Path(compiled_py_path).parent))
+                )
+            except MIB_OPERATION_ERRORS:
+                with contextlib.suppress(*MIB_OPERATION_ERRORS):
+                    mib_builder.add_mib_sources()
+
+            mib_builder.load_modules(mib_name)
+            mib_symbols = mib_builder.mibSymbols[mib_name]
+            entry_obj = mib_symbols.get(entry_name)
+            if isinstance(entry_obj, HasIndexNames):
+                entry_info["indexes"] = [idx[2] for idx in entry_obj.getIndexNames()]
+        except MIB_OPERATION_ERRORS as err:
+            logger.warning("Could not extract index columns for %s: %s", entry_name, err)
+
+    def _find_table_columns(
+        self,
+        info: dict[str, Any],
+        entry_oid: tuple[Any, ...],
+        table_name: str,
+        entry_name: str | None,
+    ) -> list[str]:
+        """Return column names that are direct children of the entry OID."""
+        columns: list[str] = []
+        for col_name, col_info in info.items():
+            if not isinstance(col_info, dict):
+                continue
+            if col_name in [table_name, entry_name]:
+                continue
+            col_oid = tuple(col_info.get("oid", []))
+            if len(col_oid) == len(entry_oid) + 1 and col_oid[: len(entry_oid)] == entry_oid:
+                columns.append(col_name)
+        return columns
+
+    def _build_default_row(
+        self,
+        columns: list[str],
+        info: dict[str, Any],
+        entry_info: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build default row values for table columns."""
+        default_row: dict[str, Any] = {}
+        if not getattr(self, "_type_registry", None):
+            self._type_registry = self._load_type_registry()
+
+        index_names = entry_info.get("indexes", [])
+        if not index_names:
+            index_names = ["__index__"]
+            entry_info["indexes"] = index_names
+        if "__index__" in index_names:
+            default_row["__index__"] = "1"
+
+        for col in columns:
+            col_info = cast("dict[str, Any]", info[col])
+            col_type = col_info.get("type", "")
+            type_info = self._type_registry.get(col_type, {})
+            type_info = self._normalize_type_info_for_symbol(type_info, col_type)
+            if "enums" in col_info:
+                type_info = {**type_info, "enums": col_info["enums"]}
+
+            if col in index_names:
+                default_value = self._get_default_index_value(col_type, type_info)
+                if isinstance(default_value, int) and default_value < 1:
+                    constraints = type_info.get("constraints", [])
+                    has_nonzero_constraint = any(
+                        (
+                            c.get("min", 0) > 0
+                            if isinstance(c, dict) and c.get("type") == "ValueRangeConstraint"
+                            else False
+                        )
+                        for c in constraints
+                    )
+                    if has_nonzero_constraint or col_type == "InterfaceIndex":
+                        default_value = 1
+                default_row[col] = default_value
+            else:
+                default_row[col] = self._get_default_value_from_type_info(type_info, col)
+
+        return default_row
 
     def _parse_mib_name_from_py(self, compiled_py_path: str) -> str:
         """Parse the MIB name from the compiled Python file (looks for mibBuilder.exportSymbols)."""
@@ -302,8 +355,8 @@ class BehaviourGenerator:
             mib_builder.add_mib_sources(
                 builder.DirMibSource(str(Path(mib_py_path).parent))
             )
-        except Exception:
-            with contextlib.suppress(Exception):
+        except MIB_OPERATION_ERRORS:
+            with contextlib.suppress(*MIB_OPERATION_ERRORS):
                 mib_builder.add_mib_sources()
         mib_builder.load_modules(mib_name)
         mib_symbols = mib_builder.mibSymbols[mib_name]
@@ -321,101 +374,7 @@ class BehaviourGenerator:
             msg = f"mib_symbols for {mib_name} is not a dict; cannot extract symbols."
             raise TypeError(msg)
 
-        result: dict[str, Any] = {}
-        for symbol_name, symbol_obj in mib_symbols.items():
-            symbol_name_str = str(symbol_name)
-            snapshot = extract_symbol_snapshot(symbol_obj)
-            if snapshot is None:
-                continue
-
-            if snapshot.class_name == "MibScalarInstance":
-                continue
-
-            oid = snapshot.oid
-            syntax_obj = snapshot.syntax_obj
-            access = snapshot.access
-
-            # Check if this is a structural type (table, row, column)
-            symbol_type = snapshot.class_name
-            is_structural = symbol_type in ("MibTable", "MibTableRow", "MibTableColumn")
-
-            # Get the syntax type for non-structural elements
-            if syntax_obj is not None and syntax_obj.__class__.__name__ != "NoneType":
-                type_name = syntax_obj.__class__.__name__
-            else:
-                type_name = symbol_type
-
-            if not getattr(self, "_type_registry", None):
-                self._type_registry = self._load_type_registry()
-            type_info = self._type_registry.get(type_name, {})
-
-            # If type not in registry, try to infer base_type from type_name
-            if not type_info and type_name:
-                # Map common type names to base types
-                base_type_map: dict[str, str] = {
-                    "INTEGER": "Integer32",
-                    "OCTET STRING": "OctetString",
-                    "OBJECT IDENTIFIER": "ObjectIdentifier",
-                }
-                mapped_type = base_type_map.get(type_name, type_name) or type_name
-                type_info = self._type_registry.get(mapped_type, {})
-                if not type_info:
-                    # Create minimal type_info with base_type set to the mapped type
-                    type_info = {"base_type": mapped_type}
-
-            # CRITICAL: Always enrich type_info with enums from the compiled MIB syntax object
-            # This is necessary because the registry has generic types (Integer32, OctetString)
-            # but the actual compiled MIB has specific enums for each symbol
-            if syntax_obj is not None and syntax_obj.__class__.__name__ != "NoneType":
-                extracted_type_info = self._extract_type_info(syntax_obj, type_name)
-                # DEBUG
-                if symbol_name_str in ("ifAdminStatus", "ifOperStatus"):
-                    logger.warning(
-                        "DEBUG %s: extracted enums = %s",
-                        symbol_name_str,
-                        extracted_type_info.get("enums"),
-                    )
-                # Merge extracted enums and constraints into type_info
-                # Extracted info has priority as it comes from the specific symbol
-                if extracted_type_info.get("enums"):
-                    type_info = dict(type_info)  # Create a copy to avoid modifying registry
-                    type_info["enums"] = extracted_type_info["enums"]
-                if extracted_type_info.get("constraints"):
-                    type_info = dict(type_info)  # Create a copy if not already done
-                    type_info["constraints"] = extracted_type_info["constraints"]
-
-            # Provide sensible default initial values based on type
-            # Skip for structural types (tables, rows, columns)
-            # Table columns should NOT have initial values - they're just type definitions
-            # The actual values live in the table's "rows" array
-            if is_structural:
-                initial_value = None
-                dynamic_func = None
-            else:
-                type_info = self._normalize_type_info_for_symbol(type_info or {}, type_name)
-                initial_value = self._get_default_value_from_type_info(
-                    type_info or {}, symbol_name_str
-                )
-                dynamic_func = self._get_dynamic_function(symbol_name_str)
-
-            entry: dict[str, Any] = {
-                "oid": oid,
-                "type": type_name,
-                "access": access,
-            }
-
-            # Only add initial and dynamic_function for non-structural types
-            # Structural types (tables, rows, columns) don't have initial values
-            if not is_structural:
-                entry["initial"] = initial_value
-                entry["dynamic_function"] = dynamic_func
-
-            # Include enums in the schema if they exist
-            # This is critical for fields like ifAdminStatus that have enum constraints
-            if type_info and type_info.get("enums"):
-                entry["enums"] = type_info["enums"]
-
-            result[symbol_name_str] = entry
+        result = self._build_object_entries(mib_symbols)
 
         # Detect tables that inherit their index from another table (AUGMENTS pattern)
         # This needs to be done after all symbols are collected
@@ -436,6 +395,89 @@ class BehaviourGenerator:
 
         logger.debug("Extracted MIB info for %s: %s", mib_name, list(result.keys()))
         return {"objects": result, "traps": traps}
+
+    def _build_object_entries(self, mib_symbols: dict[str, Any]) -> dict[str, Any]:
+        """Convert raw MIB symbols to schema object entries."""
+        if not getattr(self, "_type_registry", None):
+            self._type_registry = self._load_type_registry()
+
+        result: dict[str, Any] = {}
+        for symbol_name, symbol_obj in mib_symbols.items():
+            symbol_name_str = str(symbol_name)
+            snapshot = extract_symbol_snapshot(symbol_obj)
+            if snapshot is None or snapshot.class_name == "MibScalarInstance":
+                continue
+
+            entry = self._build_symbol_entry(snapshot, symbol_name_str)
+            result[symbol_name_str] = entry
+
+        return result
+
+    def _build_symbol_entry(self, snapshot: SymbolSnapshot, symbol_name: str) -> dict[str, Any]:
+        """Build a single schema entry from a symbol snapshot."""
+        symbol_type = snapshot.class_name
+        syntax_obj = snapshot.syntax_obj
+        is_structural = symbol_type in ("MibTable", "MibTableRow", "MibTableColumn")
+
+        if syntax_obj is not None and syntax_obj.__class__.__name__ != "NoneType":
+            type_name = syntax_obj.__class__.__name__
+        else:
+            type_name = symbol_type
+
+        type_info = self._resolve_type_info(type_name, syntax_obj, symbol_name)
+        entry: dict[str, Any] = {
+            "oid": snapshot.oid,
+            "type": type_name,
+            "access": snapshot.access,
+        }
+
+        if not is_structural:
+            normalized = self._normalize_type_info_for_symbol(type_info or {}, type_name)
+            entry["initial"] = self._get_default_value_from_type_info(normalized or {}, symbol_name)
+            entry["dynamic_function"] = self._get_dynamic_function(symbol_name)
+
+        if type_info.get("enums"):
+            entry["enums"] = type_info["enums"]
+        return entry
+
+    def _resolve_type_info(
+        self,
+        type_name: str,
+        syntax_obj: object | None,
+        symbol_name: str,
+    ) -> dict[str, Any]:
+        """Resolve and enrich type info from registry and concrete symbol metadata."""
+        type_info = cast("dict[str, Any]", self._type_registry.get(type_name, {}))
+
+        if not type_info and type_name:
+            base_type_map: dict[str, str] = {
+                "INTEGER": "Integer32",
+                "OCTET STRING": "OctetString",
+                "OBJECT IDENTIFIER": "ObjectIdentifier",
+            }
+            mapped_type = base_type_map.get(type_name, type_name) or type_name
+            type_info = cast("dict[str, Any]", self._type_registry.get(mapped_type, {}))
+            if not type_info:
+                type_info = {"base_type": mapped_type}
+
+        if syntax_obj is None or syntax_obj.__class__.__name__ == "NoneType":
+            return type_info
+
+        extracted_type_info = self._extract_type_info(syntax_obj, type_name)
+        if symbol_name in ("ifAdminStatus", "ifOperStatus"):
+            logger.warning(
+                "DEBUG %s: extracted enums = %s",
+                symbol_name,
+                extracted_type_info.get("enums"),
+            )
+
+        if extracted_type_info.get("enums"):
+            type_info = dict(type_info)
+            type_info["enums"] = extracted_type_info["enums"]
+        if extracted_type_info.get("constraints"):
+            type_info = dict(type_info)
+            type_info["constraints"] = extracted_type_info["constraints"]
+        return type_info
 
     def _extract_traps(
         self,
@@ -567,7 +609,7 @@ class BehaviourGenerator:
                 # Only mark as inherited if there are actually inherited index columns
                 if inherited_indexes and entry_name in result:
                     result[entry_name]["index_from"] = inherited_indexes
-            except Exception:
+            except MIB_OPERATION_ERRORS:
                 # Skip if we can't detect - not all objects have getIndexNames
                 logger.debug("Skipping inherited-index detection for %s", entry_name)
 
@@ -653,25 +695,24 @@ class BehaviourGenerator:
         For complex types like IpAddress, returns a representative value.
         For integer types, returns 1.
         """
-        # Handle special SNMP types
+        default_value: object = self._get_default_value_from_type_info(type_info, "index")
+
         if col_type == "IpAddress":
-            return "192.168.1.1"  # Default IP address
-        if col_type == "InterfaceIndexOrZero":
-            return 0
-        if col_type == "InterfaceIndex":
-            return 1
-        if col_type in ("Unsigned32", "Integer32", "Integer", "Gauge32"):
-            # For port numbers and similar, use a more realistic default
-            # Check if this might be a port based on constraints
+            default_value = "192.168.1.1"
+        elif col_type == "InterfaceIndexOrZero":
+            default_value = 0
+        elif col_type == "InterfaceIndex":
+            default_value = 1
+        elif col_type in ("Unsigned32", "Integer32", "Integer", "Gauge32"):
+            default_value = 1
             if type_info:
                 base = str(type_info.get("base_type", ""))
                 if "port" in base.lower():
-                    return 8080
-            return 1
-        if col_type in ("OctetString", "DisplayString", "PhysAddress"):
-            return "default"
-        # Use the generic default value generator
-        return self._get_default_value_from_type_info(type_info, "index")
+                    default_value = 8080
+        elif col_type in ("OctetString", "DisplayString", "PhysAddress"):
+            default_value = "default"
+
+        return default_value
 
     def _get_default_value_from_type_info(
         self,
@@ -716,35 +757,31 @@ class BehaviourGenerator:
 
     def _get_default_value(self, syntax: str, symbol_name: str) -> object:
         """Legacy method - kept for compatibility."""
-        # This is now handled by _get_default_value_from_type_info
-        # but kept as fallback
-        if symbol_name == "sysDescr":
-            return "Simple Python SNMP Agent - Demo System"
-        if symbol_name == "sysObjectID":
-            return "1.3.6.1.4.1.99999"
-        if symbol_name == "sysContact":
-            return "Admin <admin@example.com>"
-        if symbol_name == "sysName":
-            return "my-pysnmp-agent"
-        if symbol_name == "sysLocation":
-            return "Development Lab"
-        if symbol_name == "sysUpTime":
-            return None  # Dynamic, handled by uptime function
+        symbol_defaults: dict[str, object] = {
+            "sysDescr": "Simple Python SNMP Agent - Demo System",
+            "sysObjectID": "1.3.6.1.4.1.99999",
+            "sysContact": "Admin <admin@example.com>",
+            "sysName": "my-pysnmp-agent",
+            "sysLocation": "Development Lab",
+            "sysUpTime": None,
+        }
+        if symbol_name in symbol_defaults:
+            return symbol_defaults[symbol_name]
 
-        # Type-based defaults
-        if syntax in ("DisplayString", "OctetString"):
-            return "unset"
-        if syntax == "ObjectIdentifier":
-            return "0.0"
-        if syntax in ("Integer32", "Integer", "Gauge32", "Unsigned32"):
-            return 0
-        if syntax in ("Counter32", "Counter64"):
-            return 0
-        if syntax == "IpAddress":
-            return "0.0.0.0"
-        if syntax == "TimeTicks":
-            return 0
-        return None
+        type_defaults: dict[str, object] = {
+            "DisplayString": "unset",
+            "OctetString": "unset",
+            "ObjectIdentifier": "0.0",
+            "Integer32": 0,
+            "Integer": 0,
+            "Gauge32": 0,
+            "Unsigned32": 0,
+            "Counter32": 0,
+            "Counter64": 0,
+            "IpAddress": "0.0.0.0",  # noqa: S104
+            "TimeTicks": 0,
+        }
+        return type_defaults.get(syntax)
 
     def _get_dynamic_function(self, symbol_name: str) -> object:
         """Determine if this symbol should use a dynamic function."""

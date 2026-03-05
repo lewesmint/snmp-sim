@@ -14,15 +14,22 @@ which use mocked PySNMP libraries.
 import unittest
 from typing import Any
 
-import pytest
-
-from async_wrapper import (
-    SnmpSyncError,
-    SyncSnmpClient,
-    get_sync,
-    make_oid,
-    shutdown_sync_wrapper,
-)
+try:
+    from async_wrapper import (
+        SnmpSyncError,
+        SyncSnmpClient,
+        get_sync,
+        make_oid,
+        shutdown_sync_wrapper,
+    )
+except ModuleNotFoundError:
+    from async_wrapper import (
+        SnmpSyncError,
+        SyncSnmpClient,
+        get_sync,
+        make_oid,
+        shutdown_sync_wrapper,
+    )
 
 try:
     from pysnmp.hlapi.asyncio import (

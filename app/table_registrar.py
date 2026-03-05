@@ -510,7 +510,7 @@ class TableRegistrar:
             return None
         try:
             resolved = self.snmp_type_resolver.resolve_type_factory(base_type, self.mib_builder)
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
             resolved = None
 
         if resolved is not None:
@@ -518,7 +518,7 @@ class TableRegistrar:
 
         try:
             fallback = getattr(rfc1902, base_type, None)
-        except Exception:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError, RuntimeError):
             return None
 
         return fallback if callable(fallback) else None

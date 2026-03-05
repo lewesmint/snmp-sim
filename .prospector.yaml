@@ -4,14 +4,15 @@ doc-warnings: false
 member-warnings: false
 
 ignore-paths:
-  - agent-model
-  - agent-model-backups
+  - tests
   - compiled-mibs
-  - docs
-  - logs
-  - manual-tests
-  - minimal-for-reference
+  - compiled-mibs-test
   - retired
+  - minimal_for_reference
+  - manual-tests
+  - logs
+  - ui/logs
+  - snmp_wrapper
 
 tools:
   dodgy:

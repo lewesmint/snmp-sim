@@ -9,7 +9,7 @@ Scope: Python codebase scan excluding configured generated/archive folders
 - .pyenv/**
 - compiled-mibs/**
 - compiled-mibs-test/**
-- minimal-for-reference/**
+- minimal_for_reference/**
 - manual-tests/**
 - retired/**
 - logs/**
@@ -88,7 +88,7 @@ Scope: Python codebase scan excluding configured generated/archive folders
 - [tool.mypy]
   - ignore_missing_imports = true
   - disable_error_code = ["import-untyped"]
-  - exclude includes: retired, compiled-mibs-test, compiled-mibs, minimal-for-reference, manual-tests, logs, ui, tests, ui/logs
+  - exclude includes: retired, compiled-mibs-test, compiled-mibs, minimal_for_reference, manual-tests, logs, ui, tests, ui/logs
 - [tool.ruff.lint]
   - ignore = ["E501", "E741"]
 - [tool.pytest.ini_options]

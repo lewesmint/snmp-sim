@@ -1,5 +1,4 @@
 """Run consolidated quality checks for the main project Python folders."""
-# ruff: noqa: INP001
 
 from __future__ import annotations
 

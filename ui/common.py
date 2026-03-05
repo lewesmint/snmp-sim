@@ -5,17 +5,13 @@ from __future__ import annotations
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from app.interface_types import PrettyPrintable
 
 if TYPE_CHECKING:
     import tkinter as tk
     from collections.abc import Callable
-
-
-T = TypeVar("T")
-
 
 class Logger:
     """Simple logger that outputs to both console and optional text widget with color coding."""
@@ -98,7 +94,7 @@ def format_snmp_value(value: PrettyPrintable | object) -> str:
         return str(value)
 
 
-def safe_call(
+def safe_call[T](
     func: Callable[[], T],
     default: T | None = None,
     logger: Logger | None = None,

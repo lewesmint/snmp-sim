@@ -8,12 +8,12 @@ import json
 import sys
 from io import StringIO
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.api_shared import JsonObject
 from app.api_state import logger, state
 from app.app_config import AppConfig
 from app.cli_bake_state import backup_schemas, bake_state_into_schemas, load_mib_state
@@ -40,6 +40,9 @@ from app.model_paths import (
     GUI_CONFIG_YAML_FILE,
     MIB_STATE_FILE,
 )
+
+if TYPE_CHECKING:
+    from app.api_shared import JsonObject
 
 router = APIRouter()
 
@@ -74,7 +77,7 @@ def _clear_agent_state() -> None:
         state.snmp_agent.table_instances = {}
         state.snmp_agent.deleted_instances = []
         with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
-            state.snmp_agent._save_mib_state()
+            state.snmp_agent.save_mib_state()
 
 
 @router.get("/config")

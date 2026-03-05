@@ -7,7 +7,7 @@ This script identifies tests that appear redundant from a line-coverage perspect
 It can optionally run pytest with ``--cov-context=test`` to produce context-aware
 coverage data before analysis.
 """
-# ruff: noqa: INP001
+# ruff: noqa: T201
 # pylint: disable=line-too-long,missing-class-docstring,missing-function-docstring
 
 from __future__ import annotations
@@ -23,6 +23,9 @@ from pathlib import Path
 from typing import Any
 
 from coverage import CoverageData
+
+# Maximum number of tests to display per duplicate group before truncation
+_MAX_TESTS_DISPLAY = 8
 
 
 def _project_root() -> Path:
@@ -52,6 +55,8 @@ def _is_test_context(raw_context: str) -> bool:
 
 @dataclass(frozen=True)
 class Candidate:
+    """A test candidate with coverage line statistics for redundancy analysis."""
+
     test_id: str
     covered_lines: int
     unique_lines: int
@@ -68,15 +73,8 @@ def _run_pytest_for_contexts(pytest_args: list[str], root: Path) -> int:
     env = os.environ.copy()
     rcfile_path = root / ".coverage.redundancy.rc"
     rcfile_path.write_text(
-        "\n".join(
-            [
-                "[run]",
-                "branch = true",
-                "dynamic_context = test_function",
-                "source = app,plugins,ui",
-            ]
-        )
-        + "\n",
+        "[run]\nbranch = true\ndynamic_context = test_function\nsource = app,plugins,ui"
+         "\n",
         encoding="utf-8",
     )
 
@@ -145,7 +143,9 @@ def _load_context_data(coverage_file: Path) -> tuple[dict[str, set[tuple[str, in
     return dict(per_test_lines), measured_files
 
 
-def _build_candidates(per_test_lines: dict[str, set[tuple[str, int]]]) -> tuple[list[Candidate], dict[str, list[str]]]:
+def _build_candidates(
+    per_test_lines: dict[str, set[tuple[str, int]]],
+) -> tuple[list[Candidate], dict[str, list[str]]]:
     line_to_tests: dict[tuple[str, int], set[str]] = defaultdict(set)
     for test_id, covered in per_test_lines.items():
         for key in covered:
@@ -181,7 +181,11 @@ def _build_candidates(per_test_lines: dict[str, set[tuple[str, int]]]) -> tuple[
     return candidates, duplicate_groups
 
 
-def _print_report(candidates: list[Candidate], duplicate_groups: dict[str, list[str]], top_n: int) -> None:
+def _print_report(
+    candidates: list[Candidate],
+    duplicate_groups: dict[str, list[str]],
+    top_n: int,
+) -> None:
     total_tests = len(candidates)
     no_coverage = [c for c in candidates if c.covered_lines == 0]
     zero_unique = [c for c in candidates if c.covered_lines > 0 and c.unique_lines == 0]
@@ -203,10 +207,10 @@ def _print_report(candidates: list[Candidate], duplicate_groups: dict[str, list[
         print("\nExact duplicate-signature groups (first 10):")
         for group_id, tests in list(duplicate_groups.items())[:10]:
             print(f"- {group_id}: {len(tests)} tests")
-            for test_id in tests[:8]:
+            for test_id in tests[:_MAX_TESTS_DISPLAY]:
                 print(f"    - {test_id}")
-            if len(tests) > 8:
-                print(f"    - ... and {len(tests) - 8} more")
+            if len(tests) > _MAX_TESTS_DISPLAY:
+                print(f"    - ... and {len(tests) - _MAX_TESTS_DISPLAY} more")
 
     print(
         "\nNote: zero-unique-line does not automatically mean removable; "
@@ -250,6 +254,15 @@ def _write_json_report(
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the redundancy report script.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed arguments including --run, --pytest-args, --coverage-file,
+        --top, and --json-out options.
+
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--run",
@@ -282,6 +295,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Run the redundancy report script and write the report."""
     args = parse_args()
     root = _project_root()
 

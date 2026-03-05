@@ -9,13 +9,13 @@ Approach:
 This is slower than context-based approaches, but robust across coverage/pytest-cov
 configuration differences.
 """
-# ruff: noqa: INP001
 # pylint: disable=line-too-long,missing-class-docstring,missing-function-docstring
 
 from __future__ import annotations
 
 import argparse
 import json
+import logging
 import subprocess
 import sys
 from collections import defaultdict
@@ -26,10 +26,14 @@ from typing import Any
 from coverage import CoverageData
 
 SOURCE_PREFIXES = ("app/", "plugins/", "ui/")
+MAX_DUPLICATE_PREVIEW = 8
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class TestResult:
+    """Per-test isolation coverage summary."""
+
     nodeid: str
     success: bool
     covered_lines: int
@@ -173,31 +177,38 @@ def _print_report(results: list[TestResult], duplicates: dict[str, list[str]], t
     no_coverage = [r for r in results if r.covered_lines == 0 and r.success]
     failed = [r for r in results if not r.success]
 
-    print("\n=== Test Redundancy Report (isolated coverage) ===")
-    print(f"Tests analyzed: {len(results)}")
-    print(f"Failed during isolated run: {len(failed)}")
-    print(f"No-coverage tests: {len(no_coverage)}")
-    print(f"Zero-unique-line candidates: {len(zero_unique)}")
-    print(f"Exact duplicate-signature groups: {len(duplicates)}")
+    LOGGER.info("\n=== Test Redundancy Report (isolated coverage) ===")
+    LOGGER.info("Tests analyzed: %s", len(results))
+    LOGGER.info("Failed during isolated run: %s", len(failed))
+    LOGGER.info("No-coverage tests: %s", len(no_coverage))
+    LOGGER.info("Zero-unique-line candidates: %s", len(zero_unique))
+    LOGGER.info("Exact duplicate-signature groups: %s", len(duplicates))
 
-    print("\nTop zero-unique-line candidates:")
+    LOGGER.info("\nTop zero-unique-line candidates:")
     for row in sorted(zero_unique, key=lambda x: x.covered_lines, reverse=True)[:top]:
-        print(
-            f"- {row.nodeid} | covered={row.covered_lines} "
-            f"unique={row.unique_lines} shared={row.shared_lines}"
+        LOGGER.info(
+            "- %s | covered=%s unique=%s shared=%s",
+            row.nodeid,
+            row.covered_lines,
+            row.unique_lines,
+            row.shared_lines,
         )
 
     if duplicates:
-        print("\nExact duplicate-signature groups (first 10):")
+        LOGGER.info("\nExact duplicate-signature groups (first 10):")
         for gid, tests in list(duplicates.items())[:10]:
-            print(f"- {gid}: {len(tests)} tests")
-            for test in tests[:8]:
-                print(f"    - {test}")
-            if len(tests) > 8:
-                print(f"    - ... and {len(tests) - 8} more")
+            LOGGER.info("- %s: %s tests", gid, len(tests))
+            for test in tests[:MAX_DUPLICATE_PREVIEW]:
+                LOGGER.info("    - %s", test)
+            if len(tests) > MAX_DUPLICATE_PREVIEW:
+                LOGGER.info("    - ... and %s more", len(tests) - MAX_DUPLICATE_PREVIEW)
 
 
-def _write_json(output_path: Path, results: list[TestResult], duplicates: dict[str, list[str]]) -> None:
+def _write_json(
+    output_path: Path,
+    results: list[TestResult],
+    duplicates: dict[str, list[str]],
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
         "summary": {
@@ -227,6 +238,7 @@ def _write_json(output_path: Path, results: list[TestResult], duplicates: dict[s
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for isolated redundancy analysis."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--max-tests",
@@ -255,20 +267,23 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Run isolated per-test coverage analysis and write the report."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     args = parse_args()
     root = _project_root()
 
     try:
         nodeids = _collect_tests(root, args.collect_args)
-    except RuntimeError as exc:
-        print(str(exc), file=sys.stderr)
+    except RuntimeError:
+        LOGGER.exception("Failed to collect tests.")
         return 2
 
-    if args.max_tests and args.max_tests > 0:
+    if args.max_tests > 0:
         nodeids = nodeids[: args.max_tests]
 
     if not nodeids:
-        print("No tests collected.", file=sys.stderr)
+        LOGGER.error("No tests collected.")
         return 2
 
     data_file = root / ".coverage.redundancy.isolated"
@@ -286,14 +301,14 @@ def main() -> int:
             failed.append(nodeid)
 
         if idx % 25 == 0 or idx == total:
-            print(f"Progress: {idx}/{total} tests analyzed")
+            LOGGER.info("Progress: %s/%s tests analyzed", idx, total)
 
     results, duplicates = _analyze(per_test_lines, failed)
     _print_report(results, duplicates, args.top)
 
     output_path = (root / args.json_out).resolve()
     _write_json(output_path, results, duplicates)
-    print(f"\nWrote JSON report to: {output_path}")
+    LOGGER.info("\nWrote JSON report to: %s", output_path)
     return 0
 
 

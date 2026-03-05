@@ -1,5 +1,6 @@
-#!/usr/bin/env python3
 """Test different OID formats with pysnmp GETNEXT"""
+
+from __future__ import annotations
 
 import asyncio
 from pysnmp.hlapi.v3arch.asyncio import (

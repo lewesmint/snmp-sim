@@ -39,5 +39,4 @@ def write_model_output(model: ModelDict, output_path: str) -> bool:
     except OSError:
         logger.exception("Error: Failed to save model")
         return False
-    else:
-        return True
+    return True

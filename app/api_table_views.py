@@ -371,6 +371,191 @@ def set_oid_value(update: OIDValueUpdate) -> dict[str, object]:
     return {"status": "ok", "oid": parts, "new_value": update.value}
 
 
+def _get_objects_map(schema: JsonValue) -> dict[str, Any]:
+    if not isinstance(schema, dict):
+        return {}
+    objects = schema.get("objects", schema)
+    return objects if isinstance(objects, dict) else {}
+
+
+def _build_index_source_map(schemas: dict[str, JsonValue]) -> dict[str, dict[str, str]]:
+    index_source_map: dict[str, dict[str, str]] = {}
+
+    for schema in schemas.values():
+        objects = _get_objects_map(schema)
+        if not objects:
+            continue
+
+        for obj_data in objects.values():
+            if not isinstance(obj_data, dict) or obj_data.get("type") != "MibTableRow":
+                continue
+
+            index_from = obj_data.get("index_from", [])
+            if not isinstance(index_from, list) or not index_from:
+                continue
+
+            source_info = index_from[0]
+            if not isinstance(source_info, dict):
+                continue
+
+            source_mib = source_info.get("mib")
+            source_column = source_info.get("column")
+            if not isinstance(source_mib, str) or not isinstance(source_column, str):
+                continue
+
+            table_oid_parts = obj_data.get("oid", [])
+            if not isinstance(table_oid_parts, list) or not table_oid_parts:
+                continue
+            if table_oid_parts[-1] != 1:
+                continue
+
+            table_oid = ".".join(str(x) for x in table_oid_parts[:-1])
+            index_source_map[table_oid] = {"mib": source_mib, "column": source_column}
+
+    return index_source_map
+
+
+def _find_entry_for_table(
+    objects: dict[str, Any],
+    table_oid_parts: list[int],
+) -> tuple[str | None, dict[str, Any]]:
+    expected_entry_oid = [*table_oid_parts, 1]
+    for other_name, other_data in objects.items():
+        if (
+            isinstance(other_data, dict)
+            and other_data.get("type") == "MibTableRow"
+            and list(other_data.get("oid", [])) == expected_entry_oid
+        ):
+            return other_name, other_data
+    return None, {}
+
+
+def _row_instance_parts(
+    row: dict[str, Any],
+    index_columns: list[str],
+    metadata: dict[str, Any],
+) -> list[str]:
+    parts: list[str] = []
+    for idx_col in index_columns:
+        if idx_col not in row:
+            continue
+        val = row[idx_col]
+        col_meta = metadata.get(idx_col, {})
+        if col_meta.get("type") == "IpAddress" and isinstance(val, str):
+            parts.extend(val.split("."))
+        else:
+            parts.append(str(val))
+    return parts
+
+
+def _collect_instances_from_rows(
+    rows: object,
+    index_columns: list[str],
+    metadata: dict[str, Any],
+) -> list[str]:
+    instances: list[str] = []
+    if not isinstance(rows, list):
+        return instances
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        parts = _row_instance_parts(row, index_columns, metadata)
+        if parts:
+            instances.append(".".join(parts))
+    return instances
+
+
+def _find_parent_table_obj(
+    source_objects: dict[str, Any],
+    source_column: str,
+) -> dict[str, Any] | None:
+    col_data = source_objects.get(source_column)
+    if not isinstance(col_data, dict):
+        return None
+
+    col_oid = tuple(col_data.get("oid", []))
+    if len(col_oid) <= 1:
+        return None
+
+    entry_oid = col_oid[:-1]
+    if not entry_oid or entry_oid[-1] != 1:
+        return None
+
+    parent_table_oid = list(entry_oid[:-1])
+    for tbl_data in source_objects.values():
+        if (
+            isinstance(tbl_data, dict)
+            and tbl_data.get("type") == "MibTable"
+            and list(tbl_data.get("oid", [])) == parent_table_oid
+        ):
+            return tbl_data
+    return None
+
+
+def _collect_instances_from_index_source(
+    table_oid: str,
+    obj_name: str,
+    source_info: dict[str, str],
+    schemas: dict[str, JsonValue],
+) -> list[str]:
+    source_mib = source_info.get("mib", "")
+    source_column = source_info.get("column", "")
+
+    if table_oid.endswith(".31.1.1"):
+        logger.debug(
+            "Fetching parent instances for %s (%s) from %s.%s",
+            obj_name,
+            table_oid,
+            source_mib,
+            source_column,
+        )
+
+    if source_mib not in schemas:
+        return []
+
+    source_objects = _get_objects_map(schemas[source_mib])
+    if not source_objects:
+        return []
+
+    parent_table_obj = _find_parent_table_obj(source_objects, source_column)
+    if not parent_table_obj:
+        return []
+
+    source_entry_oid = [*list(parent_table_obj.get("oid", [])), 1]
+    source_entry_obj = {}
+    for source_entry_data in source_objects.values():
+        if (
+            isinstance(source_entry_data, dict)
+            and source_entry_data.get("type") == "MibTableRow"
+            and list(source_entry_data.get("oid", [])) == source_entry_oid
+        ):
+            source_entry_obj = source_entry_data
+            break
+
+    source_indexes = source_entry_obj.get("indexes", [])
+    instances = _collect_instances_from_rows(
+        parent_table_obj.get("rows", []),
+        source_indexes,
+        source_objects,
+    )
+
+    if table_oid.endswith(".31.1.1"):
+        logger.debug("After fetching parent instances for %s: %s", obj_name, instances)
+
+    return instances
+
+
+def _merge_live_instances(table_oid: str, instances: list[str]) -> list[str]:
+    if state.snmp_agent is None or table_oid not in state.snmp_agent.table_instances:
+        return instances
+
+    for inst_key in state.snmp_agent.table_instances[table_oid]:
+        if inst_key not in instances:
+            instances.append(inst_key)
+    return instances
+
+
 @router.get("/tree/bulk")
 def get_tree_bulk_data() -> dict[str, object]:
     """Get complete tree data including all table instances for efficient GUI loading."""
@@ -384,161 +569,36 @@ def get_tree_bulk_data() -> dict[str, object]:
     schemas = load_all_schemas(schema_dir)
 
     tables_data: dict[str, Any] = {}
-
-    index_source_map: dict[str, dict[str, str]] = {}
-
-    for schema in schemas.values():
-        objects = schema.get("objects", schema)
-        if not isinstance(objects, dict):
-            continue
-
-        for _obj_data in objects.values():
-            if isinstance(_obj_data, dict) and _obj_data.get("type") == "MibTableRow":
-                index_from = _obj_data.get("index_from", [])
-                if index_from and isinstance(index_from, list) and len(index_from) > 0:
-                    source_info = index_from[0]
-                    if not isinstance(source_info, dict):
-                        continue
-                    source_mib = source_info.get("mib")
-                    source_column = source_info.get("column")
-                    if not isinstance(source_mib, str) or not isinstance(source_column, str):
-                        continue
-                    table_oid_parts = _obj_data.get("oid", [])
-                    if table_oid_parts and len(table_oid_parts) > 0 and table_oid_parts[-1] == 1:
-                        table_oid = ".".join(str(x) for x in table_oid_parts[:-1])
-                        index_source_map[table_oid] = {
-                            "mib": source_mib,
-                            "column": source_column,
-                        }
+    index_source_map = _build_index_source_map(schemas)
 
     for schema in schemas.values():
-        objects = schema.get("objects", schema)
-        if not isinstance(objects, dict):
+        objects = _get_objects_map(schema)
+        if not objects:
             continue
 
         for obj_name, obj_data in objects.items():
             if isinstance(obj_data, dict) and obj_data.get("type") == "MibTable":
                 table_oid = ".".join(str(x) for x in obj_data["oid"])
 
-                entry_name = None
-                entry_obj = {}
-                table_oid_parts = obj_data["oid"]
-                expected_entry_oid = [*table_oid_parts, 1]
-
-                for other_name, other_data in objects.items():
-                    if (
-                        isinstance(other_data, dict)
-                        and other_data.get("type") == "MibTableRow"
-                        and list(other_data.get("oid", [])) == expected_entry_oid
-                    ):
-                        entry_name = other_name
-                        entry_obj = other_data
-                        break
+                entry_name, entry_obj = _find_entry_for_table(objects, obj_data["oid"])
 
                 index_columns = entry_obj.get("indexes", [])
 
                 instances: list[str] = []
                 try:
                     if table_oid in index_source_map:
-                        source_info = index_source_map[table_oid]
-                        source_mib = source_info.get("mib", "")
-                        source_column = source_info.get("column", "")
-
-                        if table_oid.endswith(".31.1.1"):
-                            logger.debug(
-                                "Fetching parent instances for %s (%s) from %s.%s",
-                                obj_name,
-                                table_oid,
-                                source_mib,
-                                source_column,
-                            )
-                        if source_mib in schemas:
-                            source_schema = schemas[source_mib]
-                            source_objects: dict[str, Any] = {}
-                            if isinstance(source_schema, dict):
-                                candidate_source_objects = source_schema.get(
-                                    "objects", source_schema
-                                )
-                                if isinstance(candidate_source_objects, dict):
-                                    source_objects = candidate_source_objects
-                            if not source_objects:
-                                continue
-
-                            parent_table_obj = None
-                            if source_column in source_objects:
-                                col_data = source_objects[source_column]
-                                if isinstance(col_data, dict):
-                                    col_oid = tuple(col_data.get("oid", []))
-                                    if len(col_oid) > 1:
-                                        entry_oid = col_oid[:-1]
-                                        if len(entry_oid) > 0 and entry_oid[-1] == 1:
-                                            table_oid_parts = entry_oid[:-1]
-                                            for tbl_data in source_objects.values():
-                                                if (
-                                                    isinstance(tbl_data, dict)
-                                                    and tbl_data.get("type") == "MibTable"
-                                                    and list(tbl_data.get("oid", []))
-                                                    == list(table_oid_parts)
-                                                ):
-                                                    parent_table_obj = tbl_data
-                                                    break
-
-                            if parent_table_obj:
-                                source_rows = parent_table_obj.get("rows", [])
-                                source_entry_obj = {}
-
-                                source_entry_oid = [*list(parent_table_obj.get("oid", [])), 1]
-                                for source_entry_data in source_objects.values():
-                                    if (
-                                        isinstance(source_entry_data, dict)
-                                        and source_entry_data.get("type") == "MibTableRow"
-                                        and list(source_entry_data.get("oid", []))
-                                        == source_entry_oid
-                                    ):
-                                        source_entry_obj = source_entry_data
-                                        break
-
-                                source_indexes = source_entry_obj.get("indexes", [])
-
-                                if isinstance(source_rows, list):
-                                    for row in source_rows:
-                                        if isinstance(row, dict):
-                                            parts = []
-                                            for idx_col in source_indexes:
-                                                if idx_col in row:
-                                                    val = row[idx_col]
-                                                    col_meta = source_objects.get(idx_col, {})
-                                                    if col_meta.get(
-                                                        "type"
-                                                    ) == "IpAddress" and isinstance(val, str):
-                                                        parts.extend(val.split("."))
-                                                    else:
-                                                        parts.append(str(val))
-                                            if parts:
-                                                instances.append(".".join(parts))
-
-                        if table_oid.endswith(".31.1.1"):
-                            logger.debug(
-                                "After fetching parent instances for %s: %s", obj_name, instances
-                            )
+                        instances = _collect_instances_from_index_source(
+                            table_oid,
+                            obj_name,
+                            index_source_map[table_oid],
+                            schemas,
+                        )
                     else:
-                        rows = obj_data.get("rows", [])
-                        if isinstance(rows, list):
-                            for row in rows:
-                                if isinstance(row, dict):
-                                    parts = []
-                                    for idx_col in index_columns:
-                                        if idx_col in row:
-                                            val = row[idx_col]
-                                            col_meta = objects.get(idx_col, {})
-                                            if col_meta.get("type") == "IpAddress" and isinstance(
-                                                val, str
-                                            ):
-                                                parts.extend(val.split("."))
-                                            else:
-                                                parts.append(str(val))
-                                    if parts:
-                                        instances.append(".".join(parts))
+                        instances = _collect_instances_from_rows(
+                            obj_data.get("rows", []),
+                            index_columns,
+                            objects,
+                        )
 
                     has_index_from = isinstance(entry_obj, dict) and bool(
                         entry_obj.get("index_from")
@@ -546,10 +606,8 @@ def get_tree_bulk_data() -> dict[str, object]:
                     is_in_index_source = table_oid in index_source_map
                     is_augmented = has_index_from or is_in_index_source
 
-                    if not is_augmented and table_oid in state.snmp_agent.table_instances:
-                        for inst_key in state.snmp_agent.table_instances[table_oid]:
-                            if inst_key not in instances:
-                                instances.append(inst_key)
+                    if not is_augmented:
+                        instances = _merge_live_instances(table_oid, instances)
                 except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
                     logger.warning("Error getting instances for table %s: %s", obj_name, e)
 

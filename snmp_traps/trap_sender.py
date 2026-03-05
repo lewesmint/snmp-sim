@@ -7,7 +7,7 @@ import logging
 from collections.abc import Sequence
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, cast
+from typing import Any, Literal, cast
 
 from pysnmp.hlapi.v3arch.asyncio import (
     CommunityData,
@@ -22,9 +22,9 @@ from pysnmp.hlapi.v3arch.asyncio import (
 from pysnmp.smi import builder as snmp_builder
 from pysnmp.smi import error as snmp_error
 
-OidIndex: TypeAlias = int | str | tuple[int, ...]
-VarBindValue: TypeAlias = Any
-VarBindSpec: TypeAlias = (
+type OidIndex = int | str | tuple[int, ...]
+type VarBindValue = Any
+type VarBindSpec = (
     ObjectType
     | tuple[str, str, VarBindValue]
     | tuple[str, str, VarBindValue, OidIndex]

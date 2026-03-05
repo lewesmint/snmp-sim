@@ -3,7 +3,11 @@
 
 import sys
 import time
-from async_wrapper import get_sync, get_next_sync, make_oid
+
+try:
+    from minimal_for_reference.async_wrapper import get_next_sync, get_sync, make_oid
+except ModuleNotFoundError:
+    from async_wrapper import get_next_sync, get_sync, make_oid
 from pysnmp.hlapi.asyncio import SnmpEngine, CommunityData, ObjectType
 
 address = ("parrot", 161)

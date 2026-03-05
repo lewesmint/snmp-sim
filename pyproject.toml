@@ -37,7 +37,7 @@ ignore_missing_imports = false
 mypy_path = ["../pysnmp-type-wrapper", "../pysnmp-type-wrapper/typings"]
 
 # Exclude generated, test, and scratch folders anywhere in the tree
-exclude = '(^|.*/)(retired|compiled-mibs-test|compiled-mibs|minimal-for-reference|manual-tests|logs|tests|snmp_wrapper)/'
+exclude = '(^|.*/)(retired|compiled-mibs-test|compiled-mibs|minimal_for_reference|manual-tests|logs|tests|snmp_wrapper)/'
 
 # Ignore missing stubs only for selected third party modules that tend to be untyped.
 # Add or remove entries here as you encounter them.
@@ -52,13 +52,17 @@ module = [
 ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 
+[[tool.mypy.overrides]]
+module = ["minimal_for_reference.*"]
+ignore_errors = true
+
 [tool.coverage.run]
 source = ["app", "plugins", "ui"]
 branch = true
 omit = [
     "tests/**",
     "manual-tests/**",
-    "minimal-for-reference/**",
+    "minimal_for_reference/**",
     "compiled-mibs/**",
     "compiled-mibs-test/**",
     "retired/**",
@@ -81,7 +85,7 @@ exclude = [
     "retired/**",
     "compiled-mibs/**",
     "compiled-mibs-test/**",
-    "minimal-for-reference/**",
+    "minimal_for_reference/**",
     "manual-tests/**",
     "logs/**",
     "ui/logs/**",
@@ -108,23 +112,41 @@ ignore = [
     "FBT001",  # allow bool-typed args in existing legacy APIs
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"minimal_for_reference/**/*.py" = ["ALL"]
+
 [tool.ruff.lint.mccabe]
 max-complexity = 12
 
 [tool.pylint.messages_control]
 disable = [
-    "broad-exception-caught",
-    "protected-access",
-    "raise-missing-from",
-    "too-many-branches",
-    "duplicate-code",
+    "C0114",  # missing-module-docstring
+    "C0115",  # missing-class-docstring
+    "C0116",  # missing-function-docstring
+    "W0718",  # broad-exception-caught
+    "W0212",  # protected-access
+    "W0707",  # raise-missing-from
+    "R0903",  # too-few-public-methods
+    "R0902",  # too-many-instance-attributes
+    "R0911",  # too-many-return-statements
+    "R0914",  # too-many-locals
+    "R0915",  # too-many-statements
+    "R0913",  # too-many-arguments
+    "R0917",  # too-many-positional-arguments
+    "R1702",  # too-many-nested-blocks
+    "R0912",  # too-many-branches
+    "R0801",  # duplicate-code
 ]
+
+[tool.pylint.basic]
+method-rgx = "^(?:[a-z_][a-z0-9_]*|prettyPrint)$"
 
 [tool.pylint.main]
 ignore = [
     "retired",
     "compiled-mibs",
     "compiled-mibs-test",
+    "minimal_for_reference",
     "manual-tests",
     "tests",
     "snmp_wrapper",
@@ -144,6 +166,7 @@ ignore-paths = [
     "(^|.*/)retired/.*",
     "(^|.*/)compiled-mibs/.*",
     "(^|.*/)compiled-mibs-test/.*",
+    "(^|.*/)minimal_for_reference/.*",
     "(^|.*/)manual-tests/.*",
     "(^|.*/)tests/.*",
     "(^|.*/)snmp_wrapper/.*",
@@ -165,7 +188,7 @@ ignore-paths = [
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = [
-    "--ignore=minimal-for-reference",
+    "--ignore=minimal_for_reference",
     "--ignore=compiled-mibs",
     "--ignore=compiled-mibs-test",
     "--ignore=retired",
@@ -193,11 +216,12 @@ exclude = [
     "compiled-mibs",
     "compiled-mibs-test",
     "retired",
-    "minimal-for-reference",
-    "manual-tests",
     "logs",
     "ui/logs",
     "snmp_wrapper",
+]
+ignore = [
+    "minimal_for_reference",
 ]
 
 [[tool.pyright.executionEnvironments]]
@@ -215,5 +239,6 @@ mypy_extensions = "^1.1.0"
 pytest = "^9.0.2"
 pytest-mock = "^3.15.1"
 pylint = "^4.0.5"
+prospector = "^1.18.0"
 coverage = "^7.13.4"
 pytest-cov = "^7.0.0"

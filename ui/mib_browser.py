@@ -41,6 +41,7 @@ from pysnmp.smi import builder, view
 
 from app.mib_builder_adapters import extract_optional_metadata, extract_symbol_oid
 from ui.common import Logger, format_snmp_value
+from ui.icon_utils import load_icons_with_fallback
 
 
 def _ensure_default_tk_root() -> None:
@@ -153,20 +154,6 @@ class MIBBrowserWindow:
         """Load icons for the results tree (same as OID tree)."""
         icons_dir = Path(__file__).parent / "icons"
 
-        def make_generated(color: str, inner: str | None) -> tk.PhotoImage:
-            """Create a simple colored square icon."""
-            # Create a 16x16 colored square
-            img = tk.PhotoImage(width=16, height=16)
-            # PhotoImage.put expects string color, not tuple for coordinates
-            for x in range(16):
-                for y in range(16):
-                    img.put(color, (x, y))
-            if inner:
-                for x in range(4, 12):
-                    for y in range(4, 12):
-                        img.put(inner, (x, y))
-            return img
-
         icon_specs = {
             "folder": ("#fbbf24", None),
             "table": ("#3b82f6", None),
@@ -176,17 +163,14 @@ class MIBBrowserWindow:
             "chart": ("#a78bfa", None),
             "key": ("#f97316", None),
         }
-
-        for name, (color, inner) in icon_specs.items():
-            try:
-                png_path = icons_dir / f"{name}.png"
-                if png_path.exists():
-                    self.icons[name] = tk.PhotoImage(file=str(png_path))
-                else:
-                    self.icons[name] = make_generated(color, inner)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                # On any error fall back to generated icon
-                self.icons[name] = make_generated(color, inner)
+        self.icons.update(
+            load_icons_with_fallback(
+                icons_dir=icons_dir,
+                icon_specs=icon_specs,
+                size=16,
+                inner_padding=4,
+            )
+        )
 
     def _setup_ui(self) -> None:
         """Set up the UI components."""

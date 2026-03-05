@@ -14,7 +14,7 @@ router = APIRouter()
 class TrapReceiverConfig(BaseModel):
     """Configuration for trap receiver."""
 
-    host: str = "0.0.0.0"
+    host: str = "0.0.0.0"  # noqa: S104
     port: int = 16662
     community: str = "public"
 
@@ -30,7 +30,7 @@ def start_trap_receiver(config: TrapReceiverConfig | None = None) -> dict[str, o
             "message": "Trap receiver is already running",
         }
 
-    host = config.host if config else "0.0.0.0"
+    host = config.host if config else "0.0.0.0"  # noqa: S104
     port = config.port if config else 16662
     community = config.community if config else "public"
 

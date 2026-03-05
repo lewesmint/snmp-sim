@@ -8,7 +8,11 @@ Usage:
 """
 
 import sys
-from async_wrapper import get_sync, set_sync, make_oid, SnmpSyncError
+
+try:
+    from minimal_for_reference.async_wrapper import SnmpSyncError, get_sync, make_oid, set_sync
+except ModuleNotFoundError:
+    from async_wrapper import SnmpSyncError, get_sync, make_oid, set_sync
 from pysnmp.hlapi.asyncio import SnmpEngine, CommunityData, ObjectType
 from pysnmp.proto.rfc1902 import OctetString
 

@@ -6,23 +6,39 @@ import unittest
 from typing import cast
 from unittest.mock import MagicMock, Mock, patch
 
+try:
+    from minimal_for_reference.async_wrapper import (
+        SnmpSyncError,
+        SyncSnmpClient,
+        _GLOBAL_STATE,
+        _LoopThread,
+        _get_global_loop_thread,
+        _raise_on_error,
+        get_sync,
+        make_oid,
+        run_sync,
+        set_sync,
+        shutdown_sync_wrapper,
+    )
+except ModuleNotFoundError:
+    from async_wrapper import (
+        SnmpSyncError,
+        SyncSnmpClient,
+        _GLOBAL_STATE,
+        _LoopThread,
+        _get_global_loop_thread,
+        _raise_on_error,
+        get_sync,
+        make_oid,
+        run_sync,
+        set_sync,
+        shutdown_sync_wrapper,
+    )
+
 # Mock PySNMP imports before importing async_wrapper
 sys.modules["pysnmp"] = MagicMock()
 sys.modules["pysnmp.hlapi"] = MagicMock()
 sys.modules["pysnmp.hlapi.asyncio"] = MagicMock()
-
-from async_wrapper import (  # noqa: E402
-    SnmpSyncError,
-    SyncSnmpClient,
-    _LoopThread,
-    _raise_on_error,
-    get_sync,
-    make_oid,
-    run_sync,
-    set_sync,
-    shutdown_sync_wrapper,
-)
-
 
 class TestRaiseOnError(unittest.TestCase):
     """Test error handling in _raise_on_error."""
@@ -236,15 +252,14 @@ class TestShutdown(unittest.TestCase):
 
     def test_shutdown_clears_global_state(self) -> None:
         """Should clear global loop thread on shutdown."""
-        import async_wrapper
 
         # Trigger creation of global loop
-        _ = async_wrapper._get_global_loop_thread()
-        self.assertIsNotNone(async_wrapper._GLOBAL_LOOP_THREAD)
+        _ = _get_global_loop_thread()
+        self.assertIsNotNone(_GLOBAL_STATE.loop_thread)
 
         # Shutdown
         shutdown_sync_wrapper()
-        self.assertIsNone(async_wrapper._GLOBAL_LOOP_THREAD)
+        self.assertIsNone(_GLOBAL_STATE.loop_thread)
 
 
 if __name__ == "__main__":

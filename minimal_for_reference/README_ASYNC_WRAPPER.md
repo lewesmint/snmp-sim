@@ -209,7 +209,7 @@ except SnmpSyncError as e:
 Run the test suite:
 
 ```bash
-cd minimal-for-reference
+cd minimal_for_reference
 python -m pytest test_async_wrapper.py -v
 ```
 

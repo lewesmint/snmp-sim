@@ -126,7 +126,7 @@ def clear_trap_overrides(trap_name: str) -> dict[str, object]:
 
 
 @router.get("/trap-varbinds/{trap_name}")
-def get_trap_varbinds(trap_name: str) -> dict[str, object]:
+def get_trap_varbinds(trap_name: str) -> dict[str, object]:  # noqa: PLR0915
     """Get detailed varbind metadata for a specific trap."""
     if state.snmp_agent is None:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")

@@ -33,6 +33,7 @@ import yaml
 
 from app.model_paths import CONFIG_DIR, GUI_CONFIG_JSON_FILE, GUI_CONFIG_YAML_FILE
 from ui.common import Logger, save_gui_log
+from ui.icon_utils import load_icons_with_fallback
 from ui.mib_browser import MIBBrowserWindow
 from ui.snmp_gui_links_mixin import SNMPGuiLinksMixin
 from ui.snmp_gui_trap_overrides_mixin import SNMPGuiTrapOverridesMixin
@@ -421,18 +422,8 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
         If the `ui/icons` directory contains PNG files named after keys (e.g. folder.png), those are
         loaded and used. Otherwise the method generates simple colored square icons as a fallback.
         """
-        size = 16
-        icons = {}
         icons_dir = Path(__file__).parent / "icons"
 
-        def make_generated(color: str, inner: str | None = None) -> tk.PhotoImage:
-            img = tk.PhotoImage(width=size, height=size)
-            img.put(color, to=(0, 0))
-            if inner:
-                img.put(inner, to=(2, 2))
-            return img
-
-        # Try to load from ui/icons/<name>.png, otherwise generate a simple icon
         icon_specs = {
             "folder": ("#f4c542", None),
             "table": ("#3b82f6", None),
@@ -443,16 +434,12 @@ class SNMPControllerGUI(SNMPGuiLinksMixin, SNMPGuiTrapsMixin, SNMPGuiTrapOverrid
             "key": ("#f97316", None),
         }
 
-        for name, (color, inner) in icon_specs.items():
-            try:
-                png_path = icons_dir / f"{name}.png"
-                if png_path.exists():
-                    icons[name] = tk.PhotoImage(file=str(png_path))
-                else:
-                    icons[name] = make_generated(color, inner)
-            except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                # On any error fall back to generated icon
-                icons[name] = make_generated(color, inner)
+        icons = load_icons_with_fallback(
+            icons_dir=icons_dir,
+            icon_specs=icon_specs,
+            size=16,
+            inner_padding=2,
+        )
 
         # Store images and keep refs so Tcl doesn't GC them
         self.oid_icon_images = icons

@@ -21,31 +21,44 @@ Requirements:
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
+from collections.abc import Coroutine, Sequence
 from concurrent.futures import Future
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, Sequence, Tuple, Union
+from dataclasses import dataclass, field
+from typing import Protocol, runtime_checkable
 
 # PySNMP imports
-from pysnmp.hlapi.asyncio import (
+from pysnmp.hlapi.v3arch.asyncio import (
     ContextData,
     ObjectIdentity,
     ObjectType,
     SnmpEngine,
     UdpTransportTarget,
+    CommunityData,
+    UsmUserData,
     get_cmd,
-    set_cmd,
     next_cmd,
+    set_cmd,
 )
-
-if TYPE_CHECKING:
-    from pysnmp.hlapi.asyncio import CommunityData, UsmUserData
-else:
-    from pysnmp.hlapi.asyncio import CommunityData, UsmUserData
 
 
 VarBinds = Sequence[ObjectType]
-GetResult = Tuple[Any, Any, Any, Tuple[ObjectType, ...]]
+
+
+@runtime_checkable
+class _PrettyPrintable(Protocol):
+    def prettyPrint(self) -> str: ...  # noqa: N802
+
+
+@runtime_checkable
+class _IntLike(Protocol):
+    def __int__(self) -> int: ...
+
+
+type ErrorStatus = _PrettyPrintable | int | None
+type ErrorIndex = _IntLike | int | None
+GetResult = tuple[object | None, ErrorStatus, ErrorIndex, tuple[ObjectType, ...]]
 
 
 class SnmpSyncError(RuntimeError):
@@ -57,7 +70,7 @@ class _LoopThread:
 
     def __init__(self) -> None:
         self._loop_ready = threading.Event()
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._thread = threading.Thread(
             target=self._run, name="pysnmp-sync-loop", daemon=True
         )
@@ -86,7 +99,8 @@ class _LoopThread:
     @property
     def loop(self) -> asyncio.AbstractEventLoop:
         if self._loop is None:
-            raise RuntimeError("Background loop not initialised.")
+            message = "Background loop not initialised."
+            raise RuntimeError(message)
         return self._loop
 
     def stop(self) -> None:
@@ -95,32 +109,26 @@ class _LoopThread:
         self._thread.join(timeout=2.0)
 
 
-_GLOBAL_LOOP_THREAD: Optional[_LoopThread] = None
 _GLOBAL_LOCK = threading.Lock()
 
 
+@dataclass(slots=True)
+class _GlobalState:
+    loop_thread: _LoopThread | None = None
+
+
+_GLOBAL_STATE = _GlobalState()
+
+
 def _get_global_loop_thread() -> _LoopThread:
-    global _GLOBAL_LOOP_THREAD
     with _GLOBAL_LOCK:
-        if _GLOBAL_LOOP_THREAD is None:
-            _GLOBAL_LOOP_THREAD = _LoopThread()
-        return _GLOBAL_LOOP_THREAD
+        if _GLOBAL_STATE.loop_thread is None:
+            _GLOBAL_STATE.loop_thread = _LoopThread()
+        return _GLOBAL_STATE.loop_thread
 
 
-def run_sync(coro: Any) -> Any:
-    """Run an async coroutine synchronously.
-
-    Handles two cases:
-      1. No event loop in current thread: uses asyncio.run() with a fresh loop.
-      2. Event loop already running: schedules coroutine on a background thread's loop
-         to avoid blocking the current loop.
-
-    Args:
-        coro: The coroutine to execute.
-
-    Returns:
-        The result of the coroutine.
-    """
+def run_sync[T](coro: Coroutine[object, object, T], *, result_timeout: float | None = None) -> T:
+    """Run an async coroutine synchronously."""
     try:
         running_loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -130,58 +138,36 @@ def run_sync(coro: Any) -> Any:
         return asyncio.run(coro)  # creates/closes its own loop
 
     loop_thread = _get_global_loop_thread()
-    future: Future[Any] = asyncio.run_coroutine_threadsafe(coro, loop_thread.loop)
-    return future.result()
+    future: Future[T] = asyncio.run_coroutine_threadsafe(coro, loop_thread.loop)
+    return future.result(timeout=result_timeout)
 
 
-def run_sync_persistent(coro: Any) -> Any:
-    """Run an async coroutine synchronously using PERSISTENT background loop.
-
-    Always uses the background thread's event loop, even from the main thread.
-    This ensures the same engine can be reused across multiple calls.
-
-    Use this for clients that want to reuse a single SnmpEngine instance
-    (like PersistentSnmpClient).
-
-    Args:
-        coro: The coroutine to execute.
-
-    Returns:
-        The result of the coroutine.
-    """
+def run_sync_persistent[T](
+    coro: Coroutine[object, object, T], *, result_timeout: float | None = None
+) -> T:
+    """Run an async coroutine on the persistent background loop."""
     loop_thread = _get_global_loop_thread()
-    future: Future[Any] = asyncio.run_coroutine_threadsafe(coro, loop_thread.loop)
-    return future.result()
+    future: Future[T] = asyncio.run_coroutine_threadsafe(coro, loop_thread.loop)
+    return future.result(timeout=result_timeout)
 
 
 async def _get_async(
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
-    timeout: float = 1.0,
+    request_timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
+    context: ContextData | None = None,
 ) -> GetResult:
-    """Execute SNMP GET command asynchronously.
-
-    Args:
-        engine: SNMP engine instance
-        auth: Authentication (CommunityData or UsmUserData)
-        address: Tuple of (hostname, port) for SNMP agent
-        var_binds: Variable bindings to get
-        timeout: Timeout in seconds (default 1.0)
-        retries: Number of retries (default 5)
-        context: Optional SNMP context (defaults to ContextData())
-
-    Returns:
-        Tuple of (error_indication, error_status, error_index, result_var_binds)
-    """
+    """Perform an asynchronous SNMP GET command."""
     if context is None:
         context = ContextData()
 
     # Create transport target asynchronously (PySNMP 7.x requirement)
-    target = await UdpTransportTarget.create(address, timeout=timeout, retries=retries)
+    target = await UdpTransportTarget.create(
+        address, timeout=request_timeout, retries=retries
+    )
 
     # get_cmd is a coroutine function that directly returns the result tuple
     error_indication, error_status, error_index, result_var_binds = await get_cmd(
@@ -192,32 +178,21 @@ async def _get_async(
 
 async def _set_async(
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
-    timeout: float = 1.0,
+    request_timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
+    context: ContextData | None = None,
 ) -> GetResult:
-    """Execute SNMP SET command asynchronously.
-
-    Args:
-        engine: SNMP engine instance
-        auth: Authentication (CommunityData or UsmUserData)
-        address: Tuple of (hostname, port) for SNMP agent
-        var_binds: Variable bindings to set
-        timeout: Timeout in seconds (default 1.0)
-        retries: Number of retries (default 5)
-        context: Optional SNMP context (defaults to ContextData())
-
-    Returns:
-        Tuple of (error_indication, error_status, error_index, result_var_binds)
-    """
+    """Perform an asynchronous SNMP SET command."""
     if context is None:
         context = ContextData()
 
     # Create transport target asynchronously (PySNMP 7.x requirement)
-    target = await UdpTransportTarget.create(address, timeout=timeout, retries=retries)
+    target = await UdpTransportTarget.create(
+        address, timeout=request_timeout, retries=retries
+    )
 
     # set_cmd is a coroutine function that directly returns the result tuple
     error_indication, error_status, error_index, result_var_binds = await set_cmd(
@@ -228,32 +203,21 @@ async def _set_async(
 
 async def _next_async(
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
-    timeout: float = 1.0,
+    request_timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
+    context: ContextData | None = None,
 ) -> GetResult:
-    """Execute SNMP GET-NEXT command asynchronously (for snmpwalk).
-
-    Args:
-        engine: SNMP engine instance
-        auth: Authentication (CommunityData or UsmUserData)
-        address: Tuple of (hostname, port) for SNMP agent
-        var_binds: Variable bindings to get next
-        timeout: Timeout in seconds (default 1.0)
-        retries: Number of retries (default 5)
-        context: Optional SNMP context (defaults to ContextData())
-
-    Returns:
-        Tuple of (error_indication, error_status, error_index, result_var_binds)
-    """
+    """Perform an asynchronous SNMP GET-NEXT command."""
     if context is None:
         context = ContextData()
 
     # Create transport target asynchronously (PySNMP 7.x requirement)
-    target = await UdpTransportTarget.create(address, timeout=timeout, retries=retries)
+    target = await UdpTransportTarget.create(
+        address, timeout=request_timeout, retries=retries
+    )
 
     # next_cmd is a coroutine function that directly returns the result tuple
     error_indication, error_status, error_index, result_var_binds = await next_cmd(
@@ -262,64 +226,39 @@ async def _next_async(
     return error_indication, error_status, error_index, result_var_binds
 
 
-def _raise_on_error(error_indication: Any, error_status: Any, error_index: Any) -> None:
-    """Raise SnmpSyncError if SNMP operation reported an error.
-
-    Args:
-        error_indication: Transport/engine error (if present, operation failed)
-        error_status: PDU error status (e.g., noAccess, notWritable)
-        error_index: Index of the variable binding that caused the error
-
-    Raises:
-        SnmpSyncError: If error_indication or error_status is set.
-    """
+def _raise_on_error(
+    error_indication: object | None,
+    error_status: ErrorStatus,
+    error_index: ErrorIndex,
+) -> None:
+    """Raise an exception if an SNMP operation reports an error."""
     if error_indication:
-        raise SnmpSyncError(f"SNMP error: {error_indication}")
+        message = f"SNMP error: {error_indication}"
+        raise SnmpSyncError(message)
 
     # error_status is truthy when there is a PDU-level error
     if error_status:
-        idx = int(error_index) if error_index else 0
-        raise SnmpSyncError(f"{error_status.prettyPrint()} at varbind index {idx}")
+        idx = int(error_index) if error_index is not None else 0
+        if isinstance(error_status, _PrettyPrintable):
+            status_text = error_status.prettyPrint()
+        else:
+            status_text = str(error_status)
+        message = f"{status_text} at varbind index {idx}"
+        raise SnmpSyncError(message)
 
 
 def get_sync(
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
     timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
+    context: ContextData | None = None,
+    *,
     use_persistent_loop: bool = False,
-) -> Tuple[ObjectType, ...]:
-    """Synchronous SNMP GET operation.
-
-    Blocks until the GET response is received and processed.
-    Handles async UdpTransportTarget creation internally.
-
-    Args:
-        engine: SNMP engine instance
-        auth: Authentication (CommunityData for v2c, UsmUserData for v3)
-        address: Tuple of (hostname, port) for SNMP agent, e.g. ('192.168.1.1', 161)
-        var_binds: Variable bindings to retrieve
-        timeout: Timeout in seconds (default 1.0)
-        retries: Number of retries (default 5)
-        context: Optional SNMP context (defaults to ContextData())
-        use_persistent_loop: If True, uses persistent background loop (required for engine reuse).
-                             If False, creates/closes loop for each call (default).
-
-    Returns:
-        Tuple of ObjectType results from the GET operation.
-
-    Raises:
-        SnmpSyncError: If the operation fails at transport or PDU level.
-
-    Example:
-        >>> engine = SnmpEngine()
-        >>> auth = CommunityData('public', mpModel=1)
-        >>> oid = ObjectType(make_oid('1.3.6.1.2.1.1.1.0'))
-        >>> result = get_sync(engine, auth, ('192.168.1.1', 161), [oid])
-    """
+) -> tuple[ObjectType, ...]:
+    """Perform a synchronous SNMP GET operation."""
     runner = run_sync_persistent if use_persistent_loop else run_sync
     error_indication, error_status, error_index, result_var_binds = runner(
         _get_async(
@@ -327,7 +266,7 @@ def get_sync(
             auth,
             address,
             var_binds,
-            timeout=timeout,
+            request_timeout=timeout,
             retries=retries,
             context=context,
         )
@@ -338,42 +277,16 @@ def get_sync(
 
 def set_sync(
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
     timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
+    context: ContextData | None = None,
+    *,
     use_persistent_loop: bool = False,
-) -> Tuple[ObjectType, ...]:
-    """Synchronous SNMP SET operation.
-
-    Blocks until the SET response is received and processed.
-    Handles async UdpTransportTarget creation internally.
-
-    Args:
-        engine: SNMP engine instance
-        auth: Authentication (CommunityData for v2c, UsmUserData for v3)
-        address: Tuple of (hostname, port) for SNMP agent, e.g. ('192.168.1.1', 161)
-        var_binds: Variable bindings to set
-        timeout: Timeout in seconds (default 1.0)
-        retries: Number of retries (default 5)
-        context: Optional SNMP context (defaults to ContextData())
-        use_persistent_loop: If True, uses persistent background loop (required for engine reuse).
-                             If False, creates/closes loop for each call (default).
-
-    Returns:
-        Tuple of ObjectType results from the SET operation.
-
-    Raises:
-        SnmpSyncError: If the operation fails at transport or PDU level.
-
-    Example:
-        >>> engine = SnmpEngine()
-        >>> auth = CommunityData('private', mpModel=1)
-        >>> oid = ObjectType(make_oid('1.3.6.1.2.1.1.4.0'), 'admin@example.com')
-        >>> result = set_sync(engine, auth, ('192.168.1.1', 161), [oid])
-    """
+) -> tuple[ObjectType, ...]:
+    """Perform a synchronous SNMP SET operation."""
     runner = run_sync_persistent if use_persistent_loop else run_sync
     error_indication, error_status, error_index, result_var_binds = runner(
         _set_async(
@@ -381,7 +294,7 @@ def set_sync(
             auth,
             address,
             var_binds,
-            timeout=timeout,
+            request_timeout=timeout,
             retries=retries,
             context=context,
         )
@@ -392,42 +305,16 @@ def set_sync(
 
 def get_next_sync(
     engine: SnmpEngine,
-    auth: Union[CommunityData, UsmUserData],
-    address: Tuple[str, int],
+    auth: CommunityData | UsmUserData,
+    address: tuple[str, int],
     var_binds: VarBinds,
     timeout: float = 1.0,
     retries: int = 5,
-    context: Optional[ContextData] = None,
+    context: ContextData | None = None,
+    *,
     use_persistent_loop: bool = False,
-) -> Tuple[ObjectType, ...]:
-    """Synchronous SNMP GET-NEXT operation (for snmpwalk).
-
-    Blocks until the GET-NEXT response is received and processed.
-    Handles async UdpTransportTarget creation internally.
-
-    Args:
-        engine: SNMP engine instance
-        auth: Authentication (CommunityData for v2c, UsmUserData for v3)
-        address: Tuple of (hostname, port) for SNMP agent, e.g. ('192.168.1.1', 161)
-        var_binds: Variable bindings to get next
-        timeout: Timeout in seconds (default 1.0)
-        retries: Number of retries (default 5)
-        context: Optional SNMP context (defaults to ContextData())
-        use_persistent_loop: If True, uses persistent background loop (required for engine reuse).
-                             If False, creates/closes loop for each call (default).
-
-    Returns:
-        Tuple of ObjectType results from the GET-NEXT operation.
-
-    Raises:
-        SnmpSyncError: If the operation fails at transport or PDU level.
-
-    Example:
-        >>> engine = SnmpEngine()
-        >>> auth = CommunityData('public', mpModel=1)
-        >>> oid = ObjectType(make_oid('1.3.6.1.2.1.1.1.0'))
-        >>> result = get_next_sync(engine, auth, ('192.168.1.1', 161), [oid])
-    """
+) -> tuple[ObjectType, ...]:
+    """Perform a synchronous SNMP GET-NEXT operation."""
     runner = run_sync_persistent if use_persistent_loop else run_sync
     error_indication, error_status, error_index, result_var_binds = runner(
         _next_async(
@@ -435,7 +322,7 @@ def get_next_sync(
             auth,
             address,
             var_binds,
-            timeout=timeout,
+            request_timeout=timeout,
             retries=retries,
             context=context,
         )
@@ -446,8 +333,7 @@ def get_next_sync(
 
 @dataclass(slots=True)
 class SyncSnmpClient:
-    """
-    Convenience client that holds engine/auth/address/timeout/retries/context and exposes get/set.
+    """Provide synchronous methods over a pre-existing SNMP engine.
 
     ⚠️  WARNING: Do NOT reuse the same engine across multiple calls if using asyncio.run().
     Each call to get_sync/set_sync/get_next_sync with asyncio.run() creates and closes an
@@ -470,13 +356,14 @@ class SyncSnmpClient:
     """
 
     engine: SnmpEngine
-    auth: Union[CommunityData, UsmUserData]
-    address: Tuple[str, int]
+    auth: CommunityData | UsmUserData
+    address: tuple[str, int]
     timeout: float = 1.0
     retries: int = 5
-    context: ContextData = ContextData()
+    context: ContextData = field(default_factory=ContextData)
 
-    def get(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
+    def get(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
+        """Perform a GET request with the configured client settings."""
         return get_sync(
             engine=self.engine,
             auth=self.auth,
@@ -487,7 +374,8 @@ class SyncSnmpClient:
             context=self.context,
         )
 
-    def set(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
+    def set(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
+        """Perform a SET request with the configured client settings."""
         return set_sync(
             engine=self.engine,
             auth=self.auth,
@@ -498,7 +386,8 @@ class SyncSnmpClient:
             context=self.context,
         )
 
-    def get_next(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
+    def get_next(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
+        """Perform a GET-NEXT request with the configured client settings."""
         return get_next_sync(
             engine=self.engine,
             auth=self.auth,
@@ -512,8 +401,7 @@ class SyncSnmpClient:
 
 @dataclass(slots=True)
 class StatelessSnmpClient:
-    """
-    Creates a FRESH engine for EVERY operation.
+    """Create a fresh SNMP engine for every operation.
 
     ✓ Safe to use for any number of operations
     ✓ No engine reuse issues
@@ -530,15 +418,16 @@ class StatelessSnmpClient:
         vb = ObjectType(ObjectIdentity("1.3.6.1.2.1.1.1.0"))
         res = client.get(vb)  # Creates fresh engine internally
         res = client.get(vb)  # Creates another fresh engine
+
     """
 
-    auth: Union[CommunityData, UsmUserData]
-    address: Tuple[str, int]
+    auth: CommunityData | UsmUserData
+    address: tuple[str, int]
     timeout: float = 1.0
     retries: int = 5
-    context: ContextData = ContextData()
+    context: ContextData = field(default_factory=ContextData)
 
-    def get(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
+    def get(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
         """Create fresh engine, perform GET, discard engine."""
         engine = SnmpEngine()
         return get_sync(
@@ -551,7 +440,7 @@ class StatelessSnmpClient:
             context=self.context,
         )
 
-    def set(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
+    def set(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
         """Create fresh engine, perform SET, discard engine."""
         engine = SnmpEngine()
         return set_sync(
@@ -564,7 +453,7 @@ class StatelessSnmpClient:
             context=self.context,
         )
 
-    def get_next(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
+    def get_next(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
         """Create fresh engine, perform GET-NEXT, discard engine."""
         engine = SnmpEngine()
         return get_next_sync(
@@ -580,8 +469,7 @@ class StatelessSnmpClient:
 
 @dataclass(slots=True)
 class PersistentSnmpClient:
-    """
-    Creates ONE engine, uses the persistent BACKGROUND EVENT LOOP.
+    """Reuse one engine on the persistent background event loop.
 
     ✓ Safe to reuse engine across unlimited operations
     ✓ Most efficient (engine + loop reused)
@@ -603,14 +491,15 @@ class PersistentSnmpClient:
 
         # When done:
         client.shutdown()
+
     """
 
-    auth: Union[CommunityData, UsmUserData]
-    address: Tuple[str, int]
+    auth: CommunityData | UsmUserData
+    address: tuple[str, int]
     timeout: float = 1.0
     retries: int = 5
-    context: ContextData = ContextData()
-    _engine: Optional[SnmpEngine] = None
+    context: ContextData = field(default_factory=ContextData)
+    _engine: SnmpEngine | None = None
 
     def _ensure_engine(self) -> SnmpEngine:
         """Lazily create engine on first use."""
@@ -618,7 +507,7 @@ class PersistentSnmpClient:
             self._engine = SnmpEngine()
         return self._engine
 
-    def get(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
+    def get(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
         """Perform GET using persistent engine + background loop."""
         engine = self._ensure_engine()
         return get_sync(
@@ -632,7 +521,7 @@ class PersistentSnmpClient:
             use_persistent_loop=True,
         )
 
-    def set(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
+    def set(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
         """Perform SET using persistent engine + background loop."""
         engine = self._ensure_engine()
         return set_sync(
@@ -646,7 +535,7 @@ class PersistentSnmpClient:
             use_persistent_loop=True,
         )
 
-    def get_next(self, *var_binds: ObjectType) -> Tuple[ObjectType, ...]:
+    def get_next(self, *var_binds: ObjectType) -> tuple[ObjectType, ...]:
         """Perform GET-NEXT using persistent engine + background loop."""
         engine = self._ensure_engine()
         return get_next_sync(
@@ -667,23 +556,23 @@ class PersistentSnmpClient:
 
 
 def make_oid(oid: str) -> ObjectIdentity:
-    """
-    Small helper so callers can do make_oid("1.3.6.1.2.1.1.5.0").
-    """
+    """Build an ObjectIdentity from an OID string."""
     return ObjectIdentity(oid)
 
 
 # Optional: allow explicit shutdown of the background loop if your process needs it.
 def shutdown_sync_wrapper() -> None:
-    global _GLOBAL_LOOP_THREAD
+    """Stop and clear the shared background loop thread."""
     with _GLOBAL_LOCK:
-        if _GLOBAL_LOOP_THREAD is not None:
-            _GLOBAL_LOOP_THREAD.stop()
-            _GLOBAL_LOOP_THREAD = None
+        if _GLOBAL_STATE.loop_thread is not None:
+            _GLOBAL_STATE.loop_thread.stop()
+            _GLOBAL_STATE.loop_thread = None
 
 
 if __name__ == "__main__":
     # Minimal example (SNMPv2c GET sysDescr.0)
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
     engine_ = SnmpEngine()
     auth_ = CommunityData("public", mpModel=1)
     address_ = ("127.0.0.1", 161)
@@ -696,6 +585,6 @@ if __name__ == "__main__":
     try:
         result = client.get(sys_descr)
         for vb in result:
-            print(vb.prettyPrint())
+            logger.info(vb.prettyPrint())
     finally:
         shutdown_sync_wrapper()

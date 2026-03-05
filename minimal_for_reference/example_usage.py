@@ -7,13 +7,26 @@ Note: Requires a running SNMP agent on the target.
 
 # pyright: reportAttributeAccessIssue=false, reportCallIssue=false, reportArgumentType=false
 
-from async_wrapper import (
-    SyncSnmpClient,
-    get_sync,
-    make_oid,
-    set_sync,
-    shutdown_sync_wrapper,
-)
+import asyncio
+
+try:
+    from minimal_for_reference.async_wrapper import (
+        SnmpSyncError,
+        SyncSnmpClient,
+        get_sync,
+        make_oid,
+        set_sync,
+        shutdown_sync_wrapper,
+    )
+except ModuleNotFoundError:
+    from async_wrapper import (
+        SnmpSyncError,
+        SyncSnmpClient,
+        get_sync,
+        make_oid,
+        set_sync,
+        shutdown_sync_wrapper,
+    )
 
 # Import PySNMP 7.x components
 try:
@@ -101,7 +114,6 @@ def example_client_class() -> None:
 def example_async_context() -> None:
     """Example 4: Using from within an async context (demonstrates threading)."""
     print("\n=== Example 4: From async context ===")
-    import asyncio
 
     async def async_main() -> None:
         """This function runs in an asyncio event loop."""
@@ -129,8 +141,6 @@ def example_async_context() -> None:
 def example_error_handling() -> None:
     """Example 5: Error handling."""
     print("\n=== Example 5: Error Handling ===")
-
-    from async_wrapper import SnmpSyncError
 
     engine = SnmpEngine()
     auth = CommunityData("public", mpModel=1)

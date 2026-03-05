@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Debug get_next_sync hanging."""
 
-from async_wrapper import get_sync, get_next_sync, make_oid
-from pysnmp.hlapi.asyncio import SnmpEngine, CommunityData, ObjectType
+from pysnmp.hlapi.asyncio import CommunityData, ObjectType, SnmpEngine
+
+try:
+    from minimal_for_reference.async_wrapper import get_next_sync, get_sync, make_oid
+except ModuleNotFoundError:
+    from async_wrapper import get_next_sync, get_sync, make_oid
 
 address = ("parrot", 161)
 

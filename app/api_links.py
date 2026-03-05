@@ -132,7 +132,7 @@ def _sync_link_targets_on_create(request: LinkRequest) -> None:
                 continue
             if instance_str not in state.snmp_agent.table_instances[target_table]:
                 continue
-            state.snmp_agent._update_table_cell_values(
+            state.snmp_agent.update_table_cell_values(
                 target_table,
                 instance_str,
                 {target_col: value},
@@ -172,7 +172,7 @@ def create_or_update_link(request: LinkRequest) -> dict[str, object]:
 
     _sync_link_targets_on_create(request)
 
-    state.snmp_agent._save_mib_state()
+    state.snmp_agent.save_mib_state()
 
     return {"status": "ok", "id": link_id}
 
@@ -193,5 +193,5 @@ def delete_link(link_id: str) -> dict[str, object]:
     if not link_manager.remove_link(link_id, source="state"):
         raise HTTPException(status_code=404, detail="Link not found")
 
-    state.snmp_agent._save_mib_state()
+    state.snmp_agent.save_mib_state()
     return {"status": "deleted", "id": link_id}

@@ -1,6 +1,19 @@
 """Quick verification that all sync functions work."""
 
-from async_wrapper import get_sync, get_next_sync, make_oid, SyncSnmpClient
+try:
+    from minimal_for_reference.async_wrapper import (
+        SyncSnmpClient,
+        get_next_sync,
+        get_sync,
+        make_oid,
+    )
+except ModuleNotFoundError:
+    from async_wrapper import (
+        SyncSnmpClient,
+        get_next_sync,
+        get_sync,
+        make_oid,
+    )
 from pysnmp.hlapi.asyncio import SnmpEngine, CommunityData, ObjectType
 
 engine = SnmpEngine()

@@ -2,11 +2,19 @@
 """Test both stateless and persistent client approaches."""
 
 import time
-from async_wrapper import (
-    StatelessSnmpClient,
-    PersistentSnmpClient,
-    make_oid,
-)
+
+try:
+    from minimal_for_reference.async_wrapper import (
+        PersistentSnmpClient,
+        StatelessSnmpClient,
+        make_oid,
+    )
+except ModuleNotFoundError:
+    from async_wrapper import (
+        PersistentSnmpClient,
+        StatelessSnmpClient,
+        make_oid,
+    )
 from pysnmp.hlapi.asyncio import CommunityData, ObjectType
 
 address = ("parrot", 161)

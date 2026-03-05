@@ -6,7 +6,10 @@ This demonstrates:
 3. Full type safety and error handling
 """
 
-from async_wrapper import get_sync, make_oid, SnmpSyncError
+try:
+    from minimal_for_reference.async_wrapper import SnmpSyncError, get_sync, make_oid
+except ModuleNotFoundError:
+    from async_wrapper import SnmpSyncError, get_sync, make_oid
 from pysnmp.hlapi.asyncio import SnmpEngine, CommunityData, ObjectType
 
 # Setup

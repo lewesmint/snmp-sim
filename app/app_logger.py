@@ -9,6 +9,8 @@ import os
 import re
 import shutil
 import sys
+import types
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,6 +32,9 @@ class LoggingConfig:
 
 if TYPE_CHECKING:
     from app.app_config import AppConfig
+
+
+LoggerConfigDict = dict[str, Any]
 
 
 class ColoredFormatter(logging.Formatter):
@@ -146,6 +151,15 @@ def _archive_log_file(log_path: Path) -> None:
         shutil.move(str(log_path), str(archived_path))
 
 
+_ExcInfoType = (
+    bool
+    | tuple[type[BaseException], BaseException, types.TracebackType | None]
+    | tuple[None, None, None]
+    | BaseException
+    | None
+)
+
+
 class AppLogger:
     """Application logger with configuration management."""
 
@@ -154,7 +168,7 @@ class AppLogger:
     @staticmethod
     def configure(app_config: AppConfig) -> None:
         """Configure logging from an AppConfig instance."""
-        logger_cfg = cast("dict[str, Any]", app_config.get("logger", {}))
+        logger_cfg = cast("LoggerConfigDict", app_config.get("logger", {}))
 
         log_dir = logger_cfg.get("log_dir", "logs")
         log_file = logger_cfg.get("log_file", "snmp-agent.log")
@@ -193,19 +207,49 @@ class AppLogger:
         return logging.getLogger(name)
 
     @staticmethod
-    def warning(msg: str, *args: Any, **kwargs: Any) -> None:
+    def warning(
+        msg: str,
+        *args: object,
+        exc_info: _ExcInfoType = False,
+        stack_info: bool = False,
+        stacklevel: int = 1,
+        extra: Mapping[str, object] | None = None,
+    ) -> None:
         """Log a warning message."""
-        logging.getLogger().warning(msg, *args, **kwargs)
+        logging.getLogger().warning(
+            msg, *args, exc_info=exc_info, stack_info=stack_info,
+            stacklevel=stacklevel, extra=extra,
+        )
 
     @staticmethod
-    def error(msg: str, *args: Any, **kwargs: Any) -> None:
+    def error(
+        msg: str,
+        *args: object,
+        exc_info: _ExcInfoType = False,
+        stack_info: bool = False,
+        stacklevel: int = 1,
+        extra: Mapping[str, object] | None = None,
+    ) -> None:
         """Log an error message."""
-        logging.getLogger().error(msg, *args, **kwargs)
+        logging.getLogger().error(
+            msg, *args, exc_info=exc_info, stack_info=stack_info,
+            stacklevel=stacklevel, extra=extra,
+        )
 
     @staticmethod
-    def info(msg: str, *args: Any, **kwargs: Any) -> None:
+    def info(
+        msg: str,
+        *args: object,
+        exc_info: _ExcInfoType = False,
+        stack_info: bool = False,
+        stacklevel: int = 1,
+        extra: Mapping[str, object] | None = None,
+    ) -> None:
         """Log an info message."""
-        logging.getLogger().info(msg, *args, **kwargs)
+        logging.getLogger().info(
+            msg, *args, exc_info=exc_info, stack_info=stack_info,
+            stacklevel=stacklevel, extra=extra,
+        )
 
     @staticmethod
     def _configure(config: LoggingConfig) -> None:

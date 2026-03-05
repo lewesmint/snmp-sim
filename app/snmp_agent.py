@@ -950,14 +950,14 @@ class SNMPAgent:
                     self.overrides[dotted] = new_serial
 
                 try:
-                    self._save_mib_state()
+                    self.save_mib_state()
                 except (AttributeError, LookupError, OSError, TypeError, ValueError):
                     self.logger.exception("Failed to save MIB state")
             # If we've reverted to initial, remove any existing override
             elif dotted in self.overrides:
                 self.overrides.pop(dotted, None)
                 try:
-                    self._save_mib_state()
+                    self.save_mib_state()
                 except (AttributeError, LookupError, OSError, TypeError, ValueError):
                     self.logger.exception("Failed to save MIB state")
 
@@ -1165,7 +1165,7 @@ class SNMPAgent:
             oid for oid in self.deleted_instances if oid in schema_instance_oids
         ]
         if len(self.deleted_instances) != before:
-            self._save_mib_state()
+            self.save_mib_state()
             self.logger.info(
                 "Filtered deleted instances against schema: %s -> %s",
                 before,
@@ -1385,7 +1385,7 @@ class SNMPAgent:
                             updated = True
 
         if updated:
-            self._save_mib_state()
+            self.save_mib_state()
 
     def _materialize_index_columns(self) -> None:
         """Ensure index columns are materialized in all table instances.
@@ -1450,7 +1450,7 @@ class SNMPAgent:
                                 updated = True
 
         if updated:
-            self._save_mib_state()
+            self.save_mib_state()
 
     def _normalize_oid_str(self, oid: str) -> str:
         """Normalize a dotted OID string (remove extra dots/spaces)."""
@@ -1862,9 +1862,9 @@ class SNMPAgent:
 
         # Save unified file
         if mib_state["scalars"] or mib_state["tables"]:
-            self._save_mib_state()
+            self.save_mib_state()
 
-    def _save_mib_state(self) -> None:
+    def save_mib_state(self) -> None:
         """Save unified MIB state to disk."""
         path = Path(self._state_file_path())
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1970,7 +1970,7 @@ class SNMPAgent:
             )
             return False
 
-    def _update_table_cell_values(
+    def update_table_cell_values(
         self,
         table_oid: str,
         instance_str: str,
@@ -2124,7 +2124,7 @@ class SNMPAgent:
                         for target in linked_targets:
                             target_table = target.table_oid or table_oid
                             linked_values: dict[str, JsonValue] = {target.column_name: value}
-                            self._update_table_cell_values(
+                            self.update_table_cell_values(
                                 target_table,
                                 instance_str,
                                 linked_values,
@@ -2190,10 +2190,10 @@ class SNMPAgent:
             self.deleted_instances.remove(instance_oid)
 
         # Update the actual MibScalarInstance objects for each column value
-        self._update_table_cell_values(table_oid, index_str, serialized_column_values)
+        self.update_table_cell_values(table_oid, index_str, serialized_column_values)
 
         # Persist to unified state file
-        self._save_mib_state()
+        self.save_mib_state()
 
         self.logger.info("Added table instance: %s", instance_oid)
 
@@ -2265,7 +2265,7 @@ class SNMPAgent:
         if self._instance_defined_in_schema(table_oid, index_values):
             if instance_oid not in self.deleted_instances:
                 self.deleted_instances.append(instance_oid)
-                self._save_mib_state()
+                self.save_mib_state()
                 self.logger.info("Deleted table instance: %s", instance_oid)
         else:
             self.logger.info("Skipping deleted_instances for %s (not in schema rows)", instance_oid)
@@ -2451,7 +2451,7 @@ class SNMPAgent:
             for k in removed_invalid:
                 self.overrides.pop(k, None)
             try:
-                self._save_mib_state()
+                self.save_mib_state()
             except (AttributeError, LookupError, OSError, TypeError, ValueError):
                 self.logger.exception("Failed to save MIB state after pruning invalid entries")
             self.logger.info(
@@ -2473,7 +2473,7 @@ class SNMPAgent:
             for instance_str, instance_data in instances.items():
                 column_values = instance_data.get("column_values", {})
                 if column_values:
-                    self._update_table_cell_values(table_oid, instance_str, column_values)
+                    self.update_table_cell_values(table_oid, instance_str, column_values)
                     self.logger.debug("Applied table instance %s.%s", table_oid, instance_str)
 
 

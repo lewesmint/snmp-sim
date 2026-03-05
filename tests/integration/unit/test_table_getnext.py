@@ -5,17 +5,18 @@ prevents __index_mib from attempting to unregister non-existent subtrees.
 """
 
 import logging
-from typing import Any, TypeAlias
+from typing import Any
 
 import pytest
 from pysnmp.entity import engine
 from pysnmp.smi import builder
 
+from app.interface_types import TableData
 from app.table_registrar import TableRegistrar
 
 # Type aliases for test data structures
-TypeRegistry: TypeAlias = dict[str, dict[str, str]]
-MIBJSONs: TypeAlias = dict[str, dict[str, Any]]
+type TypeRegistry = dict[str, dict[str, str]]
+type MIBJSONs = dict[str, dict[str, Any]]
 
 
 @pytest.fixture
@@ -54,7 +55,7 @@ def test_table_registration_disabled_in_pysnmp(logger: logging.Logger, mocker: A
     )
 
     # Create mock table data
-    table_data = {
+    table_data: TableData = {
         "table": {"oid": [1, 3, 6, 1, 2, 1, 1, 9]},
         "entry": {"oid": [1, 3, 6, 1, 2, 1, 1, 9, 1], "indexes": ["sysORIndex"]},
         "columns": {
@@ -69,7 +70,6 @@ def test_table_registration_disabled_in_pysnmp(logger: logging.Logger, mocker: A
                 "access": "read-only",
             },
         },
-        "prefix": "sysOR",
     }
 
     type_registry: TypeRegistry = {
@@ -158,7 +158,7 @@ def test_export_symbols_not_called(logger: logging.Logger, mocker: Any) -> None:
         logger=logger,
     )
 
-    table_data = {
+    table_data: TableData = {
         "table": {"oid": [1, 3, 6, 1, 2, 1, 1, 9]},
         "entry": {"oid": [1, 3, 6, 1, 2, 1, 1, 9, 1], "indexes": ["sysORIndex"]},
         "columns": {
@@ -168,7 +168,6 @@ def test_export_symbols_not_called(logger: logging.Logger, mocker: Any) -> None:
                 "access": "read-only",
             },
         },
-        "prefix": "sysOR",
     }
 
     type_registry: TypeRegistry = {"Integer32": {"base_type": "Integer32"}}

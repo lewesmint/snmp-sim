@@ -595,13 +595,8 @@ class MibRegistrar:
             try:
                 table_symbols = self._build_table_symbols(mib, name, info, mib_json, type_registry)
                 export_symbols.update(table_symbols)
-            except REGISTRAR_EXCEPTIONS as _e:
-                self.logger.error(
-                    "Error building table %s: %s",
-                    name,
-                    _e,
-                    exc_info=True,
-                )
+            except REGISTRAR_EXCEPTIONS:
+                self.logger.exception("Error building table %s", name)
                 continue
 
     def _build_mib_symbols(

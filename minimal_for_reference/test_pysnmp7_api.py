@@ -24,15 +24,15 @@ async def test_snmp_get() -> None:
     oid = ObjectType(ObjectIdentity("1.3.6.1.2.1.1.1.0"))
 
     # Perform GET
-    errorIndication, errorStatus, errorIndex, varBinds = await get_cmd(
+    error_indication, error_status, error_index, var_binds = await get_cmd(
         engine, auth, target, ContextData(), oid
     )
 
-    print(f"errorIndication: {errorIndication}")
-    print(f"errorStatus: {errorStatus}")
-    print(f"errorIndex: {errorIndex}")
-    print("varBinds:")
-    for vb in varBinds:
+    print(f"error_indication: {error_indication}")
+    print(f"error_status: {error_status}")
+    print(f"error_index: {error_index}")
+    print("var_binds:")
+    for vb in var_binds:
         print(f"  {vb.prettyPrint()}")
 
 

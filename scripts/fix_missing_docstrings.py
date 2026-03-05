@@ -1,6 +1,4 @@
 """Fix pylint missing docstring warnings by inserting concise docstrings."""
-# ruff: noqa: INP001
-
 from __future__ import annotations
 
 import logging

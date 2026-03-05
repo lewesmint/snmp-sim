@@ -1,52 +1,34 @@
 """Shared protocol/interface types for structural typing.
 
-These protocols model *capabilities* exposed by dynamic PySNMP/runtime objects
+These protocols model capabilities exposed by dynamic PySNMP/runtime objects
 without requiring inheritance.
 
 Design rule:
 - Keep protocols small and composable (method/attribute capability slices).
 - Model richer, multi-field runtime data with adapter snapshots/dataclasses in
-    ``app.mib_builder_adapters`` rather than growing monolithic protocols.
+  ``app.mib_builder_adapters`` rather than growing monolithic protocols.
 """
+# ruff: noqa: D102
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from typing import Any, Protocol, runtime_checkable
 
-from pysnmp_type_wrapper.interfaces import (
-    ColumnMeta as _ColumnMeta,
-)
-from pysnmp_type_wrapper.interfaces import (
-    EntryMeta as _EntryMeta,
-)
-from pysnmp_type_wrapper.interfaces import (
-    MibJsonObject as _BoundaryMibJsonObject,
-)
-from pysnmp_type_wrapper.interfaces import (
-    MutableScalarInstance as _MutableScalarInstance,
-)
-from pysnmp_type_wrapper.interfaces import (
-    SnmpTypeFactory as _SnmpTypeFactory,
-)
-from pysnmp_type_wrapper.interfaces import (
-    SupportsClone as _SupportsClone,
-)
-from pysnmp_type_wrapper.interfaces import (
-    SupportsMibBuilder as _SupportsMibBuilder,
-)
-from pysnmp_type_wrapper.interfaces import (
-    SupportsMibSymbolsAdapter as _SupportsMibSymbolsAdapter,
-)
-from pysnmp_type_wrapper.interfaces import (
-    SupportsSnmpTypeResolver as _SupportsSnmpTypeResolver,
-)
-from pysnmp_type_wrapper.interfaces import (
-    TableData as _TableData,
-)
-from pysnmp_type_wrapper.interfaces import (
-    TableMeta as _TableMeta,
-)
+from pysnmp_type_wrapper.interfaces import ColumnMeta as _ColumnMeta
+from pysnmp_type_wrapper.interfaces import EntryMeta as _EntryMeta
+from pysnmp_type_wrapper.interfaces import MibJsonObject as _BoundaryMibJsonObject
+from pysnmp_type_wrapper.interfaces import MutableScalarInstance as _MutableScalarInstance
+from pysnmp_type_wrapper.interfaces import SnmpTypeFactory as _SnmpTypeFactory
+from pysnmp_type_wrapper.interfaces import SupportsClone as _SupportsClone
+from pysnmp_type_wrapper.interfaces import SupportsMibBuilder as _SupportsMibBuilder
+from pysnmp_type_wrapper.interfaces import SupportsMibSymbolsAdapter as _SupportsMibSymbolsAdapter
+from pysnmp_type_wrapper.interfaces import SupportsSnmpTypeResolver as _SupportsSnmpTypeResolver
+from pysnmp_type_wrapper.interfaces import TableData as _TableData
+from pysnmp_type_wrapper.interfaces import TableMeta as _TableMeta
+
+# Pylint design rule, but Protocol slices are intentionally tiny.
+# pylint: disable=too-few-public-methods
 
 type InterfaceObject = object
 type MibJsonObject = _BoundaryMibJsonObject
@@ -58,6 +40,7 @@ type SnmpTypeFactory = _SnmpTypeFactory
 class SupportsMibBuilder(_SupportsMibBuilder, Protocol):
     """Compatibility shim for wrapper-owned MIB builder protocol."""
 
+
 ColumnMeta = _ColumnMeta
 EntryMeta = _EntryMeta
 MutableScalarInstance = _MutableScalarInstance
@@ -68,14 +51,17 @@ TableData = _TableData
 TableMeta = _TableMeta
 
 
+# Only keep runtime_checkable where you actually need isinstance() checks.
+# If you never do runtime checks for these, remove the decorator and it will
+# still work for static typing.
+
+
 @runtime_checkable
 class PrettyPrintable(Protocol):
     """Values that provide a display-friendly prettyPrint method."""
 
     def prettyPrint(self) -> object:  # noqa: N802  # pylint: disable=invalid-name
-        """Return a display-friendly representation."""
-        msg = "Protocol method"
-        raise NotImplementedError(msg)
+        ...
 
 
 @runtime_checkable
@@ -83,9 +69,7 @@ class HasName(Protocol):
     """Objects exposing getName for OID-like identity."""
 
     def getName(self) -> Iterable[int]:  # noqa: N802  # pylint: disable=invalid-name
-        """Return the object's OID tuple/list."""
-        msg = "Protocol method"
-        raise NotImplementedError(msg)
+        ...
 
 
 @runtime_checkable
@@ -93,9 +77,7 @@ class HasIndexNames(Protocol):
     """Objects exposing getIndexNames for table-index metadata."""
 
     def getIndexNames(self) -> Iterable[tuple[Any, Any, str]]:  # noqa: N802  # pylint: disable=invalid-name
-        """Return index metadata tuples, where element 3 is the index symbol name."""
-        msg = "Protocol method"
-        raise NotImplementedError(msg)
+        ...
 
 
 @runtime_checkable
@@ -108,9 +90,7 @@ class HasSyntax(Protocol):
     """Objects exposing getSyntax for SNMP value metadata."""
 
     def getSyntax(self) -> object:  # noqa: N802  # pylint: disable=invalid-name
-        """Return syntax/type object for this symbol."""
-        msg = "Protocol method"
-        raise NotImplementedError(msg)
+        ...
 
 
 @runtime_checkable
@@ -118,9 +98,7 @@ class HasGetMaxAccess(Protocol):
     """Objects exposing getMaxAccess for access metadata."""
 
     def getMaxAccess(self) -> object:  # noqa: N802  # pylint: disable=invalid-name
-        """Return max-access metadata for this symbol."""
-        msg = "Protocol method"
-        raise NotImplementedError(msg)
+        ...
 
 
 @runtime_checkable
@@ -128,9 +106,7 @@ class HasGetDisplayHint(Protocol):
     """Objects exposing getDisplayHint textual metadata."""
 
     def getDisplayHint(self) -> str | None:  # noqa: N802  # pylint: disable=invalid-name
-        """Return display-hint metadata for this symbol."""
-        msg = "Protocol method"
-        raise NotImplementedError(msg)
+        ...
 
 
 @runtime_checkable
@@ -150,9 +126,7 @@ class HasDescription(Protocol):
     """Objects exposing getDescription textual metadata."""
 
     def getDescription(self) -> str:  # noqa: N802  # pylint: disable=invalid-name
-        """Return a description payload for this symbol."""
-        msg = "Protocol method"
-        raise NotImplementedError(msg)
+        ...
 
 
 @runtime_checkable
@@ -160,9 +134,7 @@ class HasStatus(Protocol):
     """Objects exposing getStatus textual metadata."""
 
     def getStatus(self) -> str:  # noqa: N802  # pylint: disable=invalid-name
-        """Return status metadata for this symbol."""
-        msg = "Protocol method"
-        raise NotImplementedError(msg)
+        ...
 
 
 @runtime_checkable
@@ -170,9 +142,7 @@ class HasObjects(Protocol):
     """Objects exposing varbind/object reference metadata."""
 
     def getObjects(self) -> Iterable[object]:  # noqa: N802  # pylint: disable=invalid-name
-        """Return object references associated with a notification symbol."""
-        msg = "Protocol method"
-        raise NotImplementedError(msg)
+        ...
 
 
 @runtime_checkable
