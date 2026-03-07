@@ -8,7 +8,7 @@ This test will:
 """
 
 import contextlib
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pysnmp.entity import engine
@@ -69,7 +69,7 @@ def snmp_engine_with_table(test_mib_json: dict[str, Any]) -> engine.SnmpEngine:
         "OctetString": {"base_type": "OctetString"},
     }
     registrar = TableRegistrar(
-        mib_builder=mib_builder,
+        mib_builder=cast("Any", mib_builder),
         mib_scalar_instance=MibScalarInstance,
         mib_table=MibTable,
         mib_table_row=MibTableRow,
@@ -108,7 +108,13 @@ def snmp_engine_with_table(test_mib_json: dict[str, Any]) -> engine.SnmpEngine:
     mib_jsons = {"TEST-MIB": test_mib_json.copy()}
 
     # Register the table
-    registrar.register_single_table("TEST-MIB", "testTable", table_data, type_registry, mib_jsons)
+    registrar.register_single_table(
+        "TEST-MIB",
+        "testTable",
+        cast("Any", table_data),
+        type_registry,
+        cast("Any", mib_jsons),
+    )
 
     return snmp_engine
 
@@ -150,10 +156,14 @@ def test_mib_view_can_query_unregistered_table(
     # Query for the table OID
     table_oid = (1, 3, 6, 1, 99, 1, 1)
 
+    getnext_failed = False
+    returned_sym_name: str | None = None
+
     try:
         # Try to get the next MIB node - since our table isn't registered,
         # this should skip over our range
         modName, symName, indices = mib_view.getNextMibNode(table_oid)
+        returned_sym_name = str(symName)
     except (
         AssertionError,
         AttributeError,
@@ -164,15 +174,15 @@ def test_mib_view_can_query_unregistered_table(
         TypeError,
         ValueError,
     ):
-        pass
+        getnext_failed = True
 
-    # Try to translate the table OID
-    with contextlib.suppress(Exception):
-        _modName, _symName, _indices = mib_view.getNodeName((table_oid,))
+    # Translating non-exported custom table OID should fail.
+    with pytest.raises(Exception):
+        mib_view.getNodeName((table_oid,))
 
     # The key insight: without exporting to pysnmp, the MIB view doesn't know about our table
     # This means GETNEXT won't be able to properly handle table OIDs
-    assert True, "Test documents current behavior"
+    assert getnext_failed or (returned_sym_name is not None and "test" not in returned_sym_name)
 
 
 def test_table_oid_walkthrough() -> None:
@@ -225,7 +235,6 @@ def test_table_oid_walkthrough() -> None:
             1,
         ), f"OID {oid} should be in testEntry subtree"
 
-    for oid, _value in getnext_walk:
-        pass
+    assert [value for _oid, value in getnext_walk] == [1, 100, 2, 200]
 
     assert len(getnext_walk) == 4, "Should have 4 accessible instances in 2x2 table"

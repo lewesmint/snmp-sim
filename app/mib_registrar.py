@@ -64,6 +64,8 @@ class SNMPContext:
 
     mib_builder: ObjectType
     """PySNMP MIB builder instance"""
+    mib_scalar: ObjectType
+    """MibScalar class from SNMPv2-SMI"""
     mib_scalar_instance: ObjectType
     """MibScalarInstance class from SNMPv2-SMI"""
     mib_table: ObjectType
@@ -92,6 +94,7 @@ class MibRegistrar:
 
         """
         self.mib_builder = snmp_context.mib_builder
+        self.mib_scalar_cls = snmp_context.mib_scalar
         self.mib_scalar_instance_cls = snmp_context.mib_scalar_instance
         self.mib_table_cls = snmp_context.mib_table
         self.mib_table_row_cls = snmp_context.mib_table_row
@@ -595,8 +598,9 @@ class MibRegistrar:
             try:
                 table_symbols = self._build_table_symbols(mib, name, info, mib_json, type_registry)
                 export_symbols.update(table_symbols)
-            except REGISTRAR_EXCEPTIONS:
-                self.logger.exception("Error building table %s", name)
+            except REGISTRAR_EXCEPTIONS as exc:
+                exc_text = str(exc)
+                self.logger.exception("Error building table %s: %s", name, exc_text)
                 continue
 
     def _build_mib_symbols(

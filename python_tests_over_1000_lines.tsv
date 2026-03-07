@@ -1,0 +1,5 @@
+path	line_count
+tests/unit/agent/test_snmp_agent_additional.py	2172
+tests/misc/test_generator_more.py	1581
+tests/unit/mib/test_mib_registrar_more.py	1580
+tests/unit/type_system/test_type_recorder_unit.py	1390

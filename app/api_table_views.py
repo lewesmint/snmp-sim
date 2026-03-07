@@ -177,11 +177,6 @@ def _resolve_table_cell_context(
     parts: tuple[int, ...],
     schemas: dict[str, JsonValue],
 ) -> tuple[str, tuple[int, ...], str, str] | None:
-    table_oid_str: str | None = None
-    table_parts: tuple[int, ...] | None = None
-    instance_str: str | None = None
-    column_name: str | None = None
-
     for schema in schemas.values():
         if not isinstance(schema, dict):
             continue
@@ -190,47 +185,66 @@ def _resolve_table_cell_context(
             continue
 
         for obj_data in objects.values():
-            if not isinstance(obj_data, dict) or obj_data.get("type") != "MibTable":
+            table_candidate = _try_match_table_candidate(parts, obj_data)
+            if table_candidate is None:
                 continue
+            table_oid_str, table_parts, instance_str, column_num, entry_oid = table_candidate
 
-            candidate_table_list = as_oid_list(obj_data.get("oid", []))
-            if not candidate_table_list:
+            column_name = _find_column_name_for_number(
+                objects=objects,
+                entry_oid=entry_oid,
+                column_num=column_num,
+            )
+            if column_name is None:
                 continue
-            candidate_table_parts = tuple(candidate_table_list)
-            entry_oid = (*candidate_table_parts, 1)
-            if not (
-                len(parts) > len(candidate_table_parts) + 1
-                and parts[: len(candidate_table_parts)] == candidate_table_parts
-                and parts[len(candidate_table_parts)] == 1
-            ):
-                continue
+            return table_oid_str, table_parts, instance_str, column_name
 
-            table_parts_local = candidate_table_parts
-            table_oid_str = ".".join(str(x) for x in table_parts_local)
-            column_num = parts[len(table_parts_local) + 1]
-            instance_parts = parts[len(table_parts_local) + 2 :]
-            instance_str = ".".join(str(x) for x in instance_parts) if instance_parts else "1"
-            table_parts = table_parts_local
+    return None
 
-            for col_name, col_data in objects.items():
-                if not isinstance(col_data, dict) or "oid" not in col_data:
-                    continue
-                col_oid_list = as_oid_list(col_data.get("oid", []))
-                if not col_oid_list:
-                    continue
-                col_oid_t = tuple(col_oid_list)
-                if col_oid_t == (*entry_oid, column_num):
-                    column_name = col_name
-                    break
-            if table_oid_str:
-                break
-        if table_oid_str:
-            break
 
-    if not table_oid_str or not column_name or table_parts is None or instance_str is None:
+def _try_match_table_candidate(
+    parts: tuple[int, ...],
+    obj_data: object,
+) -> tuple[str, tuple[int, ...], str, int, tuple[int, ...]] | None:
+    if not isinstance(obj_data, dict) or obj_data.get("type") != "MibTable":
         return None
 
-    return table_oid_str, table_parts, instance_str, column_name
+    candidate_table_list = as_oid_list(obj_data.get("oid", []))
+    if not candidate_table_list:
+        return None
+
+    table_parts = tuple(candidate_table_list)
+    if not (
+        len(parts) > len(table_parts) + 1
+        and parts[: len(table_parts)] == table_parts
+        and parts[len(table_parts)] == 1
+    ):
+        return None
+
+    table_oid_str = ".".join(str(x) for x in table_parts)
+    column_num = parts[len(table_parts) + 1]
+    instance_parts = parts[len(table_parts) + 2 :]
+    instance_str = ".".join(str(x) for x in instance_parts) if instance_parts else "1"
+    entry_oid = (*table_parts, 1)
+    return table_oid_str, table_parts, instance_str, column_num, entry_oid
+
+
+def _find_column_name_for_number(
+    *,
+    objects: dict[str, object],
+    entry_oid: tuple[int, ...],
+    column_num: int,
+) -> str | None:
+    target_oid = (*entry_oid, column_num)
+    for col_name, col_data in objects.items():
+        if not isinstance(col_data, dict) or "oid" not in col_data:
+            continue
+        col_oid_list = as_oid_list(col_data.get("oid", []))
+        if not col_oid_list:
+            continue
+        if tuple(col_oid_list) == target_oid:
+            return col_name
+    return None
 
 
 def _try_table_instance_value(
@@ -266,6 +280,55 @@ def _row_matches_instance(row: JsonObject, index_columns: list[str], instance_st
     return row_instance_str == instance_str
 
 
+def _resolve_table_and_entry_objects(
+    objects: JsonObject,
+    table_parts: tuple[int, ...],
+    entry_oid: tuple[int, ...],
+) -> tuple[JsonObject | None, JsonObject | None]:
+    table_obj: JsonObject | None = None
+    entry_obj: JsonObject | None = None
+
+    for obj_data in objects.values():
+        if not isinstance(obj_data, dict):
+            continue
+        obj_oid_list = as_oid_list(obj_data.get("oid", []))
+        if not obj_oid_list:
+            continue
+        obj_oid = tuple(obj_oid_list)
+        if obj_data.get("type") == "MibTable" and obj_oid == table_parts:
+            table_obj = obj_data
+        if obj_data.get("type") == "MibTableRow" and obj_oid == entry_oid:
+            entry_obj = obj_data
+
+    return table_obj, entry_obj
+
+
+def _lookup_schema_row_cell_value(
+    table_obj: JsonObject,
+    index_column_names: list[str],
+    instance_str: str,
+    column_name: str,
+    parts: tuple[int, ...],
+) -> JsonValue | None:
+    rows = table_obj.get("rows", [])
+    if not isinstance(rows, list):
+        return None
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        row_obj = row
+        if not _row_matches_instance(row_obj, index_column_names, instance_str):
+            continue
+        if column_name not in row_obj:
+            continue
+        value = row_obj[column_name]
+        logger.info("Fetched table cell value from schema for OID %s: %s", parts, value)
+        return value
+
+    return None
+
+
 def _try_schema_row_value(
     schemas: dict[str, JsonValue],
     table_parts: tuple[int, ...],
@@ -282,20 +345,7 @@ def _try_schema_row_value(
         if not isinstance(objects, dict):
             continue
 
-        table_obj: JsonObject | None = None
-        entry_obj: JsonObject | None = None
-        for obj_data in objects.values():
-            if not isinstance(obj_data, dict):
-                continue
-            obj_oid_list = as_oid_list(obj_data.get("oid", []))
-            if not obj_oid_list:
-                continue
-            obj_oid = tuple(obj_oid_list)
-            if obj_data.get("type") == "MibTable" and obj_oid == table_parts:
-                table_obj = obj_data
-            if obj_data.get("type") == "MibTableRow" and obj_oid == entry_oid:
-                entry_obj = obj_data
-
+        table_obj, entry_obj = _resolve_table_and_entry_objects(objects, table_parts, entry_oid)
         if not table_obj or not entry_obj:
             continue
 
@@ -303,20 +353,14 @@ def _try_schema_row_value(
         index_column_names: list[str] = []
         if isinstance(raw_index_columns, list):
             index_column_names = [str(col) for col in raw_index_columns]
-        rows = table_obj.get("rows", [])
-        if not isinstance(rows, list):
-            continue
-
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            row_obj = row
-            if not _row_matches_instance(row_obj, index_column_names, instance_str):
-                continue
-            if column_name not in row_obj:
-                continue
-            value = row_obj[column_name]
-            logger.info("Fetched table cell value from schema for OID %s: %s", parts, value)
+        value = _lookup_schema_row_cell_value(
+            table_obj,
+            index_column_names,
+            instance_str,
+            column_name,
+            parts,
+        )
+        if value is not None:
             return value
 
     return None

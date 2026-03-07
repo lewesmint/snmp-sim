@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import anyio
 from fastapi import APIRouter, HTTPException
@@ -14,6 +14,7 @@ from pysnmp.hlapi.v3arch.asyncio import (
     ContextData,
     NotificationType,
     ObjectIdentity,
+    SnmpEngine,
     UdpTransportTarget,
     send_notification,
 )
@@ -125,8 +126,134 @@ def clear_trap_overrides(trap_name: str) -> dict[str, object]:
     return {"status": "ok", "trap_name": trap_name}
 
 
+def _find_trap_definition(
+    schemas: dict[str, Any],
+    trap_name: str,
+) -> tuple[dict[str, Any], str] | None:
+    for candidate_mib_name, schema in schemas.items():
+        if not isinstance(schema, dict):
+            continue
+        traps_obj = schema.get("traps", {})
+        if not isinstance(traps_obj, dict):
+            continue
+        trap_candidate = traps_obj.get(trap_name)
+        if isinstance(trap_candidate, dict):
+            return trap_candidate, candidate_mib_name
+    return None
+
+
+def _get_schema_objects(schemas: dict[str, Any], mib_name: str) -> dict[str, Any]:
+    obj_schema = schemas.get(mib_name, {})
+    if not isinstance(obj_schema, dict):
+        return {}
+    schema_objects_candidate = obj_schema.get("objects", obj_schema)
+    if not isinstance(schema_objects_candidate, dict):
+        return {}
+    return schema_objects_candidate
+
+
+def _unknown_varbind_metadata(obj_mib: str, obj_name: str) -> dict[str, object]:
+    return {
+        "mib": obj_mib,
+        "name": obj_name,
+        "oid": [],
+        "type": "Unknown",
+        "access": "unknown",
+        "is_index": False,
+        "parent_table": None,
+    }
+
+
+def _find_row_data_for_parent_oid(
+    schema_objects: dict[str, Any],
+    parent_oid: tuple[int, ...],
+) -> dict[str, Any] | None:
+    for check_data in schema_objects.values():
+        if (
+            isinstance(check_data, dict)
+            and tuple(check_data.get("oid", [])) == parent_oid
+            and check_data.get("type") == "MibTableRow"
+        ):
+            return check_data
+    return None
+
+
+def _find_table_data_for_row_oid(
+    schema_objects: dict[str, Any],
+    table_oid: tuple[int, ...],
+) -> tuple[str, dict[str, Any]] | None:
+    for table_name, table_data in schema_objects.items():
+        if (
+            isinstance(table_data, dict)
+            and tuple(table_data.get("oid", [])) == table_oid
+            and table_data.get("type") == "MibTable"
+        ):
+            return table_name, table_data
+    return None
+
+
+def _collect_row_columns_meta(
+    schema_objects: dict[str, Any],
+    row_oid: tuple[int, ...],
+) -> dict[str, dict[str, object]]:
+    columns_meta: dict[str, dict[str, object]] = {}
+    for col_name, col_data in schema_objects.items():
+        if not isinstance(col_data, dict):
+            continue
+        col_oid = tuple(col_data.get("oid", []))
+        if len(col_oid) > len(row_oid) and col_oid[: len(row_oid)] == row_oid:
+            columns_meta[col_name] = {
+                "oid": list(col_oid),
+                "type": col_data.get("type", "Unknown"),
+                "access": col_data.get("access", "unknown"),
+            }
+    return columns_meta
+
+
+def _resolve_parent_table_details(
+    schema_objects: dict[str, Any],
+    obj_oid: list[int],
+    obj_name: str,
+) -> tuple[dict[str, object] | None, bool, dict[str, object] | None]:
+    if len(obj_oid) <= MIN_PARENT_OID_LEN:
+        return None, False, None
+
+    row_oid = tuple(obj_oid[:-1])
+    row_data = _find_row_data_for_parent_oid(schema_objects, row_oid)
+    if row_data is None:
+        return None, False, None
+
+    if not row_oid:
+        return None, False, None
+
+    table_oid = tuple(row_oid[:-1])
+    table_info = _find_table_data_for_row_oid(schema_objects, table_oid)
+    if table_info is None:
+        return None, False, None
+
+    table_name, table_data = table_info
+    table_index_cols = row_data.get("indexes", [])
+    if not isinstance(table_index_cols, list):
+        table_index_cols = []
+
+    parent_table: dict[str, object] = {
+        "name": table_name,
+        "oid": list(table_oid),
+        "index_columns": table_index_cols,
+    }
+
+    context: dict[str, object] = {
+        "parent_table_oid": list(table_oid),
+        "parent_table_name": table_name,
+        "index_columns": table_index_cols,
+        "instances": table_data.get("instances", []),
+        "columns_meta": _collect_row_columns_meta(schema_objects, row_oid),
+    }
+    return parent_table, obj_name in table_index_cols, context
+
+
 @router.get("/trap-varbinds/{trap_name}")
-def get_trap_varbinds(trap_name: str) -> dict[str, object]:  # noqa: PLR0915
+def get_trap_varbinds(trap_name: str) -> dict[str, object]:
     """Get detailed varbind metadata for a specific trap."""
     if state.snmp_agent is None:
         raise HTTPException(status_code=500, detail="SNMP agent not initialized")
@@ -137,115 +264,68 @@ def get_trap_varbinds(trap_name: str) -> dict[str, object]:  # noqa: PLR0915
 
     schemas = load_all_schemas(schema_dir)
 
-    trap_info = None
-    mib_name = None
-
-    for candidate_mib_name, schema in schemas.items():
-        if isinstance(schema, dict) and isinstance(schema.get("traps"), dict):
-            traps_obj = schema.get("traps", {})
-            if not isinstance(traps_obj, dict):
-                continue
-            if trap_name in traps_obj:
-                trap_candidate = traps_obj[trap_name]
-                if not isinstance(trap_candidate, dict):
-                    continue
-                trap_info = trap_candidate
-                mib_name = candidate_mib_name
-                break
-
-    if not trap_info or mib_name is None:
+    trap_found = _find_trap_definition(schemas, trap_name)
+    if trap_found is None:
         raise HTTPException(status_code=404, detail=f"Trap '{trap_name}' not found")
+
+    trap_info, mib_name = trap_found
 
     varbind_objects = trap_info.get("objects", [])
 
     varbinds_metadata = []
-    parent_table_oid = None
-    parent_table_name = None
-    index_columns = []
-    instances = []
-    columns_meta = {}
+    parent_table_oid: list[int] | None = None
+    parent_table_name: str | None = None
+    index_columns: list[str] = []
+    instances: list[object] = []
+    columns_meta: dict[str, dict[str, object]] = {}
 
     for varbind_obj in varbind_objects:
         obj_mib = varbind_obj.get("mib", "")
         obj_name = varbind_obj.get("name", "")
 
-        obj_schema = schemas.get(obj_mib, {})
-        schema_objects: dict[str, Any] = {}
-        if isinstance(obj_schema, dict):
-            schema_objects_candidate = obj_schema.get("objects", obj_schema)
-            if isinstance(schema_objects_candidate, dict):
-                schema_objects = schema_objects_candidate
+        schema_objects = _get_schema_objects(schemas, obj_mib)
 
         obj_data = schema_objects.get(obj_name, {})
 
         if not obj_data:
-            varbinds_metadata.append(
-                {
-                    "mib": obj_mib,
-                    "name": obj_name,
-                    "oid": [],
-                    "type": "Unknown",
-                    "access": "unknown",
-                    "is_index": False,
-                    "parent_table": None,
-                }
-            )
+            varbinds_metadata.append(_unknown_varbind_metadata(obj_mib, obj_name))
             continue
 
         obj_oid = obj_data.get("oid", [])
         obj_type = obj_data.get("type", "Unknown")
         obj_access = obj_data.get("access", "unknown")
+        if not isinstance(obj_oid, list):
+            obj_oid = []
 
-        is_index = False
-        parent_table = None
+        parent_table, is_index, context = _resolve_parent_table_details(
+            schema_objects,
+            obj_oid,
+            obj_name,
+        )
+        if context is not None and parent_table_oid is None:
+            context_parent_oid = context.get("parent_table_oid")
+            if isinstance(context_parent_oid, list):
+                parent_table_oid = context_parent_oid
 
-        if len(obj_oid) > MIN_PARENT_OID_LEN:
-            parent_oid = tuple(obj_oid[:-1])
+            context_parent_name = context.get("parent_table_name")
+            if isinstance(context_parent_name, str):
+                parent_table_name = context_parent_name
 
-            for check_data in schema_objects.values():
-                if (
-                    isinstance(check_data, dict)
-                    and tuple(check_data.get("oid", [])) == parent_oid
-                    and check_data.get("type") == "MibTableRow"
-                ):
-                    if parent_oid:
-                        table_oid = tuple(parent_oid[:-1])
+            context_index_columns = context.get("index_columns")
+            if isinstance(context_index_columns, list):
+                index_columns = [item for item in context_index_columns if isinstance(item, str)]
 
-                        for table_name, table_data in schema_objects.items():
-                            if (
-                                isinstance(table_data, dict)
-                                and tuple(table_data.get("oid", [])) == table_oid
-                                and table_data.get("type") == "MibTable"
-                            ):
-                                table_index_cols = check_data.get("indexes", [])
-                                parent_table = {
-                                    "name": table_name,
-                                    "oid": list(table_oid),
-                                    "index_columns": table_index_cols,
-                                }
+            context_instances = context.get("instances")
+            if isinstance(context_instances, list):
+                instances = context_instances
 
-                                if obj_name in table_index_cols:
-                                    is_index = True
-
-                                if parent_table_oid is None:
-                                    parent_table_oid = list(table_oid)
-                                    parent_table_name = table_name
-                                    index_columns = table_index_cols
-                                    instances = table_data.get("instances", [])
-
-                                    for col_name, col_data in schema_objects.items():
-                                        if isinstance(col_data, dict):
-                                            col_oid = tuple(col_data.get("oid", []))
-                                            if (
-                                                len(col_oid) > len(parent_oid)
-                                                and col_oid[: len(parent_oid)] == parent_oid
-                                            ):
-                                                columns_meta[col_name] = {
-                                                    "oid": list(col_oid),
-                                                    "type": col_data.get("type", "Unknown"),
-                                                    "access": col_data.get("access", "unknown"),
-                                                }
-                    break
+            context_columns_meta = context.get("columns_meta")
+            if isinstance(context_columns_meta, dict):
+                columns_meta = {
+                    key: value
+                    for key, value in context_columns_meta.items()
+                    if isinstance(key, str) and isinstance(value, dict)
+                }
 
         varbinds_metadata.append(
             {
@@ -281,41 +361,20 @@ class TrapSendRequest(BaseModel):
     community: str | None = "public"
 
 
-@router.post("/send-trap")
-async def send_trap(request: TrapSendRequest) -> dict[str, object]:
-    """Send an SNMP trap/notification."""
+def _get_snmp_engine_or_raise() -> SnmpEngine:
     if state.snmp_agent is None:
-        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
-
-    schema_dir = SCHEMA_DIR
-    if not await anyio.Path(schema_dir).exists():
-        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
-
-    schemas = load_all_schemas(schema_dir)
-
-    trap_info = None
-    mib_name = None
-
-    for candidate_mib_name, schema in schemas.items():
-        if isinstance(schema, dict) and isinstance(schema.get("traps"), dict):
-            traps_obj = schema.get("traps", {})
-            if not isinstance(traps_obj, dict):
-                continue
-            if request.trap_name in traps_obj:
-                trap_candidate = traps_obj[request.trap_name]
-                if not isinstance(trap_candidate, dict):
-                    continue
-                trap_info = trap_candidate
-                mib_name = candidate_mib_name
-                break
-
-    if not trap_info or mib_name is None:
-        raise HTTPException(status_code=404, detail=f"Trap '{request.trap_name}' not found")
-
-    snmp_engine = getattr(state.snmp_agent, "snmp_engine", None)
+        raise HTTPException(status_code=500, detail="SNMP agent engine not initialized")
+    snmp_engine = state.snmp_agent.snmp_engine
     if snmp_engine is None:
         raise HTTPException(status_code=500, detail="SNMP agent engine not initialized")
+    return snmp_engine
 
+
+def _resolve_notification_or_raise(
+    snmp_engine: SnmpEngine,
+    mib_name: str,
+    trap_name: str,
+) -> NotificationType:
     mib_builder = snmp_engine.get_mib_builder()
     mib_view = view.MibViewController(mib_builder)
 
@@ -328,17 +387,22 @@ async def send_trap(request: TrapSendRequest) -> dict[str, object]:
         ) from exc
 
     try:
-        notif = NotificationType(ObjectIdentity(mib_name, request.trap_name)).resolve_with_mib(
-            mib_view
-        )
+        return NotificationType(ObjectIdentity(mib_name, trap_name)).resolve_with_mib(mib_view)
     except (SmiError, ValueError, TypeError) as exc:
         raise HTTPException(
             status_code=400,
-            detail=f"Failed to resolve notification {mib_name}::{request.trap_name}. {exc}",
+            detail=f"Failed to resolve notification {mib_name}::{trap_name}. {exc}",
         ) from exc
 
+
+async def _send_notification_or_raise(
+    *,
+    snmp_engine: SnmpEngine,
+    request: TrapSendRequest,
+    notification: NotificationType,
+) -> tuple[object, object, object, object]:
     try:
-        error_indication, error_status, error_index, _ = await send_notification(
+        result = await send_notification(
             snmp_engine,
             CommunityData(request.community or "public"),
             await UdpTransportTarget.create(
@@ -346,12 +410,19 @@ async def send_trap(request: TrapSendRequest) -> dict[str, object]:
             ),
             ContextData(),
             request.trap_type,
-            notif,
+            notification,
         )
+        return cast("tuple[object, object, object, object]", result)
     except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
         logger.exception("Failed to send trap")
         raise HTTPException(status_code=500, detail=f"Failed to send trap: {exc}") from exc
 
+
+def _raise_if_send_failed(
+    error_indication: object,
+    error_status: object,
+    error_index: object,
+) -> None:
     if error_indication:
         raise HTTPException(status_code=502, detail=f"SNMP send error: {error_indication}")
 
@@ -359,6 +430,33 @@ async def send_trap(request: TrapSendRequest) -> dict[str, object]:
         raise HTTPException(
             status_code=502, detail=f"SNMP send error: {error_status} at {error_index}"
         )
+
+
+@router.post("/send-trap")
+async def send_trap(request: TrapSendRequest) -> dict[str, object]:
+    """Send an SNMP trap/notification."""
+    if state.snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    schema_dir = SCHEMA_DIR
+    if not await anyio.Path(schema_dir).exists():
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
+
+    schemas = load_all_schemas(schema_dir)
+
+    trap_found = _find_trap_definition(schemas, request.trap_name)
+    if trap_found is None:
+        raise HTTPException(status_code=404, detail=f"Trap '{request.trap_name}' not found")
+    trap_info, mib_name = trap_found
+
+    snmp_engine = _get_snmp_engine_or_raise()
+    notif = _resolve_notification_or_raise(snmp_engine, mib_name, request.trap_name)
+    error_indication, error_status, error_index, _ = await _send_notification_or_raise(
+        snmp_engine=snmp_engine,
+        request=request,
+        notification=notif,
+    )
+    _raise_if_send_failed(error_indication, error_status, error_index)
 
     trap_oid = tuple(trap_info["oid"])
 
@@ -398,7 +496,9 @@ async def send_test_trap(request: TestTrapRequest) -> dict[str, object]:
     test_mib = "SNMPv2-MIB"
     test_notification = "coldStart"
 
-    snmp_engine = getattr(state.snmp_agent, "snmp_engine", None)
+    if state.snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent engine not initialized")
+    snmp_engine = state.snmp_agent.snmp_engine
     if snmp_engine is None:
         raise HTTPException(status_code=500, detail="SNMP agent engine not initialized")
 

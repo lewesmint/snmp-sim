@@ -12,12 +12,19 @@ def test_wrapper_public_exports_present() -> None:
         "EntryMeta",
         "MibSymbolMap",
         "MibJsonObject",
+        "MibNodeLike",
+        "MibScalarClass",
+        "MibScalarInstanceClass",
+        "MibTableClass",
+        "MibTableColumnClass",
+        "MibTableRowClass",
         "MutableScalarInstance",
         "PysnmpMibSymbolsAdapter",
         "PysnmpRfc1902Adapter",
         "PysnmpTypeResolver",
         "RUNTIME_ADAPTER_EXCEPTIONS",
         "RuntimeSnmpContextArgs",
+        "Snmpv2SmiClasses",
         "SnmpTypeFactory",
         "SupportsClone",
         "SupportsMibBuilder",
@@ -41,6 +48,10 @@ def test_wrapper_public_exports_present() -> None:
 
 def test_wrapper_public_classes_are_constructible() -> None:
     """Core adapter classes should be importable and constructible."""
-    wrapper.PysnmpRfc1902Adapter(object())
-    wrapper.PysnmpMibSymbolsAdapter(object())
-    wrapper.PysnmpTypeResolver()
+    rfc_adapter = wrapper.PysnmpRfc1902Adapter(object())
+    mib_adapter = wrapper.PysnmpMibSymbolsAdapter(object())
+    resolver = wrapper.PysnmpTypeResolver()
+
+    assert isinstance(rfc_adapter, wrapper.PysnmpRfc1902Adapter)
+    assert isinstance(mib_adapter, wrapper.PysnmpMibSymbolsAdapter)
+    assert isinstance(resolver, wrapper.PysnmpTypeResolver)

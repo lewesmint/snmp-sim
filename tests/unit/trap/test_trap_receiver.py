@@ -55,7 +55,9 @@ def test_trap_receiver_parse_trap() -> None:
     assert trap_data["trap_oid"] == (1, 3, 6, 1, 4, 1, 99999, 0, 1)
     assert trap_data["trap_oid_str"] == "1.3.6.1.4.1.99999.0.1"
     assert trap_data["is_test_trap"] is True
-    assert len(trap_data["varbinds"]) == 3
+    parsed_varbinds = trap_data["varbinds"]
+    assert isinstance(parsed_varbinds, list)
+    assert len(parsed_varbinds) == 3
 
 
 def test_trap_receiver_parse_non_test_trap() -> None:
@@ -79,7 +81,7 @@ def test_trap_receiver_parse_non_test_trap() -> None:
     assert trap_data["is_test_trap"] is False
 
 
-def test_trap_receiver_callback() -> None:
+def test_trap_receiver_callback(monkeypatch: Any) -> None:
     """Test trap callback is invoked."""
     callback_called = []
 
@@ -87,6 +89,12 @@ def test_trap_receiver_callback() -> None:
         callback_called.append(trap_data)
 
     receiver = TrapReceiver(on_trap_callback=test_callback)
+
+    def fake_extract_source(snmp_engine: object, state_reference: object) -> str:
+        _ = (snmp_engine, state_reference)
+        return "unknown"
+
+    monkeypatch.setattr(receiver, "_extract_source", fake_extract_source)
 
     # Mock varbinds
     from pysnmp.proto import rfc1902
@@ -100,7 +108,7 @@ def test_trap_receiver_callback() -> None:
     ]
 
     # Call the callback directly
-    receiver._trap_callback(None, None, None, None, varbinds, None)
+    receiver._trap_callback(object(), None, None, None, varbinds, None)
 
     assert len(callback_called) == 1
     assert callback_called[0]["is_test_trap"] is True

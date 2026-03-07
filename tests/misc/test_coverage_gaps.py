@@ -2,11 +2,12 @@
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from app.generator import BehaviourGenerator
+from app.interface_types import ColumnMeta, MibJsonObject, TableData
 from app.snmp_agent import SNMPAgent
 from app.table_registrar import TableRegistrar
 from app.type_recorder import TypeRecorder
@@ -40,13 +41,16 @@ def test_register_pysnmp_table_column_type_resolution_fails(
     mocker: Any,
 ) -> None:
     """Test _register_pysnmp_table when column type resolution fails (lines 234-236)."""
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "table": {"oid": [1, 2, 3]},
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {
             "badCol": {"oid": [1, 2, 3, 1, 1], "type": "UnknownType"},
         },
-    }
+        },
+    )
     type_registry: dict[str, Any] = {}
     new_row: dict[str, Any] = {}
 
@@ -66,7 +70,7 @@ def test_register_pysnmp_table_column_type_resolution_fails(
 
     # Should skip the column and not register it
     # TableRegistrar does not export table symbols; ensure export_symbols not called
-    mock_registrar.mib_builder.export_symbols.assert_not_called()
+    cast(Any, mock_registrar.mib_builder).export_symbols.assert_not_called()
 
 
 def test_register_row_instances_with_actual_columns(
@@ -74,18 +78,21 @@ def test_register_row_instances_with_actual_columns(
     mocker: Any,
 ) -> None:
     """Test _register_row_instances successful path (lines 289-307)."""
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {
             "col1": {"oid": [1, 2, 3, 1, 1], "type": "Integer32"},
             "col2": {"oid": [1, 2, 3, 1, 2], "type": "Integer32"},
         },
-    }
+        },
+    )
     type_registry: dict[str, Any] = {
         "Integer32": {"base_type": "Integer32"},
     }
     col_names = ["col1", "col2"]
-    new_row = {"col1": 42, "col2": 99}
+    new_row: MibJsonObject = {"col1": 42, "col2": 99}
 
     mock_registrar._resolve_snmp_type = mocker.Mock(return_value=int)  # type: ignore[method-assign]
 
@@ -99,7 +106,7 @@ def test_register_row_instances_with_actual_columns(
     )
 
     # Should have called mib_scalar_instance twice
-    assert mock_registrar.mib_scalar_instance.call_count == 2
+    assert cast(Any, mock_registrar.mib_scalar_instance).call_count == 2
 
 
 def test_register_row_instances_type_resolution_fails(
@@ -107,15 +114,18 @@ def test_register_row_instances_type_resolution_fails(
     mocker: Any,
 ) -> None:
     """Test _register_row_instances when type resolution fails (lines 289-290)."""
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {
             "badCol": {"oid": [1, 2, 3, 1, 1], "type": "UnknownType"},
         },
-    }
+        },
+    )
     type_registry: dict[str, Any] = {}
     col_names: list[str] = ["badCol"]
-    new_row: dict[str, Any] = {"badCol": 0}
+    new_row: MibJsonObject = {"badCol": 0}
 
     # Make _resolve_snmp_type return None - this causes continue on line 290
     mock_registrar._resolve_snmp_type = mocker.Mock(  # type: ignore[method-assign]
@@ -132,7 +142,7 @@ def test_register_row_instances_type_resolution_fails(
     )
 
     # Should not call mib_scalar_instance
-    mock_registrar.mib_scalar_instance.assert_not_called()
+    cast(Any, mock_registrar.mib_scalar_instance).assert_not_called()
 
 
 def test_register_row_instances_value_error_exception(
@@ -141,15 +151,18 @@ def test_register_row_instances_value_error_exception(
     mocker: Any,
 ) -> None:
     """Test _register_row_instances when type conversion raises exception (lines 300-303)."""
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {
             "col1": {"oid": [1, 2, 3, 1, 1], "type": "Integer32"},
         },
-    }
+        },
+    )
     type_registry: dict[str, Any] = {"Integer32": {"base_type": "Integer32"}}
     col_names: list[str] = ["col1"]
-    new_row: dict[str, Any] = {"col1": "not_a_number"}  # Will fail conversion to int
+    new_row: MibJsonObject = {"col1": "not_a_number"}  # Will fail conversion to int
 
     mock_registrar._resolve_snmp_type = mocker.Mock(return_value=int)  # type: ignore[method-assign]
 
@@ -171,13 +184,16 @@ def test_register_row_instances_no_columns(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Test _register_row_instances when no columns (lines 306-307)."""
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "entry": {"oid": [1, 2, 3, 1]},
         "columns": {},
-    }
+        },
+    )
     type_registry: dict[str, Any] = {}
     col_names: list[str] = []
-    new_row: dict[str, Any] = {}
+    new_row: MibJsonObject = {}
 
     with caplog.at_level(logging.WARNING):
         mock_registrar._register_row_instances(
@@ -198,7 +214,7 @@ def test_resolve_snmp_type_with_rfc1902_fallback(
 ) -> None:
     """Test _resolve_snmp_type falls back to pysnmp.proto.rfc1902 (lines 366-375)."""
     # Make import_symbols fail for both SNMPv2 modules
-    mock_registrar.mib_builder.import_symbols.side_effect = Exception("Not found")
+    cast(Any, mock_registrar.mib_builder).import_symbols.side_effect = RuntimeError("Not found")
 
     # This will use real rfc1902, which is fine - just test it returns something
     result = mock_registrar._resolve_snmp_type("Integer32", "col", "table")
@@ -212,7 +228,9 @@ def test_resolve_snmp_type_final_fallback_returns_none(
 ) -> None:
     """Test _resolve_snmp_type returns None for completely unknown types (lines 404-406)."""
     # Make both import_symbols fail
-    mock_registrar.mib_builder.import_symbols.side_effect = Exception("Import failed")
+    cast(Any, mock_registrar.mib_builder).import_symbols.side_effect = RuntimeError(
+        "Import failed",
+    )
 
     # Test with unknown type that even rfc1902 doesn't have
     result = mock_registrar._resolve_snmp_type("CompletelyFakeTypeDoesNotExist", "col", "table")
@@ -225,7 +243,7 @@ def test_get_default_value_size_constraint_exact_4(
     mock_registrar: TableRegistrar,
 ) -> None:
     """Test _get_default_value_for_type with size constraint of exactly 4 (line 330)."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info = {"constraints": [{"type": "ValueSizeConstraint", "min": 4, "max": 4}]}
 
     result = mock_registrar._get_default_value_for_type(
@@ -241,7 +259,7 @@ def test_get_default_value_size_constraint_exact_4(
 
 def test_get_default_value_size_set_with_4_only(mock_registrar: TableRegistrar) -> None:
     """Test _get_default_value_for_type with size set containing only [4] (line 398)."""
-    col_info: dict[str, Any] = {}
+    col_info = cast(ColumnMeta, {})
     type_info: dict[str, Any] = {"size": {"type": "set", "allowed": [4]}}
 
     result = mock_registrar._get_default_value_for_type(
@@ -269,10 +287,10 @@ def test_snmp_agent_register_mib_objects_missing_type_registry_file(
     # Don't replace logger - use the actual one so caplog captures it
     agent.mib_builder = mocker.Mock()
     agent.mib_jsons = {"TEST-MIB": {}}
-    agent.MibScalarInstance = mocker.Mock()  # type: ignore[attr-defined]
-    agent.MibTable = mocker.Mock()  # type: ignore[attr-defined]
-    agent.MibTableRow = mocker.Mock()  # type: ignore[attr-defined]
-    agent.MibTableColumn = mocker.Mock()  # type: ignore[attr-defined]
+    agent.MibScalarInstance = mocker.Mock()
+    agent.MibTable = mocker.Mock()
+    agent.MibTableRow = mocker.Mock()
+    agent.MibTableColumn = mocker.Mock()
 
     # Make the type registry file fail to open
     original_open = open
@@ -476,7 +494,7 @@ def test_generator_table_index_extraction_exception(
         def load_modules(self, _name: str) -> None:
             """Test case for load_modules."""
             msg = "Load failed"
-            raise Exception(msg)
+            raise RuntimeError(msg)
 
     monkeypatch.setattr("app.generator.builder.MibBuilder", FailingBuilder)
     monkeypatch.setattr("app.generator.builder.DirMibSource", lambda _path: "src")

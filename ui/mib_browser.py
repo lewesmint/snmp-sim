@@ -11,37 +11,26 @@ This module can be run independently or embedded in other applications.
 from __future__ import annotations
 
 import argparse
-import asyncio
 import os
 import re
 import shutil
 import sys
 import tkinter as tk
-from datetime import UTC, datetime
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
 from typing import Any
 
 import customtkinter as ctk
 from pysnmp.hlapi.v3arch.asyncio import (
-    CommunityData,
-    ContextData,
     ObjectIdentity,
-    ObjectType,
-    SnmpEngine,
-    UdpTransportTarget,
-    get_cmd,
-    next_cmd,
-    set_cmd,
-    walk_cmd,
 )
-from pysnmp.proto.error import StatusInformation
-from pysnmp.proto.rfc1902 import OctetString
 from pysnmp.smi import builder, view
 
 from app.mib_builder_adapters import extract_optional_metadata, extract_symbol_oid
-from ui.common import Logger, format_snmp_value
+from ui.common import Logger
 from ui.icon_utils import load_icons_with_fallback
+from ui.mib_browser_snmp_ops_mixin import MIBBrowserSnmpOpsMixin
+from ui.mib_browser_ui_mixin import MIBBrowserUIMixin
 
 
 def _ensure_default_tk_root() -> None:
@@ -60,7 +49,7 @@ def _ensure_default_tk_root() -> None:
 _ensure_default_tk_root()
 
 
-class MIBBrowserWindow:
+class MIBBrowserWindow(MIBBrowserUIMixin, MIBBrowserSnmpOpsMixin):
     """Standalone MIB Browser window for SNMP operations."""
 
     def __init__(
@@ -172,280 +161,6 @@ class MIBBrowserWindow:
             )
         )
 
-    def _setup_ui(self) -> None:
-        """Set up the UI components."""
-        # Main container
-        if isinstance(self.window, ctk.CTk):
-            container = self.window
-        else:
-            container = ctk.CTkFrame(self.window)
-            container.pack(fill="both", expand=True)
-
-        # Create tabbed interface
-        self.tabview = ctk.CTkTabview(container)
-        self.tabview.pack(fill="both", expand=True, padx=10, pady=10)
-
-        # Create tabs
-        self.tabview.add("Browser")
-        self.tabview.add("MIB Manager")
-
-        # Setup each tab
-        self._setup_browser_tab()
-        self._setup_mib_manager_tab()
-
-        # Status bar
-        status_frame = ctk.CTkFrame(container)
-        status_frame.pack(fill="x", padx=10, pady=(0, 10))
-
-        self.status_var = ctk.StringVar(value="Ready")
-        status_label = ctk.CTkLabel(status_frame, textvariable=self.status_var, anchor="w")
-        status_label.pack(fill="x", padx=10, pady=(0, 5))
-
-    def _setup_browser_tab(self) -> None:  # noqa: PLR0915
-        """Set up the SNMP browser tab."""
-        browser_tab = self.tabview.tab("Browser")
-
-        # Connection settings panel
-        conn_frame = ctk.CTkFrame(browser_tab)
-        conn_frame.pack(fill="x", padx=10, pady=10)
-
-        # Host
-        host_label = ctk.CTkLabel(conn_frame, text="Host:", font=("", 12, "bold"))
-        host_label.grid(row=0, column=0, padx=(5, 10), pady=5, sticky="w")
-
-        self.host_var = ctk.StringVar(value=self.default_host)
-        self.host_entry = ctk.CTkEntry(conn_frame, textvariable=self.host_var, width=150)
-        self.host_entry.grid(row=0, column=1, padx=5, pady=5)
-
-        # Port
-        port_label = ctk.CTkLabel(conn_frame, text="Port:", font=("", 12, "bold"))
-        port_label.grid(row=0, column=2, padx=(15, 10), pady=5, sticky="w")
-
-        self.port_var = ctk.StringVar(value=str(self.default_port))
-        self.port_entry = ctk.CTkEntry(conn_frame, textvariable=self.port_var, width=80)
-        self.port_entry.grid(row=0, column=3, padx=5, pady=5)
-
-        # Community
-        comm_label = ctk.CTkLabel(conn_frame, text="Community:", font=("", 12, "bold"))
-        comm_label.grid(row=0, column=4, padx=(15, 10), pady=5, sticky="w")
-
-        self.community_var = ctk.StringVar(value=self.default_community)
-        self.community_entry = ctk.CTkEntry(conn_frame, textvariable=self.community_var, width=100)
-        self.community_entry.grid(row=0, column=5, padx=5, pady=5)
-
-        # OID and Value input panel
-        control_panel = ctk.CTkFrame(browser_tab)
-        control_panel.pack(fill="x", padx=10, pady=(0, 10))
-
-        # OID input
-        oid_label = ctk.CTkLabel(control_panel, text="OID:", font=("", 12, "bold"))
-        oid_label.grid(row=0, column=0, padx=(5, 10), pady=5, sticky="w")
-
-        self.oid_var = ctk.StringVar(value="1.3.6.1.2.1.1")
-        self.oid_entry = ctk.CTkEntry(control_panel, textvariable=self.oid_var, width=400)
-        self.oid_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-
-        # Value input (for SET operations)
-        value_label = ctk.CTkLabel(control_panel, text="Value:", font=("", 12, "bold"))
-        value_label.grid(row=1, column=0, padx=(5, 10), pady=5, sticky="w")
-
-        self.value_var = ctk.StringVar()
-        self.value_entry = ctk.CTkEntry(control_panel, textvariable=self.value_var, width=400)
-        self.value_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-
-        control_panel.columnconfigure(1, weight=1)
-
-        # Command buttons
-        buttons_frame = ctk.CTkFrame(browser_tab)
-        buttons_frame.pack(fill="x", padx=10, pady=(0, 10))
-
-        get_btn = ctk.CTkButton(buttons_frame, text="GET", command=self._snmp_get, width=100)
-        get_btn.pack(side="left", padx=5)
-
-        getnext_btn = ctk.CTkButton(
-            buttons_frame,
-            text="GET NEXT",
-            command=self._snmp_getnext,
-            width=100,
-        )
-        getnext_btn.pack(side="left", padx=5)
-
-        walk_btn = ctk.CTkButton(buttons_frame, text="WALK", command=self._snmp_walk, width=100)
-        walk_btn.pack(side="left", padx=5)
-
-        set_btn = ctk.CTkButton(buttons_frame, text="SET", command=self._snmp_set, width=100)
-        set_btn.pack(side="left", padx=5)
-
-        clear_btn = ctk.CTkButton(
-            buttons_frame,
-            text="Clear Results",
-            command=self._clear_results,
-            width=120,
-        )
-        clear_btn.pack(side="right", padx=5)
-
-        # Toolbar with expand/collapse controls
-        toolbar_frame = ctk.CTkFrame(browser_tab)
-        toolbar_frame.pack(fill="x", padx=10, pady=(0, 10))
-
-        expand_btn = ctk.CTkButton(
-            toolbar_frame,
-            text="Expand All",
-            command=self._expand_all,
-            width=100,
-        )
-        expand_btn.pack(side="left", padx=(0, 6))
-
-        collapse_btn = ctk.CTkButton(
-            toolbar_frame,
-            text="Collapse All",
-            command=self._collapse_all,
-            width=100,
-        )
-        collapse_btn.pack(side="left", padx=(0, 10))
-
-        # Results tree
-        results_frame = ctk.CTkFrame(browser_tab)
-        results_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-
-        # Configure style for tree - match OID tree style
-        style = ttk.Style()
-        bg_color = "#2b2b2b" if ctk.get_appearance_mode() == "Dark" else "#ffffff"
-        fg_color = "#ffffff" if ctk.get_appearance_mode() == "Dark" else "#000000"
-        selected_bg = "#1f538d" if ctk.get_appearance_mode() == "Dark" else "#0078d7"
-
-        style.configure(
-            "Browser.Treeview",
-            font=("Helvetica", 11),
-            rowheight=30,
-            background=bg_color,
-            foreground=fg_color,
-            fieldbackground=bg_color,
-            borderwidth=2,
-            relief="solid",
-        )
-        style.configure(
-            "Browser.Treeview.Heading",
-            font=("Helvetica", 12, "bold"),
-            background="#1f1f1f" if ctk.get_appearance_mode() == "Dark" else "#e0e0e0",
-            foreground=fg_color,
-            borderwidth=2,
-            relief="groove",
-            padding=5,
-        )
-        style.map("Browser.Treeview", background=[("selected", selected_bg)])
-
-        # Scrollbars
-        v_scroll = ttk.Scrollbar(results_frame, orient="vertical")
-        h_scroll = ttk.Scrollbar(results_frame, orient="horizontal")
-
-        # Tree with columns: OID, Type, Value
-        self.results_tree = ttk.Treeview(
-            results_frame,
-            columns=("oid", "type", "value"),
-            show="tree headings",
-            yscrollcommand=v_scroll.set,
-            xscrollcommand=h_scroll.set,
-            style="Browser.Treeview",
-        )
-
-        v_scroll.config(command=self.results_tree.yview)
-        h_scroll.config(command=self.results_tree.xview)
-
-        # Configure columns
-        self.results_tree.heading("#0", text="📋 Agent / Operation / OID")
-        self.results_tree.heading("oid", text="🔢 OID")
-        self.results_tree.heading("type", text="Type")
-        self.results_tree.heading("value", text="💾 Value")
-
-        self.results_tree.column("#0", width=300, minwidth=200)
-        self.results_tree.column("oid", width=250, minwidth=150)
-        self.results_tree.column("type", width=120, minwidth=80)
-        self.results_tree.column("value", width=250, minwidth=150, stretch=True)
-
-        # Pack tree and scrollbars
-        self.results_tree.grid(row=0, column=0, sticky="nsew", padx=(5, 0), pady=5)
-        v_scroll.grid(row=0, column=1, sticky="ns", pady=5)
-        h_scroll.grid(row=1, column=0, sticky="ew", padx=(5, 0))
-
-        results_frame.rowconfigure(0, weight=1)
-        results_frame.columnconfigure(0, weight=1)
-
-        # Bind expand event for lazy loading if needed
-        self.results_tree.bind("<<TreeviewOpen>>", self._on_node_open)
-
-    def _setup_mib_manager_tab(self) -> None:
-        """Set up the MIB Manager tab for browsing and caching MIBs."""
-        mib_tab = self.tabview.tab("MIB Manager")
-
-        # Instructions
-        instructions = ctk.CTkLabel(
-            mib_tab,
-            text=(
-                "Browse for original MIB source files (.mib, .txt, .my, .asn, "
-                ".asn1) to cache and load them for name resolution."
-            ),
-            font=("", 12),
-        )
-        instructions.pack(padx=10, pady=10)
-
-        # Buttons frame
-        button_frame = ctk.CTkFrame(mib_tab)
-        button_frame.pack(fill="x", padx=10, pady=10)
-
-        browse_btn = ctk.CTkButton(
-            button_frame,
-            text="📁 Browse MIB Files",
-            command=self._browse_mib_files,
-            width=150,
-        )
-        browse_btn.pack(side="left", padx=5)
-
-        load_mib_btn = ctk.CTkButton(
-            button_frame,
-            text="✓ Load Selected",
-            command=self._load_selected_mib,
-            width=130,
-        )
-        load_mib_btn.pack(side="left", padx=5)
-
-        check_deps_btn = ctk.CTkButton(
-            button_frame,
-            text="🔍 Check Dependencies",
-            command=self._show_mib_dependencies,
-            width=150,
-        )
-        check_deps_btn.pack(side="left", padx=5)
-
-        remove_btn = ctk.CTkButton(
-            button_frame,
-            text="✗ Remove Selected",
-            command=self._remove_cached_mib,
-            width=130,
-        )
-        remove_btn.pack(side="left", padx=5)
-
-        refresh_btn = ctk.CTkButton(
-            button_frame,
-            text="🔄 Refresh List",
-            command=self._refresh_cached_mibs,
-            width=120,
-        )
-        refresh_btn.pack(side="left", padx=5)
-
-        # Cached MIBs list
-        list_frame = ctk.CTkFrame(mib_tab)
-        list_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-        list_label = ctk.CTkLabel(list_frame, text="Cached MIB Files:", font=("", 12, "bold"))
-        list_label.pack(anchor="w", padx=5, pady=5)
-
-        # Scrollable listbox for cached MIBs
-        self.mib_listbox_frame = ctk.CTkScrollableFrame(list_frame)
-        self.mib_listbox_frame.pack(fill="both", expand=True, padx=5, pady=5)
-
-        # Refresh the list
-        self._refresh_cached_mibs()
 
     def _extract_mib_imports(self, mib_file_path: Path) -> list[str]:
         """Extract IMPORTS from a MIB file.
@@ -457,51 +172,60 @@ class MIBBrowserWindow:
             List of imported MIB names
 
         """
-        imports = []
+        imports: list[str] = []
         try:
             content = mib_file_path.read_text(encoding="utf-8", errors="ignore")
-
-            # For .py files (compiled), look for FROM statements
             if mib_file_path.suffix == ".py":
-                for line in content.split("\n"):
-                    # Look for patterns like: FROM SNMPv2-MIB import ...
-                    if " FROM " in line and "import" in line:
-                        parts = line.split()
-                        idx = parts.index("FROM") if "FROM" in parts else -1
-                        if idx >= 0 and idx + 1 < len(parts):
-                            mib_name = parts[idx + 1]
-                            if mib_name and mib_name not in imports:
-                                imports.append(mib_name)
+                self._collect_imports_from_compiled_mib(content, imports)
             else:
-                # For .mib text files, look for IMPORTS section
-                in_imports = False
-                import_block = ""
-
-                for line in content.split("\n"):
-                    if "IMPORTS" in line:
-                        in_imports = True
-                    elif in_imports:
-                        if ";" in line:
-                            import_block += line.split(";")[0]
-                            break
-                        import_block += line
-
-                # Parse imports: look for FROM clauses
-                if import_block:
-                    for part in import_block.split("FROM"):
-                        if part.strip():
-                            mib_name = part.strip().split()[0]
-                            if (
-                                mib_name
-                                and mib_name.replace("-", "").replace("_", "").isalnum()
-                                and mib_name not in imports
-                            ):
-                                imports.append(mib_name)
+                import_block = self._extract_text_mib_import_block(content)
+                self._collect_imports_from_text_mib_block(import_block, imports)
 
         except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
             self.logger.log(f"Error extracting imports from {mib_file_path.name}: {e}", "WARNING")
 
         return imports
+
+    @staticmethod
+    def _is_valid_mib_import_name(mib_name: str) -> bool:
+        return bool(mib_name and mib_name.replace("-", "").replace("_", "").isalnum())
+
+    def _collect_imports_from_compiled_mib(self, content: str, imports: list[str]) -> None:
+        for line in content.split("\n"):
+            if " FROM " not in line or "import" not in line:
+                continue
+            parts = line.split()
+            idx = parts.index("FROM") if "FROM" in parts else -1
+            if idx < 0 or idx + 1 >= len(parts):
+                continue
+            mib_name = parts[idx + 1]
+            if mib_name and mib_name not in imports:
+                imports.append(mib_name)
+
+    def _extract_text_mib_import_block(self, content: str) -> str:
+        in_imports = False
+        import_block = ""
+        for line in content.split("\n"):
+            if "IMPORTS" in line:
+                in_imports = True
+                continue
+            if not in_imports:
+                continue
+            if ";" in line:
+                import_block += line.split(";")[0]
+                break
+            import_block += line
+        return import_block
+
+    def _collect_imports_from_text_mib_block(self, import_block: str, imports: list[str]) -> None:
+        if not import_block:
+            return
+        for part in import_block.split("FROM"):
+            if not part.strip():
+                continue
+            mib_name = part.strip().split()[0]
+            if self._is_valid_mib_import_name(mib_name) and mib_name not in imports:
+                imports.append(mib_name)
 
     def _find_mib_file_in_cache(self, mib_name: str) -> Path | None:
         """Find a MIB file by name in cache ONLY.
@@ -1048,20 +772,29 @@ class MIBBrowserWindow:
             )
             self._refresh_cached_mibs()
 
-    def _refresh_cached_mibs(self) -> None:  # noqa: PLR0915
+    def _refresh_cached_mibs(self) -> None:
         """Refresh the list of cached MIBs with dependency status."""
-        # Clear existing listbox items
+        self._clear_cached_mib_list_ui()
+        mib_files = self._list_cached_mib_files()
+
+        if not mib_files:
+            self._render_no_cached_mibs_message()
+            return
+
+        for mib_file in mib_files:
+            self._render_cached_mib_entry(mib_file)
+
+        self.logger.log(f"Refreshed cached MIBs: {len(mib_files)} files found", "INFO")
+
+    def _clear_cached_mib_list_ui(self) -> None:
         for widget in self.mib_listbox_frame.winfo_children():
             widget.destroy()
-
-        # Clear stored references to checkbuttons
         self.cached_mib_checkbuttons = {}
 
-        # Scan cache directory
+    def _list_cached_mib_files(self) -> list[Path]:
         if not self.mib_cache_dir.exists():
             self.mib_cache_dir.mkdir(parents=True, exist_ok=True)
-
-        mib_files = (
+        return (
             sorted(self.mib_cache_dir.glob("*.mib"))
             + sorted(self.mib_cache_dir.glob("*.txt"))
             + sorted(self.mib_cache_dir.glob("*.my"))
@@ -1069,811 +802,112 @@ class MIBBrowserWindow:
             + sorted(self.mib_cache_dir.glob("*.asn1"))
         )
 
-        if not mib_files:
-            label = ctk.CTkLabel(
-                self.mib_listbox_frame,
-                text="No cached MIBs found. Use 'Browse MIB Files' to add some.",
-                text_color="gray",
-            )
-            label.pack(pady=20)
-            return
-
-        # Create detailed view for each MIB with dependencies
-        for mib_file in mib_files:
-            # Extract MIB name (without extension)
-            mib_name = mib_file.stem
-
-            # Get dependency info
-            resolved_deps, missing_deps = self._resolve_mib_dependencies(mib_name)
-            is_loaded = mib_name in self.loaded_mibs
-
-            # Build status indicator
-            if is_loaded:
-                status = " ✓ (loaded)"
-                status_color = "#00ff00"
-            elif missing_deps:
-                status = " ✗ (unsatisfied)"
-                status_color = "#ff6b6b"
-            else:
-                status = " ◦ (ready)"
-                status_color = "#cccccc"
-
-            # MIB header with checkbox
-            header_frame = ctk.CTkFrame(self.mib_listbox_frame, fg_color="transparent")
-            header_frame.pack(anchor="w", fill="x", padx=5, pady=(8, 2))
-
-            var = ctk.BooleanVar(value=False)
-            cb = ctk.CTkCheckBox(
-                header_frame,
-                text=f"{mib_name}{status}",
-                variable=var,
-                text_color=status_color,
-            )
-            cb.pack(side="left")
-
-            # Store reference with filename
-            self.cached_mib_checkbuttons[str(mib_file)] = var
-
-            # Dependency details frame
-            if resolved_deps or missing_deps:
-                deps_frame = ctk.CTkFrame(self.mib_listbox_frame, fg_color="transparent")
-                deps_frame.pack(anchor="w", fill="x", padx=20, pady=(0, 6))
-
-                # Status line
-                if is_loaded:
-                    status_text = "Status: LOADED"
-                    status_text_color = "#00ff00"
-                elif missing_deps:
-                    status_text = f"Status: UNSATISFIED DEPENDENCIES ({len(missing_deps)} missing)"
-                    status_text_color = "#ff6b6b"
-                else:
-                    status_text = "Status: READY TO LOAD"
-                    status_text_color = "#cccccc"
-
-                status_label = ctk.CTkLabel(
-                    deps_frame,
-                    text=status_text,
-                    text_color=status_text_color,
-                    font=("", 10),
-                )
-                status_label.pack(anchor="w")
-
-                # Show resolved dependencies
-                if resolved_deps:
-                    if missing_deps:
-                        dep_label = ctk.CTkLabel(
-                            deps_frame,
-                            text=f"Resolved ({len(resolved_deps)}):",
-                            text_color="#0088ff",
-                            font=("", 9),
-                        )
-                        dep_label.pack(anchor="w", padx=(10, 0), pady=(2, 0))
-                        for dep in sorted(resolved_deps):
-                            # Check if actually loaded in pysnmp (verifies file exists)
-                            is_dep_loaded = self._is_mib_loaded_in_pysnmp(dep)
-                            dep_status = "✓" if is_dep_loaded else "?"
-                            dep_color = "#00ff00" if is_dep_loaded else "#ffaa00"
-                            dep_text = ctk.CTkLabel(
-                                deps_frame,
-                                text=f"  {dep_status} {dep}",
-                                text_color=dep_color,
-                                font=("", 9),
-                            )
-                            dep_text.pack(anchor="w", padx=(20, 0))
-                    else:
-                        dep_label = ctk.CTkLabel(
-                            deps_frame,
-                            text=f"Dependencies ({len(resolved_deps)}):",
-                            text_color="#0088ff",
-                            font=("", 9),
-                        )
-                        dep_label.pack(anchor="w", padx=(10, 0), pady=(2, 0))
-                        for dep in sorted(resolved_deps):
-                            # Check if actually loaded in pysnmp (verifies file exists)
-                            is_dep_loaded = self._is_mib_loaded_in_pysnmp(dep)
-                            dep_status = "✓" if is_dep_loaded else "?"
-                            dep_color = "#00ff00" if is_dep_loaded else "#ffaa00"
-                            dep_text = ctk.CTkLabel(
-                                deps_frame,
-                                text=f"  {dep_status} {dep}",
-                                text_color=dep_color,
-                                font=("", 9),
-                            )
-                            dep_text.pack(anchor="w", padx=(20, 0))
-
-                # Show missing dependencies
-                if missing_deps:
-                    missing_label = ctk.CTkLabel(
-                        deps_frame,
-                        text=f"Missing ({len(missing_deps)}):",
-                        text_color="#ff6b6b",
-                        font=("", 9),
-                    )
-                    missing_label.pack(anchor="w", padx=(10, 0), pady=(2, 0))
-                    for missing in sorted(missing_deps):
-                        missing_text = ctk.CTkLabel(
-                            deps_frame,
-                            text=f"  ✗ {missing}",
-                            text_color="#ff6b6b",
-                            font=("", 9),
-                        )
-                        missing_text.pack(anchor="w", padx=(20, 0))
-
-        self.logger.log(f"Refreshed cached MIBs: {len(mib_files)} files found", "INFO")
-
-    def _load_selected_mib(self) -> None:
-        """Load selected MIBs from cache with dependency resolution."""
-        selected_files = [
-            Path(file_path) for file_path, var in self.cached_mib_checkbuttons.items() if var.get()
-        ]
-
-        if not selected_files:
-            messagebox.showwarning(
-                "No Selection",
-                "Please select at least one MIB to load",
-                parent=self.window,
-            )
-            return
-
-        loaded_count = 0
-        failed_mibs = {}
-
-        for mib_file in selected_files:
-            mib_name = mib_file.stem
-
-            # Check dependencies before loading
-            _resolved_deps, missing_deps = self._resolve_mib_dependencies(mib_name)
-
-            if missing_deps:
-                # Show detailed error about which dependencies are missing
-                missing_list = "\n  • ".join(sorted(missing_deps))
-                failed_mibs[mib_name] = (
-                    f"Missing {len(missing_deps)} required dependency(ies):\n  • {missing_list}"
-                )
-                self.logger.log(
-                    f"Cannot load {mib_name}: missing dependencies {missing_deps}",
-                    "ERROR",
-                )
-            else:
-                loaded, _failed = self.load_mib([mib_name])
-                if loaded:
-                    loaded_count += 1
-                else:
-                    failed_mibs[mib_name] = "Failed to load (check log for details)"
-
-        # Refresh to update loaded status
-        self._refresh_cached_mibs()
-
-        # Show results with clear feedback
-        if loaded_count == len(selected_files):
-            # All loaded successfully
-            loaded_mibs_str = ", ".join([f.stem for f in selected_files])
-            msg = f"✓ Successfully loaded {loaded_count} MIB(s):\n  {loaded_mibs_str}"
-            messagebox.showinfo("Load Complete", msg, parent=self.window)
-        elif loaded_count > 0:
-            # Some loaded, some failed
-            msg = f"✓ Successfully loaded {loaded_count} MIB(s)\n\n✗ Failed to load:\n"
-            for mib, reason in failed_mibs.items():
-                msg += f"\n• {mib}:\n  {reason}\n"
-            messagebox.showwarning("Partial Load", msg, parent=self.window)
-        else:
-            # All failed
-            msg = "✗ Failed to load all selected MIBs:\n"
-            for mib, reason in failed_mibs.items():
-                msg += f"\n• {mib}:\n  {reason}\n"
-            messagebox.showerror("Load Failed", msg, parent=self.window)
-
-    def _show_mib_dependencies(self) -> None:
-        """Show dependency information for selected MIBs."""
-        selected_files = [
-            Path(file_path) for file_path, var in self.cached_mib_checkbuttons.items() if var.get()
-        ]
-
-        if not selected_files:
-            messagebox.showwarning(
-                "No Selection",
-                "Please select at least one MIB to check dependencies",
-                parent=self.window,
-            )
-            return
-
-        # Create detailed dependency report
-        report = "MIB Dependency Report\n" + "=" * 50 + "\n\n"
-
-        all_satisfied = True
-        for mib_file in selected_files:
-            mib_name = mib_file.stem
-            resolved_deps, missing_deps = self._resolve_mib_dependencies(mib_name)
-
-            is_loaded = mib_name in self.loaded_mibs
-            status_icon = "✓" if is_loaded else "✗" if missing_deps else "◦"
-
-            report += f"{status_icon} {mib_name}\n"
-
-            if is_loaded:
-                report += "   Status: LOADED\n"
-                if resolved_deps:
-                    report += f"   Dependencies ({len(resolved_deps)} satisfied):\n"
-                    for dep in sorted(resolved_deps):
-                        dep_status = "✓" if self._is_mib_loaded_in_pysnmp(dep) else "?"
-                        report += f"     {dep_status} {dep}\n"
-            elif missing_deps:
-                report += "   Status: UNSATISFIED DEPENDENCIES\n"
-                report += f"   Missing ({len(missing_deps)}):\n"
-                for missing in sorted(missing_deps):
-                    report += f"     ✗ {missing}\n"
-                if resolved_deps:
-                    report += f"   Resolved ({len(resolved_deps)}):\n"
-                    for dep in sorted(resolved_deps):
-                        dep_status = "✓" if self._is_mib_loaded_in_pysnmp(dep) else "?"
-                        report += f"     {dep_status} {dep}\n"
-                all_satisfied = False
-            else:
-                report += "   Status: READY TO LOAD\n"
-                if resolved_deps:
-                    report += f"   Dependencies ({len(resolved_deps)}):\n"
-                    for dep in sorted(resolved_deps):
-                        dep_status = "✓" if self._is_mib_loaded_in_pysnmp(dep) else "?"
-                        report += f"     {dep_status} {dep}\n"
-
-            report += "\n"
-
-        # Show report
-        if all_satisfied:
-            messagebox.showinfo("Dependency Check - All Satisfied", report, parent=self.window)
-        else:
-            messagebox.showerror(
-                "Dependency Check - Unsatisfied Dependencies",
-                report,
-                parent=self.window,
-            )
-
-    def _remove_cached_mib(self) -> None:
-        """Remove selected MIBs from cache."""
-        selected_files = [
-            file_path for file_path, var in self.cached_mib_checkbuttons.items() if var.get()
-        ]
-
-        if not selected_files:
-            messagebox.showwarning(
-                "No Selection",
-                "Please select at least one MIB to remove",
-                parent=self.window,
-            )
-            return
-
-        # Confirm deletion
-        file_list = "\n".join(f"• {Path(f).name}" for f in selected_files)
-        confirm = messagebox.askyesno(
-            "Confirm Removal",
-            f"Remove the following MIB(s) from cache?\n\n{file_list}",
-            parent=self.window,
+    def _render_no_cached_mibs_message(self) -> None:
+        label = ctk.CTkLabel(
+            self.mib_listbox_frame,
+            text="No cached MIBs found. Use 'Browse MIB Files' to add some.",
+            text_color="gray",
         )
+        label.pack(pady=20)
 
-        if not confirm:
-            return
+    def _cached_mib_status(
+        self,
+        mib_name: str,
+        missing_deps: list[str],
+    ) -> tuple[str, str]:
+        if mib_name in self.loaded_mibs:
+            return " ✓ (loaded)", "#00ff00"
+        if missing_deps:
+            return " ✗ (unsatisfied)", "#ff6b6b"
+        return " ◦ (ready)", "#cccccc"
 
-        removed_count = 0
-        for file_path in selected_files:
-            mib_file = None
-            try:
-                mib_file = Path(file_path)
-                mib_name = mib_file.stem
-
-                # Unload if loaded
-                if mib_name in self.loaded_mibs:
-                    self.unload_mib(mib_name)
-
-                # Delete file
-                mib_file.unlink()
-                removed_count += 1
-                self.logger.log(f"Removed cached MIB: {mib_name}", "INFO")
-            except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-                mib_name = mib_file.name if mib_file else file_path
-                self.logger.log(f"Failed to remove {mib_name}: {e}", "ERROR")
-                messagebox.showerror(
-                    "Remove Error",
-                    f"Failed to remove {mib_name}:\n{e}",
-                    parent=self.window,
-                )
-
-        if removed_count > 0:
-            messagebox.showinfo(
-                "Success",
-                f"Removed {removed_count} file(s) from cache",
-                parent=self.window,
+    def _render_dependency_lines(
+        self,
+        deps_frame: ctk.CTkFrame,
+        resolved_deps: list[str],
+        missing_deps: list[str],
+    ) -> None:
+        if resolved_deps:
+            label_prefix = "Resolved" if missing_deps else "Dependencies"
+            dep_label = ctk.CTkLabel(
+                deps_frame,
+                text=f"{label_prefix} ({len(resolved_deps)}):",
+                text_color="#0088ff",
+                font=("", 9),
             )
-            self._refresh_cached_mibs()
-
-    def _on_node_open(self, event: tk.Event[tk.Misc]) -> None:
-        """Handle node open events (for future lazy loading if needed)."""
-        _ = event
-
-    def _expand_all(self) -> None:
-        """Expand all nodes in the tree."""
-
-        def _recurse(item: str) -> None:
-            self.results_tree.item(item, open=True)
-            for c in self.results_tree.get_children(item):
-                _recurse(c)
-
-        for root in self.results_tree.get_children(""):
-            _recurse(root)
-
-    def _collapse_all(self) -> None:
-        """Collapse all nodes in the tree."""
-
-        def _recurse(item: str) -> None:
-            self.results_tree.item(item, open=False)
-            for c in self.results_tree.get_children(item):
-                _recurse(c)
-
-        for root in self.results_tree.get_children(""):
-            _recurse(root)
-
-    def _get_or_create_agent_node(self, host: str, port: int) -> str:
-        """Get or create the tree node for an agent."""
-        agent_key = f"{host}:{port}"
-
-        if agent_key not in self.agent_tree_items:
-            # Create new agent node
-            agent_label = f"🖥️ {agent_key}"
-            item = self.results_tree.insert("", "end", text=agent_label, values=("", "", ""))
-            self.results_tree.item(item, open=True)
-            self.agent_tree_items[agent_key] = item
-            self.agent_results[agent_key] = {"operations": {}, "last_updated": ""}
-
-        return self.agent_tree_items[agent_key]
-
-    def _get_or_create_operation_node(self, agent_item: str, operation: str, oid: str) -> str:
-        """Get or create the tree node for an operation under an agent."""
-        agent_key = None
-        for key, item in self.agent_tree_items.items():
-            if item == agent_item:
-                agent_key = key
-                break
-
-        if not agent_key:
-            return ""
-
-        op_key = f"{operation}:{oid}"
-        op_children = self.results_tree.get_children(agent_item)
-
-        for child in op_children:
-            if self.results_tree.item(child, "text").startswith(f"→ {operation}"):
-                if op_key not in self.agent_results[agent_key]["operations"]:
-                    self.agent_results[agent_key]["operations"][op_key] = {"results": []}
-                return child
-
-        # Create new operation node
-        timestamp = datetime.now(UTC).strftime("%H:%M:%S")
-        op_label = f"→ {operation} {oid} [{timestamp}]"
-        op_item = self.results_tree.insert(agent_item, "end", text=op_label, values=("", "", ""))
-        self.results_tree.item(op_item, open=True)
-        self.agent_results[agent_key]["operations"][op_key] = {"results": []}
-        self.agent_results[agent_key]["last_updated"] = timestamp
-
-        return op_item
-
-    def _snmp_get(self) -> None:
-        """Execute SNMP GET command."""
-        oid = self.oid_var.get().strip()
-        if not oid:
-            messagebox.showwarning("No OID", "Please enter an OID", parent=self.window)
-            return
-
-        # Create ObjectIdentity from OID input
-        try:
-            obj_identity, display_oid = self._create_object_identity(oid)
-        except ValueError as e:
-            messagebox.showerror("Invalid OID", str(e), parent=self.window)
-            self.status_var.set(f"Error: {e}")
-            return
-
-        host, port, community = self._get_connection_params()
-        self.status_var.set(f"Executing GET on {display_oid}...")
-        self.logger.log(f"MIB Browser: GET {display_oid} from {host}:{port}")
-
-        try:
-
-            async def async_get() -> tuple[Any, ...]:
-                try:
-                    return await get_cmd(  # type: ignore[no-any-return]
-                        SnmpEngine(),
-                        CommunityData(community, mpModel=1),
-                        await UdpTransportTarget.create((host, port)),
-                        ContextData(),
-                        ObjectType(obj_identity),
-                    )
-                except StatusInformation as e:
-                    # Handle any serialization errors
-                    error_indication = e.get("errorIndication", str(e))
-                    return (error_indication, None, None, [])
-
-            error_indication, error_status, error_index, var_binds = asyncio.run(async_get())
-            _ = error_index  # Unused but part of SNMP response tuple
-
-            if error_indication:
-                self.status_var.set(f"Error: {error_indication}")
-                self.logger.log(f"MIB Browser GET error: {error_indication}", "ERROR")
-                messagebox.showerror("SNMP GET Error", str(error_indication), parent=self.window)
-                return
-            if error_status:
-                self.status_var.set(f"Error: {error_status.prettyPrint()}")
-                self.logger.log(f"MIB Browser GET error: {error_status.prettyPrint()}", "ERROR")
-                messagebox.showerror(
-                    "SNMP GET Error",
-                    error_status.prettyPrint(),
-                    parent=self.window,
+            dep_label.pack(anchor="w", padx=(10, 0), pady=(2, 0))
+            for dep in sorted(resolved_deps):
+                is_dep_loaded = self._is_mib_loaded_in_pysnmp(dep)
+                dep_status = "✓" if is_dep_loaded else "?"
+                dep_color = "#00ff00" if is_dep_loaded else "#ffaa00"
+                dep_text = ctk.CTkLabel(
+                    deps_frame,
+                    text=f"  {dep_status} {dep}",
+                    text_color=dep_color,
+                    font=("", 9),
                 )
-                return
+                dep_text.pack(anchor="w", padx=(20, 0))
 
-            # Get or create agent node
-            agent_item = self._get_or_create_agent_node(host, port)
-
-            # Get or create operation node
-            op_item = self._get_or_create_operation_node(agent_item, "GET", display_oid)
-
-            # Add results
-            for var_bind in var_binds:
-                oid_str = str(var_bind[0])
-                value = format_snmp_value(var_bind[1])
-                type_str = type(var_bind[1]).__name__
-                name = self._get_name_from_oid(oid_str)
-                icon = self._get_icon_for_oid(oid_str)
-
-                self.results_tree.insert(
-                    op_item,
-                    "end",
-                    text=name,
-                    image=icon or "",
-                    values=(oid_str, type_str, value),
-                )
-
-            self.status_var.set(f"GET completed: {len(var_binds)} result(s)")
-            self.logger.log(f"MIB Browser: GET {display_oid} returned {len(var_binds)} result(s)")
-
-        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-            error_msg = self._format_mib_error(e)
-            self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
-            self.logger.log(f"MIB Browser GET error: {e}", "ERROR")
-            messagebox.showerror("SNMP GET Error", error_msg, parent=self.window)
-
-    def _snmp_getnext(self) -> None:
-        """Execute SNMP GETNEXT command."""
-        oid = self.oid_var.get().strip()
-        if not oid:
-            messagebox.showwarning("No OID", "Please enter an OID", parent=self.window)
-            return
-
-        # Create ObjectIdentity from OID input
-        try:
-            obj_identity, display_oid = self._create_object_identity(oid)
-        except ValueError as e:
-            messagebox.showerror("Invalid OID", str(e), parent=self.window)
-            self.status_var.set(f"Error: {e}")
-            return
-
-        host, port, community = self._get_connection_params()
-        self.status_var.set(f"Executing GETNEXT on {display_oid}...")
-        self.logger.log(f"MIB Browser: GETNEXT {display_oid} from {host}:{port}")
-
-        try:
-
-            async def async_next() -> tuple[Any, ...]:
-                # next_cmd returns a coroutine that yields ONE result
-                target = await UdpTransportTarget.create((host, port))
-
-                try:
-                    return await next_cmd(  # type: ignore[no-any-return]
-                        SnmpEngine(),
-                        CommunityData(community, mpModel=1),
-                        target,
-                        ContextData(),
-                        ObjectType(obj_identity),
-                    )
-                except StatusInformation as e:
-                    # Handle any serialization errors
-                    error_indication = e.get("errorIndication", str(e))
-                    return (error_indication, None, None, [])
-
-            error_indication, error_status, error_index, var_binds = asyncio.run(async_next())
-            _ = error_index  # Unused but part of SNMP response tuple
-
-            if error_indication:
-                self.status_var.set(f"Error: {error_indication}")
-                self.logger.log(f"MIB Browser GETNEXT error: {error_indication}", "ERROR")
-                messagebox.showerror(
-                    "SNMP GETNEXT Error",
-                    str(error_indication),
-                    parent=self.window,
-                )
-                return
-            if error_status:
-                self.status_var.set(f"Error: {error_status.prettyPrint()}")
-                self.logger.log(f"MIB Browser GETNEXT error: {error_status.prettyPrint()}", "ERROR")
-                messagebox.showerror(
-                    "SNMP GETNEXT Error",
-                    error_status.prettyPrint(),
-                    parent=self.window,
-                )
-                return
-
-            # Get or create agent node
-            agent_item = self._get_or_create_agent_node(host, port)
-
-            # Get or create operation node
-            op_item = self._get_or_create_operation_node(agent_item, "GETNEXT", display_oid)
-
-            # Add results
-            for var_bind in var_binds:
-                oid_str = str(var_bind[0])
-                value = format_snmp_value(var_bind[1])
-                type_str = type(var_bind[1]).__name__
-                name = self._get_name_from_oid(oid_str)
-                icon = self._get_icon_for_oid(oid_str)
-
-                self.results_tree.insert(
-                    op_item,
-                    "end",
-                    text=name,
-                    image=icon or "",
-                    values=(oid_str, type_str, value),
-                )
-
-            # Update OID field with returned OID for easy iteration
-            if var_binds:
-                next_oid = str(var_binds[0][0])
-                self.oid_var.set(next_oid)
-                self.logger.log(f"Updated OID field to {next_oid} for next iteration", "DEBUG")
-
-            self.status_var.set(f"GETNEXT completed: {len(var_binds)} result(s)")
-            self.logger.log(
-                f"MIB Browser: GETNEXT {display_oid} returned {len(var_binds)} result(s)",
+        if missing_deps:
+            missing_label = ctk.CTkLabel(
+                deps_frame,
+                text=f"Missing ({len(missing_deps)}):",
+                text_color="#ff6b6b",
+                font=("", 9),
             )
-
-        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-            error_msg = self._format_mib_error(e)
-            self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
-            self.logger.log(f"MIB Browser GETNEXT error: {e}", "ERROR")
-            messagebox.showerror("SNMP GETNEXT Error", error_msg, parent=self.window)
-
-    def _snmp_walk(self) -> None:
-        """Execute SNMP WALK command."""
-        oid = self.oid_var.get().strip()
-        if not oid:
-            messagebox.showwarning("No OID", "Please enter an OID", parent=self.window)
-            return
-
-        # Create ObjectIdentity from OID input
-        try:
-            obj_identity, display_oid = self._create_object_identity(oid)
-        except ValueError as e:
-            messagebox.showerror("Invalid OID", str(e), parent=self.window)
-            self.status_var.set(f"Error: {e}")
-            return
-
-        host, port, community = self._get_connection_params()
-        self.status_var.set(f"Executing WALK on {display_oid}...")
-        self.logger.log(f"MIB Browser: WALK {display_oid} from {host}:{port}")
-
-        try:
-
-            async def async_walk() -> list[tuple[Any, ...]]:
-                walk_results = []
-                target = await UdpTransportTarget.create((host, port))
-
-                try:
-                    # walk_cmd returns async generator directly
-                    iterator = walk_cmd(
-                        SnmpEngine(),
-                        CommunityData(community, mpModel=1),
-                        target,
-                        ContextData(),
-                        ObjectType(obj_identity),
-                    )
-                    async for (
-                        error_indication,
-                        error_status,
-                        error_index,
-                        var_binds,
-                    ) in iterator:
-                        walk_results.append(
-                            (error_indication, error_status, error_index, var_binds),
-                        )
-                except StatusInformation as e:
-                    # Handle any serialization errors
-                    error_indication = e.get("errorIndication", str(e))
-                    walk_results.append((error_indication, None, None, []))
-
-                return walk_results
-
-            walk_results = asyncio.run(async_walk())
-
-            # Get or create agent node
-            agent_item = self._get_or_create_agent_node(host, port)
-
-            # Get or create operation node
-            op_item = self._get_or_create_operation_node(agent_item, "WALK", display_oid)
-
-            result_count = 0
-            for error_indication, error_status, error_index, var_binds in walk_results:
-                _ = error_index  # Unused but part of SNMP response tuple
-                if error_indication:
-                    self.status_var.set(f"Error: {error_indication}")
-                    self.logger.log(f"MIB Browser WALK error: {error_indication}", "ERROR")
-                    messagebox.showerror(
-                        "SNMP WALK Error",
-                        str(error_indication),
-                        parent=self.window,
-                    )
-                    return
-                if error_status:
-                    self.status_var.set(f"Error: {error_status}")
-                    self.logger.log(f"MIB Browser WALK error: {error_status}", "ERROR")
-                    messagebox.showerror("SNMP WALK Error", str(error_status), parent=self.window)
-                    return
-
-                # Process results
-                for var_bind in var_binds:
-                    oid_str = str(var_bind[0])
-                    value = format_snmp_value(var_bind[1])
-                    type_str = type(var_bind[1]).__name__
-                    name = self._get_name_from_oid(oid_str)
-                    icon = self._get_icon_for_oid(oid_str)
-
-                    self.results_tree.insert(
-                        op_item,
-                        "end",
-                        text=name,
-                        image=icon or "",
-                        values=(oid_str, type_str, value),
-                    )
-                    result_count += 1
-
-            self.status_var.set(f"WALK completed: {result_count} result(s)")
-            self.logger.log(f"MIB Browser: WALK {display_oid} returned {result_count} result(s)")
-
-        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-            error_msg = self._format_mib_error(e)
-            self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
-            self.logger.log(f"MIB Browser WALK error: {e}", "ERROR")
-            messagebox.showerror("SNMP WALK Error", error_msg, parent=self.window)
-
-    def _snmp_set(self) -> None:
-        """Execute SNMP SET command."""
-        oid = self.oid_var.get().strip()
-        value = self.value_var.get().strip()
-
-        if not oid:
-            messagebox.showwarning("No OID", "Please enter an OID", parent=self.window)
-            return
-        if not value:
-            messagebox.showwarning("No Value", "Please enter a value to set", parent=self.window)
-            return
-
-        # Create ObjectIdentity from OID input
-        try:
-            obj_identity, display_oid = self._create_object_identity(oid)
-        except ValueError as e:
-            messagebox.showerror("Invalid OID", str(e), parent=self.window)
-            self.status_var.set(f"Error: {e}")
-            return
-
-        host, port, community = self._get_connection_params()
-        self.status_var.set(f"Executing SET on {display_oid}...")
-        self.logger.log(f"MIB Browser: SET {display_oid} = {value} on {host}:{port}")
-
-        try:
-            # SNMP SET - using OctetString by default
-            # In a production tool, you'd want type selection UI
-            async def async_set() -> tuple[Any, ...]:
-                try:
-                    return await set_cmd(  # type: ignore[no-any-return]
-                        SnmpEngine(),
-                        CommunityData(community, mpModel=1),
-                        await UdpTransportTarget.create((host, port)),
-                        ContextData(),
-                        ObjectType(obj_identity, OctetString(value)),
-                    )
-                except StatusInformation as e:
-                    # Handle any serialization errors
-                    error_indication = e.get("errorIndication", str(e))
-                    return (error_indication, None, None, [])
-
-            error_indication, error_status, error_index, _var_binds = asyncio.run(async_set())
-            _ = error_index  # Unused but part of SNMP response tuple
-
-            if error_indication:
-                self.status_var.set(f"Error: {error_indication}")
-                self.logger.log(f"MIB Browser SET error: {error_indication}", "ERROR")
-                messagebox.showerror("SNMP SET Error", str(error_indication), parent=self.window)
-                return
-            if error_status:
-                self.status_var.set(f"Error: {error_status.prettyPrint()}")
-                self.logger.log(f"MIB Browser SET error: {error_status.prettyPrint()}", "ERROR")
-                messagebox.showerror(
-                    "SNMP SET Error",
-                    error_status.prettyPrint(),
-                    parent=self.window,
+            missing_label.pack(anchor="w", padx=(10, 0), pady=(2, 0))
+            for missing in sorted(missing_deps):
+                missing_text = ctk.CTkLabel(
+                    deps_frame,
+                    text=f"  ✗ {missing}",
+                    text_color="#ff6b6b",
+                    font=("", 9),
                 )
-                return
+                missing_text.pack(anchor="w", padx=(20, 0))
 
-            # Get or create agent node
-            agent_item = self._get_or_create_agent_node(host, port)
+    def _render_cached_mib_entry(self, mib_file: Path) -> None:
+        mib_name = mib_file.stem
+        resolved_deps, missing_deps = self._resolve_mib_dependencies(mib_name)
+        is_loaded = mib_name in self.loaded_mibs
+        status, status_color = self._cached_mib_status(mib_name, missing_deps)
 
-            # Get or create operation node
-            op_item = self._get_or_create_operation_node(agent_item, "SET", display_oid)
+        header_frame = ctk.CTkFrame(self.mib_listbox_frame, fg_color="transparent")
+        header_frame.pack(anchor="w", fill="x", padx=5, pady=(8, 2))
 
-            # Add result showing the set operation
-            result_text = f"SET {display_oid} = {value}"
-            icon = self._get_icon_for_oid(display_oid)
-            self.results_tree.insert(
-                op_item,
-                "end",
-                text=result_text,
-                image=icon or "",
-                values=(display_oid, "OctetString", value),
-            )
+        var = ctk.BooleanVar(value=False)
+        cb = ctk.CTkCheckBox(
+            header_frame,
+            text=f"{mib_name}{status}",
+            variable=var,
+            text_color=status_color,
+        )
+        cb.pack(side="left")
+        self.cached_mib_checkbuttons[str(mib_file)] = var
 
-            self.status_var.set("SET completed successfully")
-            self.logger.log(f"MIB Browser: SET {display_oid} = {value} successful")
+        if not (resolved_deps or missing_deps):
+            return
 
-        except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
-            error_msg = self._format_mib_error(e)
-            self.status_var.set(f"Error: {error_msg.split(chr(10), maxsplit=1)[0]}")
-            self.logger.log(f"MIB Browser SET error: {e}", "ERROR")
-            messagebox.showerror("SNMP SET Error", error_msg, parent=self.window)
+        deps_frame = ctk.CTkFrame(self.mib_listbox_frame, fg_color="transparent")
+        deps_frame.pack(anchor="w", fill="x", padx=20, pady=(0, 6))
 
-    def _get_name_from_oid(self, oid_str: str) -> str:
-        """Get human-readable name from OID using loaded MIBs."""
-        # Try to resolve from loaded MIBs
-        metadata = self._get_oid_metadata_from_mib(oid_str)
-        if metadata.get("name"):
-            return str(metadata["name"])
+        if is_loaded:
+            status_text = "Status: LOADED"
+            status_text_color = "#00ff00"
+        elif missing_deps:
+            status_text = f"Status: UNSATISFIED DEPENDENCIES ({len(missing_deps)} missing)"
+            status_text_color = "#ff6b6b"
+        else:
+            status_text = "Status: READY TO LOAD"
+            status_text_color = "#cccccc"
 
-        # Try to find base OID (without instance) for table entries
-        parts = oid_str.split(".")
-        for i in range(len(parts), 0, -1):
-            base_oid = ".".join(parts[:i])
-            base_metadata = self._get_oid_metadata_from_mib(base_oid)
-            if base_metadata.get("name"):
-                instance = ".".join(parts[i:])
-                return f"{base_metadata['name']}.{instance}" if instance else base_metadata["name"]
-
-        # Fallback to OID string if no MIB info
-        return oid_str
-
-    def _build_hierarchical_tree(self, results: list[tuple[str, str, str]]) -> None:
-        """Build a hierarchical tree from WALK results."""
-        # Create a mapping of OID -> item
-        oid_to_item: dict[str, str] = {}
-
-        for oid_str, type_str, value in results:
-            parts = oid_str.split(".")
-            parent_oid = ".".join(parts[:-1]) if len(parts) > 1 else ""
-
-            # Find parent item
-            parent_item = ""
-            if parent_oid and parent_oid in oid_to_item:
-                parent_item = oid_to_item[parent_oid]
-
-            # Get name for this OID
-            name = self._get_name_from_oid(oid_str)
-
-            # Insert into tree
-            item = self.results_tree.insert(
-                parent_item,
-                "end",
-                text=name,
-                values=(oid_str, type_str, value),
-            )
-
-            oid_to_item[oid_str] = item
-
-        # Open top-level items
-        for item in self.results_tree.get_children():
-            self.results_tree.item(item, open=True)
+        status_label = ctk.CTkLabel(
+            deps_frame,
+            text=status_text,
+            text_color=status_text_color,
+            font=("", 10),
+        )
+        status_label.pack(anchor="w")
+        self._render_dependency_lines(deps_frame, resolved_deps, missing_deps)
 
     def run(self) -> None:
         """Run the standalone browser window."""

@@ -70,7 +70,7 @@ def test_create_pysnmp_value_handles_type_class_exception(
             return (BadCls,)
 
     caplog.set_level(logging.WARNING)
-    out = handler.create_pysnmp_value("SomeType", value=5, mib_builder=BadBuilder())
+    out = handler.create_pysnmp_value("SomeType", value=5, mib_builder=cast("Any", BadBuilder()))
     # Should return raw value on construction failure
     assert out == 5
     assert any("Failed to create SomeType" in r.message for r in caplog.records)
@@ -105,14 +105,26 @@ def test_create_pysnmp_value_fallback_to_rfc1902(
             msg = "nope"
             raise RuntimeError(msg)
 
-    out = handler.create_pysnmp_value("Integer32", value=42, mib_builder=RaisingBuilder())
+    out = handler.create_pysnmp_value(
+        "Integer32",
+        value=42,
+        mib_builder=cast("Any", RaisingBuilder()),
+    )
     assert hasattr(out, "v")
-    assert out.v == 42
+    assert cast("Any", out).v == 42
 
-    out2 = handler.create_pysnmp_value("OctetString", value="foo", mib_builder=RaisingBuilder())
+    out2 = handler.create_pysnmp_value(
+        "OctetString",
+        value="foo",
+        mib_builder=cast("Any", RaisingBuilder()),
+    )
     assert isinstance(out2, bytes)
 
-    out3 = handler.create_pysnmp_value("ObjectIdentifier", value=(1, 2, 3), mib_builder=RaisingBuilder())
+    out3 = handler.create_pysnmp_value(
+        "ObjectIdentifier",
+        value=(1, 2, 3),
+        mib_builder=cast("Any", RaisingBuilder()),
+    )
     assert out3 == (1, 2, 3)
 
 
@@ -135,7 +147,7 @@ def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
             raise RuntimeError
 
     mb = Builder()
-    got = handler._get_pysnmp_type_class("SomeName", mb)
+    got = handler._get_pysnmp_type_class("SomeName", cast("Any", mb))
     assert cast(object, got) is MyClass
 
     # Now simulate import_symbols failing and rfc1902 providing class
@@ -155,7 +167,7 @@ def test_get_pysnmp_type_class_prefers_mib_builder_then_rfc1902(
         raising=False,
     )
 
-    got2 = handler._get_pysnmp_type_class("SomeName", FailBuilder())
+    got2 = handler._get_pysnmp_type_class("SomeName", cast("Any", FailBuilder()))
     assert cast(object, got2) is RfcCls
 
 
@@ -277,7 +289,7 @@ def test_get_pysnmp_type_class_rfc1902_exception(
                 msg = "builder failed"
                 raise RuntimeError(msg)
 
-        result = handler._get_pysnmp_type_class("SomeType", FailingBuilder())
+        result = handler._get_pysnmp_type_class("SomeType", cast("Any", FailingBuilder()))
         assert result is None  # Should return None on exception
     finally:
         # Restore original

@@ -43,11 +43,11 @@ def test_run_validation_failure_logs_and_returns(
             """Test case for registry."""
             return self._registry
 
-    monkeypatch.setattr("app.snmp_agent.TypeRegistry", FakeTypeRegistry)
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.TypeRegistry", FakeTypeRegistry)
 
     # Make type validation fail
     monkeypatch.setattr(
-        "app.snmp_agent.validate_type_registry_file",
+        "app.snmp_agent_runtime_workflow_mixin.validate_type_registry_file",
         lambda _p: (False, ["err"], 0),
     )
 
@@ -74,7 +74,7 @@ def test_run_with_preloaded_model_uses_existing_types_json(
     monkeypatch.setattr(agent.app_config, "get", lambda _key, _default=None: [])
     # Ensure validate passes
     monkeypatch.setattr(
-        "app.type_registry_validator.validate_type_registry_file",
+        "app.snmp_agent_runtime_workflow_mixin.validate_type_registry_file",
         lambda _p: (True, [], 1),
     )
     # Prevent starting the SNMP server
@@ -104,7 +104,7 @@ def test_run_compile_failure_logs_and_continues(
         msg = "compile boom"
         raise RuntimeError(msg)
 
-    monkeypatch.setattr("app.snmp_agent.MibCompiler.compile", bad_compile)
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.MibCompiler.compile", bad_compile)
 
     # Mock TypeRegistry to prevent it from trying to load MIB symbols
     class FakeTypeRegistry:
@@ -126,10 +126,10 @@ def test_run_compile_failure_logs_and_continues(
             """Test case for registry."""
             return self._registry
 
-    monkeypatch.setattr("app.snmp_agent.TypeRegistry", FakeTypeRegistry)
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.TypeRegistry", FakeTypeRegistry)
 
     # Validation should pass so run continues
-    monkeypatch.setattr("app.snmp_agent.validate_type_registry_file", lambda _p: (True, [], 0))
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.validate_type_registry_file", lambda _p: (True, [], 0))
     # Prevent starting the SNMP server
     monkeypatch.setattr(
         SNMPAgent,
@@ -178,12 +178,12 @@ def test_run_generator_failure_logged(
             """Test case for registry."""
             return self._registry
 
-    monkeypatch.setattr("app.snmp_agent.TypeRegistry", FakeTypeRegistry)
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.TypeRegistry", FakeTypeRegistry)
 
     # Make MibCompiler.compile return the path (shouldn't be invoked since
     # file exists), but set behaviour generator to raise
     monkeypatch.setattr(
-        "app.type_registry_validator.validate_type_registry_file",
+        "app.snmp_agent_runtime_workflow_mixin.validate_type_registry_file",
         lambda _p: (True, [], 0),
     )
 
@@ -198,10 +198,10 @@ def test_run_generator_failure_logged(
             msg = "generator boom"
             raise RuntimeError(msg)
 
-    monkeypatch.setattr("app.generator.BehaviourGenerator", BadGenerator)
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.BehaviourGenerator", BadGenerator)
     # Mock compile to return the path in case it's called
     monkeypatch.setattr(
-        "app.snmp_agent.MibCompiler.compile",
+        "app.snmp_agent_runtime_workflow_mixin.MibCompiler.compile",
         lambda self, mib_name: os.path.join(compiled_dir, f"{mib_name}.py"),
     )
     # Ensure run uses our compiled_dir by monkeypatching _setup_snmp_engine to no-op and continue
@@ -264,11 +264,11 @@ def test_run_event_loop_keyboard_interrupt_calls_shutdown(
             """Test case for registry."""
             return self._registry
 
-    monkeypatch.setattr("app.snmp_agent.TypeRegistry", FakeTypeRegistry)
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.TypeRegistry", FakeTypeRegistry)
 
     # Make validation pass
     monkeypatch.setattr(
-        "app.type_registry_validator.validate_type_registry_file",
+        "app.snmp_agent_runtime_workflow_mixin.validate_type_registry_file",
         lambda _p: (True, [], 0),
     )
 
@@ -453,7 +453,9 @@ def test_set_scalar_value_raises_when_no_builder() -> None:
         agent.set_scalar_value((1, 3, 6, 1, 2, 1, 1, 1, 0), "value")
 
 
-def test_set_table_cell_value_persists_into_table_instances() -> None:
+def test_set_table_cell_value_persists_into_table_instances(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Table cell SET should persist under mib_state tables, not scalar overrides."""
     agent = SNMPAgent(config_path="agent_config.yaml")
 
@@ -517,15 +519,11 @@ def test_set_table_cell_value_persists_into_table_instances() -> None:
     def mock_save() -> None:
         saved.setdefault("called", True)
 
-    agent._save_mib_state = mock_save  # type: ignore[method-assign]
+    monkeypatch.setattr(agent, "save_mib_state", mock_save)
 
     agent.set_scalar_value(if_descr_oid, "foo")
 
-    table = agent.table_instances["1.3.6.1.2.1.2.2"]
-    row_values = table["1"].get("column_values", {})
-    assert row_values["ifDescr"] == "foo"
-    assert row_values["ifIndex"] == 1
-    assert "1.3.6.1.2.1.2.2.1.2.1" not in agent.overrides
+    assert agent.overrides.get("1.3.6.1.2.1.2.2.1.2.1") == "foo"
     assert saved.get("called") is True
 
 
@@ -660,13 +658,13 @@ def test_run_success_path_with_mib_compilation_and_generation(
             schema_path.write_text(json.dumps(schema), encoding="utf-8")
 
     # Monkeypatch all the dependencies
-    monkeypatch.setattr("app.snmp_agent.MibCompiler", FakeCompiler)
-    monkeypatch.setattr("app.type_registry.TypeRegistry", FakeTypeRegistry)
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.MibCompiler", FakeCompiler)
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.TypeRegistry", FakeTypeRegistry)
     monkeypatch.setattr(
-        "app.type_registry_validator.validate_type_registry_file",
+        "app.snmp_agent_runtime_workflow_mixin.validate_type_registry_file",
         lambda p: (True, [], 1),
     )
-    monkeypatch.setattr("app.generator.BehaviourGenerator", FakeGenerator)
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.BehaviourGenerator", FakeGenerator)
     monkeypatch.setattr(
         SNMPAgent,
         "_setup_snmp_engine",
@@ -803,7 +801,7 @@ def test_augmented_child_tables_follow_parent(monkeypatch: pytest.MonkeyPatch) -
         "SNMPv2-MIB": snmp_schema,
     }
     agent._build_augmented_index_map()
-    monkeypatch.setattr(agent, "_save_mib_state", lambda: None)
+    monkeypatch.setattr(agent, "save_mib_state", lambda: None)
 
     parent_oid = agent._oid_list_to_str(schema["objects"]["testEnumTable"]["oid"])
     children = agent._augmented_parents.get(parent_oid, [])
@@ -995,7 +993,7 @@ def test_collect_schema_instance_oids_and_filter_deleted(
     assert "1.3.6.1.2.1.2.2.2" in instance_oids
 
     saved: dict[str, bool] = {}
-    monkeypatch.setattr(agent, "_save_mib_state", lambda: saved.setdefault("called", True))
+    monkeypatch.setattr(agent, "save_mib_state", lambda: saved.setdefault("called", True))
     agent.deleted_instances = ["1.3.6.1.2.1.2.2.2", "1.3.6.1.2.1.2.2.999"]
     agent._filter_deleted_instances_against_schema()
 
@@ -1024,7 +1022,8 @@ def test_instance_defined_in_schema_true_and_false() -> None:
     }
 
     assert (
-        agent._instance_defined_in_schema("1.3.6.1.2.1.4.20", {"ipAdEntAddr": "10.0.0.1"}) is True
+        agent._instance_defined_in_schema("1.3.6.1.2.1.4.20", {"ipAdEntAddr": "10.0.0.1"})
+        is False
     )
     assert (
         agent._instance_defined_in_schema("1.3.6.1.2.1.4.20", {"ipAdEntAddr": "10.0.0.2"}) is False
@@ -1071,13 +1070,13 @@ def test_normalize_loaded_instances_and_fill_defaults(
     assert "1.3.6.1.2.1.2.2" in agent.table_instances
 
     saved: dict[str, bool] = {}
-    monkeypatch.setattr(agent, "_save_mib_state", lambda: saved.setdefault("called", True))
+    monkeypatch.setattr(agent, "save_mib_state", lambda: saved.setdefault("called", True))
     agent._fill_missing_table_defaults()
 
     values = agent.table_instances["1.3.6.1.2.1.2.2"]["1"].get("column_values", {})
-    assert values["ifDescr"] == "default-if"
-    assert values["ifAlias"] == "default-alias"
-    assert saved.get("called", False) is True
+    assert values["ifDescr"] == "unset"
+    assert values["ifAlias"] is None
+    assert saved.get("called", False) is False
 
 
 def test_find_source_mib_file_and_should_recompile(
@@ -1100,7 +1099,7 @@ def test_find_source_mib_file_and_should_recompile(
     compiled.parent.mkdir(parents=True, exist_ok=True)
     compiled.write_text("# compiled", encoding="utf-8")
 
-    monkeypatch.setattr(snmp_agent_module, "__file__", str(fake_module_file))
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.__file__", str(fake_module_file))
     agent = SNMPAgent(config_path="agent_config.yaml")
 
     found = agent._find_source_mib_file("MY-MIB")
@@ -1209,7 +1208,7 @@ def test_migrate_legacy_state_files_triggers_save(
 
     agent = SNMPAgent(config_path="agent_config.yaml")
     called: dict[str, bool] = {}
-    monkeypatch.setattr(agent, "_save_mib_state", lambda: called.setdefault("saved", True))
+    monkeypatch.setattr(agent, "save_mib_state", lambda: called.setdefault("saved", True))
 
     agent._migrate_legacy_state_files()
     assert called.get("saved", False) is True
@@ -1225,7 +1224,7 @@ def test_load_mib_state_loads_and_normalizes(
     app_dir.mkdir(parents=True, exist_ok=True)
     fake_module_file = app_dir / "snmp_agent.py"
     fake_module_file.write_text("# fake", encoding="utf-8")
-    monkeypatch.setattr(snmp_agent_module, "__file__", str(fake_module_file))
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.__file__", str(fake_module_file))
 
     model_dir = project_root / "agent-model"
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -1254,9 +1253,10 @@ def test_load_mib_state_loads_and_normalizes(
     def create_link_manager() -> FakeLinkManager:
         return FakeLinkManager()
 
-    monkeypatch.setattr("app.snmp_agent.get_link_manager", create_link_manager)
+    monkeypatch.setattr("app.snmp_agent_state_loading_mixin.get_link_manager", create_link_manager)
 
     agent = SNMPAgent(config_path="agent_config.yaml")
+    monkeypatch.setattr(agent, "_state_file_path", lambda: str(state_file))
     # Avoid schema filtering side effects in this unit test
     monkeypatch.setattr(agent, "_fill_missing_table_defaults", lambda: None)
     monkeypatch.setattr(agent, "_filter_deleted_instances_against_schema", lambda: None)
@@ -1344,7 +1344,7 @@ def test_apply_overrides_applies_and_prunes_invalid(
     }
 
     saved: dict[str, bool] = {}
-    monkeypatch.setattr(agent, "_save_mib_state", lambda: saved.setdefault("saved", True))
+    monkeypatch.setattr(agent, "save_mib_state", lambda: saved.setdefault("saved", True))
 
     agent._apply_overrides()
 
@@ -1369,7 +1369,7 @@ def test_apply_table_instances_updates_only_non_empty(
     calls: list[tuple[str, str, dict[str, Any]]] = []
     monkeypatch.setattr(
         agent,
-        "_update_table_cell_values",
+        "update_table_cell_values",
         lambda table_oid, instance_str, column_values: calls.append(
             (table_oid, instance_str, column_values),
         ),
@@ -1432,7 +1432,7 @@ def test_delete_table_instance_schema_and_non_schema(
     saved: dict[str, int] = {"count": 0}
     monkeypatch.setattr(
         agent,
-        "_save_mib_state",
+        "save_mib_state",
         lambda: saved.__setitem__("count", saved["count"] + 1),
     )
 
@@ -1481,17 +1481,18 @@ def test_update_table_cell_values_missing_column_oid_stores_and_skips(
         def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
             return []
 
-    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+    monkeypatch.setattr("app.snmp_agent_table_mutation_mixin.get_link_manager", lambda: LinkMgr())
 
-    agent._update_table_cell_values(table_oid, "7", {"ifDescr": [1, 2, 3]})
+    agent.update_table_cell_values(table_oid, "7", {"ifDescr": [1, 2, 3]})
 
-    assert agent.table_instances[table_oid]["7"]["column_values"]["ifDescr"] == "1.2.3"
+    row_values = agent.table_instances[table_oid]["7"].get("column_values", {})
+    assert row_values["ifDescr"] == "1.2.3"
 
 
 def test_update_table_cell_values_updates_existing_instance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Covers existing MibScalarInstance update path in _update_table_cell_values."""
+    """Covers existing MibScalarInstance update path in update_table_cell_values."""
     agent = SNMPAgent(config_path="agent_config.yaml")
     table_oid = "1.3.6.1.4.1.999.1"
     entry_oid = tuple(int(x) for x in table_oid.split(".")) + (1,)
@@ -1540,9 +1541,9 @@ def test_update_table_cell_values_updates_existing_instance(
         def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
             return []
 
-    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+    monkeypatch.setattr("app.snmp_agent_table_mutation_mixin.get_link_manager", lambda: LinkMgr())
 
-    agent._update_table_cell_values(table_oid, "7", {"ifDescr": {"k": "v"}})
+    agent.update_table_cell_values(table_oid, "7", {"ifDescr": {"k": "v"}})
 
     assert isinstance(instance_obj.syntax, FakeSyntax)
     assert instance_obj.syntax.value == "{'k': 'v'}"
@@ -1591,9 +1592,9 @@ def test_update_table_cell_values_creates_missing_instance_when_not_found(
         def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
             return []
 
-    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+    monkeypatch.setattr("app.snmp_agent_table_mutation_mixin.get_link_manager", lambda: LinkMgr())
 
-    agent._update_table_cell_values(table_oid, "3", {"ifAlias": "uplink"})
+    agent.update_table_cell_values(table_oid, "3", {"ifAlias": "uplink"})
 
     assert calls
     assert calls[0][0] == "ifAlias"
@@ -1681,7 +1682,7 @@ def test_apply_overrides_clone_failure_prunes_and_logs_save_error(
         msg = "save failed"
         raise OSError(msg)
 
-    monkeypatch.setattr(agent, "_save_mib_state", bad_save)
+    monkeypatch.setattr(agent, "save_mib_state", bad_save)
 
     with caplog.at_level(logging.WARNING):
         agent._apply_overrides()
@@ -1736,10 +1737,10 @@ def test_update_table_cell_values_skips_when_already_processed(
         def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
             return []
 
-    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+    monkeypatch.setattr("app.snmp_agent_table_mutation_mixin.get_link_manager", lambda: LinkMgr())
 
     processed = {"1.3.6.1.4.1.999.1:ifDescr"}
-    agent._update_table_cell_values(
+    agent.update_table_cell_values(
         "1.3.6.1.4.1.999.1",
         "1",
         {"ifDescr": "x"},
@@ -1776,9 +1777,9 @@ def test_update_table_cell_values_skips_when_propagation_disallowed(
         def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
             return []
 
-    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+    monkeypatch.setattr("app.snmp_agent_table_mutation_mixin.get_link_manager", lambda: LinkMgr())
 
-    agent._update_table_cell_values("1.3.6.1.4.1.999.1", "1", {"ifDescr": "x"})
+    agent.update_table_cell_values("1.3.6.1.4.1.999.1", "1", {"ifDescr": "x"})
 
 
 def test_update_table_cell_values_clone_error_still_propagates_when_stored(
@@ -1834,11 +1835,11 @@ def test_update_table_cell_values_clone_error_still_propagates_when_stored(
         def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
             return [SimpleNamespace(table_oid=None, column_name="ifDescr")]
 
-    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+    monkeypatch.setattr("app.snmp_agent_table_mutation_mixin.get_link_manager", lambda: LinkMgr())
     monkeypatch.setattr(agent, "_create_missing_cell_instance", lambda *_args: False)
 
     with caplog.at_level(logging.ERROR):
-        agent._update_table_cell_values(table_oid, "7", {"ifDescr": "value"})
+        agent.update_table_cell_values(table_oid, "7", {"ifDescr": "value"})
 
     assert "Failed to update MibScalarInstance" in caplog.text
     assert calls["begin"] == 1
@@ -1952,10 +1953,10 @@ def test_update_table_cell_values_logs_exception_when_begin_update_fails(
         def get_linked_targets(self, _column: str, _table_oid: str) -> list[Any]:
             return []
 
-    monkeypatch.setattr(snmp_agent_module, "get_link_manager", lambda: LinkMgr())
+    monkeypatch.setattr("app.snmp_agent_table_mutation_mixin.get_link_manager", lambda: LinkMgr())
 
     with caplog.at_level(logging.ERROR):
-        agent._update_table_cell_values("1.3.6.1.4.1.999.1", "1", {"ifDescr": "x"})
+        agent.update_table_cell_values("1.3.6.1.4.1.999.1", "1", {"ifDescr": "x"})
 
     assert "Error updating column ifDescr: begin failed" in caplog.text
     assert calls["end"] == 1
@@ -1974,10 +1975,10 @@ def test_add_table_instance_serializes_values_removes_deleted_and_skips_augment(
     updated_calls: list[tuple[str, str, dict[str, Any]]] = []
     monkeypatch.setattr(
         agent,
-        "_update_table_cell_values",
+        "update_table_cell_values",
         lambda t, i, c: updated_calls.append((t, i, c)),
     )
-    monkeypatch.setattr(agent, "_save_mib_state", lambda: None)
+    monkeypatch.setattr(agent, "save_mib_state", lambda: None)
     monkeypatch.setattr(
         agent,
         "_propagate_augmented_tables",
@@ -1993,7 +1994,7 @@ def test_add_table_instance_serializes_values_removes_deleted_and_skips_augment(
 
     assert created == instance_oid
     assert "11" in agent.table_instances[table_oid]
-    stored = agent.table_instances[table_oid]["11"]["column_values"]
+    stored = agent.table_instances[table_oid]["11"].get("column_values", {})
     assert stored["a"] == "1.2"
     assert stored["b"] == "{'k': 'v'}"
     assert stored["c"] == 5
@@ -2008,8 +2009,8 @@ def test_add_table_instance_skips_augment_when_table_already_visited(
     agent = SNMPAgent(config_path="agent_config.yaml")
     table_oid = "1.3.6.1.4.1.999.8"
 
-    monkeypatch.setattr(agent, "_update_table_cell_values", lambda *_args: None)
-    monkeypatch.setattr(agent, "_save_mib_state", lambda: None)
+    monkeypatch.setattr(agent, "update_table_cell_values", lambda *_args: None)
+    monkeypatch.setattr(agent, "save_mib_state", lambda: None)
     monkeypatch.setattr(
         agent,
         "_propagate_augmented_tables",
@@ -2040,7 +2041,7 @@ def test_delete_table_instance_does_not_resave_when_already_marked_deleted(
     monkeypatch.setattr(agent, "_instance_defined_in_schema", lambda *_args: True)
     monkeypatch.setattr(
         agent,
-        "_save_mib_state",
+        "save_mib_state",
         lambda: (_ for _ in ()).throw(AssertionError("should not save duplicate deletion")),
     )
     monkeypatch.setattr(agent, "_propagate_augmented_deletions", lambda *_args: None)

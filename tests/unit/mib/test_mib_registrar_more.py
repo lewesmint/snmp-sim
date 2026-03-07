@@ -67,6 +67,7 @@ def make_registrar() -> MibRegistrar:
     logger = logging.getLogger("test")
     snmp_context = SNMPContext(
         mib_builder=DummyBuilder(),
+        mib_scalar=None,
         mib_scalar_instance=DummyScalarInstance,
         mib_table=None,
         mib_table_row=None,
@@ -345,6 +346,7 @@ def test_register_all_mibs_type_registry_load_fails(caplog: Any, tmp_path: Any) 
     b = DummyBuilder()
     snmp_context = SNMPContext(
         mib_builder=b,
+        mib_scalar=None,
         mib_scalar_instance=None,
         mib_table=None,
         mib_table_row=None,

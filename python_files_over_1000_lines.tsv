@@ -1,0 +1,11 @@
+path	line_count
+tests/unit/agent/test_snmp_agent_additional.py	2172
+compiled-mibs/HOST-RESOURCES-MIB.py	1593
+tests/misc/test_generator_more.py	1581
+tests/unit/mib/test_mib_registrar_more.py	1580
+app/snmp_agent.py	1408
+ui/mib_browser.py	1397
+tests/unit/type_system/test_type_recorder_unit.py	1390
+compiled-mibs/IF-MIB.py	1314
+compiled-mibs/CISCO-TC.py	1310
+ui/snmp_gui.py	1175

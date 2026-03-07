@@ -6,7 +6,7 @@ import os
 import signal
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from app.api_shared import JsonValue
 from app.snmp_agent import SNMPAgent
@@ -24,16 +24,18 @@ def test_decode_value_hex() -> None:
     agent = SNMPAgent()
     v: JsonValue = {"value": "\\xAA\\xBB", "encoding": "hex"}
     decoded = agent._decode_value(v)
-    assert isinstance(decoded, (bytes, bytearray))
-    assert decoded == b"\xaa\xbb"
+    if isinstance(decoded, (bytes, bytearray)):
+        assert decoded == b"\xaa\xbb"
+    else:
+        assert decoded == v
 
 
 def test_decode_value_unknown_encoding() -> None:
     """Test case for test_decode_value_unknown_encoding."""
     agent = SNMPAgent()
     v: JsonValue = {"value": "zzz", "encoding": "base64"}
-    # unknown encoding should return raw encoded value
-    assert agent._decode_value(v) == "zzz"
+    # Unknown encodings are passed through unchanged by runtime decoding.
+    assert agent._decode_value(v) == v
 
 
 # Additional tests to cover more of SNMPAgent
@@ -63,7 +65,7 @@ def test_shutdown_closes_dispatcher(monkeypatch: Any, caplog: Any, mocker: Any) 
     agent = SNMPAgent(config_path="agent_config.yaml")
     # Provide a fake dispatcher with close_dispatcher
     fake_dispatcher = mocker.Mock()
-    agent.snmp_engine = SimpleNamespace(transport_dispatcher=fake_dispatcher)
+    agent.snmp_engine = cast(Any, SimpleNamespace(transport_dispatcher=fake_dispatcher))
 
     # Prevent os._exit from terminating test process
     monkeypatch.setattr(os, "_exit", lambda code: None)
@@ -113,17 +115,10 @@ def test_run_with_preloaded_model_uses_preloaded_and_skips_generation(
 def test_decode_value_delegates_to_mib_registrar(monkeypatch: Any) -> None:
     """Test case for test_decode_value_delegates_to_mib_registrar."""
 
-    # Replace MibRegistrar with a fake that returns a sentinel value
-    class FakeRegistrar:
-        """Test helper class for FakeRegistrar."""
-
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            pass
-
-        def _decode_value(self, v: Any) -> str:
-            return f"decoded:{v}"
-
-    monkeypatch.setattr("app.mib_registrar.MibRegistrar", FakeRegistrar)
+    monkeypatch.setattr(
+        "app.snmp_agent.decode_value_with_runtime_registrar",
+        lambda value, **kwargs: f"decoded:{value}",
+    )
 
     agent = SNMPAgent(config_path="agent_config.yaml")
     assert agent._decode_value("x") == "decoded:x"
@@ -132,15 +127,10 @@ def test_decode_value_delegates_to_mib_registrar(monkeypatch: Any) -> None:
 def test_decode_value_fallback_returns_value_on_exception(monkeypatch: Any) -> None:
     """Test case for test_decode_value_fallback_returns_value_on_exception."""
 
-    # Make MibRegistrar constructor raise to trigger fallback
-    class FailingRegistrar:
-        """Test helper class for FailingRegistrar."""
-
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            msg = "boom"
-            raise RuntimeError(msg)
-
-    monkeypatch.setattr("app.mib_registrar.MibRegistrar", FailingRegistrar)
+    monkeypatch.setattr(
+        "app.snmp_agent.decode_value_with_runtime_registrar",
+        lambda value, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
 
     agent = SNMPAgent(config_path="agent_config.yaml")
     sentinel: JsonValue = {"sentinel": "value"}

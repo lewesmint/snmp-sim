@@ -12,17 +12,16 @@ import time
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from threading import Thread
-from typing import cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from pysnmp.carrier.asyncio.dgram import udp
 from pysnmp.entity import config
 from pysnmp.entity.rfc3413 import ntfrcv
 from pysnmp.hlapi.v3arch.asyncio import SnmpEngine
 
-TransportInfoGetter = Callable[[object], object]
-ExecutionContextGetter = Callable[[str], object]
-NoArgMethod = Callable[[], object]
-OneIntArgMethod = Callable[[int], object]
+if TYPE_CHECKING:
+    from app.interface_types import PrettyPrintable
+
 BASE_CONTEXT_EXCEPTIONS = (AttributeError, LookupError)
 SOURCE_CONTEXT_EXCEPTIONS = (
     *BASE_CONTEXT_EXCEPTIONS,
@@ -30,6 +29,51 @@ SOURCE_CONTEXT_EXCEPTIONS = (
     TypeError,
     ValueError,
 )
+
+
+class DispatcherProtocol(Protocol):
+    def run_dispatcher(self) -> None: ...
+
+    def job_started(self, jobs_count: int) -> None: ...
+
+    def job_finished(self, jobs_count: int) -> None: ...
+
+    def close_dispatcher(self) -> None: ...
+
+
+class ConfigProtocol(Protocol):
+    def add_transport(self, engine: SnmpEngine, domain_name: object, transport: object) -> None: ...
+
+    def add_v1_system(self, engine: SnmpEngine, area_name: str, community: str) -> None: ...
+
+
+class TransportInstanceProtocol(Protocol):
+    def open_server_mode(self, endpoint: tuple[str, int]) -> object: ...
+
+
+class UdpModuleProtocol(Protocol):
+    UdpAsyncioTransport: type[TransportInstanceProtocol]
+    DOMAIN_NAME: object
+
+
+class MessageDispatcherProtocol(Protocol):
+    def get_transport_info(self, state_reference: object) -> object: ...
+
+
+class ObserverProtocol(Protocol):
+    def get_execution_context(self, execution_point: str) -> object: ...
+
+
+class EngineTransportProtocol(Protocol):
+    transport_dispatcher: DispatcherProtocol
+
+
+class EngineMessageProtocol(Protocol):
+    message_dispatcher: MessageDispatcherProtocol
+
+
+class EngineObserverProtocol(Protocol):
+    observer: ObserverProtocol
 
 
 def _oid_tuple_to_str(oid: Iterable[int]) -> str:
@@ -60,6 +104,7 @@ class TrapReceiver:
         self.on_trap_callback = on_trap_callback
 
         self.snmp_engine: SnmpEngine | None = None
+        self.dispatcher: DispatcherProtocol | None = None
         self.running = False
         self.thread: Thread | None = None
 
@@ -83,155 +128,80 @@ class TrapReceiver:
             return
 
         self.running = False
-        if self.snmp_engine:
-            dispatcher = getattr(self.snmp_engine, "transport_dispatcher", None)
-            if dispatcher is None:
-                dispatcher = getattr(self.snmp_engine, "transportDispatcher", None)
-            if dispatcher is not None:
-                close_dispatcher = getattr(dispatcher, "close_dispatcher", None)
-                if not callable(close_dispatcher):
-                    close_dispatcher = getattr(dispatcher, "closeDispatcher", None)
-                if callable(close_dispatcher):
-                    with contextlib.suppress(
-                        AttributeError,
-                        LookupError,
-                        OSError,
-                        TypeError,
-                        ValueError,
-                    ):
-                        close_dispatcher()
+        if self.dispatcher is not None:
+            with contextlib.suppress(
+                AttributeError,
+                LookupError,
+                OSError,
+                TypeError,
+                ValueError,
+            ):
+                self.dispatcher.close_dispatcher()
         if self.thread:
             self.thread.join(timeout=3.0)
 
         self.logger.info("Trap receiver stopped")
 
-    def _validate_callable(self, obj: object, name: str) -> Callable[..., object]:
-        """Validate that an object is callable, raising TypeError if not."""
-        if callable(obj):
-            return cast("Callable[..., object]", obj)
-        msg = f"pysnmp config missing {name}"
-        raise TypeError(msg)
-
-    def _get_dispatcher(self, snmp_engine: object) -> object:
-        """Get the transport dispatcher from the SNMP engine."""
-        dispatcher = getattr(snmp_engine, "transport_dispatcher", None)
-        if dispatcher is None:
-            dispatcher = getattr(snmp_engine, "transportDispatcher", None)
-        if dispatcher is None:
-            msg = "pysnmp engine missing transport dispatcher"
-            raise RuntimeError(msg)
-        return dispatcher
-
-    def _get_method(self, obj: object, *names: str) -> Callable[..., object] | None:
-        """Get the first callable attribute found from a list of names."""
-        for name in names:
-            candidate = getattr(obj, name, None)
-            if callable(candidate):
-                return cast("Callable[..., object]", candidate)
-        return None
-
-    def _run_dispatcher(self, dispatcher: object) -> None:
+    def _run_dispatcher(self, dispatcher: DispatcherProtocol) -> None:
         """Call the run_dispatcher method on the dispatcher."""
-        run_dispatcher = self._get_method(dispatcher, "run_dispatcher", "runDispatcher")
-        if run_dispatcher is None:
-            msg = "pysnmp dispatcher missing run_dispatcher"
-            raise RuntimeError(msg)
-        run_dispatcher()
+        dispatcher.run_dispatcher()
 
-    def _get_config_callable(
-        self,
-        *,
-        snake_name: str,
-        legacy_name: str,
-        error_name: str,
-    ) -> Callable[..., object]:
-        candidate = getattr(config, snake_name, None)
-        if not callable(candidate):
-            candidate = getattr(config, legacy_name, None)
-        return self._validate_callable(candidate, error_name)
-
-    def _get_dispatcher_optional(self, snmp_engine: object) -> object | None:
-        dispatcher = getattr(snmp_engine, "transport_dispatcher", None)
-        if dispatcher is None:
-            dispatcher = getattr(snmp_engine, "transportDispatcher", None)
-        return dispatcher
-
-    def _setup_engine_and_dispatcher(self) -> tuple[SnmpEngine, object]:
+    def _setup_engine_and_dispatcher(self) -> tuple[SnmpEngine, DispatcherProtocol]:
         engine = SnmpEngine()
         self.snmp_engine = engine
 
+        config_module = cast("ConfigProtocol", config)
+        udp_module = cast("UdpModuleProtocol", udp)
+
         add_transport = cast(
             "Callable[[SnmpEngine, object, object], None]",
-            self._get_config_callable(
-                snake_name="add_transport",
-                legacy_name="addTransport",
-                error_name="add_transport",
-            ),
+            config_module.add_transport,
         )
         self._add_udp_transport(
             snmp_engine=engine,
             add_transport=add_transport,
-            transport_module=udp,
+            transport_module=udp_module,
             bind_host=self.host,
             bind_port=self.port,
         )
 
         add_v1_system = cast(
             "Callable[[SnmpEngine, str, str], None]",
-            self._get_config_callable(
-                snake_name="add_v1_system",
-                legacy_name="addV1System",
-                error_name="add_v1_system",
-            ),
+            config_module.add_v1_system,
         )
         add_v1_system(engine, "my-area", self.community)
         ntfrcv.NotificationReceiver(engine, self._trap_callback)
 
-        self.logger.info("%s", f"Listening for traps on UDP port {self.port}")
-        return engine, self._get_dispatcher(engine)
+        dispatcher = cast("EngineTransportProtocol", engine).transport_dispatcher
+        self.dispatcher = dispatcher
 
-    def _start_dispatcher_job(self, dispatcher: object) -> None:
-        job_started = cast(
-            "OneIntArgMethod | None",
-            self._get_method(dispatcher, "job_started", "jobStarted"),
-        )
-        if job_started is not None:
-            job_started(1)
+        self.logger.info("%s", f"Listening for traps on UDP port {self.port}")
+        return engine, dispatcher
+
+    def _start_dispatcher_job(self, dispatcher: DispatcherProtocol) -> None:
+        dispatcher.job_started(1)
 
     def _cleanup_snmp_engine_dispatcher(self) -> None:
-        if not self.snmp_engine:
-            return
-        dispatcher = self._get_dispatcher_optional(self.snmp_engine)
-        if dispatcher is None:
+        if self.dispatcher is None:
             return
 
-        job_finished = cast(
-            "OneIntArgMethod | None",
-            self._get_method(dispatcher, "job_finished", "jobFinished"),
-        )
-        if job_finished is not None:
-            with contextlib.suppress(
-                AttributeError,
-                LookupError,
-                OSError,
-                TypeError,
-                ValueError,
-            ):
-                job_finished(1)
+        with contextlib.suppress(
+            AttributeError,
+            LookupError,
+            OSError,
+            TypeError,
+            ValueError,
+        ):
+            self.dispatcher.job_finished(1)
 
-        close_dispatcher = cast(
-            "NoArgMethod | None",
-            self._get_method(dispatcher, "close_dispatcher", "closeDispatcher"),
-        )
-        if close_dispatcher is not None:
-            with contextlib.suppress(
-                AttributeError,
-                LookupError,
-                OSError,
-                TypeError,
-                ValueError,
-            ):
-                close_dispatcher()
+        with contextlib.suppress(
+            AttributeError,
+            LookupError,
+            OSError,
+            TypeError,
+            ValueError,
+        ):
+            self.dispatcher.close_dispatcher()
 
     def _close_event_loop(
         self,
@@ -259,6 +229,8 @@ class TrapReceiver:
         finally:
             self._cleanup_snmp_engine_dispatcher()
             self._close_event_loop(event_loop)
+            self.dispatcher = None
+            self.snmp_engine = None
             self.running = False
 
     def _add_udp_transport(
@@ -266,30 +238,15 @@ class TrapReceiver:
         *,
         snmp_engine: SnmpEngine,
         add_transport: Callable[[SnmpEngine, object, object], None],
-        transport_module: object,
+        transport_module: UdpModuleProtocol,
         bind_host: str,
         bind_port: int,
     ) -> None:
-        transport_cls = getattr(transport_module, "UdpAsyncioTransport", None)
-        if transport_cls is None:
-            transport_cls = getattr(transport_module, "UdpTransport", None)
-        if transport_cls is None:
-            msg = "No compatible UDP transport found for pysnmp"
-            raise TypeError(msg)
+        transport_cls = transport_module.UdpAsyncioTransport
+        transport_instance = transport_cls()
+        transport = transport_instance.open_server_mode((bind_host, bind_port))
 
-        transport = transport_cls()
-        open_server_mode = getattr(transport, "open_server_mode", None)
-        if not callable(open_server_mode):
-            open_server_mode = getattr(transport, "openServerMode", None)
-        if not callable(open_server_mode):
-            msg = "UDP transport missing open_server_mode"
-            raise TypeError(msg)
-
-        transport = open_server_mode((bind_host, bind_port))
-
-        domain_name = getattr(transport_module, "DOMAIN_NAME", None)
-        if domain_name is None:
-            domain_name = getattr(transport_module, "domainName", None)
+        domain_name = transport_module.DOMAIN_NAME
 
         add_transport(snmp_engine, domain_name, transport)
 
@@ -363,73 +320,34 @@ class TrapReceiver:
             return f"{transport_address[0]}:{transport_address[1]}"
         return str(transport_address)
 
-    def _get_transport_info_getter(self, snmp_engine: object) -> TransportInfoGetter | None:
-        message_dispatcher = getattr(snmp_engine, "message_dispatcher", None)
-        if message_dispatcher is None:
-            message_dispatcher = getattr(snmp_engine, "msgAndPduDsp", None)
-        if message_dispatcher is None:
-            return None
-
-        getter = getattr(message_dispatcher, "get_transport_info", None)
-        if callable(getter):
-            return cast("TransportInfoGetter", getter)
-
-        legacy_getter = getattr(message_dispatcher, "getTransportInfo", None)
-        if callable(legacy_getter):
-            return cast("TransportInfoGetter", legacy_getter)
-
-        return None
-
     def _extract_source_from_transport_info(
         self,
         snmp_engine: object,
         state_reference: object,
     ) -> str | None:
-        get_transport_info = self._get_transport_info_getter(snmp_engine)
-        if not callable(get_transport_info):
-            return None
-
-        with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
-            transport_info = get_transport_info(state_reference)
+        message_dispatcher = cast("EngineMessageProtocol", snmp_engine).message_dispatcher
+        try:
+            transport_info = message_dispatcher.get_transport_info(state_reference)
             if (
                 isinstance(transport_info, tuple)
                 and len(transport_info) == self.TRANSPORT_INFO_PAIR_LEN
             ):
                 return self._format_transport_address(transport_info[1])
-
-        return None
-
-    def _get_execution_context_getter(
-        self,
-        snmp_engine: object,
-    ) -> ExecutionContextGetter | None:
-        observer = getattr(snmp_engine, "observer", None)
-        if observer is None:
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
             return None
-
-        getter = getattr(observer, "get_execution_context", None)
-        if callable(getter):
-            return cast("ExecutionContextGetter", getter)
-
-        legacy_getter = getattr(observer, "getExecutionContext", None)
-        if callable(legacy_getter):
-            return cast("ExecutionContextGetter", legacy_getter)
 
         return None
 
     def _extract_source_from_observer(self, snmp_engine: object) -> str | None:
-        get_execution_context = self._get_execution_context_getter(snmp_engine)
-        if not callable(get_execution_context):
-            return None
-
+        observer = cast("EngineObserverProtocol", snmp_engine).observer
         execution_points = (
             "rfc3412.receiveMessage:request",
             "rfc3412.receiveMessage:response",
             "rfc2576.processIncomingMsg",
         )
         for execution_point in execution_points:
-            with contextlib.suppress(*SOURCE_CONTEXT_EXCEPTIONS):
-                context = get_execution_context(execution_point)
+            try:
+                context = observer.get_execution_context(execution_point)
                 if not isinstance(context, dict):
                     continue
                 transport_address = context.get("transportAddress")
@@ -441,6 +359,8 @@ class TrapReceiver:
                     and len(transport_information) == self.TRANSPORT_INFO_PAIR_LEN
                 ):
                     return self._format_transport_address(transport_information[1])
+            except SOURCE_CONTEXT_EXCEPTIONS:
+                continue
 
         return None
 
@@ -469,6 +389,10 @@ class TrapReceiver:
         trap_oid_str = "unknown"
         varbinds: list[dict[str, object]] = []
         is_test_trap = False
+        sys_uptime_oid = self.SYS_UPTIME_OID
+        snmp_trap_oid = self.SNMP_TRAP_OID
+        test_trap_oid = self.TEST_TRAP_OID
+        append_varbind = varbinds.append
 
         for oid, val in var_binds:
             if not isinstance(oid, Iterable) or isinstance(oid, (str, bytes, bytearray)):
@@ -479,26 +403,27 @@ class TrapReceiver:
             oid_str = _oid_tuple_to_str(oid_tuple)
 
             value_str = str(val)
-            pretty_print = getattr(val, "prettyPrint", None)
-            if callable(pretty_print):
-                try:
-                    value_str = str(pretty_print())
-                except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                    value_str = str(val)
+            try:
+                pretty_printable = cast("PrettyPrintable", val)
+                value_str = str(pretty_printable.prettyPrint())
+            except AttributeError:
+                pass
+            except (LookupError, OSError, TypeError, ValueError):
+                value_str = str(val)
 
-            if oid_tuple == self.SYS_UPTIME_OID:
+            if oid_tuple == sys_uptime_oid:
                 uptime = value_str
-            elif oid_tuple == self.SNMP_TRAP_OID:
+            elif oid_tuple == snmp_trap_oid:
                 if isinstance(val, Iterable) and not isinstance(val, (str, bytes, bytearray)):
                     trap_oid = tuple(val)
                 else:
                     trap_oid = None
                 if trap_oid is not None:
                     trap_oid_str = _oid_tuple_to_str(trap_oid)
-                    if trap_oid == self.TEST_TRAP_OID:
+                    if trap_oid == test_trap_oid:
                         is_test_trap = True
 
-            varbinds.append(
+            append_varbind(
                 {
                     "oid": oid_tuple,
                     "oid_str": oid_str,

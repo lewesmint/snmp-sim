@@ -282,7 +282,7 @@ class BehaviourGenerator:
     ) -> dict[str, Any]:
         """Build default row values for table columns."""
         default_row: dict[str, Any] = {}
-        if not getattr(self, "_type_registry", None):
+        if not self._type_registry:
             self._type_registry = self._load_type_registry()
 
         index_names = entry_info.get("indexes", [])
@@ -695,7 +695,12 @@ class BehaviourGenerator:
         For complex types like IpAddress, returns a representative value.
         For integer types, returns 1.
         """
-        default_value: object = self._get_default_value_from_type_info(type_info, "index")
+        # Start with plugin-provided defaults when available, but tolerate missing plugins
+        # for index generation so type-based fallbacks still work deterministically.
+        try:
+            default_value: object = self._get_default_value_from_type_info(type_info, "index")
+        except RuntimeError:
+            default_value = 1
 
         if col_type == "IpAddress":
             default_value = "192.168.1.1"

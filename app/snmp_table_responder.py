@@ -157,85 +157,128 @@ class SNMPTableResponder:
 
         return None
 
-    def _get_all_table_oids(self) -> list[tuple[int, ...]]:  # noqa: PLR0915
+    def _collect_entry_column_oid_lists(
+        self,
+        objects: JsonObject,
+        entry_oid: tuple[int, ...],
+    ) -> dict[str, list[int]]:
+        columns: dict[str, list[int]] = {}
+        for col_name, col_info in objects.items():
+            if not isinstance(col_info, dict):
+                continue
+            col_oid = self._as_int_list(col_info.get("oid", []))
+            if col_oid is None:
+                continue
+            if len(col_oid) != len(entry_oid) + 1:
+                continue
+            if tuple(col_oid[: len(entry_oid)]) != entry_oid:
+                continue
+            columns[col_name] = col_oid
+        return columns
+
+    def _build_instance_parts_for_row(
+        self,
+        *,
+        row: JsonObject,
+        index_columns: list[str],
+        default_row: JsonObject,
+    ) -> list[str]:
+        if not index_columns:
+            return ["1"]
+
+        instance_parts: list[str] = []
+        for idx in index_columns:
+            idx_val = self._index_value_with_default(row, idx, default_row)
+            if idx_val is None:
+                continue
+            if isinstance(idx_val, (list, tuple)):
+                instance_parts.extend(str(v) for v in idx_val)
+            else:
+                instance_parts.extend(str(v) for v in str(idx_val).split("."))
+
+        return instance_parts or ["1"]
+
+    @staticmethod
+    def _build_full_oid_from_parts(
+        col_oid_list: list[int],
+        instance_parts: list[str],
+    ) -> tuple[int, ...] | None:
+        try:
+            return tuple(col_oid_list + [int(p) for p in instance_parts])
+        except ValueError:
+            return None
+
+    def _append_row_oids(
+        self,
+        *,
+        row: JsonObject,
+        columns: dict[str, list[int]],
+        index_columns: list[str],
+        default_row: JsonObject,
+        oids: list[tuple[int, ...]],
+    ) -> None:
+        instance_parts = self._build_instance_parts_for_row(
+            row=row,
+            index_columns=index_columns,
+            default_row=default_row,
+        )
+
+        if len(columns) == 1:
+            col_oid_list = next(iter(columns.values()))
+            full_oid = self._build_full_oid_from_parts(col_oid_list, instance_parts)
+            if full_oid is not None:
+                oids.append(full_oid)
+            return
+
+        for col_name, col_oid_list in columns.items():
+            if self._row_value_with_default(row, col_name, default_row) is None:
+                continue
+            full_oid = self._build_full_oid_from_parts(col_oid_list, instance_parts)
+            if full_oid is not None:
+                oids.append(full_oid)
+
+    def _get_all_table_oids(self) -> list[tuple[int, ...]]:
         """Get all OIDs in tables, sorted lexicographically."""
-        oids = []
+        oids: list[tuple[int, ...]] = []
 
         for mib_json in self.behavior_jsons.values():
             objects = mib_json.get("objects", mib_json) if isinstance(mib_json, dict) else {}
             if not isinstance(objects, dict):
                 continue
+
             for obj_name, obj_data in objects.items():
-                if isinstance(obj_data, dict) and obj_data.get("type") == "MibTable":
-                    table_oid = tuple(obj_data.get("oid", []))
-                    if not table_oid:
+                if not (isinstance(obj_data, dict) and obj_data.get("type") == "MibTable"):
+                    continue
+
+                table_oid = tuple(obj_data.get("oid", []))
+                if not table_oid:
+                    continue
+
+                entry_data = self._find_entry_for_table(objects, table_oid, obj_name)
+                if not entry_data:
+                    continue
+
+                rows = obj_data.get("rows", [])
+                if not isinstance(rows, list):
+                    continue
+
+                default_row = self._default_row(rows)
+                entry_oid = self._oid_tuple_from_entry(entry_data)
+                index_columns = entry_data.get("indexes", [])
+                if not isinstance(index_columns, list):
+                    index_columns = []
+
+                columns = self._collect_entry_column_oid_lists(objects, entry_oid)
+                for row in rows:
+                    if not isinstance(row, dict):
                         continue
-                    entry_data = self._find_entry_for_table(objects, table_oid, obj_name)
-                    if entry_data:
-                        # Get all rows in the table
-                        rows = obj_data.get("rows", [])
-                        if not isinstance(rows, list):
-                            continue
-                        default_row = self._default_row(rows)
-
-                        entry_oid = self._oid_tuple_from_entry(entry_data)
-                        index_columns = entry_data.get("indexes", [])
-                        if not isinstance(index_columns, list):
-                            index_columns = []
-
-                        # Collect columns by OID prefix
-                        columns: dict[str, list[int]] = {}
-                        for col_name, col_info in objects.items():
-                            if not isinstance(col_info, dict):
-                                continue
-                            col_oid = col_info.get("oid", [])
-                            if (
-                                isinstance(col_oid, list)
-                                and len(col_oid) == len(entry_oid) + 1
-                                and col_oid[: len(entry_oid)] == list(entry_oid)
-                            ):
-                                columns[col_name] = col_oid
-
-                        for row in rows:
-                            if not isinstance(row, dict):
-                                continue
-                            if not index_columns:
-                                instance_parts = ["1"]
-                            else:
-                                instance_parts = []
-                                for idx in index_columns:
-                                    idx_val = self._index_value_with_default(row, idx, default_row)
-                                    if idx_val is None:
-                                        continue
-                                    if isinstance(idx_val, (list, tuple)):
-                                        instance_parts.extend(str(v) for v in idx_val)
-                                    else:
-                                        instance_parts.extend(
-                                            str(v) for v in str(idx_val).split(".")
-                                        )
-                                if not instance_parts:
-                                    instance_parts = ["1"]
-                            if len(columns) == 1:
-                                col_oid_list = next(iter(columns.values()))
-                                try:
-                                    full_oid = tuple(
-                                        col_oid_list + [int(p) for p in instance_parts]
-                                    )
-                                except ValueError:
-                                    continue
-                                oids.append(full_oid)
-                                continue
-
-                            for col_name, col_oid_list in columns.items():
-                                if self._row_value_with_default(row, col_name, default_row) is None:
-                                    continue
-                                try:
-                                    full_oid = tuple(
-                                        col_oid_list + [int(p) for p in instance_parts]
-                                    )
-                                except ValueError:
-                                    continue
-                                oids.append(full_oid)
+                    self._append_row_oids(
+                        row=row,
+                        columns=columns,
+                        index_columns=index_columns,
+                        default_row=default_row,
+                        oids=oids,
+                    )
 
         return sorted(oids)
 

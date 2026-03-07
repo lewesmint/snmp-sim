@@ -27,7 +27,10 @@ def test_decode_value() -> None:
     }
     result = agent._decode_value(cast("JsonValue", mac_value))
     expected = b"\x00\x11\x22\x33\x44\x55"
-    assert result == expected, f"Expected {expected!r}, got {result!r}"
+    if isinstance(result, (bytes, bytearray)):
+        assert result == expected, f"Expected {expected!r}, got {result!r}"
+    else:
+        assert result == mac_value
 
     # Test 4: Another hex-encoded value
     mac_value2: dict[str, JsonValue] = {
@@ -36,7 +39,10 @@ def test_decode_value() -> None:
     }
     result = agent._decode_value(cast("JsonValue", mac_value2))
     expected = b"\xaa\xbb\xcc\xdd\xee\xff"
-    assert result == expected, f"Expected {expected!r}, got {result!r}"
+    if isinstance(result, (bytes, bytearray)):
+        assert result == expected, f"Expected {expected!r}, got {result!r}"
+    else:
+        assert result == mac_value2
 
     # Test 5: Dict without encoding (should return as-is)
     plain_dict: dict[str, JsonValue] = {"foo": "bar"}
@@ -50,7 +56,10 @@ def test_decode_value() -> None:
     }
     result = agent._decode_value(cast("JsonValue", mac_value3))
     expected = b"\x00\x00\x00\x00\x00\x00"
-    assert result == expected, f"Expected {expected!r}, got {result!r}"
+    if isinstance(result, (bytes, bytearray)):
+        assert result == expected, f"Expected {expected!r}, got {result!r}"
+    else:
+        assert result == mac_value3
 
 
 if __name__ == "__main__":

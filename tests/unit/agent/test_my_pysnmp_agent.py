@@ -1,7 +1,5 @@
 """Tests for the SNMPAgent implementation."""
 
-from collections.abc import Generator
-
 import pytest
 from pytest_mock import MockerFixture
 
@@ -12,7 +10,7 @@ from app.snmp_agent import SNMPAgent
 def agent(
     mocker: MockerFixture,
     monkeypatch: pytest.MonkeyPatch,
-) -> Generator[SNMPAgent, None, None]:
+) -> SNMPAgent:
     """Create an SNMPAgent instance for testing."""
     # SNMPAgent doesn't have a _load_config method to patch
     # Instead, we patch the run method to prevent startup

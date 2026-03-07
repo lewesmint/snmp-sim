@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from app.value_links import ValueLinkEndpoint, ValueLinkManager
 
 
@@ -32,7 +34,7 @@ def test_add_and_remove_link_updates_indexes() -> None:
 def test_parse_link_config_endpoints_and_columns() -> None:
     """Test case for test_parse_link_config_endpoints_and_columns."""
     manager = ValueLinkManager()
-    objects = {
+    objects: dict[str, dict[str, list[int]]] = {
         "ifDescr": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2]},
         "ifName": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 3]},
     }
@@ -48,7 +50,7 @@ def test_parse_link_config_endpoints_and_columns() -> None:
                 "create_missing": True,
                 "columns": ["ifDescr", "ifName"],
             },
-            objects,
+            cast("Any", objects),
         )
     )
 
@@ -85,7 +87,7 @@ def test_load_links_from_schema_and_state_and_export() -> None:
     """Test case for test_load_links_from_schema_and_state_and_export."""
     manager = ValueLinkManager()
 
-    schema = {
+    schema: dict[str, object] = {
         "objects": {
             "ifDescr": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 2]},
             "ifName": {"oid": [1, 3, 6, 1, 2, 1, 2, 2, 1, 3]},
@@ -97,7 +99,7 @@ def test_load_links_from_schema_and_state_and_export() -> None:
     }
     manager.load_links_from_schema(schema)
 
-    state_links = [
+    state_links: list[dict[str, object]] = [
         {
             "id": "state-1",
             "scope": "global",

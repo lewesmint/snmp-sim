@@ -52,6 +52,7 @@ def test_get_sysdescr_agent_not_initialized() -> None:
 def test_get_and_set_sysdescr_happy_path(mocker: Any) -> None:
     """Test case for test_get_and_set_sysdescr_happy_path."""
     fake = mocker.MagicMock()
+    fake.snmp_engine = object()
     oid = (1, 3, 6, 1, 2, 1, 1, 1, 0)
     fake.get_scalar_value.return_value = "My system"
     api_state.state.snmp_agent = fake

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 import pytest
+from app.oid_utils import normalize_oid, oid_tuple_to_str
 
 pytest.importorskip("_tkinter")
 
@@ -47,6 +48,7 @@ class _Resp:
     def __init__(self, status_code: int = 200, text: str = "") -> None:
         self.status_code = status_code
         self.text = text
+        self.ok = status_code < 400
 
 
 class _JsonResp:
@@ -64,15 +66,15 @@ def _mk_gui() -> sg.SNMPControllerGUI:
     gui.api_url = "http://test"
     gui.oid_metadata = {}
     gui.table_schemas = {}
-    gui._log = lambda *args, **kwargs: None
+    setattr(gui, "_log", lambda *args, **kwargs: None)
     return gui
 
 
 def test_oid_list_to_str_formats_list_tuple_and_scalar() -> None:
     """Test case for test_oid_list_to_str_formats_list_tuple_and_scalar."""
-    assert sg._oid_list_to_str([1, 3, 6]) == "1.3.6"
-    assert sg._oid_list_to_str((1, 3, 6, 1)) == "1.3.6.1"
-    assert sg._oid_list_to_str("1.3.6.1") == "1.3.6.1"
+    assert oid_tuple_to_str(normalize_oid([1, 3, 6])) == "1.3.6"
+    assert oid_tuple_to_str(normalize_oid((1, 3, 6, 1))) == "1.3.6.1"
+    assert oid_tuple_to_str(normalize_oid("1.3.6.1")) == "1.3.6.1"
 
 
 def test_links_helpers_format_and_parse_endpoints() -> None:

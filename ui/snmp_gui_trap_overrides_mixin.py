@@ -344,70 +344,80 @@ class SNMPGuiTrapOverridesMixin:
             if response.status_code == 200:
                 data = response.json()
                 self.current_trap_overrides = data.get("overrides", {})
-
-                for row in self.oid_rows:
-                    if row.get("is_sysuptime", False) or row.get("is_index", False):
-                        continue
-
-                    oid_name = row["oid_name"]
-                    if oid_name in self.current_trap_overrides:
-                        saved_entry = self.current_trap_overrides[oid_name]
-                        if isinstance(saved_entry, dict):
-                            enabled = bool(saved_entry.get("enabled"))
-                            override_val = str(saved_entry.get("value", ""))
-                        else:
-                            enabled = True
-                            override_val = str(saved_entry)
-
-                        row["use_override_var"].set(enabled)
-                        if row.get("is_enum"):
-                            display_val = self._format_enum_display(
-                                override_val,
-                                row.get("enums", {}),
-                            )
-                            if row.get("override_var") is not None:
-                                row["override_var"].set(display_val)
-                            else:
-                                row["override_entry"].set(display_val)
-                        elif row.get("override_var") is not None:
-                            row["override_var"].set(override_val)
-                        else:
-                            row["override_entry"].delete(0, "end")
-                            row["override_entry"].insert(0, override_val)
-                    else:
-                        row["use_override_var"].set(False)
-                        if row.get("is_enum"):
-                            if row.get("override_var") is not None:
-                                row["override_var"].set("")
-                            else:
-                                row["override_entry"].set("")
-                        elif row.get("override_var") is not None:
-                            row["override_var"].set("")
-                        else:
-                            row["override_entry"].delete(0, "end")
+                self._apply_loaded_trap_overrides_to_rows()
             else:
                 self.current_trap_overrides = {}
-                for row in self.oid_rows:
-                    if row.get("is_sysuptime", False) or row.get("is_index", False):
-                        continue
-                    row["use_override_var"].set(False)
-                    if row.get("is_enum"):
-                        row["override_entry"].set("")
-                    else:
-                        row["override_entry"].delete(0, "end")
+                self._reset_all_trap_override_rows()
         except (AttributeError, LookupError, OSError, TypeError, ValueError) as error:
             self._log(f"Failed to load trap overrides: {error}", "WARNING")
             self.current_trap_overrides = {}
-            for row in self.oid_rows:
-                if row.get("is_sysuptime", False) or row.get("is_index", False):
-                    continue
-                row["use_override_var"].set(False)
-                if row.get("is_enum"):
-                    row["override_entry"].set("")
-                else:
-                    row["override_entry"].delete(0, "end")
+            self._reset_all_trap_override_rows()
         finally:
             self._loading_trap_overrides = False
+
+    def _is_overridable_trap_row(self, row: dict[str, Any]) -> bool:
+        return not row.get("is_sysuptime", False) and not row.get("is_index", False)
+
+    def _clear_override_input(self, row: dict[str, Any]) -> None:
+        if row.get("is_enum"):
+            if row.get("override_var") is not None:
+                row["override_var"].set("")
+            else:
+                row["override_entry"].set("")
+            return
+
+        if row.get("override_var") is not None:
+            row["override_var"].set("")
+        else:
+            row["override_entry"].delete(0, "end")
+
+    def _set_override_input_value(self, row: dict[str, Any], value: str) -> None:
+        if row.get("is_enum"):
+            display_val = self._format_enum_display(value, row.get("enums", {}))
+            if row.get("override_var") is not None:
+                row["override_var"].set(display_val)
+            else:
+                row["override_entry"].set(display_val)
+            return
+
+        if row.get("override_var") is not None:
+            row["override_var"].set(value)
+        else:
+            row["override_entry"].delete(0, "end")
+            row["override_entry"].insert(0, value)
+
+    def _apply_saved_override_to_row(self, row: dict[str, Any], saved_entry: Any) -> None:
+        if isinstance(saved_entry, dict):
+            enabled = bool(saved_entry.get("enabled"))
+            override_val = str(saved_entry.get("value", ""))
+        else:
+            enabled = True
+            override_val = str(saved_entry)
+
+        row["use_override_var"].set(enabled)
+        self._set_override_input_value(row, override_val)
+
+    def _reset_trap_override_row(self, row: dict[str, Any]) -> None:
+        row["use_override_var"].set(False)
+        self._clear_override_input(row)
+
+    def _apply_loaded_trap_overrides_to_rows(self) -> None:
+        for row in self.oid_rows:
+            if not self._is_overridable_trap_row(row):
+                continue
+
+            oid_name = row["oid_name"]
+            if oid_name in self.current_trap_overrides:
+                saved_entry = self.current_trap_overrides[oid_name]
+                self._apply_saved_override_to_row(row, saved_entry)
+            else:
+                self._reset_trap_override_row(row)
+
+    def _reset_all_trap_override_rows(self) -> None:
+        for row in self.oid_rows:
+            if not self._is_overridable_trap_row(row):
+                continue
+            self._reset_trap_override_row(row)
 
     def _refresh_current_values(self) -> None:
         """Refresh the current values displayed in the OID table."""

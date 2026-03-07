@@ -164,7 +164,10 @@ def test_run_aborts_when_type_registry_validation_fails(
     def fake_validate(path: str) -> tuple[bool, list[str], int]:
         return False, ["broken"], 0
 
-    monkeypatch.setattr("app.snmp_agent.validate_type_registry_file", fake_validate)
+    monkeypatch.setattr(
+        "app.snmp_agent_runtime_workflow_mixin.validate_type_registry_file",
+        fake_validate,
+    )
 
     # Prevent SNMP engine setup from running by patching it and asserting it is not called
     called = {"setup_called": False}
@@ -181,7 +184,9 @@ def test_run_aborts_when_type_registry_validation_fails(
     assert called["setup_called"] is False
 
 
-def test_register_mib_objects_creates_registrar_and_calls_register_all() -> None:
+def test_register_mib_objects_creates_registrar_and_calls_register_all(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Test case for test_register_mib_objects_creates_registrar_and_calls_register_all."""
     agent = SNMPAgent(preloaded_model={})
     # Ensure there's no existing registrar
@@ -189,9 +194,6 @@ def test_register_mib_objects_creates_registrar_and_calls_register_all() -> None
         delattr(agent, "mib_registrar")
     except AttributeError:
         pass
-
-    # Create a dummy module with MibRegistrar (use a ModuleType for correct typing)
-    mod = types.ModuleType("app.mib_registrar")
 
     class DummyRegistrar:
         """Test helper class for DummyRegistrar."""
@@ -205,59 +207,41 @@ def test_register_mib_objects_creates_registrar_and_calls_register_all() -> None
             self.registered = True
             self._mib_jsons = mib_jsons
 
-    mod.MibRegistrar = DummyRegistrar  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        "app.snmp_agent.create_runtime_mib_registrar",
+        lambda **kwargs: DummyRegistrar(**kwargs),
+    )
 
-    # Insert into sys.modules so the import inside the method picks it up
-    sys.modules["app.mib_registrar"] = mod
+    agent.mib_jsons = {"TEST-MIB": {"schema": {}}}
+    # Ensure mib_builder exists so _register_mib_objects proceeds (it checks for None)
+    agent.mib_builder = cast(Any, object())
+    agent.MibScalarInstance = cast(Any, object())
+    agent.MibTable = cast(Any, object())
+    agent.MibTableRow = cast(Any, object())
+    agent.MibTableColumn = cast(Any, object())
+    agent._register_mib_objects()
 
-    try:
-        agent.mib_jsons = {"TEST-MIB": {"schema": {}}}
-        # Ensure mib_builder exists so _register_mib_objects proceeds (it checks for None)
-        agent.mib_builder = cast(Any, object())
-        agent._register_mib_objects()
-
-        registrar = agent.mib_registrar
-        assert getattr(registrar, "registered", True) is True
-        assert getattr(registrar, "_mib_jsons", None) == agent.mib_jsons
-    finally:
-        del sys.modules["app.mib_registrar"]
+    registrar = agent.mib_registrar
+    assert getattr(registrar, "registered", True) is True
+    assert getattr(registrar, "_mib_jsons", None) == agent.mib_jsons
 
 
 def test_decode_value_delegates_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test case for test_decode_value_delegates_and_fallback."""
 
-    # Case 1: delegation
-    class DummyReg:
-        """Test helper class for DummyReg."""
-
-        def __init__(self, **_kwargs: Any) -> None:
-            pass
-
-        def _decode_value(self, value: Any) -> Any:
-            return f"decoded:{value}"
-
-    mod = types.ModuleType("app.mib_registrar")
-    mod.MibRegistrar = DummyReg  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "app.mib_registrar", mod)
+    monkeypatch.setattr(
+        "app.snmp_agent.decode_value_with_runtime_registrar",
+        lambda value, **kwargs: f"decoded:{value}",
+    )
 
     agent = SNMPAgent(preloaded_model={})
     out = agent._decode_value("abc")
     assert out == "decoded:abc"
 
-    # Case 2: fallback when MibRegistrar cannot be instantiated
-    class BadMod:
-        """Test helper class for BadMod."""
-
-        class MibRegistrar:
-            """Test helper class for MibRegistrar."""
-
-            def __init__(self, *_args: Any, **_kwargs: Any) -> None:
-                msg = "bad"
-                raise RuntimeError(msg)
-
-    mod_bad = types.ModuleType("app.mib_registrar")
-    mod_bad.MibRegistrar = BadMod.MibRegistrar  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "app.mib_registrar", mod_bad)
+    monkeypatch.setattr(
+        "app.snmp_agent.decode_value_with_runtime_registrar",
+        lambda value, **kwargs: (_ for _ in ()).throw(RuntimeError("bad")),
+    )
 
     agent2 = SNMPAgent(preloaded_model={})
     out2 = agent2._decode_value("xyz")
@@ -484,7 +468,7 @@ def test_setup_transport_adds_transport(monkeypatch: pytest.MonkeyPatch) -> None
         "pysnmp.carrier.asyncio.dgram",
         types.SimpleNamespace(udp=FakeUdp),
     )
-    monkeypatch.setattr(snmp_agent_module, "udp", FakeUdp, raising=False)
+    monkeypatch.setattr("app.snmp_agent_runtime_workflow_mixin.udp", FakeUdp, raising=False)
     # Ensure the pysnmp config.add_transport used in the function is our fake
     try:
         import importlib

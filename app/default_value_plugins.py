@@ -33,8 +33,9 @@ class DefaultValuePluginRegistry:
     ) -> object | None:
         try:
             return cast("object | None", plugin(type_info, symbol_name))
-        except (AttributeError, LookupError, OSError, TypeError, ValueError):
-            logger.exception("Plugin %s failed", plugin.__name__)
+        except (AttributeError, LookupError, OSError, TypeError, ValueError) as exc:
+            exc_text = str(exc)
+            logger.exception("Plugin %s failed: %s", plugin.__name__, exc_text)
             return None
 
     def register(self, name: str, plugin: DefaultValuePlugin) -> None:

@@ -1,6 +1,6 @@
 """Tests for test snmp table responder."""
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -34,7 +34,7 @@ def make_basic_behavior() -> dict[str, dict[str, Any]]:
 def test_table_map_and_detection() -> None:
     """Test case for test_table_map_and_detection."""
     behavior = make_basic_behavior()
-    r = SNMPTableResponder(behavior, mib_builder=None)
+    r = SNMPTableResponder(cast("Any", behavior), mib_builder=None)
 
     # Direct table OID
     assert r.is_table_oid((1, 2)) is True
@@ -47,7 +47,7 @@ def test_table_map_and_detection() -> None:
 def test_get_table_info_direct_and_within() -> None:
     """Test case for test_get_table_info_direct_and_within."""
     behavior = make_basic_behavior()
-    r = SNMPTableResponder(behavior, mib_builder=None)
+    r = SNMPTableResponder(cast("Any", behavior), mib_builder=None)
 
     info_direct = r.get_table_info((1, 2))
     assert info_direct is not None
@@ -66,7 +66,7 @@ def test_get_table_info_direct_and_within() -> None:
 def test_all_oids_and_get_oid_value_and_getnext() -> None:
     """Test case for test_all_oids_and_get_oid_value_and_getnext."""
     behavior = make_basic_behavior()
-    r = SNMPTableResponder(behavior, mib_builder=None)
+    r = SNMPTableResponder(cast("Any", behavior), mib_builder=None)
 
     all_oids = r._get_all_table_oids()
     assert (1, 2, 3, 1, 1) in all_oids
@@ -105,7 +105,7 @@ def test_short_oid_and_missing_entry_cases() -> None:
             # Note: no BrokenTableEntry
         },
     }
-    r = SNMPTableResponder(behavior, mib_builder=None)
+    r = SNMPTableResponder(cast("Any", behavior), mib_builder=None)
 
     # get_table_info for a row belonging to table still returns the table,
     # but _get_oid_value will fail.
@@ -119,7 +119,7 @@ def test_short_oid_and_missing_entry_cases() -> None:
 def test_handle_wrappers() -> None:
     """Test case for test_handle_wrappers."""
     behavior = make_basic_behavior()
-    r = SNMPTableResponder(behavior, mib_builder=None)
+    r = SNMPTableResponder(cast("Any", behavior), mib_builder=None)
 
     assert r.handle_get_request((1, 2, 3, 1)) == "x"
 

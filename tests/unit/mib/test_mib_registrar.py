@@ -21,6 +21,7 @@ class TestMibRegistrarInitialization:
 
         snmp_context = SNMPContext(
             mib_builder=mock_mib_builder,
+            mib_scalar=mocker.Mock(),
             mib_scalar_instance=mock_scalar_instance,
             mib_table=mock_table,
             mib_table_row=mock_table_row,
@@ -56,6 +57,7 @@ class TestMibRegistrarTypeRegistryLoading:
         mock_mib_builder = mocker.Mock()
         snmp_context = SNMPContext(
             mib_builder=mock_mib_builder,
+            mib_scalar=mocker.Mock(),
             mib_scalar_instance=mocker.Mock(),
             mib_table=mocker.Mock(),
             mib_table_row=mocker.Mock(),
@@ -85,6 +87,7 @@ class TestMibRegistrarTypeRegistryLoading:
         mock_mib_builder = mocker.Mock()
         snmp_context = SNMPContext(
             mib_builder=mock_mib_builder,
+            mib_scalar=mocker.Mock(),
             mib_scalar_instance=mocker.Mock(),
             mib_table=mocker.Mock(),
             mib_table_row=mocker.Mock(),
@@ -112,6 +115,7 @@ class TestMibRegistrarErrorHandling:
 
         snmp_context = SNMPContext(
             mib_builder=None,
+            mib_scalar=mocker.Mock(),
             mib_scalar_instance=mocker.Mock(),
             mib_table=mocker.Mock(),
             mib_table_row=mocker.Mock(),
@@ -140,6 +144,7 @@ class TestMibRegistrarErrorHandling:
 
         snmp_context = SNMPContext(
             mib_builder=mocker.Mock(),
+            mib_scalar=mocker.Mock(),
             mib_scalar_instance=mocker.Mock(),
             mib_table=mocker.Mock(),
             mib_table_row=mocker.Mock(),

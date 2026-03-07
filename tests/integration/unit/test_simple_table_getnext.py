@@ -5,7 +5,7 @@ when table export is disabled.
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pysnmp.entity import engine
@@ -66,7 +66,7 @@ def test_simple_2x2_table_with_getnext(
 
     # Create TableRegistrar
     registrar = TableRegistrar(
-        mib_builder=mib_builder,
+        mib_builder=cast("Any", mib_builder),
         mib_scalar_instance=MibScalarInstance,
         mib_table=MibTable,
         mib_table_row=MibTableRow,
@@ -111,7 +111,13 @@ def test_simple_2x2_table_with_getnext(
     }
 
     # Register the table (should NOT export to pysnmp, just track in JSON)
-    registrar.register_single_table("TEST-MIB", "testTable", table_data, type_registry, mib_jsons)
+    registrar.register_single_table(
+        "TEST-MIB",
+        "testTable",
+        cast("Any", table_data),
+        type_registry,
+        cast("Any", mib_jsons),
+    )
 
     # Now try to access table OIDs via MIB view
     # We'll try to look up OIDs in the MIB to see if they're accessible
@@ -143,8 +149,15 @@ def test_simple_2x2_table_with_getnext(
     except Exception as e:
         logger.info(f"Cannot lookup column OID (expected): {e}")
 
-    # The main assertion: the table registration shouldn't crash
-    assert True, "Table registration completed without error"
+    # Verify registration produced a concrete row in JSON model
+    table_json = cast("dict[str, Any]", mib_jsons["TEST-MIB"]["testTable"])
+    assert isinstance(table_json, dict)
+    assert "rows" in table_json
+    rows = table_json["rows"]
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    assert rows[0]["testIndex"] == 1
+    assert rows[0]["testValue"] == 0
 
 
 def test_table_oid_hierarchy(mib_builder: builder.MibBuilder, logger: logging.Logger) -> None:
@@ -244,10 +257,13 @@ def test_table_without_export_responds_to_mib_lookup(
     table_oid = (1, 3, 6, 1, 99, 1, 1)
 
     # Try to get next OID from our non-registered table
+    lookup_failed = False
+    returned_sym_name: str | None = None
     try:
         # getNextMibNode should return the next OID in the tree
         # For a non-registered table, it will skip over it
         modName, symName, indices = mib_view.getNextMibNode(table_oid)
+        returned_sym_name = str(symName)
         logger.info(
             f"getNextMibNode from table: modName={modName}, symName={symName}, indices={indices}",
         )
@@ -261,8 +277,8 @@ def test_table_without_export_responds_to_mib_lookup(
         TypeError,
         ValueError,
     ) as e:
+        lookup_failed = True
         logger.info(f"getNextMibNode from table failed (expected): {type(e).__name__}: {e}")
 
-    # This test documents the expected behavior when table export is disabled
-    # The MIB view won't know about our custom table OIDs
-    assert True, "Test completed - documents expected behavior when tables aren't exported"
+    # Without export_symbols, lookup should fail or return a non-custom symbol.
+    assert lookup_failed or (returned_sym_name is not None and "test" not in returned_sym_name)

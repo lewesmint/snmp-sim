@@ -334,7 +334,10 @@ def test_register_single_table_creates_row(
     mock_register.assert_called_once()
 
 
-def test_register_pysnmp_table_no_builder(logger: logging.Logger) -> None:
+def test_register_pysnmp_table_no_builder(
+    logger: logging.Logger,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test case for test_register_pysnmp_table_no_builder."""
     type_registry: TypeRegistry = {}
     registrar = TableRegistrar(
@@ -346,17 +349,20 @@ def test_register_pysnmp_table_no_builder(logger: logging.Logger) -> None:
         logger=logger,
         type_registry=type_registry,
     )
-    registrar._register_pysnmp_table(
-        "TEST",
-        "testTable",
-        {
-            "table": {"oid": [1, 2, 3]},
-            "entry": {"oid": [1, 2, 3, 1]},
-            "columns": {},
-        },
-        {},
-        {},
-    )
+    with caplog.at_level(logging.WARNING):
+        registrar._register_pysnmp_table(
+            "TEST",
+            "testTable",
+            {
+                "table": {"oid": [1, 2, 3]},
+                "entry": {"oid": [1, 2, 3, 1]},
+                "columns": {},
+            },
+            {},
+            {},
+        )
+
+    assert "mib_builder not available for table testTable" in caplog.text
 
 
 def test_register_pysnmp_table_export_error(
@@ -517,7 +523,10 @@ def test_resolve_snmp_type_tries_multiple_modules(
     assert result == mock_type
 
 
-def test_register_tables_missing_entry(table_registrar: TableRegistrar) -> None:
+def test_register_tables_missing_entry(
+    table_registrar: TableRegistrar,
+    mocker: MockerFixture,
+) -> None:
     """Test register_tables skips tables without corresponding entry."""
     mib_json = {
         "testTable": {"oid": [1, 2, 3], "access": "not-accessible"},
@@ -526,7 +535,9 @@ def test_register_tables_missing_entry(table_registrar: TableRegistrar) -> None:
 
     mib_jsons = {"TEST-MIB": mib_json}
 
-    # Should not raise exception, should skip the table
+    mock_register = mocker.patch.object(table_registrar, "register_single_table")
+
+    # Should skip table because matching entry is missing
     table_registrar.register_tables(
         "TEST-MIB",
         cast(MibJsonObject, mib_json),
@@ -534,8 +545,13 @@ def test_register_tables_missing_entry(table_registrar: TableRegistrar) -> None:
         cast(MibJsonMap, mib_jsons),
     )
 
+    mock_register.assert_not_called()
 
-def test_register_tables_no_columns(table_registrar: TableRegistrar) -> None:
+
+def test_register_tables_no_columns(
+    table_registrar: TableRegistrar,
+    mocker: MockerFixture,
+) -> None:
     """Test register_tables skips tables with no columns."""
     mib_json = {
         "testTable": {"oid": [1, 2, 3], "access": "not-accessible"},
@@ -545,13 +561,17 @@ def test_register_tables_no_columns(table_registrar: TableRegistrar) -> None:
 
     mib_jsons = {"TEST-MIB": mib_json}
 
-    # Should not process table without columns
+    mock_register = mocker.patch.object(table_registrar, "register_single_table")
+
+    # Should skip table because no entry columns are present
     table_registrar.register_tables(
         "TEST-MIB",
         mib_json,
         {},
         mib_jsons,
     )
+
+    mock_register.assert_not_called()
 
 
 def test_register_single_table_no_rows_in_json(

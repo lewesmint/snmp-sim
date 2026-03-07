@@ -49,7 +49,7 @@ def test_main_starts_uvicorn_and_sets_agent(monkeypatch: Any) -> None:
 
     class DummyAgent:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
-            pass
+            self.snmp_engine = object()
 
     class DummyThread:
         def __init__(self, *args: Any, **kwargs: Any) -> None:

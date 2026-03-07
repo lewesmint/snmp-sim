@@ -206,13 +206,19 @@ venvPath = "."
 venv = ".venv"
 reportMissingTypeStubs = "none"
 stubPath = "../pysnmp-type-wrapper/typings"
+include = [
+    "app",
+    "tests",
+    "run_ui.py",
+    "run_agent_with_rest.py",
+    "run_trap_receiver.py",
+]
 exclude = [
     "**/node_modules",
     "**/__pycache__",
     "**/.*",
     "**/.venv/**",
     "**/.pyenv/**",
-    "tests",
     "compiled-mibs",
     "compiled-mibs-test",
     "retired",
@@ -227,7 +233,7 @@ ignore = [
 [[tool.pyright.executionEnvironments]]
 root = "."
 pythonVersion = "3.13"
-extraPaths = ["../pysnmp-type-wrapper"]
+extraPaths = [".", "app", "../pysnmp-type-wrapper"]
 
 [tool.poetry.group.dev.dependencies]
 pyright = ">=1.1.408,<2.0.0"

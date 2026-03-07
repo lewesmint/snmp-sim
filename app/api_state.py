@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.app_logger import AppLogger
 
@@ -18,6 +18,24 @@ class ApiState:
 
     snmp_agent: SNMPAgent | None = None
     trap_receiver: TrapReceiver | None = None
+
+    def __setattr__(self, name: str, value: object) -> None:
+        """Enforce state invariants before assigning attributes."""
+        if name == "snmp_agent" and value is not None:
+            snmp_engine = None
+            if isinstance(value, HasSnmpEngine):
+                snmp_engine = value.snmp_engine
+            if snmp_engine is None:
+                msg = "snmp_agent must expose a non-None 'snmp_engine'"
+                raise ValueError(msg)
+        super().__setattr__(name, value)
+
+
+@runtime_checkable
+class HasSnmpEngine(Protocol):
+    """Protocol for objects exposing an SNMP engine reference."""
+
+    snmp_engine: object | None
 
 
 state = ApiState()

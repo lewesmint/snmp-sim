@@ -61,17 +61,8 @@ class TrapSender:
             return
 
         mib_source = snmp_builder.DirMibSource(str(compiled_dir))
-
-        add_sources = getattr(mib_builder, "add_mib_sources", None)
-        if callable(add_sources):
-            with suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
-                add_sources(mib_source)
-                return
-
-        add_sources_alt = getattr(mib_builder, "addMibSources", None)
-        if callable(add_sources_alt):
-            with suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
-                add_sources_alt(mib_source)
+        with suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
+            mib_builder.add_mib_sources(mib_source)
 
     @staticmethod
     def _coerce_varbind(spec: VarBindSpec) -> ObjectType:

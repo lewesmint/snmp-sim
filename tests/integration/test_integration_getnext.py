@@ -5,12 +5,14 @@ objects, and verifies that GETNEXT operations work without SmiError exceptions.
 """
 
 import logging
+from typing import Any, cast
 
 import pytest
 from pysnmp.entity import engine
 from pysnmp.smi import builder
 
 from app.table_registrar import TableRegistrar
+from app.interface_types import TableData
 
 
 @pytest.fixture
@@ -32,22 +34,28 @@ def mib_builder(snmp_engine: engine.SnmpEngine) -> builder.MibBuilder:
     return snmp_engine.get_mib_builder()
 
 
-def test_snmp_agent_initialization_with_disabled_table_export(
+@pytest.mark.parametrize(
+    "symbol_name",
+    [
+        "Integer32",
+        "MibScalar",
+        "MibScalarInstance",
+        "MibTable",
+        "MibTableRow",
+        "MibTableColumn",
+    ],
+)
+def test_snmpv2_smi_symbols_importable(
     snmp_engine: engine.SnmpEngine,
     mib_builder: builder.MibBuilder,
+    symbol_name: str,
 ) -> None:
-    """Integration test: Initialize SNMP agent and verify it starts without errors.
+    """Integration smoke test: SNMPv2-SMI classes import cleanly from a real engine."""
+    imported = mib_builder.importSymbols("SNMPv2-SMI", symbol_name)[0]
 
-    This tests the actual app code path that registers scalars and tables.
-    With the fix, table export is disabled, preventing __index_mib errors.
-    """
-    # Import basic MIB objects
-    Integer32 = mib_builder.importSymbols("SNMPv2-SMI", "Integer32")[0]
-
-    # Verify that the engine is properly initialized
     assert snmp_engine is not None
     assert mib_builder is not None
-    assert Integer32 is not None
+    assert imported is not None
 
 
 def test_table_registrar_does_not_export_table_symbols(
@@ -67,7 +75,7 @@ def test_table_registrar_does_not_export_table_symbols(
 
     # Create TableRegistrar
     registrar = TableRegistrar(
-        mib_builder=mib_builder,
+        mib_builder=cast("Any", mib_builder),
         mib_scalar_instance=MibScalarInstance,
         mib_table=MibTable,
         mib_table_row=MibTableRow,
@@ -76,7 +84,9 @@ def test_table_registrar_does_not_export_table_symbols(
     )
 
     # Create test table data matching SNMPv2-MIB structure
-    table_data = {
+    table_data = cast(
+        TableData,
+        {
         "table": {"oid": [1, 3, 6, 1, 2, 1, 1, 9]},
         "entry": {
             "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1],
@@ -92,17 +102,17 @@ def test_table_registrar_does_not_export_table_symbols(
             },
             "sysORID": {
                 "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 2],
-                "type": "ObjectIdentifier",
+                "type": "Integer32",
                 "access": "read-only",
-                "syntax": {"type": "ObjectIdentifier"},
+                "syntax": {"type": "Integer32"},
             },
         },
         "prefix": "sysOR",
-    }
+        },
+    )
 
     type_registry = {
         "Integer32": {"base_type": "Integer32"},
-        "ObjectIdentifier": {"base_type": "ObjectIdentifier"},
     }
 
     # Pre-populate mib_jsons as the actual app does
@@ -120,52 +130,13 @@ def test_table_registrar_does_not_export_table_symbols(
         "sysORTable",
         table_data,
         type_registry,
-        mib_jsons,
+        cast("Any", mib_jsons),
     )
 
-    # If we get here without exception, the fix is working
-    assert True, "register_single_table completed without error"
+    table_json = cast("dict[str, object]", mib_jsons["SNMPv2-MIB"]["sysORTable"])
+    assert "rows" in table_json
+    rows = table_json["rows"]
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    assert rows[0]["sysORIndex"] == 1
 
-
-def test_mib_indexing_without_table_export_errors(
-    mib_builder: builder.MibBuilder,
-) -> None:
-    """Integration test: Verify MIB classes can be imported without errors.
-
-    With the fix (disabled table export), the app should be able to
-    import and use MIB classes without triggering unregister errors.
-    """
-    # Import scalar/table classes successfully
-    Integer32 = mib_builder.importSymbols("SNMPv2-SMI", "Integer32")[0]
-    MibScalarInstance = mib_builder.importSymbols("SNMPv2-SMI", "MibScalarInstance")[0]
-    MibTable = mib_builder.importSymbols("SNMPv2-SMI", "MibTable")[0]
-    MibTableRow = mib_builder.importSymbols("SNMPv2-SMI", "MibTableRow")[0]
-    MibTableColumn = mib_builder.importSymbols("SNMPv2-SMI", "MibTableColumn")[0]
-
-    assert Integer32 is not None
-    assert MibScalarInstance is not None
-    assert MibTable is not None
-    assert MibTableRow is not None
-    assert MibTableColumn is not None
-
-
-def test_snmpagent_setup_workflow_completes(mib_builder: builder.MibBuilder) -> None:
-    """Integration test: SnmpAgent setup completes without table export errors.
-
-    This doesn't start the full agent (which requires network setup),
-    but it tests the MIB initialization and registration flow.
-    """
-    # Import MIB classes
-    Integer32 = mib_builder.importSymbols("SNMPv2-SMI", "Integer32")[0]
-    MibScalar = mib_builder.importSymbols("SNMPv2-SMI", "MibScalar")[0]
-    MibScalarInstance = mib_builder.importSymbols("SNMPv2-SMI", "MibScalarInstance")[0]
-    MibTable = mib_builder.importSymbols("SNMPv2-SMI", "MibTable")[0]
-    MibTableRow = mib_builder.importSymbols("SNMPv2-SMI", "MibTableRow")[0]
-    MibTableColumn = mib_builder.importSymbols("SNMPv2-SMI", "MibTableColumn")[0]
-
-    assert Integer32 is not None
-    assert MibScalar is not None
-    assert MibScalarInstance is not None
-    assert MibTable is not None
-    assert MibTableRow is not None
-    assert MibTableColumn is not None

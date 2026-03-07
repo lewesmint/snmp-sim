@@ -59,6 +59,7 @@ def test_api_get_and_set_sysdescr_with_agent(
         def __init__(self) -> None:
             """Initialize fake agent state for assertion of last set call."""
             self.last_set: tuple[tuple[int, ...], Any] | None = None
+            self.snmp_engine = object()
 
         def get_scalar_value(self, oid: tuple[int, ...]) -> str:
             """Return a static sysDescr value for the expected OID."""
@@ -301,7 +302,7 @@ def test_colored_formatter_changes_levelname() -> None:
 
 def test_validate_type_registry_ok() -> None:
     """Test that valid type registry passes validation."""
-    registry = {
+    registry: dict[str, dict[str, object]] = {
         "DisplayString": {
             "base_type": "OctetString",
             "used_by": [],
@@ -322,7 +323,7 @@ def test_validate_type_registry_ok() -> None:
 
 def test_validate_type_registry_missing_fields() -> None:
     """Test that type registry with missing fields fails validation."""
-    registry = {
+    registry: dict[str, dict[str, object]] = {
         "DisplayString": {
             "base_type": "OctetString",
             # Missing: used_by, defined_in, abstract

@@ -1381,8 +1381,7 @@ def test_extract_type_info_constraint_else_and_exception_paths() -> None:
 
     class NoValuesSyntax:
         class subtypeSpec:
-            @staticmethod
-            def __str__() -> str:
+            def __str__(self) -> str:
                 return "SIZE(1..10)"
 
     no_values = g._extract_type_info(NoValuesSyntax(), "CustomType")

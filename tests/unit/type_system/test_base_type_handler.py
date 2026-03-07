@@ -1,6 +1,6 @@
 """Tests for test base type handler."""
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -133,7 +133,7 @@ def test_create_pysnmp_value_uses_mib_builder_class(handler: BaseTypeHandler) ->
     """Test case for test_create_pysnmp_value_uses_mib_builder_class."""
     dummy = DummyClass
     mb = DummyBuilder(dummy)
-    out = handler.create_pysnmp_value("SomeType", value=123, mib_builder=mb)
+    out = handler.create_pysnmp_value("SomeType", value=123, mib_builder=cast("Any", mb))
     assert isinstance(out, DummyClass)
     assert out.v == 123
 

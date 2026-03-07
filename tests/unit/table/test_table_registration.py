@@ -1,6 +1,6 @@
 """Tests for table registration in SNMPAgent."""
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pytest_mock import MockerFixture
@@ -46,13 +46,13 @@ def agent(mocker: MockerFixture) -> Any:
     agent = SNMPAgent.__new__(SNMPAgent)
     agent.mib_builder = mocker.MagicMock()
     agent.mib_builder.import_symbols.return_value = []
-    agent.snmpEngine = mocker.MagicMock()
+    agent.snmp_engine = mocker.MagicMock()
     agent.logger = mocker.MagicMock()
-    # Patch SNMPAgent dependencies for table registration (use setattr to satisfy mypy)
-    agent.MibTable = mocker.MagicMock()  # type: ignore[attr-defined]
-    agent.MibTableRow = mocker.MagicMock()  # type: ignore[attr-defined]
-    agent.MibTableColumn = mocker.MagicMock()  # type: ignore[attr-defined]
-    agent.MibScalar = mocker.MagicMock()  # type: ignore[attr-defined]
+    # Patch SNMPAgent dependencies for table registration.
+    agent.MibTable = mocker.MagicMock()
+    agent.MibTableRow = mocker.MagicMock()
+    agent.MibTableColumn = mocker.MagicMock()
+    agent.MibScalar = mocker.MagicMock()
     return agent
 
 
@@ -293,7 +293,13 @@ def test_table_column_type_resolution_in_registration(agent: Any, mocker: Mocker
     )
 
     mocker.patch.object(registrar, "_register_pysnmp_table")
-    registrar.register_single_table("TEST-MIB", "ifTable", table_data, type_registry, mib_jsons)
+    registrar.register_single_table(
+        "TEST-MIB",
+        "ifTable",
+        cast("Any", table_data),
+        type_registry,
+        mib_jsons,
+    )
 
     rows = mib_jsons["TEST-MIB"]["ifTable"]["rows"]
     assert rows

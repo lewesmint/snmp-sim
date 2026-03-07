@@ -149,14 +149,11 @@ def test_alternative_rfc1902_location() -> None:
     try:
         from pysnmp.smi import rfc1902
 
-        # Try to get some types
-        if hasattr(rfc1902, "OctetString"):
-            pass
-        if hasattr(rfc1902, "DisplayString"):
-            pass
+        assert hasattr(rfc1902, "ObjectIdentity")
+        assert hasattr(rfc1902, "ObjectType")
 
     except ImportError:
-        pass
+        pytest.skip("pysnmp.smi.rfc1902 is unavailable in this environment")
 
 
 def test_create_instances() -> None:
@@ -165,8 +162,10 @@ def test_create_instances() -> None:
     from pysnmp.smi import builder
 
     # Create from rfc1902 directly
-    rfc1902.OctetString("test string")
-    rfc1902.Integer32(42)
+    octet_value = rfc1902.OctetString("test string")
+    integer_value = rfc1902.Integer32(42)
+    assert octet_value.prettyPrint() == "test string"
+    assert int(integer_value) == 42
 
     # Create from MibBuilder
     mib_builder = builder.MibBuilder()
@@ -174,9 +173,8 @@ def test_create_instances() -> None:
     # pylint: disable=invalid-name
     DisplayString = mib_builder.import_symbols("SNMPv2-TC", "DisplayString")[0]
 
-    DisplayString("display string")
-
-    # Check if DisplayString is actually based on OctetString
+    display_value = DisplayString("display string")
+    assert display_value.prettyPrint() == "display string"
 
 
 def test_cannot_import_displaystring_directly() -> None:

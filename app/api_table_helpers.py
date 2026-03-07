@@ -109,43 +109,47 @@ def merge_column_defaults(
     return merged
 
 
+def _coerce_to_int_or_str(value: object) -> int | str:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return value
+    return str(value)
+
+
+def _coerce_ip_value(value: object) -> tuple[int, ...] | str:
+    if isinstance(value, str):
+        try:
+            return tuple(int(part) for part in value.split("."))
+        except (ValueError, AttributeError):
+            return value
+    if isinstance(value, (list, tuple)) and all(isinstance(v, int) for v in value):
+        return tuple(value)
+    return str(value)
+
+
 def convert_index_value(
     col_name: str,
     value: object,
     columns: TableColumns,
 ) -> int | tuple[int, ...] | str:
     """Convert an index value to the appropriate type based on column metadata."""
-    result: int | tuple[int, ...] | str
-
     if col_name not in columns:
-        if isinstance(value, int):
-            result = value
-        elif isinstance(value, float):
-            result = int(value)
-        elif isinstance(value, str):
-            try:
-                result = int(value)
-            except (ValueError, TypeError):
-                result = str(value)
-        else:
-            result = str(value)
-        return result
+        return _coerce_to_int_or_str(value)
 
     col_info = columns[col_name]
     col_type_obj = col_info.get("type", "") if isinstance(col_info, dict) else ""
     col_type = str(col_type_obj)
 
     if col_type == "IpAddress" or "IpAddress" in col_type:
-        if isinstance(value, str):
-            try:
-                result = tuple(int(p) for p in value.split("."))
-            except (ValueError, AttributeError):
-                result = str(value)
-        elif isinstance(value, (list, tuple)) and all(isinstance(v, int) for v in value):
-            result = tuple(value)
-        else:
-            result = str(value)
-    elif "Integer" in col_type or col_type in (
+        return _coerce_ip_value(value)
+
+    if "Integer" in col_type or col_type in (
         "Integer32",
         "Integer64",
         "Unsigned32",
@@ -153,21 +157,9 @@ def convert_index_value(
         "Counter32",
         "Counter64",
     ):
-        if isinstance(value, int):
-            result = value
-        elif isinstance(value, float):
-            result = int(value)
-        elif isinstance(value, str):
-            try:
-                result = int(value)
-            except (ValueError, TypeError):
-                result = str(value)
-        else:
-            result = str(value)
-    else:
-        result = str(value) if not isinstance(value, str) else value
+        return _coerce_to_int_or_str(value)
 
-    return result
+    return str(value) if not isinstance(value, str) else value
 
 
 def load_table_schema_context(
