@@ -9,14 +9,25 @@
 from __future__ import annotations
 
 import contextlib
+import asyncio
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from pyasn1.type.univ import Integer, OctetString
 from pysnmp.carrier.asyncio.dgram import udp
 from pysnmp.carrier.asyncio.dispatch import AsyncioDispatcher
 from pysnmp.entity import config, engine
 from pysnmp.entity.rfc3413 import cmdrsp, context
+from pysnmp.hlapi.v3arch.asyncio import (
+    CommunityData,
+    ContextData,
+    NotificationType,
+    ObjectIdentity,
+    ObjectType,
+    UdpTransportTarget,
+    send_notification,
+)
 from pysnmp.smi import builder as snmp_builder
 
 from app.api_debug import record_snmp_operation
@@ -37,6 +48,14 @@ type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 
 _VAR_BIND_MIN_TUPLE_LEN = 2
+_ALARM_KEYWORDS = ("alarm", "fault", "critical", "major", "minor")
+_COMPLETION_TRAP_OID = "1.3.6.1.4.1.99998.0.2"
+_EVENT_TRAP_OID = "1.3.6.1.4.1.99998.0.3"
+
+
+def _to_var_text(value: object) -> str:
+    pretty = getattr(value, "prettyPrint", None)
+    return str(pretty()) if callable(pretty) else str(value)
 
 
 class SNMPAgentRuntimeWorkflowMixin:
@@ -101,17 +120,150 @@ class SNMPAgentRuntimeWorkflowMixin:
             def _logged_write_variables(*var_binds: object, **ctx: object) -> object:
                 formatted = [self._format_set_request_var_bind(vb) for vb in var_binds]
                 self.logger.info("SNMP SET request for var-bind(s): %s", ", ".join(formatted))
+                before_values: dict[str, str | None] = {}
                 for vb in var_binds:
                     oid_text = self._format_request_oid(vb)
                     val_text: str | None = None
                     if isinstance(vb, tuple) and len(vb) >= _VAR_BIND_MIN_TUPLE_LEN:
                         val = vb[1]
-                        pretty = getattr(val, "prettyPrint", None)
-                        val_text = str(pretty()) if callable(pretty) else str(val)
+                        val_text = _to_var_text(val)
+                    before_values[oid_text] = self._read_oid_value_text(oid_text)
                     record_snmp_operation("SET", oid_text, val_text)
-                return write_variables(*var_binds, **ctx)
+                result = write_variables(*var_binds, **ctx)
+                self._emit_behaviour_traps_after_set(var_binds, before_values)
+                return result
 
             mib_instrum.write_variables = _logged_write_variables
+
+    def _read_oid_value_text(self, oid_text: str) -> str | None:
+        """Best-effort current scalar value lookup for transition detection."""
+        with contextlib.suppress(ValueError, RuntimeError, TypeError, AttributeError):
+            oid_tuple = tuple(int(part) for part in oid_text.split("."))
+            value = self.get_scalar_value(oid_tuple)
+            return _to_var_text(value)
+        return None
+
+    def _emit_behaviour_traps_after_set(
+        self,
+        var_binds: tuple[object, ...],
+        before_values: dict[str, str | None],
+    ) -> None:
+        """Emit modeled completion/event traps after successful SET commit."""
+        transitions: list[tuple[str, str | None, str]] = []
+        for vb in var_binds:
+            if not (isinstance(vb, tuple) and len(vb) >= _VAR_BIND_MIN_TUPLE_LEN):
+                continue
+            oid_text = self._format_request_oid(vb)
+            new_text = _to_var_text(vb[1])
+            old_text = before_values.get(oid_text)
+            transitions.append((oid_text, old_text, new_text))
+
+        if not transitions:
+            return
+
+        source = ",".join(oid for oid, _old, _new in transitions)
+        self._send_modeled_completion_trap(source=source, code=0)
+
+        for oid_text, old_text, new_text in transitions:
+            if self._is_alarm_transition(old_text, new_text):
+                severity = self._infer_event_severity(new_text)
+                self._send_modeled_event_trap(
+                    severity=severity,
+                    text=f"Alarm state entered on {oid_text}: {new_text}",
+                )
+                break
+
+    @staticmethod
+    def _is_alarm_transition(old_text: str | None, new_text: str) -> bool:
+        old_alarm = SNMPAgentRuntimeWorkflowMixin._is_alarm_like(old_text)
+        new_alarm = SNMPAgentRuntimeWorkflowMixin._is_alarm_like(new_text)
+        return new_alarm and not old_alarm
+
+    @staticmethod
+    def _is_alarm_like(value: str | None) -> bool:
+        if value is None:
+            return False
+        lowered = value.lower()
+        if any(keyword in lowered for keyword in _ALARM_KEYWORDS):
+            return True
+        return lowered in {"1", "2", "3", "4", "5"}
+
+    @staticmethod
+    def _infer_event_severity(value_text: str) -> int:
+        lowered = value_text.lower()
+        if "critical" in lowered:
+            return 5
+        if "major" in lowered:
+            return 4
+        if "minor" in lowered:
+            return 3
+        if "alarm" in lowered or "fault" in lowered:
+            return 2
+        if lowered.isdigit():
+            return max(1, min(5, int(lowered)))
+        return 2
+
+    def _schedule_snmp_trap_send(
+        self,
+        trap_oid: str,
+        var_binds: list[tuple[str, object]],
+    ) -> None:
+        """Send trap now if no loop is running, otherwise schedule on current loop."""
+
+        async def _send() -> None:
+            snmp_engine = getattr(self, "snmp_engine", None)
+            if snmp_engine is None:
+                return
+
+            notification = NotificationType(ObjectIdentity(trap_oid))
+            if var_binds:
+                notification = notification.add_varbinds(
+                    *[ObjectType(ObjectIdentity(oid), value) for oid, value in var_binds]
+                )
+
+            error_indication, error_status, error_index, _ = await send_notification(
+                snmp_engine,
+                CommunityData("public"),
+                await UdpTransportTarget.create(("127.0.0.1", 162)),
+                ContextData(),
+                "trap",
+                notification,
+            )
+            if error_indication:
+                self.logger.warning("Modeled trap send error: %s", error_indication)
+            elif error_status:
+                self.logger.warning(
+                    "Modeled trap send error: %s at %s",
+                    error_status,
+                    error_index,
+                )
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
+                asyncio.run(_send())
+            return
+
+        loop.create_task(_send())
+
+    def _send_modeled_completion_trap(self, source: str, code: int) -> None:
+        self._schedule_snmp_trap_send(
+            _COMPLETION_TRAP_OID,
+            [
+                ("1.3.6.1.4.1.99998.1.1.3", OctetString(source)),
+                ("1.3.6.1.4.1.99998.1.1.4", Integer(code)),
+            ],
+        )
+
+    def _send_modeled_event_trap(self, severity: int, text: str) -> None:
+        self._schedule_snmp_trap_send(
+            _EVENT_TRAP_OID,
+            [
+                ("1.3.6.1.4.1.99998.1.1.5", Integer(severity)),
+                ("1.3.6.1.4.1.99998.1.1.6", OctetString(text)),
+            ],
+        )
 
     def _find_source_mib_file(self, mib_name: str) -> Path | None:
         """Find the source .mib file for a given MIB name.
