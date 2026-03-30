@@ -2066,6 +2066,9 @@ def test_repair_loaded_schema_fills_missing_sysor_metadata() -> None:
     assert objects["sysORTable"]["oid"] == [1, 3, 6, 1, 2, 1, 1, 9]
     assert objects["sysORTable"]["type"] == "MibTable"
     assert isinstance(objects["sysORTable"]["rows"], list)
+    assert objects["sysOREntry"]["oid"] == [1, 3, 6, 1, 2, 1, 1, 9, 1]
+    assert objects["sysOREntry"]["type"] == "MibTableRow"
+    assert objects["sysOREntry"]["indexes"] == ["sysORIndex"]
     assert objects["sysORIndex"]["oid"] == [1, 3, 6, 1, 2, 1, 1, 9, 1, 1]
     assert objects["sysORIndex"]["type"] == "Integer32"
     assert objects["sysORIndex"]["access"] == "not-accessible"

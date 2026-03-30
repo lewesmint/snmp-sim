@@ -21,13 +21,9 @@ class ApiState:
 
     def __setattr__(self, name: str, value: object) -> None:
         """Enforce state invariants before assigning attributes."""
-        if name == "snmp_agent" and value is not None:
-            snmp_engine = None
-            if isinstance(value, HasSnmpEngine):
-                snmp_engine = value.snmp_engine
-            if snmp_engine is None:
-                msg = "snmp_agent must expose a non-None 'snmp_engine'"
-                raise ValueError(msg)
+        if name == "snmp_agent" and value is not None and not isinstance(value, HasSnmpEngine):
+            msg = "snmp_agent must expose 'snmp_engine' attribute"
+            raise ValueError(msg)
         super().__setattr__(name, value)
 
 

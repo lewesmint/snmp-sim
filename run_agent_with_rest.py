@@ -96,8 +96,14 @@ def _handle_rebuild_flags(args: argparse.Namespace) -> None:
 
 
 def _is_port_in_use(port: int) -> bool:
+    # Fast path: detect an actively listening service.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.2)
+        if probe.connect_ex((LOCALHOST_BIND, port)) == 0:
+            return True
+
+    # Fallback: strict bind check without SO_REUSEADDR to avoid false negatives.
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((LOCALHOST_BIND, port))
         except OSError:

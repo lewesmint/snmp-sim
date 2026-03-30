@@ -356,7 +356,7 @@ class BehaviourGenerator:
                 builder.DirMibSource(str(Path(mib_py_path).parent))
             )
         except MIB_OPERATION_ERRORS:
-            with contextlib.suppress(*MIB_OPERATION_ERRORS):
+            with contextlib.suppress(Exception):
                 mib_builder.add_mib_sources()
         mib_builder.load_modules(mib_name)
         mib_symbols = mib_builder.mibSymbols[mib_name]

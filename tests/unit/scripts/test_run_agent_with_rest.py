@@ -70,6 +70,12 @@ def test_main_starts_uvicorn_and_sets_agent(monkeypatch: Any) -> None:
         def setsockopt(self, *_args: Any, **_kwargs: Any) -> None:
             return None
 
+        def settimeout(self, *_args: Any, **_kwargs: Any) -> None:
+            return None
+
+        def connect_ex(self, *_args: Any, **_kwargs: Any) -> int:
+            return 1
+
         def bind(self, *_args: Any, **_kwargs: Any) -> None:
             return None
 
@@ -96,3 +102,24 @@ def test_main_starts_uvicorn_and_sets_agent(monkeypatch: Any) -> None:
     assert kwargs["host"] == "0.0.0.0"
     assert kwargs["port"] == 8800
     assert kwargs["reload"] is False
+
+
+def test_set_snmp_agent_allows_late_engine_init() -> None:
+    class DummyAgent:
+        def __init__(self) -> None:
+            self.snmp_engine = None
+
+    original = api_state.state.snmp_agent
+    try:
+        api_state.state.snmp_agent = DummyAgent()  # type: ignore[assignment]
+        assert api_state.state.snmp_agent is not None
+    finally:
+        api_state.state.snmp_agent = original
+
+
+def test_ensure_rest_port_available_hops_to_next_port(monkeypatch: Any) -> None:
+    used_ports = {8800}
+    monkeypatch.setattr(raw, "_is_port_in_use", lambda port: port in used_ports)
+
+    selected = raw._ensure_rest_port_available(8800)
+    assert selected == 8801

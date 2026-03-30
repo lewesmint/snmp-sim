@@ -19,6 +19,7 @@ from app.mib_registrar import SNMPContext
 
 snmp_context = SNMPContext(
     mib_builder=object(),
+    mib_scalar=object(),
     mib_scalar_instance=object(),
     mib_table=MockTable,
     mib_table_row=MockTable,

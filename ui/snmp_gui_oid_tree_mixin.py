@@ -71,7 +71,7 @@ class SNMPGuiOidTreeMixin:
             if key in ("__name__", "__has_instance__", "__is_table__"):
                 continue
             if isinstance(value, dict):
-                if "__name__" in value and "Table" in value["__name__"]:
+                if "__name__" in value and str(value["__name__"]).endswith("Table"):
                     value["__is_table__"] = True
                 self._mark_tables(value)
 
@@ -243,21 +243,31 @@ class SNMPGuiOidTreeMixin:
         access_val = metadata.get("access") or "N/A"
         mib_val = metadata.get("mib") or "N/A"
 
+        type_key = str(type_val).strip().lower()
+        icon_key = "folder"
+        tags: tuple[str, ...] = (row_tag,)
+        if type_key == "mibtablerow":
+            icon_key = "entry"
+            tags = (row_tag, "table-entry-def")
+
         node = self.oid_tree.insert(
             parent,
             "end",
             text=display_text,
-            image=self._icon_ref("folder"),
+            image=self._icon_ref(icon_key),
             values=(oid_str, "", "", type_val, access_val, mib_val),
-            tags=(row_tag,),
+            tags=tags,
         )
         return str(node)
 
     def _is_table_container_node(self, value: dict[Any, Any], oid_str: str) -> bool:
-        return bool(
-            value.get("__is_table__")
-            and str(self.oid_metadata.get(oid_str, {}).get("type", "")) == "MibTable"
-        )
+        if not value.get("__is_table__"):
+            return False
+
+        metadata_type = str(self.oid_metadata.get(oid_str, {}).get("type", "")).strip().lower()
+        if not metadata_type:
+            return True
+        return metadata_type in {"mibtable", "table"}
 
     def _insert_tree_node_by_kind(
         self,

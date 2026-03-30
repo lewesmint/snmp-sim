@@ -366,6 +366,35 @@ class RegistrarScalarBuilder:
 
         scalar_inst.readGet = types.MethodType(_sysuptime_read_get, scalar_inst)
 
+    def attach_scalar_read_logging_hook(
+        self,
+        scalar_inst: ObjectType,
+        dotted: str,
+        friendly: str,
+    ) -> None:
+        """Attach a readGet wrapper that logs scalar SNMP GET requests."""
+        original_read_get = getattr(scalar_inst, "readGet", None)
+        registrar_logger = self.logger
+        registrar_format = self._write_hooks.format_snmp_value
+
+        def _logged_read_get(
+            inst: ObjectType,
+            *args: ObjectType,
+            _original_read_get: ObjectType = original_read_get,
+            **kwargs: ObjectType,
+        ) -> ObjectType:
+            result = _original_read_get(*args, **kwargs) if _original_read_get else None
+            current_value = result if result is not None else getattr(inst, "syntax", None)
+            registrar_logger.info(
+                "SNMP GET received for %s (%s): value=%s",
+                dotted,
+                friendly,
+                registrar_format(current_value),
+            )
+            return result if result is not None else current_value
+
+        scalar_inst.readGet = types.MethodType(_logged_read_get, scalar_inst)
+
     def build_scalar_instance(
         self,
         mib: str,
@@ -397,6 +426,7 @@ class RegistrarScalarBuilder:
                 except (AttributeError, LookupError, OSError, TypeError, ValueError):
                     dotted = ".".join(str(x) for x in (*oid_value, 0))
                 friendly = f"{mib}:{name}"
+                self.attach_scalar_read_logging_hook(scalar_inst, dotted, friendly)
                 original_write = getattr(scalar_inst, "writeCommit", None)
                 self._write_hooks.attach_write_hooks(
                     inst=scalar_inst,

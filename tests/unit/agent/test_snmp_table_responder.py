@@ -128,5 +128,18 @@ def test_handle_wrappers() -> None:
     assert nxt[0] == (1, 2, 3, 1, 1)
 
 
+def test_handle_wrappers_log_get_and_getnext(caplog: pytest.LogCaptureFixture) -> None:
+    """SNMP GET/GETNEXT wrapper methods emit concise request logs."""
+    behavior = make_basic_behavior()
+    r = SNMPTableResponder(cast("Any", behavior), mib_builder=None)
+
+    with caplog.at_level("INFO"):
+        r.handle_get_request((1, 2, 3, 1))
+        r.handle_getnext_request((1, 2, 3, 1))
+
+    assert "SNMP GET (1, 2, 3, 1) -> 'x'" in caplog.text
+    assert "SNMP GETNEXT (1, 2, 3, 1) -> (1, 2, 3, 1, 1) = 'x'" in caplog.text
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

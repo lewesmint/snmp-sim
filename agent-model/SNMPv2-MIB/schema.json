@@ -1,11 +1,104 @@
 {
   "objects": {
+    "sysORIndex": {
+      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 1],
+      "type": "Integer32",
+      "access": "not-accessible"
+    },
+    "sysORID": {
+      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 2],
+      "type": "ObjectIdentifier",
+      "access": "read-only"
+    },
+    "sysORDescr": {
+      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 3],
+      "type": "DisplayString",
+      "access": "read-only"
+    },
+    "sysORUpTime": {
+      "oid": [1, 3, 6, 1, 2, 1, 1, 9, 1, 4],
+      "type": "TimeStamp",
+      "access": "read-only"
+    },
     "sysORTable": {
       "oid": [1, 3, 6, 1, 2, 1, 1, 9],
       "type": "MibTable",
       "rows": [
         {
-          "sysORIndex": 1
+          "sysORIndex": 1,
+          "sysORID": [
+            1,
+            3,
+            6,
+            1,
+            2,
+            1,
+            11,
+            2,
+            1
+          ],
+          "sysORDescr": "The MIB module for SNMPv2 entities",
+          "sysORUpTime": 10
+        },
+        {
+          "sysORIndex": 2,
+          "sysORID": [
+            1,
+            3,
+            6,
+            1,
+            2,
+            1,
+            2
+          ],
+          "sysORDescr": "The MIB module for managing network interfaces",
+          "sysORUpTime": 20
+        },
+        {
+          "sysORIndex": 3,
+          "sysORID": [
+            1,
+            3,
+            6,
+            1,
+            2,
+            1,
+            25
+          ],
+          "sysORDescr": "The MIB module for Host Resources",
+          "sysORUpTime": 30
+        },
+        {
+          "sysORIndex": 4,
+          "sysORID": [
+            1,
+            3,
+            6,
+            1,
+            2,
+            1,
+            25,
+            3,
+            1
+          ],
+          "sysORDescr": "Host Resources types and textual conventions",
+          "sysORUpTime": 40
+        },
+        {
+          "sysORIndex": 5,
+          "sysORID": [
+            1,
+            3,
+            6,
+            1,
+            4,
+            1,
+            9,
+            9,
+            46
+          ],
+          "sysORDescr": "Cisco Alarm MIB for alarm management",
+          "sysORUpTime": 50
         }
       ]
     }

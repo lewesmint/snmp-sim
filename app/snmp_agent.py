@@ -53,7 +53,9 @@ if TYPE_CHECKING:
     from pysnmp_type_wrapper.raw_boundary_types import SupportsBoundaryMibBuilder
 
     class SupportsClone(Protocol):
-        def clone(self, value: object) -> object: ...
+        """Protocol for values exposing a clone operation."""
+
+        def clone(self, value: object) -> object: ...  # noqa: D102
 
     class MutableScalarInstance(Protocol):
         syntax: object

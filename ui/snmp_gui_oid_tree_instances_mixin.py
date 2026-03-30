@@ -90,10 +90,15 @@ class SNMPGuiOidTreeInstancesMixin:
         instance: Any,
     ) -> str:
         entry_display = f"{entry_name}.{instance}"
+        entry_img = None
+        if getattr(self, "oid_icon_images", None):
+            entry_img = self.oid_icon_images.get("entry")
+        entry_img_ref = cast("Any", entry_img) if entry_img is not None else ""
         entry_item = self.oid_tree.insert(
             table_item,
             "end",
             text=entry_display,
+            image=entry_img_ref,
             values=(
                 table_oid,
                 instance,
@@ -353,7 +358,7 @@ class SNMPGuiOidTreeInstancesMixin:
 
         return grouped
 
-    def _apply_discovered_instances_to_tree(
+    def _apply_discovered_instances_to_tree(  # noqa: PLR0915
         self,
         item: str,
         entry_oid: str,
@@ -375,10 +380,15 @@ class SNMPGuiOidTreeInstancesMixin:
         for inst, cols in grouped.items():
             entry_display = f"{entry_name}.{inst}"
             mib_val = self.oid_metadata.get(entry_oid, {}).get("mib") or "N/A"
+            entry_img = None
+            if getattr(self, "oid_icon_images", None):
+                entry_img = self.oid_icon_images.get("entry")
+            entry_img_ref = cast("Any", entry_img) if entry_img is not None else ""
             entry_item = self.oid_tree.insert(
                 item,
                 "end",
                 text=entry_display,
+                image=entry_img_ref,
                 values=(entry_oid, inst, "", "Entry", "N/A", mib_val),
                 tags=("table-entry",),
             )

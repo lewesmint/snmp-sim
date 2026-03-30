@@ -488,8 +488,21 @@ class SNMPTableResponder:
 
     def handle_get_request(self, oid: tuple[int, ...]) -> object | None:
         """Handle SNMP GET request for an OID."""
-        return self._get_oid_value(oid)
+        value = self._get_oid_value(oid)
+        if value is None:
+            self.logger.info("SNMP GET %s -> noSuchInstance", oid)
+            return None
+
+        self.logger.info("SNMP GET %s -> %r", oid, value)
+        return value
 
     def handle_getnext_request(self, oid: tuple[int, ...]) -> tuple[tuple[int, ...], object] | None:
         """Handle SNMP GETNEXT request for an OID."""
-        return self.get_next_oid(oid)
+        result = self.get_next_oid(oid)
+        if result is None:
+            self.logger.info("SNMP GETNEXT %s -> endOfMibView", oid)
+            return None
+
+        next_oid, value = result
+        self.logger.info("SNMP GETNEXT %s -> %s = %r", oid, next_oid, value)
+        return result

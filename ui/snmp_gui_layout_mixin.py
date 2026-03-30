@@ -351,6 +351,7 @@ class SNMPGuiLayoutMixin:
         icon_specs = {
             "folder": ("#f4c542", None),
             "table": ("#3b82f6", None),
+            "entry": ("#06b6d4", None),
             "lock": ("#9ca3af", None),
             "edit": ("#10b981", None),
             "doc": ("#ffffff", "#e5e7eb"),

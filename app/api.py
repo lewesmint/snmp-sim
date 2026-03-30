@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from app.api_config import router as config_router
+from app.api_debug import router as debug_router
 from app.api_links import router as links_router
 from app.api_mibs import router as mibs_router
 from app.api_state import logger, set_snmp_agent, set_trap_receiver, state
@@ -24,6 +25,7 @@ app.include_router(tables_router)
 app.include_router(traps_router)
 app.include_router(trap_receiver_router)
 app.include_router(config_router)
+app.include_router(debug_router)
 
 __all__ = [
     "app",

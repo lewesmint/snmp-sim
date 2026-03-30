@@ -345,3 +345,19 @@ def test_interface_indices_probe_fallback(monkeypatch: Any) -> None:
 
     indices = gui._get_interface_indices()
     assert indices == ["1"]
+
+
+def test_is_table_container_node_handles_missing_or_variant_type() -> None:
+    """Table nodes should still be recognized when metadata type is absent or case-varied."""
+    gui = _mk_gui()
+
+    table_value = {"__name__": "sysORTable", "__is_table__": True}
+
+    gui.oid_metadata = {"1.3.6.1.2.1.1.9": {}}
+    assert gui._is_table_container_node(table_value, "1.3.6.1.2.1.1.9") is True
+
+    gui.oid_metadata = {"1.3.6.1.2.1.1.9": {"type": "mibtable"}}
+    assert gui._is_table_container_node(table_value, "1.3.6.1.2.1.1.9") is True
+
+    gui.oid_metadata = {"1.3.6.1.2.1.1.9": {"type": "MibTableRow"}}
+    assert gui._is_table_container_node(table_value, "1.3.6.1.2.1.1.9") is False

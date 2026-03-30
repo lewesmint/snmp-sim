@@ -8,7 +8,7 @@ from typing import Any, Literal, cast
 
 import anyio
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pysnmp.hlapi.v3arch.asyncio import (
     CommunityData,
     ContextData,
@@ -361,6 +361,150 @@ class TrapSendRequest(BaseModel):
     community: str | None = "public"
 
 
+def _apply_trap_object_values(
+    *,
+    schemas: dict[str, Any],
+    trap_name: str,
+    values_by_object: dict[str, str | int],
+) -> list[dict[str, object]]:
+    """Apply scalar values for named trap objects before sending a notification."""
+    if state.snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    trap_found = _find_trap_definition(schemas, trap_name)
+    if trap_found is None:
+        raise HTTPException(status_code=404, detail=f"Trap '{trap_name}' not found")
+
+    trap_info, _ = trap_found
+    trap_objects = trap_info.get("objects", [])
+    if not isinstance(trap_objects, list):
+        raise HTTPException(status_code=500, detail=f"Trap '{trap_name}' objects are invalid")
+
+    applied: list[dict[str, object]] = []
+
+    for trap_obj in trap_objects:
+        if not isinstance(trap_obj, dict):
+            continue
+        obj_name = trap_obj.get("name")
+        obj_mib = trap_obj.get("mib")
+        if not isinstance(obj_name, str) or not isinstance(obj_mib, str):
+            continue
+        if obj_name not in values_by_object:
+            continue
+
+        schema_objects = _get_schema_objects(schemas, obj_mib)
+        obj_data = schema_objects.get(obj_name)
+        if not isinstance(obj_data, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Object metadata not found: {obj_mib}::{obj_name}",
+            )
+
+        oid_raw = obj_data.get("oid", [])
+        if not isinstance(oid_raw, list) or not all(isinstance(part, int) for part in oid_raw):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Object OID invalid: {obj_mib}::{obj_name}",
+            )
+
+        value = values_by_object[obj_name]
+        try:
+            state.snmp_agent.set_scalar_value(tuple(oid_raw), str(value))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to set {obj_mib}::{obj_name}: {exc}",
+            ) from exc
+        except (AttributeError, LookupError, OSError, TypeError) as exc:
+            logger.exception("Failed applying trap object override for %s::%s", obj_mib, obj_name)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to set {obj_mib}::{obj_name}",
+            ) from exc
+
+        applied.append(
+            {
+                "mib": obj_mib,
+                "name": obj_name,
+                "oid": oid_raw,
+                "value": value,
+            }
+        )
+
+    return applied
+
+
+async def _send_named_trap(request: TrapSendRequest) -> dict[str, object]:
+    """Shared send flow used by generic and script-oriented trap endpoints."""
+    if state.snmp_agent is None:
+        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+
+    schema_dir = SCHEMA_DIR
+    if not await anyio.Path(schema_dir).exists():
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
+
+    schemas = load_all_schemas(schema_dir)
+
+    trap_found = _find_trap_definition(schemas, request.trap_name)
+    if trap_found is None:
+        raise HTTPException(status_code=404, detail=f"Trap '{request.trap_name}' not found")
+    trap_info, mib_name = trap_found
+
+    snmp_engine = _get_snmp_engine_or_raise()
+    notif = _resolve_notification_or_raise(snmp_engine, mib_name, request.trap_name)
+    error_indication, error_status, error_index, _ = await _send_notification_or_raise(
+        snmp_engine=snmp_engine,
+        request=request,
+        notification=notif,
+    )
+    _raise_if_send_failed(error_indication, error_status, error_index)
+
+    trap_oid = tuple(trap_info["oid"])
+
+    logger.info(
+        "Sent %s for trap %s (%s::%s, OID: %s) to %s:%s",
+        request.trap_type,
+        request.trap_name,
+        mib_name,
+        request.trap_name,
+        trap_oid,
+        request.dest_host,
+        request.dest_port,
+    )
+
+    return {
+        "status": "ok",
+        "trap_name": request.trap_name,
+        "trap_oid": trap_oid,
+        "trap_type": request.trap_type,
+        "destination": f"{request.dest_host}:{request.dest_port}",
+        "mib": mib_name,
+        "objects": trap_info.get("objects", []),
+    }
+
+
+class CompletionCommandRequest(BaseModel):
+    """Script-friendly request for completionTrap notifications."""
+
+    completion_source: str = "CLI"
+    completion_code: int = 0
+    dest_host: str = "localhost"
+    dest_port: int = 162
+    community: str = "public"
+    trap_type: Literal["trap", "inform"] = "trap"
+
+
+class EventCommandRequest(BaseModel):
+    """Script-friendly request for eventTrap notifications."""
+
+    event_severity: int = Field(default=2, ge=0, le=5)
+    event_text: str = "Equipment event"
+    dest_host: str = "localhost"
+    dest_port: int = 162
+    community: str = "public"
+    trap_type: Literal["trap", "inform"] = "trap"
+
+
 def _get_snmp_engine_or_raise() -> SnmpEngine:
     if state.snmp_agent is None:
         raise HTTPException(status_code=500, detail="SNMP agent engine not initialized")
@@ -435,51 +579,67 @@ def _raise_if_send_failed(
 @router.post("/send-trap")
 async def send_trap(request: TrapSendRequest) -> dict[str, object]:
     """Send an SNMP trap/notification."""
-    if state.snmp_agent is None:
-        raise HTTPException(status_code=500, detail="SNMP agent not initialized")
+    return await _send_named_trap(request)
 
+
+@router.post("/commands/completion")
+async def send_completion_command(request: CompletionCommandRequest) -> dict[str, object]:
+    """Set completion varbind values and send completionTrap in one scriptable request."""
     schema_dir = SCHEMA_DIR
     if not await anyio.Path(schema_dir).exists():
         raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
-
     schemas = load_all_schemas(schema_dir)
 
-    trap_found = _find_trap_definition(schemas, request.trap_name)
-    if trap_found is None:
-        raise HTTPException(status_code=404, detail=f"Trap '{request.trap_name}' not found")
-    trap_info, mib_name = trap_found
-
-    snmp_engine = _get_snmp_engine_or_raise()
-    notif = _resolve_notification_or_raise(snmp_engine, mib_name, request.trap_name)
-    error_indication, error_status, error_index, _ = await _send_notification_or_raise(
-        snmp_engine=snmp_engine,
-        request=request,
-        notification=notif,
-    )
-    _raise_if_send_failed(error_indication, error_status, error_index)
-
-    trap_oid = tuple(trap_info["oid"])
-
-    logger.info(
-        "Sent %s for trap %s (%s::%s, OID: %s) to %s:%s",
-        request.trap_type,
-        request.trap_name,
-        mib_name,
-        request.trap_name,
-        trap_oid,
-        request.dest_host,
-        request.dest_port,
+    applied = _apply_trap_object_values(
+        schemas=schemas,
+        trap_name="completionTrap",
+        values_by_object={
+            "completionSource": request.completion_source,
+            "completionCode": request.completion_code,
+        },
     )
 
-    return {
-        "status": "ok",
-        "trap_name": request.trap_name,
-        "trap_oid": trap_oid,
-        "trap_type": request.trap_type,
-        "destination": f"{request.dest_host}:{request.dest_port}",
-        "mib": mib_name,
-        "objects": trap_info.get("objects", []),
-    }
+    send_result = await _send_named_trap(
+        TrapSendRequest(
+            trap_name="completionTrap",
+            trap_type=request.trap_type,
+            dest_host=request.dest_host,
+            dest_port=request.dest_port,
+            community=request.community,
+        )
+    )
+    send_result["applied_values"] = applied
+    return send_result
+
+
+@router.post("/commands/event")
+async def send_event_command(request: EventCommandRequest) -> dict[str, object]:
+    """Set event varbind values and send eventTrap in one scriptable request."""
+    schema_dir = SCHEMA_DIR
+    if not await anyio.Path(schema_dir).exists():
+        raise HTTPException(status_code=500, detail=f"Schema directory not found: {schema_dir}")
+    schemas = load_all_schemas(schema_dir)
+
+    applied = _apply_trap_object_values(
+        schemas=schemas,
+        trap_name="eventTrap",
+        values_by_object={
+            "eventSeverity": request.event_severity,
+            "eventText": request.event_text,
+        },
+    )
+
+    send_result = await _send_named_trap(
+        TrapSendRequest(
+            trap_name="eventTrap",
+            trap_type=request.trap_type,
+            dest_host=request.dest_host,
+            dest_port=request.dest_port,
+            community=request.community,
+        )
+    )
+    send_result["applied_values"] = applied
+    return send_result
 
 
 class TestTrapRequest(BaseModel):

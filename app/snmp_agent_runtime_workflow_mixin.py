@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -18,6 +19,7 @@ from pysnmp.entity import config, engine
 from pysnmp.entity.rfc3413 import cmdrsp, context
 from pysnmp.smi import builder as snmp_builder
 
+from app.api_debug import record_snmp_operation
 from app.compiler import MibCompiler
 from app.generator import BehaviourGenerator
 from app.mib_registrar import MibRegistrar, SNMPContext
@@ -34,6 +36,8 @@ if TYPE_CHECKING:
 type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 
+_VAR_BIND_MIN_TUPLE_LEN = 2
+
 
 class SNMPAgentRuntimeWorkflowMixin:
     mib_registrar: MibRegistrar | None
@@ -43,6 +47,71 @@ class SNMPAgentRuntimeWorkflowMixin:
     MibTable: type[object] | None
     MibTableRow: type[object] | None
     MibTableColumn: type[object] | None
+
+    @staticmethod
+    def _format_request_oid(var_bind: object) -> str:
+        """Best-effort formatter for request OIDs in MIB instrumentation callbacks."""
+        oid_obj = var_bind
+        if isinstance(var_bind, tuple) and var_bind:
+            oid_obj = var_bind[0]
+
+        if isinstance(oid_obj, (tuple, list)):
+            with contextlib.suppress(TypeError, ValueError):
+                oid_tuple = tuple(int(x) for x in oid_obj)
+                return ".".join(str(x) for x in oid_tuple)
+
+        return str(oid_obj)
+
+    def _format_set_request_var_bind(self, var_bind: object) -> str:
+        """Best-effort formatter for SNMP SET request var-binds (OID=value)."""
+        if isinstance(var_bind, tuple) and len(var_bind) >= _VAR_BIND_MIN_TUPLE_LEN:
+            oid_text = self._format_request_oid(var_bind)
+            return f"{oid_text}={var_bind[1]!r}"
+        return self._format_request_oid(var_bind)
+
+    def _install_snmp_request_logging_hooks(self, mib_instrum: object) -> None:
+        """Log SNMP GET/GETNEXT requests at the instrumentation boundary."""
+        read_variables = getattr(mib_instrum, "read_variables", None)
+        if callable(read_variables):
+
+            def _logged_read_variables(*var_binds: object, **ctx: object) -> object:
+                oids = [self._format_request_oid(vb) for vb in var_binds]
+                self.logger.info("SNMP GET request for OID(s): %s", ", ".join(oids))
+                for oid in oids:
+                    record_snmp_operation("GET", oid)
+                return read_variables(*var_binds, **ctx)
+
+            mib_instrum.read_variables = _logged_read_variables
+
+        read_next_variables = getattr(mib_instrum, "read_next_variables", None)
+        if callable(read_next_variables):
+
+            def _logged_read_next_variables(*var_binds: object, **ctx: object) -> object:
+                oids = [self._format_request_oid(vb) for vb in var_binds]
+                self.logger.info("SNMP GETNEXT request for OID(s): %s", ", ".join(oids))
+                for oid in oids:
+                    record_snmp_operation("GETNEXT", oid)
+                return read_next_variables(*var_binds, **ctx)
+
+            mib_instrum.read_next_variables = _logged_read_next_variables
+
+        write_variables = getattr(mib_instrum, "write_variables", None)
+        if callable(write_variables):
+
+            def _logged_write_variables(*var_binds: object, **ctx: object) -> object:
+                formatted = [self._format_set_request_var_bind(vb) for vb in var_binds]
+                self.logger.info("SNMP SET request for var-bind(s): %s", ", ".join(formatted))
+                for vb in var_binds:
+                    oid_text = self._format_request_oid(vb)
+                    val_text: str | None = None
+                    if isinstance(vb, tuple) and len(vb) >= _VAR_BIND_MIN_TUPLE_LEN:
+                        val = vb[1]
+                        pretty = getattr(val, "prettyPrint", None)
+                        val_text = str(pretty()) if callable(pretty) else str(val)
+                    record_snmp_operation("SET", oid_text, val_text)
+                return write_variables(*var_binds, **ctx)
+
+            mib_instrum.write_variables = _logged_write_variables
 
     def _find_source_mib_file(self, mib_name: str) -> Path | None:
         """Find the source .mib file for a given MIB name.
@@ -102,19 +171,8 @@ class SNMPAgentRuntimeWorkflowMixin:
 
         return False
 
-    def _repair_loaded_schema(self, mib: str, schema: dict[str, JsonValue]) -> None:
-        """Repair known schema metadata gaps in-place after loading from disk."""
-        if mib != "SNMPv2-MIB":
-            return
-
-        objects = schema.get("objects") if isinstance(schema.get("objects"), dict) else schema
-        if not isinstance(objects, dict):
-            return
-
-        sysor_table = objects.get("sysORTable")
-        if not isinstance(sysor_table, dict):
-            return
-
+    def _repair_sysor_table_basics(self, sysor_table: dict[str, JsonValue]) -> bool:
+        """Ensure sysORTable has required top-level metadata fields."""
         changed = False
         if not sysor_table.get("oid"):
             sysor_table["oid"] = [1, 3, 6, 1, 2, 1, 1, 9]
@@ -125,7 +183,44 @@ class SNMPAgentRuntimeWorkflowMixin:
         if "rows" not in sysor_table or not isinstance(sysor_table.get("rows"), list):
             sysor_table["rows"] = []
             changed = True
+        return changed
 
+    def _repair_sysor_entry(self, objects: dict[str, JsonValue]) -> bool:
+        """Ensure sysOREntry exists and references sysORIndex as its index."""
+        expected_sysor_entry_oid: list[int] = [1, 3, 6, 1, 2, 1, 1, 9, 1]
+        sysor_entry = objects.get("sysOREntry")
+        if not isinstance(sysor_entry, dict):
+            objects["sysOREntry"] = {
+                "oid": cast(JsonValue, expected_sysor_entry_oid),
+                "type": "MibTableRow",
+                "indexes": ["sysORIndex"],
+            }
+            return True
+
+        changed = False
+        if sysor_entry.get("oid") != expected_sysor_entry_oid:
+            sysor_entry["oid"] = cast(JsonValue, expected_sysor_entry_oid)
+            changed = True
+
+        if not sysor_entry.get("type"):
+            sysor_entry["type"] = "MibTableRow"
+            changed = True
+
+        indexes = sysor_entry.get("indexes")
+        if isinstance(indexes, list):
+            normalized_indexes = [str(index) for index in indexes if index is not None]
+            if normalized_indexes != ["sysORIndex"]:
+                sysor_entry["indexes"] = ["sysORIndex"]
+                changed = True
+        elif sysor_entry.get("index") != "sysORIndex":
+            sysor_entry["indexes"] = ["sysORIndex"]
+            changed = True
+
+        return changed
+
+    def _repair_sysor_columns(self, objects: dict[str, JsonValue]) -> bool:
+        """Ensure sysOR column metadata exists and matches expected OIDs/types/access."""
+        changed = False
         expected_sysor_columns: dict[str, list[int]] = {
             "sysORIndex": [1, 3, 6, 1, 2, 1, 1, 9, 1, 1],
             "sysORID": [1, 3, 6, 1, 2, 1, 1, 9, 1, 2],
@@ -168,6 +263,30 @@ class SNMPAgentRuntimeWorkflowMixin:
             if not col_obj.get("access"):
                 col_obj["access"] = expected_sysor_access[col_name]
                 changed = True
+
+        return changed
+
+    def _repair_loaded_schema(
+        self,
+        mib: str,
+        schema: dict[str, JsonValue],
+    ) -> None:
+        """Repair known schema metadata gaps in-place after loading from disk."""
+        if mib != "SNMPv2-MIB":
+            return
+
+        objects = schema.get("objects") if isinstance(schema.get("objects"), dict) else schema
+        if not isinstance(objects, dict):
+            return
+
+        sysor_table = objects.get("sysORTable")
+        if not isinstance(sysor_table, dict):
+            return
+
+        changed = False
+        changed |= self._repair_sysor_table_basics(sysor_table)
+        changed |= self._repair_sysor_entry(objects)
+        changed |= self._repair_sysor_columns(objects)
 
         if changed:
             self.logger.info("Repaired SNMPv2-MIB sysORTable metadata in loaded schema")
@@ -501,6 +620,7 @@ class SNMPAgentRuntimeWorkflowMixin:
         # Create context and get MIB builder from instrumentation (like working reference)
         self.snmp_context = context.SnmpContext(self.snmp_engine)
         mib_instrum = self.snmp_context.get_mib_instrum()
+        self._install_snmp_request_logging_hooks(mib_instrum)
         self.mib_builder = mib_instrum.get_mib_builder()
         self.mib_symbols_adapter = PysnmpMibSymbolsAdapter(
             cast("SupportsBoundaryMibBuilder", self.mib_builder)
@@ -517,16 +637,44 @@ class SNMPAgentRuntimeWorkflowMixin:
         else:
             self.logger.warning("No compiled MIB modules found to load from %s", compiled_dir)
 
-        # Import canonical MIB classes from SNMPv2-SMI via wrapper helper
-        snmpv2_smi_classes = self.mib_symbols_adapter.load_snmpv2_smi_classes()
-        if snmpv2_smi_classes is None:
-            raise RuntimeError("Failed to load SNMPv2-SMI class symbols")
+        # Import canonical MIB classes from SNMPv2-SMI.
+        # Keep compatibility with older adapter versions that do not expose
+        # load_snmpv2_smi_classes().
+        snmpv2_smi_classes_loader = getattr(
+            self.mib_symbols_adapter,
+            "load_snmpv2_smi_classes",
+            None,
+        )
+        if callable(snmpv2_smi_classes_loader):
+            snmpv2_smi_classes = snmpv2_smi_classes_loader()
+            if snmpv2_smi_classes is None:
+                raise RuntimeError("Failed to load SNMPv2-SMI class symbols")
 
-        MibScalar = snmpv2_smi_classes.mib_scalar
-        MibScalarInstance = snmpv2_smi_classes.mib_scalar_instance
-        MibTable = snmpv2_smi_classes.mib_table
-        MibTableRow = snmpv2_smi_classes.mib_table_row
-        MibTableColumn = snmpv2_smi_classes.mib_table_column
+            MibScalar = snmpv2_smi_classes.mib_scalar
+            MibScalarInstance = snmpv2_smi_classes.mib_scalar_instance
+            MibTable = snmpv2_smi_classes.mib_table
+            MibTableRow = snmpv2_smi_classes.mib_table_row
+            MibTableColumn = snmpv2_smi_classes.mib_table_column
+        else:
+            self.logger.warning(
+                "MIB symbols adapter missing load_snmpv2_smi_classes(); "
+                "falling back to import_symbols"
+            )
+            mib_scalar, mib_scalar_instance, mib_table, mib_table_row, mib_table_column = (
+                self.mib_builder.import_symbols(
+                    "SNMPv2-SMI",
+                    "MibScalar",
+                    "MibScalarInstance",
+                    "MibTable",
+                    "MibTableRow",
+                    "MibTableColumn",
+                )
+            )
+            MibScalar = mib_scalar
+            MibScalarInstance = mib_scalar_instance
+            MibTable = mib_table
+            MibTableRow = mib_table_row
+            MibTableColumn = mib_table_column
         self.MibScalar = MibScalar
         self.MibScalarInstance = MibScalarInstance
         self.MibTable = MibTable
