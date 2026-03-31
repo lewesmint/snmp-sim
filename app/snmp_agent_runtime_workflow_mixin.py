@@ -8,12 +8,14 @@
 
 from __future__ import annotations
 
-import contextlib
 import asyncio
+import contextlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from pyasn1.type.base import SimpleAsn1Type
 from pyasn1.type.univ import Integer, OctetString
 from pysnmp.carrier.asyncio.dgram import udp
 from pysnmp.carrier.asyncio.dispatch import AsyncioDispatcher
@@ -31,6 +33,7 @@ from pysnmp.hlapi.v3arch.asyncio import (
 from pysnmp.smi import builder as snmp_builder
 
 from app.api_debug import record_snmp_operation
+from app.behaviour_plugins import SetTransition, get_set_transition_trap_directives
 from app.compiler import MibCompiler
 from app.generator import BehaviourGenerator
 from app.mib_registrar import MibRegistrar, SNMPContext
@@ -48,9 +51,7 @@ type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 
 _VAR_BIND_MIN_TUPLE_LEN = 2
-_ALARM_KEYWORDS = ("alarm", "fault", "critical", "major", "minor")
-_COMPLETION_TRAP_OID = "1.3.6.1.4.1.99998.0.2"
-_EVENT_TRAP_OID = "1.3.6.1.4.1.99998.0.3"
+_LOOKUP_RESULT_TUPLE_LEN = 2
 
 
 def _to_var_text(value: object) -> str:
@@ -148,65 +149,72 @@ class SNMPAgentRuntimeWorkflowMixin:
         var_binds: tuple[object, ...],
         before_values: dict[str, str | None],
     ) -> None:
-        """Emit modeled completion/event traps after successful SET commit."""
-        transitions: list[tuple[str, str | None, str]] = []
+        """Emit plugin-defined traps after successful SET commit."""
         for vb in var_binds:
             if not (isinstance(vb, tuple) and len(vb) >= _VAR_BIND_MIN_TUPLE_LEN):
                 continue
             oid_text = self._format_request_oid(vb)
             new_text = _to_var_text(vb[1])
             old_text = before_values.get(oid_text)
-            transitions.append((oid_text, old_text, new_text))
 
-        if not transitions:
-            return
+            mib_name: str | None = None
+            symbol_name: str | None = None
+            raw_lookup_fn: object = getattr(self, "_lookup_symbol_for_dotted", None)
+            lookup_fn: Callable[[str], object] | None = (
+                cast("Callable[[str], object]", raw_lookup_fn)
+                if callable(raw_lookup_fn)
+                else None
+            )
+            if lookup_fn is not None:
+                try:
+                    lookup_result = lookup_fn(oid_text)
+                    if (
+                        isinstance(lookup_result, tuple)
+                        and len(lookup_result) == _LOOKUP_RESULT_TUPLE_LEN
+                    ):
+                        candidate_mib, candidate_symbol = lookup_result
+                        if candidate_mib is None or isinstance(candidate_mib, str):
+                            mib_name = candidate_mib
+                        if candidate_symbol is None or isinstance(candidate_symbol, str):
+                            symbol_name = candidate_symbol
+                except (
+                    AttributeError,
+                    LookupError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                    RuntimeError,
+                ):
+                    pass
 
-        source = ",".join(oid for oid, _old, _new in transitions)
-        self._send_modeled_completion_trap(source=source, code=0)
-
-        for oid_text, old_text, new_text in transitions:
-            if self._is_alarm_transition(old_text, new_text):
-                severity = self._infer_event_severity(new_text)
-                self._send_modeled_event_trap(
-                    severity=severity,
-                    text=f"Alarm state entered on {oid_text}: {new_text}",
-                )
-                break
+            transition = SetTransition(
+                oid=oid_text,
+                mib_name=mib_name,
+                symbol_name=symbol_name,
+                old_value=old_text,
+                new_value=new_text,
+            )
+            directives = get_set_transition_trap_directives(transition)
+            for directive in directives:
+                converted_var_binds = [
+                    (oid, self._coerce_trap_value(value)) for oid, value in directive.var_binds
+                ]
+                self._schedule_snmp_trap_send(directive.trap_oid, converted_var_binds)
 
     @staticmethod
-    def _is_alarm_transition(old_text: str | None, new_text: str) -> bool:
-        old_alarm = SNMPAgentRuntimeWorkflowMixin._is_alarm_like(old_text)
-        new_alarm = SNMPAgentRuntimeWorkflowMixin._is_alarm_like(new_text)
-        return new_alarm and not old_alarm
-
-    @staticmethod
-    def _is_alarm_like(value: str | None) -> bool:
-        if value is None:
-            return False
-        lowered = value.lower()
-        if any(keyword in lowered for keyword in _ALARM_KEYWORDS):
-            return True
-        return lowered in {"1", "2", "3", "4", "5"}
-
-    @staticmethod
-    def _infer_event_severity(value_text: str) -> int:
-        lowered = value_text.lower()
-        if "critical" in lowered:
-            return 5
-        if "major" in lowered:
-            return 4
-        if "minor" in lowered:
-            return 3
-        if "alarm" in lowered or "fault" in lowered:
-            return 2
-        if lowered.isdigit():
-            return max(1, min(5, int(lowered)))
-        return 2
+    def _coerce_trap_value(value: object) -> SimpleAsn1Type:
+        if isinstance(value, SimpleAsn1Type):
+            return value
+        if isinstance(value, int):
+            return cast(SimpleAsn1Type, Integer().clone(value))
+        if isinstance(value, str):
+            return cast(SimpleAsn1Type, OctetString().clone(value))
+        return cast(SimpleAsn1Type, OctetString().clone(str(value)))
 
     def _schedule_snmp_trap_send(
         self,
         trap_oid: str,
-        var_binds: list[tuple[str, object]],
+        var_binds: list[tuple[str, SimpleAsn1Type]],
     ) -> None:
         """Send trap now if no loop is running, otherwise schedule on current loop."""
 
@@ -245,25 +253,8 @@ class SNMPAgentRuntimeWorkflowMixin:
                 asyncio.run(_send())
             return
 
-        loop.create_task(_send())
-
-    def _send_modeled_completion_trap(self, source: str, code: int) -> None:
-        self._schedule_snmp_trap_send(
-            _COMPLETION_TRAP_OID,
-            [
-                ("1.3.6.1.4.1.99998.1.1.3", OctetString(source)),
-                ("1.3.6.1.4.1.99998.1.1.4", Integer(code)),
-            ],
-        )
-
-    def _send_modeled_event_trap(self, severity: int, text: str) -> None:
-        self._schedule_snmp_trap_send(
-            _EVENT_TRAP_OID,
-            [
-                ("1.3.6.1.4.1.99998.1.1.5", Integer(severity)),
-                ("1.3.6.1.4.1.99998.1.1.6", OctetString(text)),
-            ],
-        )
+        task = loop.create_task(_send())
+        task.add_done_callback(lambda _task: None)
 
     def _find_source_mib_file(self, mib_name: str) -> Path | None:
         """Find the source .mib file for a given MIB name.
