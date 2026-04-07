@@ -86,12 +86,14 @@ class TypeRecorder:
         self,
         compiled_dir: Path,
         progress_callback: Callable[[str], None] | None = None,
+        include_modules: set[str] | None = None,
     ) -> None:
         """Create a recorder configured for a compiled-MIB directory."""
         self.compiled_dir = compiled_dir
         self._registry: dict[str, TypeEntry] | None = None
         self._snmpv2_smi_types: set[str] | None = None
         self._progress_callback = progress_callback
+        self._include_modules = include_modules
         self.logger = logging.getLogger(__name__)
 
     @staticmethod
@@ -644,6 +646,8 @@ class TypeRecorder:
 
         for path in self.compiled_dir.glob("*.py"):
             if path.name == "__init__.py":
+                continue
+            if self._include_modules is not None and path.stem not in self._include_modules:
                 continue
             try:
                 mib_builder.load_modules(path.stem)

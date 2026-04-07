@@ -16,16 +16,25 @@ from app.type_recorder import TypeEntry, TypeRecorder
 class TypeRegistry:
     """Facade for building, accessing, and exporting the canonical type registry."""
 
-    def __init__(self, compiled_mibs_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        compiled_mibs_dir: Path | None = None,
+        include_modules: set[str] | None = None,
+    ) -> None:
         """Initialize registry state and compiled-MIB source directory."""
         self.compiled_mibs_dir = compiled_mibs_dir or (
             Path(__file__).parent.parent / "compiled-mibs"
         )
+        self.include_modules = include_modules
         self._registry: dict[str, TypeEntry] | None = None
 
     def build(self, progress_callback: Callable[[str], None] | None = None) -> None:
         """Build the canonical type registry from compiled-mibs using TypeRecorder."""
-        recorder = TypeRecorder(self.compiled_mibs_dir, progress_callback=progress_callback)
+        recorder = TypeRecorder(
+            self.compiled_mibs_dir,
+            progress_callback=progress_callback,
+            include_modules=self.include_modules,
+        )
         recorder.build()
         self._registry = recorder.registry
 

@@ -131,6 +131,18 @@ class SNMPAgentRuntimeWorkflowMixin:
                     before_values[oid_text] = self._read_oid_value_text(oid_text)
                     record_snmp_operation("SET", oid_text, val_text)
                 result = write_variables(*var_binds, **ctx)
+                raw_materialize_hook = getattr(
+                    self,
+                    "_materialize_rowstatus_defaults_after_set",
+                    None,
+                )
+                materialize_hook: Callable[[tuple[object, ...]], None] | None = (
+                    cast("Callable[[tuple[object, ...]], None]", raw_materialize_hook)
+                    if callable(raw_materialize_hook)
+                    else None
+                )
+                if materialize_hook is not None:
+                    materialize_hook(var_binds)
                 self._emit_behaviour_traps_after_set(var_binds, before_values)
                 return result
 
@@ -511,7 +523,13 @@ class SNMPAgentRuntimeWorkflowMixin:
             ) as e:
                 self.logger.exception("Failed to compile %s: %s", mib_name, e)
 
-    def _prepare_type_registry(self, *, compiled_dir: Path, types_json_path: Path) -> None:
+    def _prepare_type_registry(
+        self,
+        *,
+        compiled_dir: Path,
+        types_json_path: Path,
+        mibs: list[str],
+    ) -> None:
         if self.preloaded_model and types_json_path.exists():
             self.logger.info(
                 "Using preloaded model and existing types.json, skipping full MIB compilation"
@@ -529,7 +547,11 @@ class SNMPAgentRuntimeWorkflowMixin:
                     e,
                 )
 
-        type_registry = TypeRegistry(compiled_dir)
+        try:
+            type_registry = TypeRegistry(compiled_dir, include_modules=set(mibs))
+        except TypeError:
+            # Backward-compat for older/mocked TypeRegistry signatures used in unit tests.
+            type_registry = TypeRegistry(compiled_dir)
         type_registry.build()
         type_registry.export_to_json(str(types_json_path))
         self.logger.info(
@@ -742,7 +764,11 @@ class SNMPAgentRuntimeWorkflowMixin:
         self._compile_required_mibs(mibs=mibs, compiled_dir=compiled_dir, compiler=compiler)
 
         types_json_path = TYPE_REGISTRY_FILE
-        self._prepare_type_registry(compiled_dir=compiled_dir, types_json_path=types_json_path)
+        self._prepare_type_registry(
+            compiled_dir=compiled_dir,
+            types_json_path=types_json_path,
+            mibs=mibs,
+        )
         if not self._validate_type_registry_or_log(types_json_path):
             return
 

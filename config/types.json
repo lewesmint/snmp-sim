@@ -251,8 +251,8 @@
       "TEST-ENUM-MIB::eventSeverity",
       "TEST-ENUM-MIB::testRowColour",
       "TEST-ENUM-MIB::testRowPriority",
-      "TEST-ENUM-MIB::testNoIndexValueA",
-      "TEST-ENUM-MIB::testNoIndexValueB",
+      "TEST-ENUM-MIB::testInferenceIndex",
+      "TEST-ENUM-MIB::testInferenceValue",
       "TEST-ENUM-MIB::testAugBase01Int",
       "TEST-ENUM-MIB::testAugExt01Status",
       "TEST-ENUM-MIB::testAugExt02Counter",
@@ -739,7 +739,8 @@
       "SNMP-COMMUNITY-MIB::snmpCommunityStatus",
       "SNMP-USER-BASED-SM-MIB::usmUserStatus",
       "IF-MIB::ifStackStatus",
-      "IF-MIB::ifRcvAddressStatus"
+      "IF-MIB::ifRcvAddressStatus",
+      "TEST-ENUM-MIB::testRowStatus"
     ],
     "defined_in": "SNMPv2-TC",
     "abstract": false

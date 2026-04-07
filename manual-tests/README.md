@@ -34,6 +34,7 @@ python manual-tests/ui/manual_table_display.py
 Scripts that perform actual SNMP operations against a running agent (typically at localhost:161 or localhost:11161):
 
 - `test_snmp_operations.py` - Comprehensive SNMP operations (GET, SET, GETNEXT, WALK, GETBULK)
+- `test_create_and_go.py` - RowStatus createAndGo/createAndWait/destroy table-row lifecycle test
 - `test_getnext_*.py` - GetNext operation tests with various OID formats
 - `test_get_sysdescr.py` - System description retrieval test
 - `test_tree_bulk.py` - Bulk operations test
@@ -45,6 +46,9 @@ Scripts that perform actual SNMP operations against a running agent (typically a
 python run_agent_with_rest.py
 # Then in another terminal:
 python manual-tests/snmp/test_snmp_operations.py
+
+# RowStatus createAndGo test:
+python manual-tests/snmp/test_create_and_go.py
 ```
 
 ## OID Utility Tests (`oid/`)

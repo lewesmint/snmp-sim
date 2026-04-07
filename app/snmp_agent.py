@@ -410,6 +410,280 @@ class SNMPAgent(
                 continue
             row_values[idx_name] = self._index_part_to_json_value(idx_part)
 
+    @staticmethod
+    def _rowstatus_action(value: JsonValue) -> str | None:
+        """Interpret a RowStatus value as a lifecycle action."""
+        if isinstance(value, int):
+            numeric = value
+        elif isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered.isdigit():
+                numeric = int(lowered)
+            else:
+                if "createandgo" in lowered:
+                    return "create-and-go"
+                if "createandwait" in lowered:
+                    return "create-and-wait"
+                if lowered == "active":
+                    return "active"
+                if lowered == "destroy":
+                    return "destroy"
+                return None
+        else:
+            return None
+
+        if numeric == 4:
+            return "create-and-go"
+        if numeric == 5:
+            return "create-and-wait"
+        if numeric == 1:
+            return "active"
+        if numeric == 6:
+            return "destroy"
+        return None
+
+    @staticmethod
+    def _canonical_rowstatus_value(action: str, original: JsonValue) -> JsonValue:
+        """Convert transient RowStatus verbs into persisted row states."""
+        if action == "create-and-go":
+            return 1
+        if action == "create-and-wait":
+            return 2
+        return original
+
+    @staticmethod
+    def _instance_index_values(
+        instance_str: str,
+        index_columns: list[str],
+    ) -> dict[str, JsonValue]:
+        parts = [part for part in instance_str.split(".") if part]
+        if not parts:
+            return {"__index__": "1"}
+
+        if index_columns and len(index_columns) == len(parts):
+            return {
+                name: (int(part) if part.isdigit() else part)
+                for name, part in zip(index_columns, parts, strict=True)
+            }
+
+        values: dict[str, JsonValue] = {}
+        for idx, part in enumerate(parts, start=1):
+            key = "__index__" if idx == 1 else f"__index_{idx}__"
+            values[key] = int(part) if part.isdigit() else part
+        return values
+
+    def _table_default_row_for_oid(self, table_oid: str) -> dict[str, JsonValue]:
+        if table_oid in self._table_defaults:
+            return dict(self._table_defaults[table_oid])
+
+        for schema in self.mib_jsons.values():
+            objects = self._schema_objects(schema)
+            table_obj, _table_oid_list = self._find_table_object_for_oid(objects, table_oid)
+            if table_obj is None:
+                continue
+            return dict(self._extract_default_row_dict(table_obj))
+        return {}
+
+    def _is_rowstatus_column(self, table_oid: str, column_name: str) -> bool:
+        table_oid_parts = tuple(int(part) for part in table_oid.split("."))
+
+        for schema in self.mib_jsons.values():
+            objects = self._schema_objects(schema)
+            column_obj = objects.get(column_name)
+            if not isinstance(column_obj, dict):
+                continue
+
+            col_oid = self._oid_tuple(column_obj.get("oid"))
+            if col_oid is None or len(col_oid) <= len(table_oid_parts) + 1:
+                continue
+            if col_oid[: len(table_oid_parts)] != table_oid_parts:
+                continue
+            if col_oid[len(table_oid_parts)] != 1:
+                continue
+
+            col_type = column_obj.get("type")
+            return isinstance(col_type, str) and col_type.lower() == "rowstatus"
+
+        return False
+
+    def _resolve_table_cell_context_from_schema(
+        self,
+        oid: tuple[int, ...],
+    ) -> tuple[str, str, str, list[str]] | None:
+        """Resolve table/cell context directly from loaded schema objects."""
+        if not self.mib_jsons:
+            return None
+
+        for schema in self.mib_jsons.values():
+            objects = self._schema_objects(schema)
+
+            for candidate_name, candidate in objects.items():
+                if candidate.get("type") in {"MibTable", "MibTableRow"}:
+                    continue
+
+                col_oid = self._oid_tuple(candidate.get("oid"))
+                if col_oid is None or len(oid) <= len(col_oid):
+                    continue
+                if oid[: len(col_oid)] != col_oid:
+                    continue
+
+                entry_oid = col_oid[:-1]
+                table_oid = col_oid[:-2]
+                if not table_oid:
+                    continue
+
+                table_obj = None
+                entry_obj = None
+                for obj in objects.values():
+                    parsed_oid = self._oid_tuple(obj.get("oid"))
+                    if obj.get("type") == "MibTable" and parsed_oid == table_oid:
+                        table_obj = obj
+                    if obj.get("type") == "MibTableRow" and parsed_oid == entry_oid:
+                        entry_obj = obj
+
+                if table_obj is None or entry_obj is None:
+                    continue
+
+                index_columns = self._string_list(entry_obj.get("indexes"))
+                instance_parts = oid[len(col_oid) :]
+                instance_str = ".".join(str(part) for part in instance_parts) if instance_parts else "1"
+
+                return (
+                    ".".join(str(part) for part in table_oid),
+                    instance_str,
+                    candidate_name,
+                    index_columns,
+                )
+
+        return None
+
+    def _handle_rowstatus_lifecycle_set(
+        self,
+        *,
+        table_oid: str,
+        instance_str: str,
+        index_columns: list[str],
+        column_name: str,
+        action: str,
+        persisted_status: JsonValue,
+    ) -> bool:
+        index_values = self._instance_index_values(instance_str, index_columns)
+
+        if action == "destroy":
+            return self.delete_table_instance(table_oid, index_values)
+
+        if instance_str in self.table_instances.get(table_oid, {}):
+            return False
+
+        default_row = self._table_default_row_for_oid(table_oid)
+        column_values = {
+            key: value
+            for key, value in default_row.items()
+            if key not in index_columns
+        }
+        column_values[column_name] = persisted_status
+        self.add_table_instance(table_oid, index_values, column_values)
+        return True
+
+    def _materialize_rowstatus_defaults_after_set(
+        self,
+        var_binds: tuple[object, ...],
+    ) -> None:
+        """Handle RowStatus lifecycle after live SNMP SET requests.
+
+        This catches index-only createAndGo/createAndWait operations that come
+        through pysnmp instrumentation and materializes schema-default column
+        values for the new row.
+        """
+        row_updates: dict[tuple[str, str], dict[str, object]] = {}
+
+        for var_bind in var_binds:
+            try:
+                raw_value = var_bind[1]  # type: ignore[index]
+            except (AttributeError, LookupError, OSError, TypeError, ValueError, IndexError):
+                continue
+
+            oid_text = self._format_request_oid(var_bind)
+            try:
+                oid = tuple(int(part) for part in oid_text.split("."))
+            except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                continue
+
+            table_cell = self._resolve_table_cell_context_from_schema(oid)
+            if table_cell is None:
+                continue
+
+            table_oid, instance_str, column_name, index_columns = table_cell
+            key = (table_oid, instance_str)
+            row_ctx = row_updates.setdefault(
+                key,
+                {
+                    "index_columns": index_columns,
+                    "columns": set(),
+                    "rowstatus_column": None,
+                    "rowstatus_action": None,
+                    "rowstatus_value": None,
+                },
+            )
+
+            columns = cast("set[str]", row_ctx["columns"])
+            columns.add(column_name)
+
+            if not self._is_rowstatus_column(table_oid, column_name):
+                continue
+
+            action: str | None = None
+            if isinstance(raw_value, int):
+                action = self._rowstatus_action(raw_value)
+                rowstatus_value: JsonValue = raw_value
+            else:
+                try:
+                    action = self._rowstatus_action(int(raw_value))
+                    rowstatus_value = int(raw_value)
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                    rowstatus_value = str(raw_value)
+                    action = self._rowstatus_action(rowstatus_value)
+
+            if action is None:
+                continue
+
+            row_ctx["rowstatus_column"] = column_name
+            row_ctx["rowstatus_action"] = action
+            row_ctx["rowstatus_value"] = self._canonical_rowstatus_value(action, rowstatus_value)
+
+        for (table_oid, instance_str), row_ctx in row_updates.items():
+            action = cast("str | None", row_ctx.get("rowstatus_action"))
+            if not isinstance(action, str):
+                continue
+
+            index_columns = cast("list[str]", row_ctx["index_columns"])
+            index_values = self._instance_index_values(instance_str, index_columns)
+
+            if action == "destroy":
+                self.delete_table_instance(table_oid, index_values)
+                continue
+
+            columns = cast("set[str]", row_ctx["columns"])
+            rowstatus_column = row_ctx.get("rowstatus_column")
+            rowstatus_value = cast("JsonValue", row_ctx.get("rowstatus_value"))
+
+            # Only synthesize default columns for index-only RowStatus creation.
+            if not (
+                isinstance(rowstatus_column, str)
+                and action in {"create-and-go", "create-and-wait", "active"}
+                and columns == {rowstatus_column}
+            ):
+                continue
+
+            default_row = self._table_default_row_for_oid(table_oid)
+            column_values = {
+                key: value
+                for key, value in default_row.items()
+                if key not in index_columns
+            }
+            column_values[rowstatus_column] = rowstatus_value
+            self.add_table_instance(table_oid, index_values, column_values)
+
     def _persist_table_cell_set(
         self,
         table_cell: tuple[str, str, str, list[str]],
@@ -417,10 +691,27 @@ class SNMPAgent(
         new_serial: JsonValue,
     ) -> None:
         table_oid, instance_str, column_name, index_columns = table_cell
+        persisted_value = new_serial
+
+        if self._is_rowstatus_column(table_oid, column_name):
+            action = self._rowstatus_action(new_serial)
+            if action is not None:
+                persisted_value = self._canonical_rowstatus_value(action, new_serial)
+                if self._handle_rowstatus_lifecycle_set(
+                    table_oid=table_oid,
+                    instance_str=instance_str,
+                    index_columns=index_columns,
+                    column_name=column_name,
+                    action=action,
+                    persisted_status=persisted_value,
+                ):
+                    self.overrides.pop(dotted, None)
+                    return
+
         table_data = self.table_instances.setdefault(table_oid, {})
         row_data = table_data.setdefault(instance_str, {"column_values": {}})
         row_values = row_data.setdefault("column_values", {})
-        row_values[column_name] = new_serial
+        row_values[column_name] = persisted_value
         self._populate_missing_row_index_values(row_values, instance_str, index_columns)
         self.overrides.pop(dotted, None)
 
