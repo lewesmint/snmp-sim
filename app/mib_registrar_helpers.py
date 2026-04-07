@@ -738,22 +738,24 @@ class RegistrarTableBuilder:
         index_type: str,
     ) -> tuple[int, ...]:
         """Expand an index value into OID components based on its type."""
+        normalized_index_type = str(index_type).strip().lower().replace(" ", "")
+
         # Handle IpAddress type - convert "a.b.c.d" to (a, b, c, d)
-        if index_type == "IpAddress":
+        if "ipaddress" in normalized_index_type:
             return self.expand_ipaddress_components(value)
 
         # Handle OctetString and DisplayString - convert to octets
-        if index_type in ("OctetString", "DisplayString", "PhysAddress"):
+        if normalized_index_type in ("octetstring", "displaystring", "physaddress"):
             return self.expand_string_components(value)
 
         # Handle integer types - simple single value
-        if index_type in (
-            "Integer32",
-            "Unsigned32",
-            "Integer",
-            "Gauge32",
-            "Counter32",
-            "TimeTicks",
+        if normalized_index_type in (
+            "integer32",
+            "unsigned32",
+            "integer",
+            "gauge32",
+            "counter32",
+            "timeticks",
         ):
             return self.expand_integer_components(value)
 

@@ -390,6 +390,7 @@ class MibRegistrar:
             "DisplayString",
             "OctetString",
             "DateAndTime",
+            "IpAddress",
         }
 
     @staticmethod

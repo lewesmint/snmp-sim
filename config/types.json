@@ -256,7 +256,9 @@
       "TEST-ENUM-MIB::testAugBase01Int",
       "TEST-ENUM-MIB::testAugExt01Status",
       "TEST-ENUM-MIB::testAugExt02Counter",
-      "TEST-ENUM-MIB::testAugExt09Flag"
+      "TEST-ENUM-MIB::testAugExt09Flag",
+      "TEST-ENUM-MIB::testAddrStatusColour",
+      "TEST-ENUM-MIB::testAddrStatusPriority"
     ],
     "defined_in": "SNMPv2-SMI",
     "abstract": false
@@ -283,7 +285,8 @@
       "SNMP-COMMUNITY-MIB::snmpTrapAddress",
       "TEST-ENUM-MIB::endPointIpAddress",
       "TEST-ENUM-MIB::testAugBase04Address",
-      "TEST-ENUM-MIB::testAugExt07Address"
+      "TEST-ENUM-MIB::testAugExt07Address",
+      "TEST-ENUM-MIB::testAddrStatusAddress"
     ],
     "defined_in": "SNMPv2-SMI",
     "abstract": false
@@ -458,7 +461,8 @@
       "TEST-ENUM-MIB::testAugBase02Unsigned",
       "TEST-ENUM-MIB::testAugExt03Rate",
       "TEST-ENUM-MIB::testAugExt04LastChange",
-      "TEST-ENUM-MIB::testAugExt10Code"
+      "TEST-ENUM-MIB::testAugExt10Code",
+      "TEST-ENUM-MIB::testAddrStatusSlot"
     ],
     "defined_in": "SNMPv2-SMI",
     "abstract": false
@@ -740,7 +744,8 @@
       "SNMP-USER-BASED-SM-MIB::usmUserStatus",
       "IF-MIB::ifStackStatus",
       "IF-MIB::ifRcvAddressStatus",
-      "TEST-ENUM-MIB::testRowStatus"
+      "TEST-ENUM-MIB::testRowStatus",
+      "TEST-ENUM-MIB::testAddrStatusRowStatus"
     ],
     "defined_in": "SNMPv2-TC",
     "abstract": false

@@ -570,7 +570,9 @@ class SNMPAgent(
         index_values = self._instance_index_values(instance_str, index_columns)
 
         if action == "destroy":
-            return self.delete_table_instance(table_oid, index_values)
+            deleted = self.delete_table_instance(table_oid, index_values)
+            self._remove_runtime_table_cell_instances(table_oid, instance_str)
+            return deleted
 
         if instance_str in self.table_instances.get(table_oid, {}):
             return False
@@ -584,6 +586,172 @@ class SNMPAgent(
         column_values[column_name] = persisted_status
         self.add_table_instance(table_oid, index_values, column_values)
         return True
+
+    def _remove_runtime_table_cell_instances(self, table_oid: str, instance_str: str) -> int:
+        """Remove MibTableColumn._vars entries for a table row instance.
+
+        pysnmp stores dynamically-created row instances inside each
+        ``MibTableColumn._vars`` dict (keyed by the full cell OID).  A
+        RowStatus destroy(6) SET only removes the RowStatus column entry;
+        this method cascades the cleanup to all other columns so they don't
+        ghost after the row is gone.
+        """
+        if self.mib_builder is None:
+            return 0
+
+        try:
+            table_oid_tuple = tuple(int(part) for part in table_oid.split("."))
+            instance_parts = tuple(int(part) for part in instance_str.split(".") if part)
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            return 0
+
+        if not instance_parts:
+            return 0
+
+        entry_oid_prefix = table_oid_tuple + (1,)
+
+        try:
+            (mib_table_column_cls,) = self.mib_builder.import_symbols(
+                "SNMPv2-SMI", "MibTableColumn"
+            )
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            return 0
+
+        symbols = cast("dict[str, dict[str, object]]", getattr(self.mib_builder, "mibSymbols", {}))
+        removed = 0
+
+        for module_symbols in symbols.values():
+            for symbol_obj in module_symbols.values():
+                if not isinstance(symbol_obj, mib_table_column_cls):
+                    continue
+
+                raw_col_name = getattr(symbol_obj, "name", None)
+                if raw_col_name is None:
+                    continue
+                try:
+                    col_oid_tuple = tuple(int(x) for x in raw_col_name)
+                except (TypeError, ValueError):
+                    continue
+
+                # Only columns that belong to this table's entry row
+                if (
+                    len(col_oid_tuple) <= len(entry_oid_prefix)
+                    or col_oid_tuple[: len(entry_oid_prefix)] != entry_oid_prefix
+                ):
+                    continue
+
+                # The cell key is: col_oid + instance_parts
+                cell_oid = col_oid_tuple + instance_parts
+
+                vars_dict = getattr(symbol_obj, "_vars", None)
+                if not vars_dict:
+                    continue
+
+                keys_to_remove = []
+                for k in list(vars_dict.keys()):
+                    try:
+                        if tuple(int(x) for x in k) == cell_oid:
+                            keys_to_remove.append(k)
+                    except (TypeError, ValueError):
+                        continue
+
+                for key in keys_to_remove:
+                    del vars_dict[key]
+                    removed += 1
+
+                if keys_to_remove:
+                    try:
+                        symbol_obj.branchVersionId += 1
+                    except (AttributeError, TypeError):
+                        pass
+
+        if removed:
+            self.logger.info(
+                "Removed %s runtime table cell instance(s) for %s.%s",
+                removed,
+                table_oid,
+                instance_str,
+            )
+
+        return removed
+
+    def _set_existing_runtime_table_cell_value(
+        self,
+        *,
+        table_oid: str,
+        column_name: str,
+        instance_str: str,
+        value: JsonValue,
+    ) -> bool:
+        """Set value on an existing runtime table cell without creating symbols."""
+        if self.mib_builder is None:
+            return False
+
+        try:
+            table_oid_tuple = tuple(int(part) for part in table_oid.split("."))
+            instance_parts = tuple(int(part) for part in instance_str.split(".") if part)
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            return False
+
+        if not instance_parts:
+            return False
+
+        entry_oid = table_oid_tuple + (1,)
+        adapter = self._get_mib_symbols_adapter()
+        column_oid = adapter.find_column_oid_for_entry(column_name, entry_oid)
+        if not column_oid:
+            return False
+
+        cell_oid = column_oid + instance_parts
+
+        try:
+            (mib_table_column_cls,) = self.mib_builder.import_symbols(
+                "SNMPv2-SMI", "MibTableColumn"
+            )
+        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+            return False
+
+        symbols = cast("dict[str, dict[str, object]]", getattr(self.mib_builder, "mibSymbols", {}))
+        for module_symbols in symbols.values():
+            for symbol_obj in module_symbols.values():
+                if not isinstance(symbol_obj, mib_table_column_cls):
+                    continue
+                raw_col_name = getattr(symbol_obj, "name", None)
+                if raw_col_name is None:
+                    continue
+                try:
+                    col_oid_tuple = tuple(int(x) for x in raw_col_name)
+                except (TypeError, ValueError):
+                    continue
+                if col_oid_tuple != column_oid:
+                    continue
+
+                vars_dict = getattr(symbol_obj, "_vars", None)
+                if not vars_dict:
+                    return False
+
+                inst = None
+                for key, value_obj in vars_dict.items():
+                    try:
+                        if tuple(int(x) for x in key) == cell_oid:
+                            inst = value_obj
+                            break
+                    except (TypeError, ValueError):
+                        continue
+                if inst is None:
+                    return False
+
+                syntax_obj = getattr(inst, "syntax", None)
+                if syntax_obj is None:
+                    return False
+
+                try:
+                    inst.syntax = cast("SupportsClone", syntax_obj).clone(value)
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                    return False
+                return True
+
+        return False
 
     def _materialize_rowstatus_defaults_after_set(
         self,
@@ -630,21 +798,41 @@ class SNMPAgent(
             columns.add(column_name)
 
             if not self._is_rowstatus_column(table_oid, column_name):
+                # Collect actual SET value so multi-column creates can be tracked.
+                set_col_vals = cast(
+                    "dict[str, JsonValue]",
+                    row_ctx.setdefault("set_column_values", {}),
+                )
+                try:
+                    set_col_vals[column_name] = int(raw_value)
+                except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                    try:
+                        set_col_vals[column_name] = str(raw_value)
+                    except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                        pass
                 continue
 
             action: str | None = None
+            numeric_value: int | None = None
             if isinstance(raw_value, int):
+                numeric_value = raw_value
                 action = self._rowstatus_action(raw_value)
                 rowstatus_value: JsonValue = raw_value
             else:
                 try:
-                    action = self._rowstatus_action(int(raw_value))
-                    rowstatus_value = int(raw_value)
+                    numeric_value = int(raw_value)
+                    action = self._rowstatus_action(numeric_value)
+                    rowstatus_value = numeric_value
                 except (AttributeError, LookupError, OSError, TypeError, ValueError):
                     rowstatus_value = str(raw_value)
                     action = self._rowstatus_action(rowstatus_value)
 
             if action is None:
+                # Some failed RowStatus destroy requests can leave a transient
+                # runtime cell at notExists(0). Mark it for orphan cleanup.
+                if numeric_value == 0:
+                    row_ctx["rowstatus_column"] = column_name
+                    row_ctx["rowstatus_value"] = 0
                 continue
 
             row_ctx["rowstatus_column"] = column_name
@@ -653,7 +841,15 @@ class SNMPAgent(
 
         for (table_oid, instance_str), row_ctx in row_updates.items():
             action = cast("str | None", row_ctx.get("rowstatus_action"))
+            rowstatus_column = row_ctx.get("rowstatus_column")
+            rowstatus_value = cast("JsonValue", row_ctx.get("rowstatus_value"))
             if not isinstance(action, str):
+                if (
+                    isinstance(rowstatus_column, str)
+                    and rowstatus_value == 0
+                    and instance_str not in self.table_instances.get(table_oid, {})
+                ):
+                    self._remove_runtime_table_cell_instances(table_oid, instance_str)
                 continue
 
             index_columns = cast("list[str]", row_ctx["index_columns"])
@@ -661,28 +857,79 @@ class SNMPAgent(
 
             if action == "destroy":
                 self.delete_table_instance(table_oid, index_values)
+                self._remove_runtime_table_cell_instances(table_oid, instance_str)
                 continue
 
             columns = cast("set[str]", row_ctx["columns"])
-            rowstatus_column = row_ctx.get("rowstatus_column")
-            rowstatus_value = cast("JsonValue", row_ctx.get("rowstatus_value"))
 
             # Only synthesize default columns for index-only RowStatus creation.
             if not (
                 isinstance(rowstatus_column, str)
                 and action in {"create-and-go", "create-and-wait", "active"}
-                and columns == {rowstatus_column}
             ):
                 continue
 
-            default_row = self._table_default_row_for_oid(table_oid)
-            column_values = {
-                key: value
-                for key, value in default_row.items()
-                if key not in index_columns
-            }
+            if instance_str in self.table_instances.get(table_oid, {}):
+                self._set_existing_runtime_table_cell_value(
+                    table_oid=table_oid,
+                    column_name=rowstatus_column,
+                    instance_str=instance_str,
+                    value=rowstatus_value,
+                )
+                existing_row = self.table_instances[table_oid].setdefault(
+                    instance_str,
+                    {"column_values": {}},
+                )
+                row_values = existing_row.setdefault("column_values", {})
+                row_values[rowstatus_column] = rowstatus_value
+                self._save_state_safely()
+                continue
+
+            if columns == {rowstatus_column}:
+                # Index-only create: synthesise schema default columns.
+                default_row = self._table_default_row_for_oid(table_oid)
+                column_values = {
+                    key: value
+                    for key, value in default_row.items()
+                    if key not in index_columns
+                }
+                # Replace transient runtime rowstatus cell(s) created by
+                # write_variables with canonical persisted row instances.
+                column_values[rowstatus_column] = rowstatus_value
+                self._remove_runtime_table_cell_instances(table_oid, instance_str)
+                self.add_table_instance(table_oid, index_values, column_values)
+                continue
+            else:
+                # Multi-column create: record exactly what manager set.
+                column_values = dict(
+                    cast(
+                        "dict[str, JsonValue]",
+                        row_ctx.get("set_column_values", {}),
+                    )
+                )
+
+            # pysnmp write_variables has already materialised runtime instances
+            # for createAndGo; only persist row metadata here to avoid duplicate
+            # subtree registration in later __index_mib() passes.
             column_values[rowstatus_column] = rowstatus_value
-            self.add_table_instance(table_oid, index_values, column_values)
+            self._set_existing_runtime_table_cell_value(
+                table_oid=table_oid,
+                column_name=rowstatus_column,
+                instance_str=instance_str,
+                value=rowstatus_value,
+            )
+            instance_oid = f"{table_oid}.{instance_str}"
+            self.table_instances.setdefault(table_oid, {})[instance_str] = {
+                "column_values": dict(column_values),
+            }
+            if instance_oid in self.deleted_instances:
+                self.deleted_instances.remove(instance_oid)
+            self._save_state_safely()
+            self.logger.info(
+                "RowStatus create: registered row %s.%s in table_instances",
+                table_oid,
+                instance_str,
+            )
 
     def _persist_table_cell_set(
         self,

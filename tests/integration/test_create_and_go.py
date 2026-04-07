@@ -33,6 +33,36 @@ TEST_ROW_STATUS_OID = "1.3.6.1.4.1.99998.1.2.1.4"
 CREATE_AND_GO = 4
 ACTIVE = 1
 DESTROY = 6
+MIB_STATE_PATH = Path("agent-model") / "mib_state.json"
+
+
+def _snapshot_and_clear_mib_state() -> bytes | None:
+    """Return previous mib_state bytes and remove the file for test isolation."""
+    if not MIB_STATE_PATH.exists():
+        return None
+    try:
+        snapshot = MIB_STATE_PATH.read_bytes()
+    except OSError:
+        return None
+    try:
+        MIB_STATE_PATH.unlink()
+    except OSError:
+        pass
+    return snapshot
+
+
+def _restore_mib_state(snapshot: bytes | None) -> None:
+    """Restore mib_state to pre-test content or remove it if none existed."""
+    try:
+        if snapshot is None:
+            if MIB_STATE_PATH.exists():
+                MIB_STATE_PATH.unlink()
+            return
+
+        MIB_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        MIB_STATE_PATH.write_bytes(snapshot)
+    except OSError:
+        pass
 
 
 def _ensure_test_enum_schema_ready() -> None:
@@ -178,6 +208,7 @@ def _wait_for_agent(host: str, port: int, timeout_seconds: float = 20.0) -> None
 def test_create_and_go_row_lifecycle(monkeypatch: Any) -> None:
     """createAndGo should create/activate row and destroy should remove it."""
     monkeypatch.setattr(SNMPAgent, "_setup_signal_handlers", lambda self: None)
+    state_snapshot = _snapshot_and_clear_mib_state()
     _ensure_test_enum_schema_ready()
 
     host = "127.0.0.1"
@@ -299,3 +330,4 @@ def test_create_and_go_row_lifecycle(monkeypatch: Any) -> None:
             except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
                 pass
         agent_thread.join(timeout=3.0)
+        _restore_mib_state(state_snapshot)

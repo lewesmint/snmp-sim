@@ -317,6 +317,9 @@ class BehaviourGenerator:
                 default_row[col] = default_value
             else:
                 default_row[col] = self._get_default_value_from_type_info(type_info, col)
+            # RowStatus(0)=notExists is not a valid persistent state; use active(1)
+            if col_type == "RowStatus" and default_row.get(col) == 0:
+                default_row[col] = 1
 
         return default_row
 
