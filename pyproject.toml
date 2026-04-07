@@ -10,7 +10,7 @@ ignore_missing_imports = false
 mypy_path = ["../pysnmp-type-wrapper", "../pysnmp-type-wrapper/typings"]
 
 # Exclude generated, test, and scratch folders anywhere in the tree
-exclude = '(^|.*/)(retired|compiled-mibs-test|compiled-mibs|minimal_for_reference|manual-tests|logs|tests|snmp_wrapper)/'
+exclude = '(^|/)(retired|compiled-mibs|compiled-mibs-test|minimal_for_reference|manual-tests|logs|tests|snmp_wrapper)($|/)'
 
 # Ignore missing stubs only for selected third party modules that tend to be untyped.
 # Add or remove entries here as you encounter them.
@@ -182,6 +182,7 @@ stubPath = "../pysnmp-type-wrapper/typings"
 include = [
     "app",
     "tests",
+    "manual-tests",
     "run_ui.py",
     "run_agent_with_rest.py",
     "run_trap_receiver.py",
@@ -201,6 +202,8 @@ exclude = [
 ]
 ignore = [
     "minimal_for_reference",
+    "compiled-mibs",
+    "compiled-mibs-test",
 ]
 
 [[tool.pyright.executionEnvironments]]

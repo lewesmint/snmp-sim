@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
@@ -59,7 +60,7 @@ class SNMPAgentTableMutationMixin:
     def save_mib_state(self) -> None:
         return None
 
-    def _create_missing_cell_instance(
+    def _create_missing_cell_instance(  # noqa: PLR0915
         self,
         column_name: str,
         cell_oid: tuple[int, ...],
@@ -104,32 +105,86 @@ class SNMPAgentTableMutationMixin:
             column_name,
             mib_scalar_instance_cls,
         )
+        target_module: str | None = None
+        column_oid: tuple[int, ...] | None = None
+        syntax_source: object | None = None
 
-        if template_data is None:
+        if template_data is not None:
+            target_module, template_instance, column_oid = template_data
+            syntax_source = getattr(template_instance, "syntax", None)
+        else:
+            # Fresh tables may have no existing row instance to clone from yet.
+            # Fall back to cloning the column prototype syntax directly.
+            mib_table_column_cls = symbols_adapter.load_symbol_class(
+                "SNMPv2-SMI",
+                "MibTableColumn",
+            )
+            symbols = cast(
+                "dict[str, dict[str, object]]",
+                getattr(self.mib_builder, "mibSymbols", {}),
+            )
+            for module_name, module_symbols in symbols.items():
+                column_obj = module_symbols.get(column_name)
+                if (
+                    column_obj is None
+                    or mib_table_column_cls is None
+                    or not isinstance(column_obj, mib_table_column_cls)
+                ):
+                    continue
+                raw_name = getattr(column_obj, "name", None)
+                if not isinstance(raw_name, tuple):
+                    continue
+                if not all(isinstance(part, int) for part in raw_name):
+                    continue
+                target_module = module_name
+                column_oid = cast("tuple[int, ...]", raw_name)
+                syntax_source = getattr(column_obj, "syntax", None)
+                break
+
+        if target_module is None or column_oid is None or syntax_source is None:
             self.logger.debug(
-                "Could not find template instance for column %s to determine type",
+                "Could not find template or column prototype for %s to determine type",
                 column_name,
             )
             return False
 
-        target_module, template_instance, column_oid = template_data
-
         try:
-            new_syntax = cast("SupportsClone", template_instance.syntax).clone(value)
+            new_syntax = cast("SupportsClone", syntax_source).clone(value)
             index_tuple = cell_oid[len(column_oid) :]
             instance_ctor: Callable[..., object] = cast(
                 "Callable[..., object]", mib_scalar_instance_cls
             )
             new_instance = instance_ctor(column_oid, index_tuple, new_syntax)
 
-            instance_name = f"{column_name}Inst_{'_'.join(str(x) for x in index_tuple)}"
-            if not symbols_adapter.upsert_symbol(target_module, instance_name, new_instance):
+            # Register the row cell in the owning table column runtime map.
+            # This is the authoritative lookup path used by pysnmp table GETs.
+            symbols = cast(
+                "dict[str, dict[str, object]]",
+                getattr(self.mib_builder, "mibSymbols", {}),
+            )
+            module_symbols = symbols.get(target_module, {})
+            column_symbol = module_symbols.get(column_name)
+            vars_dict = getattr(column_symbol, "_vars", None)
+            if isinstance(vars_dict, dict):
+                vars_dict[cell_oid] = new_instance
+                with contextlib.suppress(AttributeError, TypeError):
+                    dynamic_column = cast("Any", column_symbol)
+                    dynamic_column.branchVersionId += 1
+            else:
                 self.logger.debug(
-                    "Could not upsert new instance %s into module %s",
-                    instance_name,
+                    "Column %s in %s has no _vars map; falling back to symbol export",
+                    column_name,
                     target_module,
                 )
-                return False
+                instance_name = f"{column_name}Inst_{'_'.join(str(x) for x in index_tuple)}"
+                if not symbols_adapter.upsert_symbol(target_module, instance_name, new_instance):
+                    self.logger.debug(
+                        "Could not upsert new instance %s into module %s",
+                        instance_name,
+                        target_module,
+                    )
+                    return False
+
             self.logger.info(
                 "Created missing MibScalarInstance %s for %s = %s",
                 cell_oid,

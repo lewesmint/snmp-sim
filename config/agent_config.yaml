@@ -40,6 +40,7 @@ mibs:
   - HOST-RESOURCES-TYPES
   - CISCO-ALARM-MIB
   - TEST-ENUM-MIB
+  - FOOBAR-MANAGER-REGISTRATION-MIB
 
 # Trap destinations configuration
 # List of host:port pairs where traps should be sent

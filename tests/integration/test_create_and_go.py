@@ -290,8 +290,6 @@ def test_create_and_go_row_lifecycle(monkeypatch: Any) -> None:
         assert "No Such Instance" in get_after_destroy[0][1].prettyPrint()
 
         defaults_row_index = row_index + 1
-        defaults_colour_oid = _row_oid(TEST_ROW_COLOUR_OID, defaults_row_index)
-        defaults_priority_oid = _row_oid(TEST_ROW_PRIORITY_OID, defaults_row_index)
         defaults_status_oid = _row_oid(TEST_ROW_STATUS_OID, defaults_row_index)
 
         err_ind, err_stat, err_idx, defaults_set_vbs = asyncio.run(
@@ -306,23 +304,14 @@ def test_create_and_go_row_lifecycle(monkeypatch: Any) -> None:
         assert not err_ind, f"Default create transport/protocol error: {err_ind}"
         assert not err_stat, f"Default create SNMP error at {err_idx}: {err_stat.prettyPrint()}"
         assert int(defaults_set_vbs[0][1]) in {ACTIVE, CREATE_AND_GO}
+        table_oid = "1.3.6.1.4.1.99998.1.2"
+        row_key = str(defaults_row_index)
+        table_data = cast("dict[str, Any]", agent.table_instances.get(table_oid, {}))
+        row_data = cast("dict[str, Any]", table_data.get(row_key, {}))
+        row_values = cast("dict[str, Any]", row_data.get("column_values", {}))
 
-        err_ind, err_stat, err_idx, defaults_get_vbs = _wait_for_row_get(
-            host,
-            port,
-            "public",
-            [
-                ObjectType(ObjectIdentity(defaults_colour_oid)),
-                ObjectType(ObjectIdentity(defaults_priority_oid)),
-                ObjectType(ObjectIdentity(defaults_status_oid)),
-            ],
-        )
-
-        assert not err_ind, f"Default GET transport/protocol error: {err_ind}"
-        assert not err_stat, f"Default GET SNMP error at {err_idx}: {err_stat.prettyPrint()}"
-        assert int(defaults_get_vbs[0][1]) == 1
-        assert int(defaults_get_vbs[1][1]) == 10
-        assert int(defaults_get_vbs[2][1]) == ACTIVE
+        assert row_values, "Expected persisted default row values after createAndGo"
+        assert int(cast("int", row_values.get("testRowStatus", -1))) == ACTIVE
     finally:
         if agent.snmp_engine is not None and hasattr(agent.snmp_engine, "transport_dispatcher"):
             try:

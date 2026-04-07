@@ -1,6 +1,6 @@
 """Runtime setup and schema workflow mixin for SNMPAgent."""
 
-# pylint: disable=invalid-name,not-callable,too-many-statements
+# pylint: disable=invalid-name,not-callable,too-many-statements,too-many-lines
 
 # mypy: disable-error-code=attr-defined
 # pyright: reportAttributeAccessIssue=false
@@ -51,10 +51,23 @@ type JsonValue = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 
 _VAR_BIND_MIN_TUPLE_LEN = 2
 _LOOKUP_RESULT_TUPLE_LEN = 2
+_TABLE_CELL_TUPLE_LEN = 4
+_SNMP_COERCE_EXCEPTIONS = (AttributeError, LookupError, OSError, TypeError, ValueError)
+_SYSOR_REQUIRED_COLUMNS: dict[str, tuple[list[int], str, str]] = {
+    "sysORIndex": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 1], "Integer32", "not-accessible"),
+    "sysORID": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 2], "ObjectIdentifier", "read-only"),
+    "sysORDescr": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 3], "DisplayString", "read-only"),
+    "sysORUpTime": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 4], "TimeStamp", "read-only"),
+}
 
 def _to_var_text(value: object) -> str:
     pretty = getattr(value, "prettyPrint", None)
     return str(pretty()) if callable(pretty) else str(value)
+
+
+def _get_callable_attr(obj: object, name: str) -> Callable[..., object] | None:
+    attr = getattr(obj, name, None)
+    return attr if callable(attr) else None
 
 class SNMPAgentRuntimeWorkflowMixin:
     mib_registrar: MibRegistrar | None
@@ -85,29 +98,22 @@ class SNMPAgentRuntimeWorkflowMixin:
         return self._format_request_oid(var_bind)
     def _install_snmp_request_logging_hooks(self, mib_instrum: object) -> None:  # noqa: PLR0915
         """Log SNMP GET/GETNEXT requests at the instrumentation boundary."""
-        read_variables = getattr(mib_instrum, "read_variables", None)
-        if callable(read_variables):
-            def _logged_read_variables(*var_binds: object, **ctx: object) -> object:
+        def _make_logged_read_call(method: Callable[..., object], op: str) -> Callable[..., object]:
+            def _logged(*var_binds: object, **ctx: object) -> object:
                 oids = [self._format_request_oid(vb) for vb in var_binds]
-                self.logger.info("SNMP GET request for OID(s): %s", ", ".join(oids))
+                self.logger.info("SNMP %s request for OID(s): %s", op, ", ".join(oids))
                 for oid in oids:
-                    record_snmp_operation("GET", oid)
-                return read_variables(*var_binds, **ctx)
+                    record_snmp_operation(op, oid)
+                return method(*var_binds, **ctx)
 
-            mib_instrum.read_variables = _logged_read_variables
+            return _logged
 
-        read_next_variables = getattr(mib_instrum, "read_next_variables", None)
-        if callable(read_next_variables):
-            def _logged_read_next_variables(*var_binds: object, **ctx: object) -> object:
-                oids = [self._format_request_oid(vb) for vb in var_binds]
-                self.logger.info("SNMP GETNEXT request for OID(s): %s", ", ".join(oids))
-                for oid in oids:
-                    record_snmp_operation("GETNEXT", oid)
-                return read_next_variables(*var_binds, **ctx)
+        for method_name, op in (("read_variables", "GET"), ("read_next_variables", "GETNEXT")):
+            read_method = getattr(mib_instrum, method_name, None)
+            if callable(read_method):
+                setattr(mib_instrum, method_name, _make_logged_read_call(read_method, op))
 
-            mib_instrum.read_next_variables = _logged_read_next_variables
-
-        write_variables = getattr(mib_instrum, "write_variables", None)
+        write_variables = _get_callable_attr(mib_instrum, "write_variables")
         if callable(write_variables):
             def _logged_write_variables(  # noqa: PLR0915
                 *var_binds: object, **ctx: object
@@ -127,21 +133,10 @@ class SNMPAgentRuntimeWorkflowMixin:
                     record_snmp_operation("SET", oid_text, val_text)
 
                 filtered_var_binds = list(var_binds)
-                raw_rowstatus_action = getattr(self, "_rowstatus_action", None)
-                raw_is_rowstatus_column = getattr(self, "_is_rowstatus_column", None)
-                raw_resolve_table_cell = getattr(
-                    self,
-                    "_resolve_table_cell_context_from_schema",
-                    None,
-                )
-                rowstatus_action: Any = (
-                    raw_rowstatus_action if callable(raw_rowstatus_action) else None
-                )
-                is_rowstatus_column: Any = (
-                    raw_is_rowstatus_column if callable(raw_is_rowstatus_column) else None
-                )
-                resolve_table_cell: Any = (
-                    raw_resolve_table_cell if callable(raw_resolve_table_cell) else None
+                rowstatus_action: Any = _get_callable_attr(self, "_rowstatus_action")
+                is_rowstatus_column: Any = _get_callable_attr(self, "_is_rowstatus_column")
+                resolve_table_cell: Any = _get_callable_attr(
+                    self, "_resolve_table_cell_context_from_schema"
                 )
 
                 if (
@@ -149,7 +144,6 @@ class SNMPAgentRuntimeWorkflowMixin:
                     and is_rowstatus_column is not None
                     and resolve_table_cell is not None
                 ):
-                    table_cell_tuple_len = 4
                     filtered_var_binds = []
                     table_instances = cast(
                         "dict[str, dict[str, object]]", getattr(self, "table_instances", {})
@@ -162,14 +156,14 @@ class SNMPAgentRuntimeWorkflowMixin:
                         oid_text = self._format_request_oid(vb)
                         try:
                             oid_tuple = tuple(int(part) for part in oid_text.split("."))
-                        except (AttributeError, LookupError, OSError, TypeError, ValueError):
+                        except _SNMP_COERCE_EXCEPTIONS:
                             filtered_var_binds.append(vb)
                             continue
 
                         table_cell = resolve_table_cell(oid_tuple)
                         if (
                             not isinstance(table_cell, tuple)
-                            or len(table_cell) != table_cell_tuple_len
+                            or len(table_cell) != _TABLE_CELL_TUPLE_LEN
                         ):
                             filtered_var_binds.append(vb)
                             continue
@@ -184,13 +178,7 @@ class SNMPAgentRuntimeWorkflowMixin:
                         raw_value = vb[1]
                         action = rowstatus_action(raw_value)
                         if action is None:
-                            with contextlib.suppress(
-                                AttributeError,
-                                LookupError,
-                                OSError,
-                                TypeError,
-                                ValueError,
-                            ):
+                            with contextlib.suppress(*_SNMP_COERCE_EXCEPTIONS):
                                 action = rowstatus_action(int(raw_value))
 
                         if (
@@ -211,14 +199,15 @@ class SNMPAgentRuntimeWorkflowMixin:
 
                 filtered_var_binds_tuple = tuple(filtered_var_binds)
                 result = write_variables(*filtered_var_binds_tuple, **ctx)
-                raw_materialize_hook = getattr(
-                    self,
-                    "_materialize_rowstatus_defaults_after_set",
-                    None,
+                raw_materialize_hook = _get_callable_attr(
+                    self, "_materialize_rowstatus_defaults_after_set"
                 )
                 materialize_hook: Callable[[tuple[object, ...]], None] | None = (
-                    cast("Callable[[tuple[object, ...]], None]", raw_materialize_hook)
-                    if callable(raw_materialize_hook)
+                    cast(
+                        "Callable[[tuple[object, ...]], None]",
+                        raw_materialize_hook,
+                    )
+                    if raw_materialize_hook
                     else None
                 )
                 if materialize_hook is not None:
@@ -447,32 +436,17 @@ class SNMPAgentRuntimeWorkflowMixin:
     def _repair_sysor_columns(self, objects: dict[str, JsonValue]) -> bool:
         """Ensure sysOR column metadata exists and matches expected OIDs/types/access."""
         changed = False
-        expected_sysor_columns: dict[str, list[int]] = {
-            "sysORIndex": [1, 3, 6, 1, 2, 1, 1, 9, 1, 1],
-            "sysORID": [1, 3, 6, 1, 2, 1, 1, 9, 1, 2],
-            "sysORDescr": [1, 3, 6, 1, 2, 1, 1, 9, 1, 3],
-            "sysORUpTime": [1, 3, 6, 1, 2, 1, 1, 9, 1, 4],
-        }
-        expected_sysor_types: dict[str, str] = {
-            "sysORIndex": "Integer32",
-            "sysORID": "ObjectIdentifier",
-            "sysORDescr": "DisplayString",
-            "sysORUpTime": "TimeStamp",
-        }
-        expected_sysor_access: dict[str, str] = {
-            "sysORIndex": "not-accessible",
-            "sysORID": "read-only",
-            "sysORDescr": "read-only",
-            "sysORUpTime": "read-only",
-        }
-
-        for col_name, expected_oid in expected_sysor_columns.items():
+        for col_name, (
+            expected_oid,
+            expected_type,
+            expected_access,
+        ) in _SYSOR_REQUIRED_COLUMNS.items():
             col_obj = objects.get(col_name)
             if not isinstance(col_obj, dict):
                 objects[col_name] = {
                     "oid": cast(JsonValue, expected_oid),
-                    "type": expected_sysor_types[col_name],
-                    "access": expected_sysor_access[col_name],
+                    "type": expected_type,
+                    "access": expected_access,
                 }
                 changed = True
                 continue
@@ -483,11 +457,11 @@ class SNMPAgentRuntimeWorkflowMixin:
                 changed = True
 
             if not col_obj.get("type"):
-                col_obj["type"] = expected_sysor_types[col_name]
+                col_obj["type"] = expected_type
                 changed = True
 
             if not col_obj.get("access"):
-                col_obj["access"] = expected_sysor_access[col_name]
+                col_obj["access"] = expected_access
                 changed = True
 
         return changed
@@ -525,14 +499,11 @@ class SNMPAgentRuntimeWorkflowMixin:
             msg = "SNMPv2-MIB schema missing objects container"
             raise TypeError(msg)
 
-        required_columns: dict[str, tuple[list[int], str, str]] = {
-            "sysORIndex": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 1], "Integer32", "not-accessible"),
-            "sysORID": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 2], "ObjectIdentifier", "read-only"),
-            "sysORDescr": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 3], "DisplayString", "read-only"),
-            "sysORUpTime": ([1, 3, 6, 1, 2, 1, 1, 9, 1, 4], "TimeStamp", "read-only"),
-        }
-
-        for col_name, (expected_oid, expected_type, expected_access) in required_columns.items():
+        for col_name, (
+            expected_oid,
+            expected_type,
+            expected_access,
+        ) in _SYSOR_REQUIRED_COLUMNS.items():
             col_obj = objects.get(col_name)
             if not isinstance(col_obj, dict):
                 msg = f"SNMPv2-MIB core column missing or invalid: {col_name}"
@@ -696,6 +667,14 @@ class SNMPAgentRuntimeWorkflowMixin:
                 len(invalid_schema_mibs),
                 ", ".join(invalid_schema_mibs),
             )
+
+    @staticmethod
+    def _schema_has_objects(schema: object) -> bool:
+        if not isinstance(schema, dict):
+            return False
+        raw_objects = schema.get("objects")
+        return isinstance(raw_objects, dict) and bool(raw_objects)
+
     def _load_single_schema_with_recovery(
         self,
         *,
@@ -704,15 +683,27 @@ class SNMPAgentRuntimeWorkflowMixin:
         generator: BehaviourGenerator,
         mib_to_py_path: dict[str, str],
     ) -> None:
+        needs_regen = False
         try:
             with schema_path.open("r", encoding="utf-8") as jf:
-                self.mib_jsons[mib] = json.load(jf)
-            self._repair_loaded_schema(mib, self.mib_jsons[mib])
-            self._validate_snmpv2_core_schema(mib, self.mib_jsons[mib])
-            self.logger.info("Loaded schema for %s from %s", mib, schema_path)
-            return
+                loaded_schema = json.load(jf)
+
+            if not self._schema_has_objects(loaded_schema):
+                self.logger.warning(
+                    "Schema for %s at %s has no objects; regenerating from compiled MIB",
+                    mib,
+                    schema_path,
+                )
+                needs_regen = True
+            else:
+                self.mib_jsons[mib] = loaded_schema
+                self._repair_loaded_schema(mib, self.mib_jsons[mib])
+                self._validate_snmpv2_core_schema(mib, self.mib_jsons[mib])
+                self.logger.info("Loaded schema for %s from %s", mib, schema_path)
+                return
         except json.JSONDecodeError as e:
             self.logger.warning("Invalid JSON schema for %s at %s: %s", mib, schema_path, e)
+            needs_regen = True
 
         regen_py_path = mib_to_py_path.get(mib)
         if not regen_py_path:
@@ -723,8 +714,11 @@ class SNMPAgentRuntimeWorkflowMixin:
             )
             return
 
+        if not needs_regen:
+            return
+
         try:
-            self.logger.info("Regenerating schema for %s due to invalid JSON...", mib)
+            self.logger.info("Regenerating schema for %s due to schema validation failure...", mib)
             generator.generate(regen_py_path, mib_name=mib, force_regenerate=True)
             with schema_path.open("r", encoding="utf-8") as jf:
                 self.mib_jsons[mib] = json.load(jf)
@@ -736,7 +730,7 @@ class SNMPAgentRuntimeWorkflowMixin:
                 raise
             self.logger.exception("Failed to regenerate schema for %s: %s", mib, regen_error)
             self.logger.warning(
-                "Skipping schema for %s due to invalid JSON at %s", mib, schema_path)
+                "Skipping schema for %s due to schema validation failure at %s", mib, schema_path)
     def _load_or_generate_schemas(
         self,
         *,
@@ -834,11 +828,49 @@ class SNMPAgentRuntimeWorkflowMixin:
         self._load_value_links_from_schemas()
         self._build_augmented_index_map()
         self._start_snmp_runtime(compiled_dir=compiled_dir)
+
+    def _reset_rowstatus_column_prototypes(self) -> None:
+        """Fix RowStatus column syntaxes that carry a DEFVAL from compiled MIBs.
+
+        When a MIB defines DEFVAL { notInService } on a RowStatus column, pysmi
+        compiles it as a subclass with ``defaultValue = 2``.  The MibTableColumn
+        then stores a *valued* prototype syntax (notInService).  When pysnmp's
+        MibTableColumn.createTest clones that prototype to create a new row
+        instance it gets value 2 (notInService) instead of no-value (notExists).
+        The RowStatus state machine then rejects createAndGo as
+        InconsistentValueError, which surfaces as wrongValue to the client.
+
+        This method walks every loaded MibTableColumn and, for any whose syntax
+        prototype is a RowStatus subtype with an existing value, replaces it with
+        a fresh valueless RowStatus instance so new-row creation starts from the
+        correct notExists state.
+        """
+        try:
+            (RowStatus,) = self.mib_builder.import_symbols("SNMPv2-TC", "RowStatus")
+            (MibTableColumn,) = self.mib_builder.import_symbols("SNMPv2-SMI", "MibTableColumn")
+        except Exception:  # noqa: BLE001
+            self.logger.debug("_reset_rowstatus_column_prototypes: SNMPv2-TC not yet available")
+            return
+
+        fixed: list[str] = []
+        for mib_name, mib_module in self.mib_builder.mibSymbols.items():
+            for sym_name, sym in mib_module.items():
+                if (
+                    isinstance(sym, MibTableColumn)
+                    and isinstance(sym.syntax, RowStatus)
+                    and sym.syntax.hasValue()
+                ):
+                    sym.syntax = RowStatus()
+                    fixed.append(f"{mib_name}::{sym_name}")
+
+        if fixed:
+            self.logger.info(
+                "Reset RowStatus prototype syntax to notExists for: %s", ", ".join(fixed)
+            )
+
     def _setup_snmp_engine(self, compiled_dir: str) -> None:
         self.logger.info("Setting up SNMP engine...")
         self.snmp_engine = engine.SnmpEngine()
-
-        # Register asyncio dispatcher
         dispatcher = AsyncioDispatcher()
         self.snmp_engine.register_transport_dispatcher(dispatcher)
 
@@ -859,6 +891,7 @@ class SNMPAgentRuntimeWorkflowMixin:
         if compiled_modules:
             self.mib_builder.load_modules(*compiled_modules)
             self.logger.info("Loaded compiled MIB modules: %s", ", ".join(sorted(compiled_modules)))
+            self._reset_rowstatus_column_prototypes()
         else:
             self.logger.warning("No compiled MIB modules found to load from %s", compiled_dir)
 

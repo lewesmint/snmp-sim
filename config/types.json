@@ -245,6 +245,8 @@
       "HOST-RESOURCES-MIB::hrSWRunPerfCPU",
       "HOST-RESOURCES-MIB::hrSWInstalledIndex",
       "HOST-RESOURCES-MIB::hrSWInstalledType",
+      "FOOBAR-MANAGER-REGISTRATION-MIB::managerSendPort",
+      "FOOBAR-MANAGER-REGISTRATION-MIB::managerTrapPort",
       "TEST-ENUM-MIB::testColour",
       "TEST-ENUM-MIB::testPriority",
       "TEST-ENUM-MIB::completionCode",
@@ -283,6 +285,7 @@
     "enums": null,
     "used_by": [
       "SNMP-COMMUNITY-MIB::snmpTrapAddress",
+      "FOOBAR-MANAGER-REGISTRATION-MIB::managerIpAddress",
       "TEST-ENUM-MIB::endPointIpAddress",
       "TEST-ENUM-MIB::testAugBase04Address",
       "TEST-ENUM-MIB::testAugExt07Address",
@@ -744,6 +747,7 @@
       "SNMP-USER-BASED-SM-MIB::usmUserStatus",
       "IF-MIB::ifStackStatus",
       "IF-MIB::ifRcvAddressStatus",
+      "FOOBAR-MANAGER-REGISTRATION-MIB::managerRowStatus",
       "TEST-ENUM-MIB::testRowStatus",
       "TEST-ENUM-MIB::testAddrStatusRowStatus"
     ],

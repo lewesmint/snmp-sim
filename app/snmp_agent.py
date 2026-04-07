@@ -20,6 +20,7 @@ import signal
 import sys
 import time
 import traceback
+import contextlib
 from types import FrameType
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, TypedDict, cast
@@ -481,8 +482,74 @@ class SNMPAgent(
             table_obj, _table_oid_list = self._find_table_object_for_oid(objects, table_oid)
             if table_obj is None:
                 continue
-            return dict(self._extract_default_row_dict(table_obj))
+
+            default_row = dict(self._extract_default_row_dict(table_obj))
+            if default_row:
+                self._table_defaults[table_oid] = dict(default_row)
+                return default_row
+
+            # RowStatus tables now start with rows=[] by design. Build a
+            # fallback default map from column metadata (e.g. enum first value).
+            table_oid_list = self._oid_list_parts(table_obj.get("oid"))
+            if not table_oid_list:
+                return {}
+
+            fallback_row = self._build_default_row_from_schema_columns(objects, table_oid_list)
+            if fallback_row:
+                self._table_defaults[table_oid] = dict(fallback_row)
+            return fallback_row
         return {}
+
+    def _column_default_from_schema(
+        self,
+        column_obj: dict[str, JsonValue],
+    ) -> JsonValue | None:
+        initial = column_obj.get("initial")
+        if initial is not None and not (
+            isinstance(initial, str) and initial.strip().lower() == "unset"
+        ):
+            return initial
+
+        enums = column_obj.get("enums")
+        if isinstance(enums, dict):
+            enum_values = [value for value in enums.values() if isinstance(value, int)]
+            if enum_values:
+                return min(enum_values)
+
+        return None
+
+    def _build_default_row_from_schema_columns(
+        self,
+        objects: dict[str, dict[str, JsonValue]],
+        table_oid_list: list[int | str],
+    ) -> dict[str, JsonValue]:
+        entry_obj = self._find_table_entry_object(objects, table_oid_list)
+        if entry_obj is None:
+            return {}
+
+        entry_oid = self._oid_tuple(entry_obj.get("oid"))
+        if entry_oid is None:
+            return {}
+
+        index_columns = set(self._string_list(entry_obj.get("indexes")))
+        defaults: dict[str, JsonValue] = {}
+
+        for column_name, column_obj in objects.items():
+            if column_name in index_columns:
+                continue
+
+            col_oid = self._oid_tuple(column_obj.get("oid"))
+            if col_oid is None or len(col_oid) != len(entry_oid) + 1:
+                continue
+            if col_oid[:-1] != entry_oid:
+                continue
+
+            default_value = self._column_default_from_schema(column_obj)
+            if default_value is None:
+                continue
+            defaults[column_name] = default_value
+
+        return defaults
 
     def _is_rowstatus_column(self, table_oid: str, column_name: str) -> bool:
         table_oid_parts = tuple(int(part) for part in table_oid.split("."))
@@ -661,7 +728,8 @@ class SNMPAgent(
 
                 if keys_to_remove:
                     try:
-                        symbol_obj.branchVersionId += 1
+                        dynamic_symbol = cast("Any", symbol_obj)
+                        dynamic_symbol.branchVersionId += 1
                     except (AttributeError, TypeError):
                         pass
 
@@ -806,10 +874,8 @@ class SNMPAgent(
                 try:
                     set_col_vals[column_name] = int(raw_value)
                 except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                    try:
+                    with contextlib.suppress(AttributeError, LookupError, OSError, TypeError, ValueError):
                         set_col_vals[column_name] = str(raw_value)
-                    except (AttributeError, LookupError, OSError, TypeError, ValueError):
-                        pass
                 continue
 
             action: str | None = None
@@ -893,20 +959,47 @@ class SNMPAgent(
                     for key, value in default_row.items()
                     if key not in index_columns
                 }
-                # Replace transient runtime rowstatus cell(s) created by
-                # write_variables with canonical persisted row instances.
                 column_values[rowstatus_column] = rowstatus_value
-                self._remove_runtime_table_cell_instances(table_oid, instance_str)
-                self.add_table_instance(table_oid, index_values, column_values)
-                continue
-            else:
-                # Multi-column create: record exactly what manager set.
-                column_values = dict(
-                    cast(
-                        "dict[str, JsonValue]",
-                        row_ctx.get("set_column_values", {}),
-                    )
+                # Keep runtime symbols as materialized by pysnmp write_variables
+                # and persist only row metadata. Mutating symbol maps here via
+                # add_table_instance can destabilize __index_mib re-indexing.
+                self._set_existing_runtime_table_cell_value(
+                    table_oid=table_oid,
+                    column_name=rowstatus_column,
+                    instance_str=instance_str,
+                    value=rowstatus_value,
                 )
+                instance_oid = f"{table_oid}.{instance_str}"
+                self.table_instances.setdefault(table_oid, {})[instance_str] = {
+                    "column_values": dict(column_values),
+                }
+                if instance_oid in self.deleted_instances:
+                    self.deleted_instances.remove(instance_oid)
+                default_runtime_values = {
+                    key: value
+                    for key, value in column_values.items()
+                    if key != rowstatus_column
+                }
+                if default_runtime_values:
+                    self.update_table_cell_values(
+                        table_oid,
+                        instance_str,
+                        default_runtime_values,
+                    )
+                self._save_state_safely()
+                self.logger.info(
+                    "RowStatus create: registered row %s.%s in table_instances",
+                    table_oid,
+                    instance_str,
+                )
+                continue
+            # Multi-column create: record exactly what manager set.
+            column_values = dict(
+                cast(
+                    "dict[str, JsonValue]",
+                    row_ctx.get("set_column_values", {}),
+                )
+            )
 
             # pysnmp write_variables has already materialised runtime instances
             # for createAndGo; only persist row metadata here to avoid duplicate

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: T201,D103,TRY003,EM101,EM102,TRY300,SLF001,PLR2004,S310,E501,PLW1510
 """End-to-end purge-and-validate run for TEST-ENUM-MIB RowStatus behavior.
 
 What this script does:
@@ -22,6 +23,8 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any, cast
 
@@ -39,6 +42,9 @@ from pysnmp.hlapi.v3arch.asyncio import (
 from pysnmp.proto.rfc1902 import Integer
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+REST_READY_URL = "http://127.0.0.1:8800/ready"
+AGENT_READY_TIMEOUT_SECONDS = 180.0
+AGENT_E2E_LOG = REPO_ROOT / "logs" / "full-purge-rowstatus-e2e-agent.log"
 
 COMPILED_TEST_ENUM = REPO_ROOT / "compiled-mibs" / "TEST-ENUM-MIB.py"
 COMPILED_TEST_ENUM_PYCACHE = REPO_ROOT / "compiled-mibs" / "__pycache__"
@@ -65,7 +71,7 @@ DESTROY = 6
 ACTIVE = 1
 
 
-class E2EFailure(RuntimeError):
+class E2EFailure(RuntimeError):  # noqa: N818
     """Raised when an assertion in the end-to-end flow fails."""
 
 
@@ -81,11 +87,11 @@ def _find_udp_port_pids(port: int) -> list[int]:
 
     pids: list[int] = []
     for line in out.splitlines():
-        line = line.strip()
-        if not line:
+        line_stripped = line.strip()
+        if not line_stripped:
             continue
         try:
-            pids.append(int(line))
+            pids.append(int(line_stripped))
         except ValueError:
             continue
     return sorted(set(pids))
@@ -97,10 +103,11 @@ def _ensure_port_ready(port: int, force_kill_port_owner: bool) -> None:
         return
 
     if not force_kill_port_owner:
-        raise E2EFailure(
+        msg = (
             f"UDP port {port} already in use by PID(s) {existing}. "
             "Stop existing agent or re-run with --force-kill-port-owner."
         )
+        raise E2EFailure(msg)
 
     print(f"[prep] Killing existing UDP:{port} owner(s): {existing}")
     for pid in existing:
@@ -115,7 +122,8 @@ def _ensure_port_ready(port: int, force_kill_port_owner: bool) -> None:
             return
         time.sleep(0.2)
 
-    raise E2EFailure(f"Failed to free UDP port {port} after terminating existing owner(s)")
+    msg = f"Failed to free UDP port {port} after terminating existing owner(s)"
+    raise E2EFailure(msg)
 
 
 def _row_oid(base_oid: str, *index_parts: int) -> str:
@@ -126,7 +134,7 @@ def _row_oid(base_oid: str, *index_parts: int) -> str:
 def _oid_to_dotted(value: object) -> str:
     try:
         return ".".join(str(int(x)) for x in cast("Any", value))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise E2EFailure(f"Failed to convert OID to dotted string: {value!r}") from exc
 
 
@@ -167,7 +175,7 @@ async def _snmp_get(host: str, port: int, community: str, *oids: str) -> tuple[A
         await get_cmd(
             SnmpEngine(),
             CommunityData(community, mpModel=1),
-            await UdpTransportTarget.create((host, port)),
+            await UdpTransportTarget.create((host, port), timeout=2, retries=1),
             ContextData(),
             *(ObjectType(ObjectIdentity(oid)) for oid in oids),
         ),
@@ -185,7 +193,7 @@ async def _snmp_set(
         await set_cmd(
             SnmpEngine(),
             CommunityData(community, mpModel=1),
-            await UdpTransportTarget.create((host, port)),
+            await UdpTransportTarget.create((host, port), timeout=2, retries=1),
             ContextData(),
             *var_binds,
         ),
@@ -198,7 +206,7 @@ async def _snmp_getnext(host: str, port: int, community: str, oid: str) -> tuple
         await next_cmd(
             SnmpEngine(),
             CommunityData(community, mpModel=1),
-            await UdpTransportTarget.create((host, port)),
+                await UdpTransportTarget.create((host, port), timeout=2, retries=1),
             ContextData(),
             ObjectType(ObjectIdentity(oid)),
         ),
@@ -229,7 +237,7 @@ async def _snmp_walk_table(
             await next_cmd(
                 SnmpEngine(),
                 CommunityData(community, mpModel=1),
-                await UdpTransportTarget.create((host, port)),
+                await UdpTransportTarget.create((host, port), timeout=2, retries=1),
                 ContextData(),
                 ObjectType(ObjectIdentity(current_oid)),
             ),
@@ -272,14 +280,32 @@ def _run_snmptable(host: str, port: int, community: str, table_oid: str) -> str 
         return None
 
 
-async def _wait_for_agent(host: str, port: int, timeout_seconds: float = 45.0) -> None:
+def _rest_agent_ready() -> bool:
+    try:
+        with urllib.request.urlopen(REST_READY_URL, timeout=1.0) as response:
+            return response.status == 200
+    except (TimeoutError, OSError, urllib.error.HTTPError, urllib.error.URLError):
+        return False
+
+
+async def _wait_for_agent(
+    host: str,
+    port: int,
+    timeout_seconds: float = AGENT_READY_TIMEOUT_SECONDS,
+) -> None:
     deadline = time.monotonic() + timeout_seconds
+    last_status = "no probe result yet"
     while time.monotonic() < deadline:
         err_ind, err_stat, _, _ = await _snmp_get(host, port, "public", SYS_NAME_OID)
         if not err_ind and not err_stat:
             return
-        await asyncio.sleep(0.5)
-    raise E2EFailure(f"Agent did not become ready within {timeout_seconds:.1f}s")
+        rest_ready = _rest_agent_ready()
+        last_status = (
+            f"snmp errInd={err_ind!r} errStat={_safe_pretty(err_stat)} restReady={rest_ready}"
+        )
+        await asyncio.sleep(0.25)
+    msg = f"Agent did not become ready within {timeout_seconds:.1f}s ({last_status})"
+    raise E2EFailure(msg)
 
 
 def _assert_process_owns_udp_port(proc: subprocess.Popen[str], port: int) -> None:
@@ -295,18 +321,27 @@ def _assert_process_owns_udp_port(proc: subprocess.Popen[str], port: int) -> Non
 
 def _start_agent_process() -> subprocess.Popen[str]:
     cmd = [sys.executable, "run_agent_with_rest.py"]
-    return subprocess.Popen(  # noqa: S603
+    AGENT_E2E_LOG.parent.mkdir(parents=True, exist_ok=True)
+    log_fp = AGENT_E2E_LOG.open("w", encoding="utf-8")
+    proc = subprocess.Popen(  # noqa: S603
         cmd,
         cwd=str(REPO_ROOT),
-        stdout=subprocess.PIPE,
+        stdout=log_fp,
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
     )
+    proc._agent_log_fp = log_fp  # type: ignore[attr-defined]
+    proc._agent_log_path = AGENT_E2E_LOG  # type: ignore[attr-defined]
+    return proc
 
 
 def _stop_agent_process(proc: subprocess.Popen[str]) -> None:
+    log_fp = getattr(proc, "_agent_log_fp", None)
+
     if proc.poll() is not None:
+        if log_fp is not None:
+            log_fp.close()
         return
 
     proc.send_signal(signal.SIGTERM)
@@ -315,18 +350,19 @@ def _stop_agent_process(proc: subprocess.Popen[str]) -> None:
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait(timeout=5)
+    finally:
+        if log_fp is not None:
+            log_fp.close()
 
 
 def _drain_agent_output(proc: subprocess.Popen[str], max_lines: int = 120) -> str:
-    if proc.stdout is None:
+    log_path = getattr(proc, "_agent_log_path", None)
+    if not isinstance(log_path, Path) or not log_path.exists():
         return ""
 
-    lines: list[str] = []
-    for _ in range(max_lines):
-        line = proc.stdout.readline()
-        if not line:
-            break
-        lines.append(line.rstrip())
+    lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    if len(lines) > max_lines:
+        lines = lines[-max_lines:]
     return "\n".join(lines)
 
 
@@ -538,16 +574,22 @@ async def run_flow(
     port: int,
     keep_logs: bool,
     force_kill_port_owner: bool,
+    use_existing_agent: bool,
 ) -> int:
-    _ensure_port_ready(port, force_kill_port_owner)
-    _purge_test_enum_artifacts()
+    proc: subprocess.Popen[str] | None = None
 
-    print("[start] Launching agent")
-    proc = _start_agent_process()
+    if use_existing_agent:
+        print("[start] Using already-running agent")
+    else:
+        _ensure_port_ready(port, force_kill_port_owner)
+        _purge_test_enum_artifacts()
+        print("[start] Launching agent")
+        proc = _start_agent_process()
 
     try:
         await _wait_for_agent(host, port)
-        _assert_process_owns_udp_port(proc, port)
+        if proc is not None:
+            _assert_process_owns_udp_port(proc, port)
         print("[start] Agent is ready")
 
         await _validate_baseline(host, port)
@@ -559,14 +601,15 @@ async def run_flow(
 
     except E2EFailure as exc:
         print(f"[fail] {exc}")
-        if keep_logs:
+        if keep_logs and proc is not None:
             print("[logs] Agent output (tail):")
             print(_drain_agent_output(proc))
         return 1
 
     finally:
-        print("[stop] Stopping agent")
-        _stop_agent_process(proc)
+        if proc is not None:
+            print("[stop] Stopping agent")
+            _stop_agent_process(proc)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -583,6 +626,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Terminate existing UDP listener(s) on the SNMP port before running",
     )
+    parser.add_argument(
+        "--use-existing-agent",
+        action="store_true",
+        help="Run against an already-started agent instead of launching one",
+    )
     return parser
 
 
@@ -597,6 +645,7 @@ def main() -> int:
             port=args.port,
             keep_logs=args.keep_logs,
             force_kill_port_owner=args.force_kill_port_owner,
+            use_existing_agent=args.use_existing_agent,
         )
     )
 

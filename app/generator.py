@@ -183,6 +183,11 @@ class BehaviourGenerator:
             if symbol_info["rows"]:
                 continue
 
+            # Skip default row creation for tables with
+            # RowStatus column (dynamic lifecycle management)
+            if self._has_rowstatus_column(info, symbol_info):
+                continue
+
             self._add_default_table_row(
                 info=info,
                 table_name=table_name,
@@ -273,6 +278,24 @@ class BehaviourGenerator:
             if len(col_oid) == len(entry_oid) + 1 and col_oid[: len(entry_oid)] == entry_oid:
                 columns.append(col_name)
         return columns
+
+    def _has_rowstatus_column(
+        self,
+        info: dict[str, Any],
+        symbol_info: dict[str, Any],
+    ) -> bool:
+        """Check if a table has a RowStatus column for dynamic lifecycle management."""
+        entry_info, entry_name = self._find_table_entry(info, symbol_info)
+        if not entry_info:
+            return False
+
+        entry_oid = tuple(entry_info.get("oid", []))
+        columns = self._find_table_columns(info, entry_oid, "", entry_name)
+        for col_name in columns:
+            col_info = cast("dict[str, Any]", info[col_name])
+            if col_info.get("type") == "RowStatus":
+                return True
+        return False
 
     def _build_default_row(
         self,
