@@ -59,4 +59,4 @@ logs/
 data/
 walks/
 agent-model-backups/
-agent-model/*
+agent-model/

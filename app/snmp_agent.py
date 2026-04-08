@@ -910,6 +910,20 @@ class SNMPAgent(
             rowstatus_column = row_ctx.get("rowstatus_column")
             rowstatus_value = cast("JsonValue", row_ctx.get("rowstatus_value"))
             if not isinstance(action, str):
+                # Persist non-RowStatus column updates for rows that already exist.
+                set_col_vals = cast(
+                    "dict[str, JsonValue]",
+                    row_ctx.get("set_column_values", {}),
+                )
+                if set_col_vals and instance_str in self.table_instances.get(table_oid, {}):
+                    index_columns = cast("list[str]", row_ctx["index_columns"])
+                    table_data = self.table_instances.setdefault(table_oid, {})
+                    existing_row = table_data.setdefault(instance_str, {"column_values": {}})
+                    row_values = existing_row.setdefault("column_values", {})
+                    row_values.update(set_col_vals)
+                    self._populate_missing_row_index_values(row_values, instance_str, index_columns)
+                    self._save_state_safely()
+
                 if (
                     isinstance(rowstatus_column, str)
                     and rowstatus_value == 0

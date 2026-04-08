@@ -573,6 +573,90 @@ def test_set_table_cell_value_persists_into_table_instances(
     assert saved.get("called") is True
 
 
+def test_materialize_non_rowstatus_set_persists_existing_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-RowStatus live SET should persist for an existing row instance."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    table_oid = "1.3.6.1.4.1.8998.321654.1.1"
+    instance_str = "127.0.0.1.2000"
+    trap_port_oid = "1.3.6.1.4.1.8998.321654.1.1.1.3.127.0.0.1.2000"
+    trap_port_value = 9162
+
+    agent.table_instances = {
+        table_oid: {
+            instance_str: {
+                "column_values": {
+                    "managerRowStatus": 1,
+                },
+            },
+        },
+    }
+
+    saved: dict[str, int] = {"count": 0}
+    monkeypatch.setattr(agent, "save_mib_state", lambda: saved.__setitem__("count", saved["count"] + 1))
+    monkeypatch.setattr(agent, "_format_request_oid", lambda _vb: trap_port_oid)
+    monkeypatch.setattr(
+        agent,
+        "_resolve_table_cell_context_from_schema",
+        lambda _oid: (
+            table_oid,
+            instance_str,
+            "managerTrapPort",
+            ["managerIpAddress", "managerSendPort"],
+        ),
+    )
+    monkeypatch.setattr(agent, "_is_rowstatus_column", lambda *_args, **_kwargs: False)
+
+    agent._materialize_rowstatus_defaults_after_set((("ignored", trap_port_value),))
+
+    row = agent.table_instances[table_oid][instance_str]
+    persisted = cast("dict[str, JsonValue]", row.get("column_values", {}))
+    assert persisted.get("managerRowStatus") == 1
+    assert persisted.get("managerTrapPort") == trap_port_value
+    assert saved["count"] >= 1
+
+
+def test_load_mib_state_keeps_non_rowstatus_columns(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Reloaded table rows should preserve persisted non-RowStatus column values."""
+    agent = SNMPAgent(config_path="agent_config.yaml")
+
+    state_file = tmp_path / "mib_state.json"
+    state_payload = {
+        "scalars": {},
+        "deleted_instances": [],
+        "links": [],
+        "tables": {
+            "1.3.6.1.4.1.8998.321654.1.1": {
+                "127.0.0.1.2000": {
+                    "column_values": {
+                        "managerRowStatus": 1,
+                        "managerTrapPort": 9162,
+                    },
+                },
+            },
+        },
+    }
+    state_file.write_text(json.dumps(state_payload), encoding="utf-8")
+
+    monkeypatch.setattr(agent, "_state_file_path", lambda: str(state_file))
+    monkeypatch.setattr(agent, "_normalize_loaded_table_instances", lambda: None)
+    monkeypatch.setattr(agent, "_materialize_index_columns", lambda: None)
+    monkeypatch.setattr(agent, "_fill_missing_table_defaults", lambda: None)
+    monkeypatch.setattr(agent, "_filter_deleted_instances_against_schema", lambda: None)
+
+    agent._load_mib_state()
+
+    row = agent.table_instances["1.3.6.1.4.1.8998.321654.1.1"]["127.0.0.1.2000"]
+    values = cast("dict[str, JsonValue]", row.get("column_values", {}))
+    assert values.get("managerRowStatus") == 1
+    assert values.get("managerTrapPort") == 9162
+
+
 def test_shutdown_logs_exception_on_error(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
