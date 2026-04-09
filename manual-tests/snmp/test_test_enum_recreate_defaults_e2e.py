@@ -94,6 +94,32 @@ def _find_udp_port_pids(port: int) -> list[int]:
     return sorted(set(pids))
 
 
+def _ensure_port_ready(port: int, force_kill_port_owner: bool) -> None:
+    existing = _find_udp_port_pids(port)
+    if not existing:
+        return
+
+    if not force_kill_port_owner:
+        msg = (
+            f"UDP port {port} already in use by PID(s): {existing}. "
+            "Stop existing agent or re-run with --force-kill-port-owner."
+        )
+        raise E2EFailure(msg)
+
+    print(f"[prep] Killing existing UDP:{port} owner(s): {existing}")
+    for pid in existing:
+        with contextlib.suppress(OSError):
+            os.kill(pid, signal.SIGTERM)
+
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if not _find_udp_port_pids(port):
+            return
+        time.sleep(0.2)
+
+    raise E2EFailure(f"Failed to free UDP port {port} after terminating existing owner(s)")
+
+
 async def _snmp_set(
     host: str,
     port: int,
@@ -314,6 +340,16 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="TEST-ENUM recreate/defaults live E2E")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=11161, help="SNMP agent UDP port")
+    parser.add_argument(
+        "--force-kill-port-owner",
+        action="store_true",
+        help="Terminate existing UDP listener(s) on the SNMP port before running",
+    )
+    parser.add_argument(
+        "--use-existing-agent",
+        action="store_true",
+        help="Run against an already-started agent instead of launching one",
+    )
     return parser
 
 
@@ -323,14 +359,17 @@ def main() -> int:
 
     host = args.host
     port = args.port
+    use_existing_agent = bool(args.use_existing_agent)
 
-    in_use = _find_udp_port_pids(port)
-    if in_use:
-        print(f"[fail] UDP port {port} already in use by PID(s): {in_use}")
-        return 1
+    proc: subprocess.Popen[bytes] | None = None
 
-    print(f"[start] host={host} port={port}")
-    proc = _start_agent()
+    if use_existing_agent:
+        print(f"[start] Using already-running agent on {host}:{port}")
+    else:
+        _ensure_port_ready(port, bool(args.force_kill_port_owner))
+        print(f"[start] host={host} port={port}")
+        proc = _start_agent()
+
     try:
         asyncio.run(_wait_for_agent(host, port))
         asyncio.run(_run_flow(host, port))
@@ -340,7 +379,8 @@ def main() -> int:
         print(f"[fail] {exc}")
         return 1
     finally:
-        _stop_agent(proc)
+        if proc is not None:
+            _stop_agent(proc)
 
 
 if __name__ == "__main__":

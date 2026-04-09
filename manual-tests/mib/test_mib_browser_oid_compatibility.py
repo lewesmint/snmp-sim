@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Final comprehensive test - MIB Browser OID compatibility"""
 
+import argparse
 import asyncio
 from pysnmp.hlapi.v3arch.asyncio import (
     SnmpEngine,
@@ -22,15 +23,29 @@ def normalize_oid(oid: str) -> str:
     return oid
 
 
-async def test_oid(oid_str: str, description: str) -> tuple[bool, str]:
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="MIB Browser OID compatibility test")
+    parser.add_argument("--host", default="127.0.0.1", help="SNMP target host")
+    parser.add_argument("--port", type=int, default=11161, help="SNMP target UDP port")
+    parser.add_argument("--community", default="public", help="SNMP community string")
+    return parser
+
+
+async def test_oid(
+    oid_str: str,
+    description: str,
+    host: str,
+    port: int,
+    community: str,
+) -> tuple[bool, str]:
     """Test an OID with both net-snmp and pysnmp (via MIB Browser normalization)"""
     normalized_oid = normalize_oid(oid_str)
 
     try:
-        target = await UdpTransportTarget.create(("127.0.0.1", 161))
+        target = await UdpTransportTarget.create((host, port))
         errorIndication, errorStatus, errorIndex, varBinds = await next_cmd(
             SnmpEngine(),
-            CommunityData("public", mpModel=1),
+            CommunityData(community, mpModel=1),
             target,
             ContextData(),
             ObjectType(ObjectIdentity(normalized_oid)),
@@ -44,7 +59,7 @@ async def test_oid(oid_str: str, description: str) -> tuple[bool, str]:
         return False, f"❌ Exception: {type(e).__name__}"
 
 
-async def main() -> bool:
+async def main(host: str, port: int, community: str) -> bool:
     test_cases = [
         ("1", "Single digit (like snmpgetnext localhost 1)"),
         (".1", "Dot-prefixed single digit (like snmpgetnext localhost .1)"),
@@ -57,11 +72,18 @@ async def main() -> bool:
     print("\n" + "=" * 80)
     print("MIB Browser OID Compatibility Test")
     print("Verifying net-snmp OID formats now work with MIB Browser via pysnmp")
+    print(f"Target: {host}:{port}, community={community}")
     print("=" * 80 + "\n")
 
     results = []
     for oid, description in test_cases:
-        success, message = await test_oid(oid, description)
+        success, message = await test_oid(
+            oid,
+            description,
+            host=host,
+            port=port,
+            community=community,
+        )
         results.append(success)
 
         # Show what normalization does
@@ -87,5 +109,6 @@ async def main() -> bool:
 
 
 if __name__ == "__main__":
-    success = asyncio.run(main())
+    args = _build_parser().parse_args()
+    success = asyncio.run(main(host=args.host, port=args.port, community=args.community))
     exit(0 if success else 1)

@@ -538,6 +538,12 @@ class SNMPAgent(
             if column_name in index_columns:
                 continue
 
+            # Index columns are typically not-accessible and should not be
+            # materialized into persisted runtime row values.
+            access = column_obj.get("access")
+            if isinstance(access, str) and access.lower() == "not-accessible":
+                continue
+
             col_oid = self._oid_tuple(column_obj.get("oid"))
             if col_oid is None or len(col_oid) != len(entry_oid) + 1:
                 continue
@@ -1002,9 +1008,10 @@ class SNMPAgent(
                     )
                 self._save_state_safely()
                 self.logger.info(
-                    "RowStatus create: registered row %s.%s in table_instances",
+                    "RowStatus create: registered row %s.%s in table_instances with values: %s",
                     table_oid,
                     instance_str,
+                    column_values,
                 )
                 continue
             # Multi-column create: record exactly what manager set.
@@ -1302,6 +1309,7 @@ class SNMPAgent(
         try:
             with path.open("w", encoding="utf-8") as f:
                 json.dump(mib_state, f, indent=2, sort_keys=True)
+                f.flush()
             self.logger.debug("Saved MIB state to %s", path)
         except (AttributeError, LookupError, OSError, TypeError, ValueError) as e:
             self.logger.exception("Failed to save MIB state to %s: %s", path, e)

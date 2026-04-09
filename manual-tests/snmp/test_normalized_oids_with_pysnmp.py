@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Test that all normalized OID formats work with pysnmp"""
 
+import argparse
 import asyncio
 from pysnmp.hlapi.v3arch.asyncio import (
     SnmpEngine,
@@ -22,16 +23,24 @@ def normalize_oid(oid: str) -> str:
     return oid
 
 
-async def test_normalized_oid(oid_str: str) -> bool:
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Validate normalized OID handling via GETNEXT")
+    parser.add_argument("--host", default="127.0.0.1", help="SNMP target host")
+    parser.add_argument("--port", type=int, default=11161, help="SNMP target UDP port")
+    parser.add_argument("--community", default="public", help="SNMP community string")
+    return parser
+
+
+async def test_normalized_oid(oid_str: str, host: str, port: int, community: str) -> bool:
     """Test GETNEXT with normalized OID"""
     normalized = normalize_oid(oid_str)
     print(f"Testing: '{oid_str}' → '{normalized}'", end=" ... ")
 
     try:
-        target = await UdpTransportTarget.create(("127.0.0.1", 161))
+        target = await UdpTransportTarget.create((host, port))
         errorIndication, errorStatus, errorIndex, varBinds = await next_cmd(
             SnmpEngine(),
-            CommunityData("public", mpModel=1),
+            CommunityData(community, mpModel=1),
             target,
             ContextData(),
             ObjectType(ObjectIdentity(normalized)),
@@ -48,7 +57,7 @@ async def test_normalized_oid(oid_str: str) -> bool:
         return False
 
 
-async def main() -> bool:
+async def main(host: str, port: int, community: str) -> bool:
     test_cases = [
         "1",  # Single digit
         ".1",  # Dot prefix single digit
@@ -61,11 +70,12 @@ async def main() -> bool:
 
     print("\n" + "=" * 70)
     print("Testing Normalized OID Formats with pysnmp")
+    print(f"Target: {host}:{port}, community={community}")
     print("=" * 70 + "\n")
 
     results = []
     for oid in test_cases:
-        result = await test_normalized_oid(oid)
+        result = await test_normalized_oid(oid, host=host, port=port, community=community)
         results.append(result)
 
     print("\n" + "=" * 70)
@@ -78,5 +88,6 @@ async def main() -> bool:
 
 
 if __name__ == "__main__":
-    success = asyncio.run(main())
+    args = _build_parser().parse_args()
+    success = asyncio.run(main(host=args.host, port=args.port, community=args.community))
     exit(0 if success else 1)

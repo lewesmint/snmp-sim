@@ -443,7 +443,7 @@ class BehaviourGenerator:
         """Build a single schema entry from a symbol snapshot."""
         symbol_type = snapshot.class_name
         syntax_obj = snapshot.syntax_obj
-        is_structural = symbol_type in ("MibTable", "MibTableRow", "MibTableColumn")
+        is_structural = symbol_type in ("MibTable", "MibTableRow")
 
         if syntax_obj is not None and syntax_obj.__class__.__name__ != "NoneType":
             type_name = syntax_obj.__class__.__name__
@@ -460,6 +460,13 @@ class BehaviourGenerator:
         if not is_structural:
             normalized = self._normalize_type_info_for_symbol(type_info or {}, type_name)
             entry["initial"] = self._get_default_value_from_type_info(normalized or {}, symbol_name)
+            # Prefer the MIB DEFVAL (compiled as a class-level defaultValue attribute) over
+            # the plugin-derived default.  We check the concrete type class dict directly so
+            # that base-class defaults (e.g. Integer32.defaultValue = 0) are not picked up.
+            if syntax_obj is not None:
+                mib_defval = type(syntax_obj).__dict__.get("defaultValue")
+                if mib_defval is not None:
+                    entry["initial"] = mib_defval
             entry["dynamic_function"] = self._get_dynamic_function(symbol_name)
 
         if type_info.get("enums"):

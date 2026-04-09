@@ -186,7 +186,7 @@ class SNMPAgentTableMutationMixin:
                     return False
 
             self.logger.info(
-                "Created missing MibScalarInstance %s for %s = %s",
+                "Created table cell MibScalarInstance %s for column %s = %s",
                 cell_oid,
                 column_name,
                 value,
@@ -377,7 +377,9 @@ class SNMPAgentTableMutationMixin:
 
         if not updated and self._create_missing_cell_instance(column_name, cell_oid, value):
             updated = True
-            self.logger.info("Created missing MibScalarInstance for %s", cell_oid)
+            self.logger.debug(
+                "Created table cell MibScalarInstance for %s (no prior instance)", cell_oid
+            )
 
         return updated or stored
 
@@ -517,14 +519,11 @@ class SNMPAgentTableMutationMixin:
             if not self.table_instances[table_oid]:
                 del self.table_instances[table_oid]
 
-        if self._instance_defined_in_schema(table_oid, index_values):
-            if instance_oid not in self.deleted_instances:
-                self.deleted_instances.append(instance_oid)
-                self.save_mib_state()
-                self.logger.info("Deleted table instance: %s", instance_oid)
-        else:
-            self.logger.info("Skipping deleted_instances for %s (not in schema rows)", instance_oid)
-
+        in_schema = self._instance_defined_in_schema(table_oid, index_values)
+        if in_schema and instance_oid not in self.deleted_instances:
+            self.deleted_instances.append(instance_oid)
+            self.save_mib_state()
+            self.logger.info("Deleted table instance: %s", instance_oid)
         if propagate_augments:
             visited = set(_augment_path) if _augment_path else set()
             if table_oid not in visited:

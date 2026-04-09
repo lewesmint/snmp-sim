@@ -64,6 +64,7 @@ INDEX_SUFFIX = (*INDEX_IP, INDEX_SEND_PORT)
 CREATE_AND_GO = 4
 DESTROY = 6
 ACTIVE = 1
+UPDATED_TRAP_PORT = 9162
 
 
 class E2EFailure(RuntimeError):  # noqa: N818
@@ -271,7 +272,11 @@ def _stop_agent_process(proc: subprocess.Popen[str]) -> None:
             log_fp.close()
 
 
-async def _run_foobar_create_and_go(host: str, port: int) -> None:
+def _pause_for_confirmation(label: str) -> None:
+    input(f"[pause] {label} — press Enter to continue...")
+
+
+async def _run_foobar_create_and_go(host: str, port: int, pause: bool = False) -> None:
     idx_oid_suffix = ".".join(str(x) for x in INDEX_SUFFIX)
     status_oid = f"{MANAGER_ROWSTATUS_OID}.{idx_oid_suffix}"
     trap_port_oid = f"{MANAGER_TRAP_PORT_OID}.{idx_oid_suffix}"
@@ -281,6 +286,19 @@ async def _run_foobar_create_and_go(host: str, port: int) -> None:
     print(f"[debug] index_ip={INDEX_IP} index_send_port={INDEX_SEND_PORT}")
     print(f"[debug] status_oid={status_oid}")
     print(f"[debug] trap_port_oid={trap_port_oid}")
+
+    print("[setup] Pre-destroy any stale row at this index (ignored if absent)")
+    pre_destroy = await _snmp_set(
+        host,
+        port,
+        "private",
+        [ObjectType(ObjectIdentity(status_oid), Integer(DESTROY))],
+    )
+    _pre_err_ind, _pre_err_stat, _pre_err_idx, _pre_vbs = pre_destroy
+    if _pre_err_ind or _pre_err_stat:
+        print(f"[setup] Pre-destroy result (non-fatal): errInd={_pre_err_ind} errStat={_pre_err_stat}")
+    else:
+        print("[setup] Pre-destroy succeeded (row was present)")
 
     print("[step] SET createAndGo on managerRowStatus")
     set_result = await _snmp_set(
@@ -320,6 +338,46 @@ async def _run_foobar_create_and_go(host: str, port: int) -> None:
         raise E2EFailure(f"managerRowStatus expected 1, got {status_value}")
     if trap_port_value != 162:
         raise E2EFailure(f"managerTrapPort expected default 162, got {trap_port_value}")
+
+    if pause:
+        _pause_for_confirmation("row created, default trap port verified")
+
+    print(f"[step] SET managerTrapPort to {UPDATED_TRAP_PORT}")
+    set_trap_result = await _snmp_set(
+        host,
+        port,
+        "private",
+        [ObjectType(ObjectIdentity(trap_port_oid), Integer(UPDATED_TRAP_PORT))],
+    )
+    _print_response("set:trapPort", set_trap_result)
+
+    err_ind, err_stat, err_idx, _set_trap_vbs = set_trap_result
+    if err_ind:
+        raise E2EFailure(f"SET trapPort transport/protocol error: {err_ind}")
+    if err_stat:
+        raise E2EFailure(
+            f"SET trapPort SNMP error: {_safe_pretty(err_stat)} at {_safe_pretty(err_idx)}"
+        )
+
+    print(f"[step] GET managerTrapPort (expect {UPDATED_TRAP_PORT})")
+    get_trap_result = await _snmp_get(host, port, "public", trap_port_oid)
+    _print_response("get:trapPort", get_trap_result)
+
+    err_ind, err_stat, err_idx, get_trap_vbs = get_trap_result
+    if err_ind:
+        raise E2EFailure(f"GET trapPort transport/protocol error: {err_ind}")
+    if err_stat:
+        raise E2EFailure(
+            f"GET trapPort SNMP error: {_safe_pretty(err_stat)} at {_safe_pretty(err_idx)}"
+        )
+    updated_trap_port_value = int(get_trap_vbs[0][1])
+    if updated_trap_port_value != UPDATED_TRAP_PORT:
+        raise E2EFailure(
+            f"managerTrapPort expected {UPDATED_TRAP_PORT}, got {updated_trap_port_value}"
+        )
+
+    if pause:
+        _pause_for_confirmation(f"trap port updated to {UPDATED_TRAP_PORT}")
 
     print("[step] SET destroy on managerRowStatus")
     destroy_result = await _snmp_set(
@@ -363,6 +421,7 @@ async def run_flow(
     port: int,
     force_kill_port_owner: bool,
     use_existing_agent: bool,
+    pause: bool = False,
 ) -> int:
     proc: subprocess.Popen[str] | None = None
 
@@ -378,7 +437,7 @@ async def run_flow(
         await _wait_for_agent(host, port)
         print("[start] Agent is ready")
 
-        await _run_foobar_create_and_go(host, port)
+        await _run_foobar_create_and_go(host, port, pause=pause)
 
         print("[pass] FOOBAR manager registration E2E passed")
         return 0
@@ -409,6 +468,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run against an already-started agent instead of launching one",
     )
+    parser.add_argument(
+        "--pause",
+        action="store_true",
+        help="Pause for interactive confirmation between key steps",
+    )
     return parser
 
 
@@ -423,6 +487,7 @@ def main() -> int:
             port=args.port,
             force_kill_port_owner=args.force_kill_port_owner,
             use_existing_agent=args.use_existing_agent,
+            pause=args.pause,
         )
     )
 

@@ -103,7 +103,7 @@ class IfEntry:
 │   ├── .venv/                              # local only — git-ignored
 │   ├── .python-version                     # 3.13.x (honoured by pyenv)
 │   ├── pyproject.toml
-│   ├── poetry.lock
+│   ├── requirements.txt
 │   ├── README.md
 │   ├── CHANGELOG.md
 │   │
@@ -156,7 +156,7 @@ class IfEntry:
 │   ├── .venv/                              # local only — git-ignored
 │   ├── .python-version                     # 3.13.x
 │   ├── pyproject.toml
-│   ├── poetry.lock
+│   ├── requirements.txt
 │   └── README.md
 │   │
 │   ├── src/
@@ -363,27 +363,19 @@ indent_size = 2
 ## `pyproject.toml` — Wrapper
 
 ```toml
-[tool.poetry]
+[project]
 name = "pysnmp-type-wrapper"
 version = "0.1.0"
-description = "Typed façade and stubs for PySNMP 7.x"
-authors = ["Mint"]
+description = "Typed facade and stubs for PySNMP 7.x"
 readme = "README.md"
-packages = [{ include = "pysnmp_type_wrapper", from = "src" }]
-
-[tool.poetry.dependencies]
-python = "^3.13"
-pysnmp = "^7.1.22"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0"
-pytest-asyncio = "^0.23"
-mypy = "^1.10"
-ruff = "^0.4"
+requires-python = ">=3.13"
+dependencies = [
+  "pysnmp>=7.1.22",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.mypy]
 strict = true
@@ -400,6 +392,12 @@ select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 ```
 
 ---
@@ -407,32 +405,22 @@ testpaths = ["tests"]
 ## `pyproject.toml` — App
 
 ```toml
-[tool.poetry]
+[project]
 name = "pysnmp-app"
 version = "0.1.0"
 description = "SNMP Agent Simulator with REST API and CustomTkinter UI"
-authors = ["Mint"]
 readme = "README.md"
-packages = [{ include = "pysnmp_app", from = "src" }]
-
-[tool.poetry.dependencies]
-python = "^3.13"
-pysnmp-type-wrapper = { path = "../pysnmp-type-wrapper", develop = true }
-fastapi = "^0.111"
-uvicorn = { extras = ["standard"], version = "^0.30" }
-customtkinter = "^5.2"
-pydantic = "^2.7"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0"
-pytest-asyncio = "^0.23"
-httpx = "^0.27"
-mypy = "^1.10"
-ruff = "^0.4"
+requires-python = ">=3.13"
+dependencies = [
+  "fastapi>=0.111",
+  "uvicorn[standard]>=0.30",
+  "customtkinter>=5.2",
+  "pydantic>=2.7",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.mypy]
 strict = true
@@ -449,6 +437,12 @@ select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 ```
 
 ---
@@ -474,11 +468,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install poetry
-      - run: poetry install
-      - run: poetry run pytest
-      - run: poetry run mypy src
-      - run: poetry run ruff check src tests
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.txt
+      - run: pytest
+      - run: mypy src
+      - run: ruff check src tests
 ```
 
 ### `.github/workflows/test-app.yml`
@@ -508,22 +502,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install poetry
+      - run: python -m pip install --upgrade pip
       - name: Install wrapper
         working-directory: pysnmp-type-wrapper
-        run: poetry install
+        run: pip install -e .
       - name: Install app
         working-directory: pysnmp-app
-        run: poetry install
+        run: |
+          pip install -e ../pysnmp-type-wrapper
+          pip install -r requirements-dev.txt
       - name: Test
         working-directory: pysnmp-app
-        run: poetry run pytest
+        run: pytest
       - name: Type check
         working-directory: pysnmp-app
-        run: poetry run mypy src
+        run: mypy src
       - name: Lint
         working-directory: pysnmp-app
-        run: poetry run ruff check src tests
+        run: ruff check src tests
 ```
 
 ---
@@ -544,12 +540,7 @@ eval "$(pyenv init -)"
 # Install Python 3.13
 pyenv install 3.13.12
 
-# Install Poetry globally
-curl -sSL https://install.python-poetry.org | python3 -
-
-# Tell Poetry to always put .venv inside the project folder
-# (critical for VS Code to auto-detect it)
-poetry config virtualenvs.in-project true
+# We will use plain venv + pip in each repo
 ```
 
 ### Setup the wrapper
@@ -557,8 +548,10 @@ poetry config virtualenvs.in-project true
 ```bash
 cd ~/code/pysnmp-type-wrapper
 pyenv local 3.13.12          # writes .python-version
-poetry env use python3.13
-poetry install
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
 ### Setup the app
@@ -566,8 +559,11 @@ poetry install
 ```bash
 cd ~/code/pysnmp-app
 pyenv local 3.13.12
-poetry env use python3.13
-poetry install               # picks up wrapper via path dep automatically
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -e ../pysnmp-type-wrapper
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
 ### Open in VS Code
@@ -586,9 +582,9 @@ selector (bottom-right status bar) to confirm each folder is using its own `.ven
 On Windows, use the same approach but note:
 
 - Install pyenv-win: `winget install pyenv-win`
-- `poetry shell` can be unreliable in PowerShell — prefer `poetry run <command>` instead
+- Use `python -m venv .venv` and `pip install ...` in each repo
 - Use `python` not `python3` in commands
-- Path separators in `pyproject.toml` path dependencies use forward slashes — Poetry handles this
+- Path separators in editable install paths should use forward slashes in docs/examples
 
 ---
 
@@ -602,7 +598,7 @@ On Windows, use the same approach but note:
 | Stubs in `typings/` (top-level) | Clean separation of runtime code vs typing overlays; both mypy and pyright look here |
 | App never imports pysnmp directly | All PySNMP usage quarantined inside wrapper; app stays clean |
 | MIB types via codegen | `MibBuilder` runs at build time; emits static `@dataclass` definitions |
-| Lock files committed | `poetry.lock` in both repos ensures reproducible environments across Mac/Windows |
+| Dependency pinning committed | `requirements*.txt` (or lock exports) in both repos ensure reproducible environments |
 | UI communicates via REST only | Server owns SNMP engine lifecycle; UI is a pure REST/WebSocket client |
 
 ---
@@ -611,7 +607,7 @@ On Windows, use the same approach but note:
 
 When the wrapper stabilises and you're ready to publish:
 
-1. Publish `pysnmp-type-wrapper` to PyPI (`poetry publish`)
+1. Publish `pysnmp-type-wrapper` to PyPI (`python -m build` then `twine upload dist/*`)
 2. In the app's `pyproject.toml`, change:
    ```toml
    # Before (local path dep)
@@ -620,7 +616,7 @@ When the wrapper stabilises and you're ready to publish:
    # After (PyPI dep)
    pysnmp-type-wrapper = "^1.0"
    ```
-3. Run `poetry update` in the app
+3. Upgrade in app (`pip install -U pysnmp-type-wrapper`)
 4. No application code changes required
 
 ---

@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -104,7 +104,22 @@ class SNMPAgentRuntimeWorkflowMixin:
                 self.logger.info("SNMP %s request for OID(s): %s", op, ", ".join(oids))
                 for oid in oids:
                     record_snmp_operation(op, oid)
-                return method(*var_binds, **ctx)
+                result = method(*var_binds, **ctx)
+                if result is not None:
+                    try:
+                        result_parts = []
+                        for vb in cast(Iterable[object], result):
+                            oid_str = self._format_request_oid(vb)
+                            is_pair = isinstance(vb, tuple) and len(vb) >= _VAR_BIND_MIN_TUPLE_LEN
+                            vb_tuple = cast(tuple[object, ...], vb)
+                            val_str = _to_var_text(vb_tuple[1]) if is_pair else "?"
+                            result_parts.append(f"{oid_str}={val_str}")
+                        self.logger.info(
+                            "SNMP %s response OID(s): %s", op, ", ".join(result_parts)
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        self.logger.debug("Failed to format SNMP %s response: %s", op, exc)
+                return result
 
             return _logged
 

@@ -4663,7 +4663,6 @@ plugins/basic_types.py	210
 plugins/date_and_time.py	69
 plugins/snmp_framework.py	73
 plugins/type_encoders.py	56
-poetry.lock	1770
 prospector.yaml	27
 pyproject.toml	244
 pyproject.toml.bak	39

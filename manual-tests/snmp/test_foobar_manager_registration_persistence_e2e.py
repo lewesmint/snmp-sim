@@ -382,12 +382,20 @@ async def _exercise_and_verify(host: str, port: int) -> None:
     _assert_state_contains_row(idx_oid_suffix, UPDATED_TRAP_PORT)
 
 
-async def run_flow(host: str, port: int, force_kill_port_owner: bool) -> int:
-    _ensure_port_ready(port, force_kill_port_owner)
-    _purge_foobar_artifacts()
-
-    print("[start] Launching agent (phase 1)")
-    proc = _start_agent_process()
+async def run_flow(
+    host: str,
+    port: int,
+    force_kill_port_owner: bool,
+    use_existing_agent: bool,
+) -> int:
+    if use_existing_agent:
+        print("[start] Using already-running agent")
+        proc: subprocess.Popen[str] | None = None
+    else:
+        _ensure_port_ready(port, force_kill_port_owner)
+        _purge_foobar_artifacts()
+        print("[start] Launching agent (phase 1)")
+        proc = _start_agent_process()
 
     idx_oid_suffix = ".".join(str(x) for x in INDEX_SUFFIX)
     status_oid = f"{MANAGER_ROWSTATUS_OID}.{idx_oid_suffix}"
@@ -399,12 +407,13 @@ async def run_flow(host: str, port: int, force_kill_port_owner: bool) -> int:
 
         await _exercise_and_verify(host, port)
 
-        print("[restart] Stopping agent for reboot check")
-        _stop_agent_process(proc)
-        proc = _start_agent_process()
+        if proc is not None:
+            print("[restart] Stopping agent for reboot check")
+            _stop_agent_process(proc)
+            proc = _start_agent_process()
 
-        await _wait_for_agent(host, port)
-        print("[start] Agent ready (phase 2)")
+            await _wait_for_agent(host, port)
+            print("[start] Agent ready (phase 2)")
 
         print("[step] verify row via SNMP after restart")
         post_result = await _snmp_get(host, port, "public", status_oid, trap_port_oid)
@@ -450,8 +459,9 @@ async def run_flow(host: str, port: int, force_kill_port_owner: bool) -> int:
         return 1
 
     finally:
-        print("[stop] Stopping agent")
-        _stop_agent_process(proc)
+        if proc is not None:
+            print("[stop] Stopping agent")
+            _stop_agent_process(proc)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -464,6 +474,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--force-kill-port-owner",
         action="store_true",
         help="Terminate existing UDP listener(s) on the SNMP port before running",
+    )
+    parser.add_argument(
+        "--use-existing-agent",
+        action="store_true",
+        help="Run against an already-started agent instead of launching/restarting one",
     )
     return parser
 
@@ -478,6 +493,7 @@ def main() -> int:
             host=args.host,
             port=args.port,
             force_kill_port_owner=args.force_kill_port_owner,
+            use_existing_agent=args.use_existing_agent,
         )
     )
 

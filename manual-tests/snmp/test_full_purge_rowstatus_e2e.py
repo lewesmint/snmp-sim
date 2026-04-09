@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import os
 import signal
 import subprocess
@@ -389,6 +390,15 @@ async def _validate_single_index_rowstatus(host: str, port: int) -> None:
     priority_oid = _row_oid(TEST_ROW_PRIORITY_OID, idx)
     status_oid = _row_oid(TEST_ROW_STATUS_OID, idx)
 
+    # Idempotence: clear stale row from prior runs when using an existing agent.
+    with contextlib.suppress(Exception):
+        await _snmp_set(
+            host,
+            port,
+            "private",
+            [ObjectType(ObjectIdentity(status_oid), Integer(DESTROY))],
+        )
+
     # --- createAndGo ---
     err_ind, err_stat, err_idx, _ = await _snmp_set(
         host,
@@ -478,6 +488,15 @@ async def _validate_multi_index_rowstatus(host: str, port: int) -> None:
     colour_oid = _row_oid(ADDR_STATUS_COLOUR_OID, *ip_parts, slot)
     priority_oid = _row_oid(ADDR_STATUS_PRIORITY_OID, *ip_parts, slot)
     status_oid = _row_oid(ADDR_STATUS_ROWSTATUS_OID, *ip_parts, slot)
+
+    # Idempotence: clear stale row from prior runs when using an existing agent.
+    with contextlib.suppress(Exception):
+        await _snmp_set(
+            host,
+            port,
+            "private",
+            [ObjectType(ObjectIdentity(status_oid), Integer(DESTROY))],
+        )
 
     # --- createAndGo ---
     err_ind, err_stat, err_idx, _ = await _snmp_set(
